@@ -16,22 +16,19 @@ if [ -n "${APT_GPG_PASSPHRASE:-}" ]; then
 fi
 
 rm -rf "$REPO"
-mkdir -p "$REPO/pool/main" "$REPO/dists/stable/main/binary-amd64" "$REPO/dists/stable/main/binary-arm64"
+mkdir -p "$REPO/pool/main" "$REPO/dists/stable/main/binary-amd64"
 cp dist/*.deb "$REPO/pool/main/"
 
 cd "$REPO"
-# Package is Architecture: all — list it for both amd64 and arm64 clients.
 dpkg-scanpackages --multiversion pool > dists/stable/main/binary-amd64/Packages
-cp dists/stable/main/binary-amd64/Packages dists/stable/main/binary-arm64/Packages
 gzip -k9 dists/stable/main/binary-amd64/Packages
-gzip -k9 dists/stable/main/binary-arm64/Packages
 
 apt-ftparchive \
   -o APT::FTPArchive::Release::Origin="nnm-control" \
   -o APT::FTPArchive::Release::Label="nnm-control" \
   -o APT::FTPArchive::Release::Suite="stable" \
   -o APT::FTPArchive::Release::Codename="stable" \
-  -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
+  -o APT::FTPArchive::Release::Architectures="amd64" \
   -o APT::FTPArchive::Release::Components="main" \
   release dists/stable > dists/stable/Release
 
