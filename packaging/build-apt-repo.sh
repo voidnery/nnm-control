@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Builds a signed flat APT repository under public/apt from dist/*.deb.
-# Requires: dpkg-dev, apt-utils, gnupg; a default-key set up in gpg.
-# Usage: packaging/build-apt-repo.sh <gpg-key-id>
+# Requires: dpkg-dev, apt-utils, gnupg; the signing key imported into gpg.
+# Usage:  packaging/build-apt-repo.sh <gpg-key-id>
+# Env:    APT_GPG_PASSPHRASE — optional; set it if the private key is
+#         passphrase-protected (loopback pinentry is used for signing).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 KEYID="${1:?gpg key id required}"
 REPO=public/apt
+
+GPG=(gpg --batch --yes -u "$KEYID")
+if [ -n "${APT_GPG_PASSPHRASE:-}" ]; then
+  GPG+=(--pinentry-mode loopback --passphrase "$APT_GPG_PASSPHRASE")
+fi
 
 rm -rf "$REPO"
 mkdir -p "$REPO/pool/main" "$REPO/dists/stable/main/binary-amd64" "$REPO/dists/stable/main/binary-arm64"
@@ -28,8 +35,8 @@ apt-ftparchive \
   -o APT::FTPArchive::Release::Components="main" \
   release dists/stable > dists/stable/Release
 
-gpg --batch --yes -u "$KEYID" --detach-sign --armor -o dists/stable/Release.gpg dists/stable/Release
-gpg --batch --yes -u "$KEYID" --clearsign -o dists/stable/InRelease dists/stable/Release
+"${GPG[@]}" --detach-sign --armor -o dists/stable/Release.gpg dists/stable/Release
+"${GPG[@]}" --clearsign -o dists/stable/InRelease dists/stable/Release
 gpg --batch --yes --armor --export "$KEYID" > gpg.key
 
 echo "APT repo ready under public/apt"
