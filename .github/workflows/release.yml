@@ -1,0 +1,88 @@
+# Release pipeline: on tag vX.Y.Z —
+#   1) build & push api/web images to ghcr.io (public),
+#   2) build the .deb,
+#   3) build a signed APT repository and publish it to the gh-pages branch
+#      (served by GitHub Pages at https://<owner>.github.io/nnm-control/apt),
+#   4) attach the .deb to a GitHub Release.
+#
+# Required repository setup (one-time):
+#   - Settings -> Pages: deploy from branch "gh-pages", folder "/ (root)".
+#   - Secret APT_GPG_PRIVATE_KEY: ASCII-armored private key
+#       (gpg --full-generate-key; gpg --armor --export-secret-keys <id>)
+#   - Secret APT_GPG_KEY_ID: the key id or email.
+#   - Secret APT_GPG_PASSPHRASE (optional): only if the key is passphrase-protected.
+#   - After first release: make both ghcr packages public
+#       (Packages -> nnm-control-api / -web -> Package settings -> Change visibility).
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: api
+            context: ./backend
+          - name: web
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:latest
+          cache-from: type=gha,scope=nc-${{ matrix.name }}
+          cache-to: type=gha,scope=nc-${{ matrix.name }},mode=max
+
+  apt-repo:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev apt-utils gnupg
+      - name: Import GPG key
+        run: echo "${{ secrets.APT_GPG_PRIVATE_KEY }}" | gpg --batch --import
+      - name: Build deb
+        run: packaging/build-deb.sh "${{ steps.meta.outputs.version }}" "${{ steps.meta.outputs.owner }}"
+      - name: Build APT repo
+        env:
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: packaging/build-apt-repo.sh "${{ secrets.APT_GPG_KEY_ID }}"
+      - name: Publish repo to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          keep_files: false
+      - name: Attach deb to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.deb
