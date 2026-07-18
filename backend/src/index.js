@@ -1,0 +1,37 @@
+import express from 'express';
+import { config } from './config.js';
+import { connectDb } from './db.js';
+import { setupRouter } from './routes/setup.js';
+import { authRouter } from './routes/auth.js';
+import { usersRouter } from './routes/users.js';
+import { rolesRouter } from './routes/roles.js';
+import { serversRouter } from './routes/servers.js';
+import { nimbleRouter } from './routes/nimbleProxy.js';
+import { zabbixRouter } from './routes/zabbix.js';
+
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json({ limit: '1mb' }));
+
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.use('/api/setup', setupRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/roles', rolesRouter);
+app.use('/api/servers', serversRouter);
+app.use('/api/nimble', nimbleRouter);
+app.use('/api/zabbix', zabbixRouter);
+
+app.use((err, _req, res, _next) => {
+  console.error('[unhandled]', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+const start = async () => {
+  await connectDb();
+  if (!config.setupToken) {
+    console.warn('[setup] SETUP_TOKEN is empty — first-run setup via web UI is disabled until it is set.');
+  }
+  app.listen(config.port, () => console.log(`[api] listening on :${config.port}`));
+};
+start().catch(e => { console.error('[fatal]', e); process.exit(1); });

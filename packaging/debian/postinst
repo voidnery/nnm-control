@@ -1,0 +1,76 @@
+#!/bin/sh
+# postinst: writes /etc/nnm-control/nnm-control.env from debconf answers,
+# generates secrets once (idempotent across upgrades), starts the service.
+set -e
+. /usr/share/debconf/confmodule
+
+ENV_DIR=/etc/nnm-control
+ENV_FILE=$ENV_DIR/nnm-control.env
+
+db_get nnm-control/domain; APP_DOMAIN="$RET"
+db_get nnm-control/port;   APP_PORT="$RET"
+
+mkdir -p "$ENV_DIR"
+touch "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+# set_var KEY VALUE — replace existing line or append (idempotent).
+set_var() {
+    key="$1"; value="$2"
+    if grep -q "^${key}=" "$ENV_FILE"; then
+        # value may contain '/', use '|' as sed delimiter
+        sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+    else
+        echo "${key}=${value}" >> "$ENV_FILE"
+    fi
+}
+# ensure_secret KEY — generate only if absent (survives upgrades/reconfigure).
+ensure_secret() {
+    key="$1"; bytes="$2"
+    if ! grep -q "^${key}=" "$ENV_FILE"; then
+        echo "${key}=$(head -c "$bytes" /dev/urandom | od -An -tx1 | tr -d ' \n')" >> "$ENV_FILE"
+    fi
+}
+
+set_var APP_DOMAIN "$APP_DOMAIN"
+set_var APP_PORT "$APP_PORT"
+set_var MONGO_URI "mongodb://mongo:27017/nnm_control"
+set_var NC_VERSION "$(dpkg-query -W -f='${Version}' nnm-control 2>/dev/null || echo latest)"
+ensure_secret JWT_SECRET 32
+ensure_secret ZABBIX_TOKEN 24
+ensure_secret SETUP_TOKEN 16
+
+# Owner of the ghcr images; kept in env so forks can point elsewhere.
+if ! grep -q '^NC_GHCR_OWNER=' "$ENV_FILE"; then
+    echo "NC_GHCR_OWNER=__OWNER__" >> "$ENV_FILE"
+fi
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable nnm-control.service >/dev/null 2>&1 || true
+    # Pull images before (re)start so a broken pull doesn't leave old stack down.
+    if docker compose -f /opt/nnm-control/docker-compose.yml \
+        --env-file "$ENV_FILE" pull --quiet 2>/dev/null; then :; else
+        echo "nnm-control: WARNING: image pull failed (offline?). Will retry on service start." >&2
+    fi
+    systemctl restart nnm-control.service || \
+        echo "nnm-control: WARNING: service failed to start; check: journalctl -u nnm-control" >&2
+fi
+
+SETUP_TOKEN_VALUE=$(grep '^SETUP_TOKEN=' "$ENV_FILE" | cut -d= -f2)
+echo ""
+echo "=============================================================="
+echo " NNM Control installed."
+echo "   Panel URL:    http://${APP_DOMAIN}:${APP_PORT}"
+echo "   (DNS A-record for ${APP_DOMAIN} must point to this machine)"
+echo ""
+echo " FIRST-RUN SETUP TOKEN (needed once, to create the superadmin"
+echo " account in the web UI on first open):"
+echo ""
+echo "   ${SETUP_TOKEN_VALUE}"
+echo ""
+echo " Manage:  nnm-control status|logs|restart|configure"
+echo "=============================================================="
+
+db_stop || true
+exit 0

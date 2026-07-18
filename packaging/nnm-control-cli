@@ -1,0 +1,22 @@
+#!/bin/sh
+# nnm-control — service management CLI (installed to /usr/bin).
+set -e
+ENV_FILE=/etc/nnm-control/nnm-control.env
+COMPOSE="docker compose -f /opt/nnm-control/docker-compose.yml --env-file $ENV_FILE"
+
+case "${1:-}" in
+    status)    systemctl status nnm-control --no-pager || true; $COMPOSE ps ;;
+    logs)      shift; $COMPOSE logs --tail=200 -f "$@" ;;
+    start)     systemctl start nnm-control ;;
+    stop)      systemctl stop nnm-control ;;
+    restart)   systemctl restart nnm-control ;;
+    pull)      $COMPOSE pull && systemctl restart nnm-control ;;
+    configure) dpkg-reconfigure nnm-control ;;
+    setup-token)
+        grep '^SETUP_TOKEN=' "$ENV_FILE" | cut -d= -f2 ;;
+    version)
+        dpkg-query -W -f='nnm-control ${Version}\n' nnm-control ;;
+    *)
+        echo "Usage: nnm-control {status|logs [service]|start|stop|restart|pull|configure|setup-token|version}"
+        exit 1 ;;
+esac

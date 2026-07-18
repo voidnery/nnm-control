@@ -1,0 +1,39 @@
+# Production compose — shipped inside the .deb to /opt/nnm-control.
+# Images are pre-built by GitHub Actions and published to ghcr.io (public).
+# All variables come from /etc/nnm-control/nnm-control.env via the
+# systemd unit (docker compose --env-file ...).
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # Intentionally NOT published to host — internal docker network only.
+
+  backend:
+    image: ghcr.io/${NC_GHCR_OWNER:-voidnery}/nnm-control-api:${NC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/nnm_control}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_TTL=${JWT_TTL:-12h}
+      - SETUP_TOKEN=${SETUP_TOKEN}
+      - ZABBIX_TOKEN=${ZABBIX_TOKEN}
+      - HOST_FS=/host
+    volumes:
+      - /:/host:ro
+    depends_on:
+      - mongo
+
+  web:
+    image: ghcr.io/${NC_GHCR_OWNER:-voidnery}/nnm-control-web:${NC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:-_}
+    ports:
+      - "${APP_PORT:-8090}:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

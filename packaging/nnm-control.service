@@ -1,0 +1,16 @@
+[Unit]
+Description=NNM Control panel (docker compose stack)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/nnm-control
+ExecStart=/usr/bin/docker compose -f /opt/nnm-control/docker-compose.yml --env-file /etc/nnm-control/nnm-control.env up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f /opt/nnm-control/docker-compose.yml --env-file /etc/nnm-control/nnm-control.env down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

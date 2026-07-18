@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+case "$1" in
+    purge)
+        # Config is removed on purge; Mongo data volume is intentionally KEPT
+        # (destroying user data requires an explicit docker volume rm).
+        rm -rf /etc/nnm-control
+        echo "nnm-control: config purged. Mongo data volume kept;"
+        echo "  remove manually with: docker volume rm nnm-control_mongo_data"
+        ;;
+esac
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+fi
+exit 0

@@ -1,0 +1,8 @@
+#!/bin/sh
+# debconf config script: asks domain/port during apt install.
+set -e
+. /usr/share/debconf/confmodule
+
+db_input high nnm-control/domain || true
+db_input high nnm-control/port || true
+db_go || true

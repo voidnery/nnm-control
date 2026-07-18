@@ -1,0 +1,36 @@
+# Developer compose — builds images from local sources instead of ghcr.
+# Usage: docker compose -f docker-compose.dev.yml --env-file dev.env up -d --build
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/nnm_control}
+      - JWT_SECRET=${JWT_SECRET:-dev_secret_change_me}
+      - JWT_TTL=${JWT_TTL:-12h}
+      - SETUP_TOKEN=${SETUP_TOKEN:-dev_setup_token}
+      - ZABBIX_TOKEN=${ZABBIX_TOKEN:-dev_zabbix_token}
+      - HOST_FS=/host
+    volumes:
+      - /:/host:ro
+    depends_on:
+      - mongo
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:-_}
+    ports:
+      - "${APP_PORT:-8090}:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

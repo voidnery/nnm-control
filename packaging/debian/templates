@@ -1,0 +1,12 @@
+Template: nnm-control/domain
+Type: string
+Default: nimble.example.com
+Description: Panel domain:
+ The domain name the panel will be served on. A DNS A-record for this
+ domain must point to this machine's IP address.
+
+Template: nnm-control/port
+Type: string
+Default: 8090
+Description: Panel port:
+ The TCP port on this machine the panel will listen on.
