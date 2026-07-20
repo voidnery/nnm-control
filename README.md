@@ -119,6 +119,11 @@ docker compose -f docker-compose.dev.yml up -d --build   # builds from sources
 
 ## Iteration journal
 
+- **iter2 m1 (v0.3.0)** — WMSPanel control plane: system Settings page
+  (WMSPanel API creds, manageable base URL .com/.ru, control-plane switch
+  primary/backup), server↔WMSPanel mapping, persistent Republish management
+  incl. "Switch source". See CHANGELOG.md.
+
 - **iter1** — foundation: JWT auth; roles (superadmin / admin / custom with
   granular per-function permissions); Nimble servers CRUD + connectivity
   test; native API client (salt/md5 token auth); per-server views: Streams,

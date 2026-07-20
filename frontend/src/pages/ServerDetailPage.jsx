@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import RepublishTab from './RepublishTab.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -138,102 +139,6 @@ function SrtTab({ serverId }) {
   );
 }
 
-function RepublishTab({ serverId }) {
-  const { can } = useAuth();
-  const [rules, setRules] = useState(null);
-  const [stats, setStats] = useState(null);
-  const [error, setError] = useState('');
-  const [form, setForm] = useState({ src_app: '', src_stream: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_stream: '' });
-  const [busy, setBusy] = useState(false);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const load = async () => {
-    setError('');
-    try {
-      const [r, st] = await Promise.all([
-        api(`/nimble/${serverId}/republish`),
-        api(`/nimble/${serverId}/republish/stats`).catch(() => null),
-      ]);
-      setRules(r?.rules || []);
-      setStats(st?.stats || []);
-    } catch (e) { setError(e.message); }
-  };
-  useEffect(() => { load(); }, [serverId]);
-
-  const create = async () => {
-    setBusy(true); setError('');
-    try {
-      await api(`/nimble/${serverId}/republish`, { method: 'POST', body: { ...form, dest_port: Number(form.dest_port) } });
-      setForm({ src_app: '', src_stream: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_stream: '' });
-      await load();
-    } catch (e) { setError(e.message); }
-    finally { setBusy(false); }
-  };
-
-  const remove = async (id) => {
-    if (!window.confirm(`Delete republish rule #${id}?`)) return;
-    await api(`/nimble/${serverId}/republish/${id}`, { method: 'DELETE' });
-    load();
-  };
-
-  const statFor = (id) => (stats || []).find(s => String(s.rule_id) === String(id));
-
-  return (
-    <div>
-      <div className="error-box" style={{ background: '#2a2214', borderColor: '#5c4a2a', color: '#e8d5a8' }}>
-        Per official Nimble docs: rules created via the native API are <b>not persistent</b> — they reset on
-        Nimble Streamer reload. Persistent rules require WMSPanel API or host-side config (planned iteration).
-      </div>
-      {error && <div className="error-box">{error}</div>}
-      <div className="panel">
-        <table>
-          <thead><tr><th>ID</th><th>Source</th><th>Destination</th><th>State</th><th>Bandwidth</th><th></th></tr></thead>
-          <tbody>
-            {(rules || []).map(rule => {
-              const st = statFor(rule.id);
-              return (
-                <tr key={rule.id} className={st?.state === 'connected' ? 'tally' : ''}>
-                  <td className="mono">{rule.id}</td>
-                  <td className="mono">{rule.src_app}/{rule.src_stream || '*'}</td>
-                  <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_stream}</td>
-                  <td>{st ? <><span className={'lamp ' + (st.state === 'connected' ? 'on' : 'warn')} />{st.state}</> : '—'}</td>
-                  <td className="mono">{st ? fmtBps(st.bandwidth) : '—'}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {can('republish.manage') && <button className="danger" onClick={() => remove(rule.id)}>Delete</button>}
-                  </td>
-                </tr>
-              );
-            })}
-            {rules && rules.length === 0 && <tr><td colSpan={6} className="hint">No API-created republish rules.</td></tr>}
-          </tbody>
-        </table>
-        <div className="row" style={{ marginTop: 8 }}>
-          <button onClick={load}>Refresh</button>
-        </div>
-      </div>
-      {can('republish.manage') && (
-        <div className="panel">
-          <h2 style={{ marginTop: 0 }}>New republish rule</h2>
-          <div className="field-inline">
-            <div><label>Source app</label><input value={form.src_app} onChange={e => set('src_app', e.target.value)} /></div>
-            <div><label>Source stream (empty = all)</label><input value={form.src_stream} onChange={e => set('src_stream', e.target.value)} /></div>
-          </div>
-          <div className="field-inline">
-            <div><label>Dest address</label><input value={form.dest_addr} onChange={e => set('dest_addr', e.target.value)} /></div>
-            <div><label>Dest port</label><input type="number" value={form.dest_port} onChange={e => set('dest_port', e.target.value)} /></div>
-          </div>
-          <div className="field-inline">
-            <div><label>Dest app</label><input value={form.dest_app} onChange={e => set('dest_app', e.target.value)} /></div>
-            <div><label>Dest stream</label><input value={form.dest_stream} onChange={e => set('dest_stream', e.target.value)} /></div>
-          </div>
-          <button className="primary" style={{ marginTop: 12 }} disabled={busy || !form.src_app || !form.dest_addr || !form.dest_app}
-                  onClick={create}>{busy ? 'Creating…' : 'Create rule'}</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function MpegtsTab({ serverId }) {
   const [status] = useNimble(serverId, 'mpegts/status');
   const [settings] = useNimble(serverId, 'mpegts/settings');
@@ -336,7 +241,7 @@ export default function ServerDetailPage() {
           <button key={t.key} className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
       </div>
-      {Active && <Active serverId={id} />}
+      {Active && <Active serverId={id} server={server} />}
     </div>
   );
 }

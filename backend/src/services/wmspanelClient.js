@@ -1,0 +1,66 @@
+// Client for WMSPanel Control API (api.wmspanel.com/v1 or api.wmspanel.ru/v1).
+// Auth: client_id + api_key as query params on every request (per official
+// reference). Requirements on the WMSPanel side: API enabled in
+// Control -> API setup -> Pull API, panel host IP whitelisted.
+// Daily account limit: 15000 calls — we call WMSPanel only for WRITE
+// operations and lists; all polling/verification uses the free native API.
+//
+// NOTE on republish endpoints: the /v1/server/{id}/rtmp/republish/{rule}/restart
+// path is confirmed by Softvelum support answers; list/create/update/delete are
+// modeled on the same family. Exact field names get pinned on first live call
+// (raw upstream responses are passed through to the UI for that reason).
+
+const TIMEOUT_MS = 12000;
+
+function buildUrl(cfg, path, extraQuery = '') {
+  const base = (cfg.baseUrl || 'https://api.wmspanel.com/v1').replace(/\/+$/, '');
+  const auth = `client_id=${encodeURIComponent(cfg.clientId)}&api_key=${encodeURIComponent(cfg.apiKey)}`;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${base}${path}${sep}${auth}${extraQuery ? '&' + extraQuery : ''}`;
+}
+
+async function call(cfg, path, { method = 'GET', body } = {}) {
+  if (!cfg.clientId || !cfg.apiKey) {
+    const e = new Error('WMSPanel API credentials are not configured');
+    e.code = 'NO_CREDS';
+    throw e;
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(buildUrl(cfg, path), {
+      method,
+      signal: ctrl.signal,
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    let data;
+    try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+    if (res.status === 403) {
+      const e = new Error('WMSPanel API: 403 — check client_id/api_key and the IP whitelist (panel host IP must be whitelisted in API setup)');
+      e.status = 403; e.data = data;
+      throw e;
+    }
+    if (!res.ok || (data && data.status && data.status !== 'Ok')) {
+      const e = new Error(`WMSPanel API error: HTTP ${res.status}${data?.status ? `, status=${data.status}` : ''}`);
+      e.status = res.status; e.data = data;
+      throw e;
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export const wmspanel = {
+  // Confirmed by official reference: GET /v1/server
+  listServers: (cfg) => call(cfg, '/server'),
+  getServer: (cfg, sid) => call(cfg, `/server/${encodeURIComponent(sid)}`),
+  // Republish family (persistent rules, unlike native API):
+  republishList:    (cfg, sid) => call(cfg, `/server/${sid}/rtmp/republish`),
+  republishCreate:  (cfg, sid, rule) => call(cfg, `/server/${sid}/rtmp/republish`, { method: 'POST', body: rule }),
+  republishUpdate:  (cfg, sid, ruleId, patch) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'PUT', body: patch }),
+  republishDelete:  (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'DELETE' }),
+  republishRestart: (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}/restart`),
+};

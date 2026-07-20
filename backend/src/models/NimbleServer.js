@@ -13,6 +13,9 @@ const serverSchema = new mongoose.Schema({
   useSsl: { type: Boolean, default: false },
   tags: { type: [String], default: [] },
   notes: { type: String, default: '' },
+  // WMSPanel server id (from GET /v1/server) — required for WMSPanel control
+  // plane operations on this instance.
+  wmspanelServerId: { type: String, default: '' },
 }, { timestamps: true });
 
 export const NimbleServer = mongoose.model('NimbleServer', serverSchema);

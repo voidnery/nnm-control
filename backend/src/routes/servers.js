@@ -9,7 +9,7 @@ serversRouter.use(requireAuth);
 // Token is never returned to the UI — only a hasToken flag.
 const pub = (s) => ({
   id: s.id, name: s.name, host: s.host, port: s.port, useSsl: s.useSsl,
-  tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), createdAt: s.createdAt,
+  tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '', createdAt: s.createdAt,
 });
 
 serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
@@ -18,16 +18,16 @@ serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
 });
 
 serversRouter.post('/', requirePerm('servers.manage'), async (req, res) => {
-  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '' } = req.body || {};
+  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '' } = req.body || {};
   if (!name || !host) return res.status(400).json({ error: 'name and host required' });
-  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes });
+  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId });
   res.status(201).json(pub(server));
 });
 
 serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Not found' });
-  const { name, host, port, token, useSsl, tags, notes } = req.body || {};
+  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId } = req.body || {};
   if (name !== undefined) server.name = name;
   if (host !== undefined) server.host = host;
   if (port !== undefined) server.port = port;
@@ -36,6 +36,7 @@ serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   if (useSsl !== undefined) server.useSsl = useSsl;
   if (tags !== undefined) server.tags = tags;
   if (notes !== undefined) server.notes = notes;
+  if (wmspanelServerId !== undefined) server.wmspanelServerId = String(wmspanelServerId).trim();
   await server.save();
   res.json(pub(server));
 });

@@ -8,6 +8,8 @@ import { rolesRouter } from './routes/roles.js';
 import { serversRouter } from './routes/servers.js';
 import { nimbleRouter } from './routes/nimbleProxy.js';
 import { zabbixRouter } from './routes/zabbix.js';
+import { settingsRouter } from './routes/settings.js';
+import { wmspanelRouter } from './routes/wmspanelProxy.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -21,6 +23,8 @@ app.use('/api/roles', rolesRouter);
 app.use('/api/servers', serversRouter);
 app.use('/api/nimble', nimbleRouter);
 app.use('/api/zabbix', zabbixRouter);
+app.use('/api/settings', settingsRouter);
+app.use('/api/wmspanel', wmspanelRouter);
 
 app.use((err, _req, res, _next) => {
   console.error('[unhandled]', err);

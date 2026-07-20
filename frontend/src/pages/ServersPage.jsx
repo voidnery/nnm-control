@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 
-const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '' };
+const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '' };
 
 function ServerModal({ initial, onClose, onSaved }) {
   const isEdit = Boolean(initial.id);
+  const [wpServers, setWpServers] = useState(null); // null = loading/unavailable
   const [form, setForm] = useState({
     ...EMPTY, ...initial,
     token: '', // never prefilled — empty means "keep existing" on edit
@@ -16,6 +17,11 @@ function ServerModal({ initial, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  useEffect(() => {
+    // WMSPanel mapping helper; silently unavailable until API creds are set.
+    api('/wmspanel/servers').then(d => setWpServers(d.servers)).catch(() => setWpServers(null));
+  }, []);
+
   const save = async () => {
     setBusy(true); setError('');
     try {
@@ -23,6 +29,7 @@ function ServerModal({ initial, onClose, onSaved }) {
         name: form.name, host: form.host, port: Number(form.port) || 8082,
         useSsl: form.useSsl, notes: form.notes,
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
+        wmspanelServerId: form.wmspanelServerId || '',
       };
       // On edit an empty token field means "do not change".
       if (!isEdit || form.token !== '') body.token = form.token;
@@ -52,6 +59,16 @@ function ServerModal({ initial, onClose, onSaved }) {
         <label>Management token {isEdit && <span className="hint">(empty = keep current)</span>}</label>
         <input type="password" value={form.token} onChange={e => set('token', e.target.value)}
                placeholder={initial.hasToken ? '••••••• (set)' : 'empty = no auth on server'} />
+        <label>WMSPanel server (for persistent control via WMSPanel API)</label>
+        {wpServers ? (
+          <select value={form.wmspanelServerId} onChange={e => set('wmspanelServerId', e.target.value)}>
+            <option value="">— not mapped —</option>
+            {wpServers.map(ws => <option key={ws.id} value={ws.id}>{ws.name} ({ws.status})</option>)}
+          </select>
+        ) : (
+          <input value={form.wmspanelServerId} onChange={e => set('wmspanelServerId', e.target.value)}
+                 placeholder="WMSPanel server id (auto-list needs API creds in Settings)" className="mono" />
+        )}
         <label>Tags (comma separated)</label>
         <input value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="edge, moscow" />
         <label>Notes</label>

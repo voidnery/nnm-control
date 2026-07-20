@@ -10,6 +10,7 @@ import ServerDetailPage from './pages/ServerDetailPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
 import RolesPage from './pages/RolesPage.jsx';
 import ZabbixPage from './pages/ZabbixPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 
 function Layout({ children }) {
   const { user, logout, can } = useAuth();
@@ -23,6 +24,7 @@ function Layout({ children }) {
           {can('users.manage') && <NavLink to="/users">Users</NavLink>}
           {can('roles.manage') && <NavLink to="/roles">Roles</NavLink>}
           {can('zabbix.view') && <NavLink to="/zabbix">Zabbix</NavLink>}
+          {can('settings.manage') && <NavLink to="/settings">Settings</NavLink>}
         </nav>
         <div className="spacer" />
         <div className="userbox">
@@ -64,6 +66,7 @@ export default function App() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/roles" element={<RolesPage />} />
         <Route path="/zabbix" element={<ZabbixPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
