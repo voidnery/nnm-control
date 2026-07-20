@@ -10,6 +10,7 @@ import { nimbleRouter } from './routes/nimbleProxy.js';
 import { zabbixRouter } from './routes/zabbix.js';
 import { settingsRouter } from './routes/settings.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
+import { startPeriodicSync } from './services/wmspanelSync.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -33,6 +34,7 @@ app.use((err, _req, res, _next) => {
 
 const start = async () => {
   await connectDb();
+  startPeriodicSync();
   if (!config.setupToken) {
     console.warn('[setup] SETUP_TOKEN is empty — first-run setup via web UI is disabled until it is set.');
   }

@@ -95,9 +95,26 @@ export default function ServersPage() {
   const [modal, setModal] = useState(null);
   const [testResults, setTestResults] = useState({});
   const [error, setError] = useState('');
+  const [pubSettings, setPubSettings] = useState(null);
+  const [syncMsg, setSyncMsg] = useState(null);
+  const [syncBusy, setSyncBusy] = useState(false);
 
   const load = () => api('/servers').then(setServers).catch(e => setError(e.message));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api('/settings/public').then(setPubSettings).catch(() => setPubSettings(null));
+  }, []);
+
+  const syncNow = async () => {
+    setSyncBusy(true); setSyncMsg(null);
+    try {
+      const r = await api('/wmspanel/sync', { method: 'POST' });
+      setSyncMsg(r.skipped ? { ok: false, text: `Sync skipped: ${r.reason}` }
+                           : { ok: true, text: `Synced from WMSPanel: +${r.created} new, ${r.updated} updated (${r.remoteTotal} total)` });
+      load();
+    } catch (e) { setSyncMsg({ ok: false, text: e.message }); }
+    finally { setSyncBusy(false); }
+  };
 
   const test = async (id) => {
     setTestResults(r => ({ ...r, [id]: { busy: true } }));
@@ -116,6 +133,16 @@ export default function ServersPage() {
       <h1>Servers</h1>
       <div className="sub">Managed Nimble Streamer instances (native management API endpoints).</div>
       {error && <div className="error-box">{error}</div>}
+      {pubSettings?.controlPlane === 'wmspanel' && (
+        <div className="panel" style={{ padding: '10px 14px' }}>
+          <span className="lamp on" />Control plane: <b>WMSPanel API</b> — the fleet is pulled from WMSPanel automatically
+          (every 10 min). Native management token is not known to WMSPanel — set it per server to enable live status.
+          {can('servers.manage') && (
+            <button style={{ marginLeft: 12 }} disabled={syncBusy} onClick={syncNow}>{syncBusy ? 'Syncing…' : 'Sync now'}</button>
+          )}
+          {syncMsg && <span className={syncMsg.ok ? 'hint' : ''} style={{ marginLeft: 10, color: syncMsg.ok ? undefined : 'var(--danger)' }}>{syncMsg.text}</span>}
+        </div>
+      )}
       {can('servers.manage') && (
         <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ Add server</button>
       )}
@@ -129,7 +156,15 @@ export default function ServersPage() {
               const t = testResults[s.id];
               return (
                 <tr key={s.id}>
-                  <td><Link to={`/servers/${s.id}`}><b>{s.name}</b></Link></td>
+                  <td>
+                    <Link to={`/servers/${s.id}`}><b>{s.name}</b></Link>
+                    {s.syncedFromWmspanel && (
+                      <span className="badge" style={{ marginLeft: 6 }}
+                            title={'Auto-synced from WMSPanel' + (s.wmspanelStatus ? ` · panel status: ${s.wmspanelStatus}` : '')}>
+                        WMS{s.wmspanelStatus ? `:${s.wmspanelStatus}` : ''}
+                      </span>
+                    )}
+                  </td>
                   <td className="mono">{s.useSsl ? 'https' : 'http'}://{s.host}:{s.port}</td>
                   <td>{s.tags.map(tag => <span key={tag} className="badge" style={{ marginRight: 4 }}>{tag}</span>)}</td>
                   <td>{s.hasToken ? <span className="badge">token</span> : <span className="badge">open</span>}</td>

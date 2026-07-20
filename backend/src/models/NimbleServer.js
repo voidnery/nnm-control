@@ -16,6 +16,10 @@ const serverSchema = new mongoose.Schema({
   // WMSPanel server id (from GET /v1/server) — required for WMSPanel control
   // plane operations on this instance.
   wmspanelServerId: { type: String, default: '' },
+  // Auto-sync metadata (WMSPanel control plane pulls the fleet automatically).
+  syncedFromWmspanel: { type: Boolean, default: false },
+  wmspanelStatus: { type: String, default: '' },   // online/offline/pending as reported by WMSPanel
+  lastSyncAt: { type: Date, default: null },
 }, { timestamps: true });
 
 export const NimbleServer = mongoose.model('NimbleServer', serverSchema);

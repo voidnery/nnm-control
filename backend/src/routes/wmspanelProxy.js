@@ -3,6 +3,7 @@ import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { wmspanel } from '../services/wmspanelClient.js';
+import { syncServersFromWmspanel } from '../services/wmspanelSync.js';
 
 // Permission-gated proxy to WMSPanel Control API (persistent settings).
 export const wmspanelRouter = Router();
@@ -23,6 +24,11 @@ function proxy(fn) {
     }
   };
 }
+
+// Manual fleet sync (also runs automatically every 10 min in wmspanel mode).
+wmspanelRouter.post('/sync', requirePerm('servers.manage'), proxy(async () => {
+  return await syncServersFromWmspanel({ force: true });
+}));
 
 // WMSPanel servers list — used for mapping our servers to WMSPanel ids.
 wmspanelRouter.get('/servers', requirePerm('servers.manage'), proxy(async () => {

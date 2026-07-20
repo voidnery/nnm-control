@@ -4,6 +4,16 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.1 (m1.1)
+- WMSPanel control plane now auto-manages the fleet: servers are pulled from
+  WMSPanel and materialized in the panel automatically (on enabling the mode,
+  every 10 minutes, and via "Sync now" on the Servers page)
+- Non-destructive sync: upsert by WMSPanel id, Nimble-kind only; name/tags/
+  status refreshed; operator-set host never overwritten; local servers absent
+  in WMSPanel are kept. Native management port/token are unknown to WMSPanel:
+  port defaults to 8082, token is filled in by the operator once
+- Servers page: WMSPanel-mode banner, per-server sync badge with panel status
+- Native control plane behaviour unchanged (manual fleet management)
 ### v0.3.0 (m1)
 - System Settings page (superadmin/admin or `settings.manage`):
   - WMSPanel API credentials (Client ID + API key) manageable in the panel

@@ -9,7 +9,8 @@ serversRouter.use(requireAuth);
 // Token is never returned to the UI — only a hasToken flag.
 const pub = (s) => ({
   id: s.id, name: s.name, host: s.host, port: s.port, useSsl: s.useSsl,
-  tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '', createdAt: s.createdAt,
+  tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '',
+  syncedFromWmspanel: Boolean(s.syncedFromWmspanel), wmspanelStatus: s.wmspanelStatus || '', lastSyncAt: s.lastSyncAt, createdAt: s.createdAt,
 });
 
 serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Settings } from '../models/Settings.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { wmspanel } from '../services/wmspanelClient.js';
+import { syncServersFromWmspanel } from '../services/wmspanelSync.js';
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
@@ -46,7 +47,13 @@ settingsRouter.put('/', async (req, res) => {
     if (wp.apiKey !== undefined) s.wmspanel.apiKey = String(wp.apiKey);
   }
   await s.save();
-  res.json(pub(s));
+  // Entering wmspanel control plane => pull the fleet right away (best-effort).
+  let sync = null;
+  if (s.controlPlane === 'wmspanel') {
+    try { sync = await syncServersFromWmspanel(); }
+    catch (e) { sync = { skipped: true, reason: e.message }; }
+  }
+  res.json({ ...pub(s), sync });
 });
 
 // Live connectivity test: lists WMSPanel servers with current (or provided) creds.
