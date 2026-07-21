@@ -4,6 +4,20 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.4 (m2.1) — transactional integrity fixes
+- FIX (critical): the failed step itself is now rolled back when its mutation
+  was actually sent — a PUT that applied but whose verification timed out no
+  longer leaves the change silently in place (`applied` flag per step)
+- Verify loop is tolerant to transient GET errors (only the deadline aborts),
+  window raised to 180s; step detail now says "Applied; verifying…" to match
+  reality (the ~30s figure is WMSPanel's delivery cycle, not our window)
+- Verify-timeout errors now include LAST SEEN values of the patched fields vs
+  expected — field-name mismatches with WMSPanel become self-evident in trace
+- Builder: app/stream source picker — active streams via WMSPanel Streams API
+  (Deep stats) with fallback aggregation from configured republish/outgoing/
+  udp objects; insert as src_app/src_stream, application/stream or hot-swap
+  key pairs
+
 ### v0.3.3 (m2) — engineering functions engine
 - Functions: ordered transactional macros over WMSPanel-managed objects.
   Step types: `patch` (republish rule / UDP+SRT output / MPEGTS outgoing /

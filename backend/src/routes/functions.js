@@ -72,6 +72,46 @@ functionsRouter.get('/runs/:id', requirePerm('functions.execute'), async (req, r
   res.json(run);
 });
 
+// App/stream picker source: active streams via WMSPanel Streams API (needs
+// Deep stats enabled); falls back to aggregating app/stream pairs from
+// configured republish/outgoing/udp objects.
+functionsRouter.get('/streams/:serverId', requirePerm('functions.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.serverId);
+  if (!server?.wmspanelServerId) return res.status(409).json({ error: 'Server is not mapped to WMSPanel' });
+  const settings = await Settings.load();
+  const cfg = settings.wmspanel;
+  const sid = server.wmspanelServerId;
+  let streams = [];
+  let source = 'aggregated';
+  try {
+    const ds = await wmspanel.dataSlices(cfg);
+    const sliceId = ds.data_slices?.[0]?.id;
+    if (sliceId) {
+      const d = await wmspanel.activeStreams(cfg, sliceId, sid);
+      streams = (d.streams || [])
+        .map(x => (typeof x === 'string' ? x : x?.name))
+        .filter(Boolean)
+        .map(full => {
+          const parts = String(full).split('/');
+          if (parts.length >= 3) return { app: parts[1], stream: parts.slice(2).join('/') };
+          return null;
+        })
+        .filter(Boolean);
+      if (streams.length) source = 'wmspanel-streams';
+    }
+  } catch { /* fall back below */ }
+  if (streams.length === 0) {
+    const pairs = new Map();
+    const add = (a, st) => { if (a) pairs.set(`${a}/${st || ''}`, { app: a, stream: st || '' }); };
+    try { const d = await wmspanel.republishList(cfg, sid); (d.rules || d.republish_rules || []).forEach(r => add(r.src_app, r.src_stream)); } catch {}
+    try { const d = await wmspanel.outgoingList(cfg, sid); (d.streams || d.settings || []).forEach(o => add(o.application, o.stream)); } catch {}
+    try { const d = await wmspanel.udpList(cfg, sid); (d.settings || []).forEach(o => { add(o.application, o.stream); add(o.src_app, o.src_stream); }); } catch {}
+    streams = [...pairs.values()];
+  }
+  streams.sort((a, b) => (a.app + '/' + a.stream).localeCompare(b.app + '/' + b.stream));
+  res.json({ streams, source });
+});
+
 // Object browser for the builder: list WMSPanel objects of a kind on a server.
 functionsRouter.get('/objects/:serverId/:kind', requirePerm('functions.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.serverId);

@@ -8,6 +8,10 @@ const runStepSchema = new mongoose.Schema({
   status: { type: String, default: 'pending' },
   detail: { type: String, default: '' },
   snapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+  // true once the mutation (PUT/action) was actually sent — the failed step
+  // itself must be rolled back if its mutation went out (verify may fail
+  // AFTER the change applied).
+  applied: { type: Boolean, default: false },
 }, { _id: false });
 
 const runSchema = new mongoose.Schema({

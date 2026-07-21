@@ -18,7 +18,7 @@ import { wmspanel } from './wmspanelClient.js';
 // All state transitions are persisted immediately so the UI can poll the run
 // and animate step progress live.
 
-const VERIFY_TIMEOUT_MS = 120_000;
+const VERIFY_TIMEOUT_MS = 180_000;
 const VERIFY_POLL_MS = 5_000;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -41,6 +41,32 @@ async function getObject(cfg, kind, sid, targetId) {
 
 function valuesMatch(obj, patch) {
   return Object.keys(patch).every(k => String(obj[k]) === String(patch[k]));
+}
+
+// Poll until the object's patched keys reflect desired values. Transient GET
+// errors do not abort the step — only the deadline does. On timeout the error
+// carries the LAST SEEN values of the patched keys: if WMSPanel names a field
+// differently than the patch, this makes it immediately visible in the trace.
+async function verifyPatched(cfg, kind, sid, targetId, want) {
+  const deadline = Date.now() + VERIFY_TIMEOUT_MS;
+  let lastSeen = null, lastErr = null;
+  for (;;) {
+    try {
+      const obj = await getObject(cfg, kind, sid, targetId);
+      lastSeen = {};
+      for (const k of Object.keys(want)) lastSeen[k] = obj[k] ?? null;
+      lastErr = null;
+      if (valuesMatch(obj, want)) return;
+    } catch (e) {
+      lastErr = e.message;
+    }
+    if (Date.now() > deadline) {
+      const seen = lastSeen ? ` Last seen: ${JSON.stringify(lastSeen)} (expected ${JSON.stringify(want)}).` : '';
+      const err = lastErr ? ` Last GET error: ${lastErr}.` : '';
+      throw new Error(`Verify timeout for ${kind} ${targetId}.${seen}${err}`);
+    }
+    await sleep(VERIFY_POLL_MS);
+  }
 }
 
 async function resolveServer(step) {
@@ -76,18 +102,12 @@ async function applyStep(cfg, run, idx, step) {
       snapshot = { sid, targetId: step.targetId, action: step.action, wasPaused: Boolean(before.paused) };
     }
     await wmspanel.outgoingAction(cfg, sid, step.targetId, step.action);
-    await persistStep(run, idx, { status: 'verifying', snapshot });
+    await persistStep(run, idx, { status: 'verifying', snapshot, applied: true,
+      detail: 'Applied; verifying (WMSPanel delivers to Nimble on its ~30s sync cycle; window 180s)' });
     if (step.action === 'pause' || step.action === 'resume') {
-      const want = { paused: step.action === 'pause' };
-      const deadline = Date.now() + VERIFY_TIMEOUT_MS;
-      for (;;) {
-        const obj = await getObject(cfg, 'outgoing', sid, step.targetId);
-        if (valuesMatch(obj, want)) break;
-        if (Date.now() > deadline) throw new Error(`Verify timeout: outgoing ${step.targetId} did not become ${step.action}d`);
-        await sleep(VERIFY_POLL_MS);
-      }
+      await verifyPatched(cfg, 'outgoing', sid, step.targetId, { paused: step.action === 'pause' });
     }
-    await persistStep(run, idx, { status: 'done' });
+    await persistStep(run, idx, { status: 'done', detail: '' });
     return;
   }
 
@@ -104,20 +124,15 @@ async function applyStep(cfg, run, idx, step) {
   await persistStep(run, idx, { snapshot });
 
   await wmspanel[KIND_OPS[kind].put](cfg, sid, step.targetId, patch);
-
-  await persistStep(run, idx, { status: 'verifying', detail: 'Waiting for WMSPanel→Nimble sync (~30s cycle)' });
-  const deadline = Date.now() + VERIFY_TIMEOUT_MS;
-  for (;;) {
-    const obj = await getObject(cfg, kind, sid, step.targetId);
-    if (valuesMatch(obj, patch)) break;
-    if (Date.now() > deadline) throw new Error(`Verify timeout: ${kind} ${step.targetId} did not reflect the patch`);
-    await sleep(VERIFY_POLL_MS);
-  }
+  await persistStep(run, idx, { applied: true, status: 'verifying',
+    detail: 'Applied; verifying (WMSPanel delivers to Nimble on its ~30s sync cycle; window 180s)' });
+  await verifyPatched(cfg, kind, sid, step.targetId, patch);
   await persistStep(run, idx, { status: 'done', detail: '' });
 }
 
 async function rollbackStep(cfg, run, idx, step) {
   const snap = run.steps[idx].snapshot;
+  const prevDetail = run.steps[idx].detail;
   await persistStep(run, idx, { status: 'rolling_back' });
   try {
     if (step.type === 'patch' && snap?.values) {
@@ -127,7 +142,7 @@ async function rollbackStep(cfg, run, idx, step) {
       await wmspanel.outgoingAction(cfg, snap.sid, snap.targetId, inverse);
     }
     // delay / restart: nothing to roll back
-    await persistStep(run, idx, { status: 'rolled_back' });
+    await persistStep(run, idx, { status: 'rolled_back', detail: prevDetail });
     return true;
   } catch (e) {
     await persistStep(run, idx, { status: 'rollback_failed', detail: e.message });
@@ -168,9 +183,13 @@ export async function executeFunction(fnDoc, startedBy) {
     if (failedAt === -1) {
       run.status = 'success';
     } else {
-      // Transactional rollback of completed steps, reverse order.
+      // Transactional rollback in reverse order. The FAILED step itself is
+      // rolled back too when its mutation was actually sent (applied=true):
+      // e.g. a PUT that succeeded but whose verification timed out MUST be
+      // reverted — otherwise the change silently stays applied.
       let allOk = true;
-      for (let i = failedAt - 1; i >= 0; i--) {
+      for (let i = failedAt; i >= 0; i--) {
+        if (i === failedAt && !run.steps[i].applied) continue;
         const ok = await rollbackStep(cfg, run, i, fnDoc.steps[i]);
         if (!ok) allOk = false;
       }

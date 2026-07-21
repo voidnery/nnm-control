@@ -56,14 +56,42 @@ function ObjectPicker({ servers, step, onPick }) {
   );
 }
 
+const KEY_PAIRS = [
+  { value: 'src', label: 'src_app / src_stream (republish)', keys: ['src_app', 'src_stream'] },
+  { value: 'app', label: 'application / stream (outgoing, udp)', keys: ['application', 'stream'] },
+  { value: 'sub', label: 'substitute_app / substitute_stream (hot swap)', keys: ['substitute_app', 'substitute_stream'] },
+  { value: 'orig', label: 'original_app / original_stream (hot swap)', keys: ['original_app', 'original_stream'] },
+];
+const defaultPairFor = (kind) => kind === 'republish' ? 'src' : kind === 'hotswap' ? 'sub' : 'app';
+
 function StepEditor({ step, servers, onChange, onRemove }) {
   const set = (k, v) => onChange({ ...step, [k]: v });
   const [patchText, setPatchText] = useState(JSON.stringify(step.patch || {}, null, 0));
   const [patchErr, setPatchErr] = useState('');
+  const [live, setLive] = useState(null);        // { streams, source }
+  const [liveErr, setLiveErr] = useState('');
+  const [pick, setPick] = useState('');          // "app/stream"
+  const [pairKind, setPairKind] = useState(defaultPairFor(step.objectKind));
   const applyPatchText = (t) => {
     setPatchText(t);
     try { onChange({ ...step, patch: JSON.parse(t || '{}') }); setPatchErr(''); }
     catch { setPatchErr('Invalid JSON'); }
+  };
+  const loadLive = async () => {
+    setLiveErr(''); setLive(null);
+    try { setLive(await api(`/functions/streams/${step.serverId}`)); }
+    catch (e) { setLiveErr(e.message); }
+  };
+  const insertPick = () => {
+    const slash = pick.indexOf('/');
+    if (slash < 0) return;
+    const app = pick.slice(0, slash);
+    const stream = pick.slice(slash + 1);
+    const keys = KEY_PAIRS.find(k => k.value === pairKind)?.keys || ['src_app', 'src_stream'];
+    const nextPatch = { ...(step.patch || {}), [keys[0]]: app, [keys[1]]: stream };
+    onChange({ ...step, patch: nextPatch });
+    setPatchText(JSON.stringify(nextPatch, null, 0));
+    setPatchErr('');
   };
   return (
     <div className="panel" style={{ padding: 12 }}>
@@ -93,6 +121,25 @@ function StepEditor({ step, servers, onChange, onRemove }) {
           <ObjectPicker servers={servers} step={step} onPick={o => set('targetId', String(o.id))} />
           {step.type === 'patch' && (
             <>
+              <label>Source picker (apps/streams on the selected server)</label>
+              <div className="row">
+                <button disabled={!step.serverId} onClick={loadLive}>Load streams</button>
+                {live && <span className="hint">{live.streams.length} found ({live.source === 'wmspanel-streams' ? 'active streams' : 'from configured objects'})</span>}
+              </div>
+              {liveErr && <div className="error-box">{liveErr}</div>}
+              {live && (
+                <div className="row" style={{ marginTop: 6 }}>
+                  <input className="mono" style={{ flex: 2 }} list={`live-${step.serverId}-${step.targetId}`}
+                         placeholder="app/stream" value={pick} onChange={e => setPick(e.target.value)} />
+                  <datalist id={`live-${step.serverId}-${step.targetId}`}>
+                    {live.streams.map(st => <option key={st.app + '/' + st.stream} value={st.app + '/' + st.stream} />)}
+                  </datalist>
+                  <select style={{ flex: 3 }} value={pairKind} onChange={e => setPairKind(e.target.value)}>
+                    {KEY_PAIRS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+                  </select>
+                  <button disabled={!pick.includes('/')} onClick={insertPick}>Insert</button>
+                </div>
+              )}
               <label>Patch (JSON: fields to change; snapshot/rollback is automatic)</label>
               <textarea className="mono" rows={2} value={patchText} onChange={e => applyPatchText(e.target.value)} />
               {patchErr && <div className="hint" style={{ color: 'var(--warn)' }}>{patchErr}</div>}

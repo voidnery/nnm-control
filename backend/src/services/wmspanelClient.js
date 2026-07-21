@@ -63,6 +63,11 @@ export const wmspanel = {
   republishUpdate:  (cfg, sid, ruleId, patch) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'PUT', body: patch }),
   republishDelete:  (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'DELETE' }),
   republishRestart: (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}/restart`),
+  // Streams helpers (for source pickers). Streams API needs Deep stats
+  // enabled on the account; callers must handle failure and fall back.
+  dataSlices: (cfg) => call(cfg, '/data_slices'),
+  activeStreams: (cfg, sliceId, sid) =>
+    call(cfg, `/streams?data_slice=${encodeURIComponent(sliceId)}&server=${encodeURIComponent(sid)}&kind=active&server_kind=nimble`),
   // UDP streaming settings (SRT/UDP outputs) — confirmed: /server/{id}/mpegts/udp
   udpList:   (cfg, sid) => call(cfg, `/server/${sid}/mpegts/udp`),
   udpGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/udp/${id}`),
