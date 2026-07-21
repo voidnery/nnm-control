@@ -13,6 +13,7 @@ export default function TranscodersPage() {
   const [filter, setFilter] = useState('');
   const [serverFilter, setServerFilter] = useState('');
   const [detail, setDetail] = useState(null);
+  const [editModal, setEditModal] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -86,7 +87,15 @@ export default function TranscodersPage() {
                     {t.paused
                       ? <button className="primary" disabled={busy} onClick={() => act(t, 'resume')}>Resume</button>
                       : <button disabled={busy} onClick={() => act(t, 'pause')}>Pause</button>}{' '}
-                    <button disabled={busy} onClick={() => act(t, 'clone')}>Clone</button>
+                    <button disabled={busy} onClick={() => act(t, 'clone')}>Clone</button>{' '}
+                    <button disabled={busy} onClick={() => setEditModal({ id: t.id, name: t.name, description: t.description || '', tags: (t.tags || []).join(',') })}>Edit</button>{' '}
+                    <button className="danger" disabled={busy} onClick={async () => {
+                      if (!window.confirm(`DELETE transcoder "${t.name}"? Its pipelines are removed permanently.`)) return;
+                      setBusy(true); setError('');
+                      try { await api(`/wmspanel/transcoders/${t.id}`, { method: 'DELETE' }); await load(); }
+                      catch (e) { setError(e.message); }
+                      finally { setBusy(false); }
+                    }}>Delete</button>
                   </>}
                 </td>
               </tr>
@@ -119,6 +128,33 @@ export default function TranscodersPage() {
         </table>
       </div>
 
+      {editModal && (
+        <div className="modal-back" onClick={() => setEditModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Edit transcoder</h3>
+            <label>Name</label>
+            <input value={editModal.name} onChange={e => setEditModal(m => ({ ...m, name: e.target.value }))} />
+            <label>Description</label>
+            <input value={editModal.description} onChange={e => setEditModal(m => ({ ...m, description: e.target.value }))} />
+            <label>Tags (comma separated)</label>
+            <input value={editModal.tags} onChange={e => setEditModal(m => ({ ...m, tags: e.target.value }))} />
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditModal(null)}>Cancel</button>
+              <button className="primary" disabled={busy || !editModal.name} onClick={async () => {
+                setBusy(true); setError('');
+                try {
+                  await api(`/wmspanel/transcoders/${editModal.id}`, { method: 'PUT', body: {
+                    name: editModal.name, description: editModal.description,
+                    tags: editModal.tags.split(',').map(x => x.trim()).filter(Boolean),
+                  } });
+                  setEditModal(null); await load();
+                } catch (e) { setError(e.message); }
+                finally { setBusy(false); }
+              }}>Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
       {detail && (
         <div className="modal-back" onClick={() => setDetail(null)}>
           <div className="modal" style={{ width: 700 }} onClick={e => e.stopPropagation()}>

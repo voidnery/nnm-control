@@ -174,3 +174,21 @@ r.get('/originapps', requirePerm('wmsobjects.view'), proxy(async () => wmspanel.
 r.post('/originapps', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.originAppCreate(await cfg(), rq.body || {})));
 r.put('/originapps/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.originAppUpdate(await cfg(), rq.params.objId, rq.body || {})));
 r.delete('/originapps/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.originAppDelete(await cfg(), rq.params.objId)));
+
+// --- m11.2: CRUD completion ---
+r.post('/server/:id/udp', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.udpCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
+r.delete('/server/:id/udp/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.udpDelete(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));
+
+r.post('/server/:id/interfaces', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.rtmpInterfaceCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
+r.put('/server/:id/interfaces/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.rtmpInterfaceUpdate(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId, rq.body || {})));
+r.delete('/server/:id/interfaces/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.rtmpInterfaceDelete(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));
+
+r.delete('/transcoders/:objId', requirePerm('wmsobjects.manage'),
+  proxy(async rq => wmspanel.transcoderDelete(await cfg(), rq.params.objId)));
+r.put('/transcoders/:objId', requirePerm('wmsobjects.manage'),
+  proxy(async rq => wmspanel.transcoderUpdate(await cfg(), null, rq.params.objId, rq.body || {})));

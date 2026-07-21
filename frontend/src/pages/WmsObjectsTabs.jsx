@@ -49,6 +49,35 @@ export function UdpTab({ serverId }) {
     sources: (o.source_streams || []).map(ss => ({ ...ss })),
   });
 
+  const [cfgModal, setCfgModal] = useState(null); // create or settings-edit
+  const openCfg = (o) => setCfgModal(o ? {
+    id: o.id, name: o.name || '', description: o.description || '',
+    protocol: o.protocol || 'srt', ip: o.ip || '', port: o.port || 10000,
+    ttl: o.ttl ?? 1,
+    parameters: Object.keys(o.parameters || {}).length ? JSON.stringify(o.parameters) : '',
+  } : { name: '', description: '', protocol: 'srt', ip: '0.0.0.0', port: 10000, ttl: 1, parameters: '' });
+  const saveCfg = async () => {
+    setBusy(true); setError('');
+    const body = {
+      name: cfgModal.name, description: cfgModal.description,
+      protocol: cfgModal.protocol, ip: cfgModal.ip, port: Number(cfgModal.port), ttl: Number(cfgModal.ttl),
+    };
+    try {
+      if (cfgModal.parameters?.trim()) body.parameters = JSON.parse(cfgModal.parameters);
+      if (cfgModal.id) await api(`/wmspanel/server/${serverId}/udp/${cfgModal.id}`, { method: 'PUT', body });
+      else await api(`/wmspanel/server/${serverId}/udp`, { method: 'POST', body });
+      setCfgModal(null); await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  const removeUdp = async (o) => {
+    if (!window.confirm(`Delete SRT/UDP output "${o.name || o.id}" (${o.ip}:${o.port})?`)) return;
+    setBusy(true); setError('');
+    try { await api(`/wmspanel/server/${serverId}/udp/${o.id}`, { method: 'DELETE' }); await load(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
   const save = async () => {
     setBusy(true); setError('');
     try {
@@ -99,7 +128,9 @@ export function UdpTab({ serverId }) {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => openEdit(o)}>Edit source</button>{' '}
-                    <button disabled={busy} onClick={() => togglePause(o)}>{o.paused ? 'Resume' : 'Pause'}</button>
+                    <button disabled={busy} onClick={() => openCfg(o)}>Settings</button>{' '}
+                    <button disabled={busy} onClick={() => togglePause(o)}>{o.paused ? 'Resume' : 'Pause'}</button>{' '}
+                    <button className="danger" disabled={busy} onClick={() => removeUdp(o)}>Delete</button>
                   </>}
                 </td>
               </tr>
@@ -107,8 +138,44 @@ export function UdpTab({ serverId }) {
             {settings.length === 0 && <tr><td colSpan={6} className="hint">No UDP/SRT outputs on this server.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}><button onClick={load} disabled={busy}>Refresh</button></div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <button onClick={load} disabled={busy}>Refresh</button>
+          {can('wmsobjects.manage') && <button className="primary" disabled={busy} onClick={() => openCfg(null)}>+ New output</button>}
+        </div>
       </div>
+      {cfgModal && (
+        <div className="modal-back" onClick={() => setCfgModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>{cfgModal.id ? `Settings of ${cfgModal.name}` : 'New SRT/UDP output'}</h3>
+            <label>Name</label>
+            <input value={cfgModal.name} onChange={e => setCfgModal(m => ({ ...m, name: e.target.value }))} />
+            <label>Description</label>
+            <input value={cfgModal.description} onChange={e => setCfgModal(m => ({ ...m, description: e.target.value }))} />
+            <div className="field-inline">
+              <div>
+                <label>Protocol</label>
+                <select value={cfgModal.protocol} onChange={e => setCfgModal(m => ({ ...m, protocol: e.target.value }))}>
+                  {['srt', 'udp', 'rist'].map(x => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </div>
+              <div><label>TTL</label><input type="number" value={cfgModal.ttl} onChange={e => setCfgModal(m => ({ ...m, ttl: e.target.value }))} /></div>
+            </div>
+            <div className="field-inline">
+              <div><label>IP</label><input className="mono" value={cfgModal.ip} onChange={e => setCfgModal(m => ({ ...m, ip: e.target.value }))} /></div>
+              <div><label>Port</label><input type="number" value={cfgModal.port} onChange={e => setCfgModal(m => ({ ...m, port: e.target.value }))} /></div>
+            </div>
+            <label>Parameters (JSON, e.g. {'{"latency":"1000","maxbw":"0"}'})</label>
+            <input className="mono" value={cfgModal.parameters} onChange={e => setCfgModal(m => ({ ...m, parameters: e.target.value }))} />
+            {!cfgModal.id && <div className="hint" style={{ marginTop: 6 }}>Source is set after creation via "Edit source".</div>}
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setCfgModal(null)}>Cancel</button>
+              <button className="primary" disabled={busy || !cfgModal.name || !cfgModal.ip || !cfgModal.port} onClick={saveCfg}>
+                {cfgModal.id ? 'Apply' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {edit && (
         <div className="modal-back" onClick={() => setEdit(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -299,6 +366,7 @@ export function HotswapTab({ serverId }) {
   const { data, error, setError, load } = useObjects(serverId, 'hotswap');
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editModal, setEditModal] = useState(null);
   const [form, setForm] = useState({ original_app: '', original_stream: '', substitute_app: '', substitute_stream: '' });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const settings = data?.settings || [];
@@ -356,13 +424,11 @@ export function HotswapTab({ serverId }) {
                             onClick={() => put(o, { emergency: !o.emergency })}>
                       {o.emergency ? 'Back to original' : 'EMERGENCY ON'}
                     </button>{' '}
-                    <button disabled={busy} onClick={() => {
-                      const sa = window.prompt('Substitute app:', o.substitute_app);
-                      if (sa === null) return;
-                      const ss = window.prompt('Substitute stream:', o.substitute_stream);
-                      if (ss === null) return;
-                      put(o, { substitute_app: sa, substitute_stream: ss });
-                    }}>Edit substitute</button>{' '}
+                    <button disabled={busy} onClick={() => setEditModal({
+                      id: o.id, original_app: o.original_app, original_stream: o.original_stream,
+                      substitute_app: o.substitute_app, substitute_stream: o.substitute_stream,
+                      paused: Boolean(o.paused),
+                    })}>Edit</button>{' '}
                     <button className="danger" disabled={busy} onClick={() => remove(o)}>Delete</button>
                   </>}
                 </td>
@@ -390,6 +456,33 @@ export function HotswapTab({ serverId }) {
           <button className="primary" style={{ marginTop: 12 }}
                   disabled={busy || !form.original_app || !form.original_stream || !form.substitute_app || !form.substitute_stream}
                   onClick={create}>{busy ? 'Creating…' : 'Create (created disarmed)'}</button>
+        </div>
+      )}
+      {editModal && (
+        <div className="modal-back" onClick={() => setEditModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Edit hot swap</h3>
+            <div className="field-inline">
+              <div><label>Original app</label><input value={editModal.original_app} onChange={e => setEditModal(m => ({ ...m, original_app: e.target.value }))} /></div>
+              <div><label>Original stream</label><input value={editModal.original_stream} onChange={e => setEditModal(m => ({ ...m, original_stream: e.target.value }))} /></div>
+            </div>
+            <div className="field-inline">
+              <div><label>Substitute app</label><input value={editModal.substitute_app} onChange={e => setEditModal(m => ({ ...m, substitute_app: e.target.value }))} /></div>
+              <div><label>Substitute stream</label><input value={editModal.substitute_stream} onChange={e => setEditModal(m => ({ ...m, substitute_stream: e.target.value }))} /></div>
+            </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={editModal.paused}
+                     onChange={e => setEditModal(m => ({ ...m, paused: e.target.checked }))} /> Paused (disarmed)
+            </label>
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditModal(null)}>Cancel</button>
+              <button className="primary" disabled={busy} onClick={async () => {
+                const { id, ...body } = editModal;
+                await put({ id }, body);
+                setEditModal(null);
+              }}>Apply</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -844,28 +937,80 @@ export function AppsTab({ serverId }) {
 
 // ------------------------------------------------------------- Interfaces
 export function InterfacesTab({ serverId }) {
-  const { data, error, load } = useObjects(serverId, 'interfaces');
-  if (!data) return <div className="hint">Loading…</div>;
+  const { can } = useAuth();
+  const { data, error, setError, load } = useObjects(serverId, 'interfaces');
+  const [busy, setBusy] = useState(false);
+  const [modal, setModal] = useState(null);
   const list = data?.interfaces || [];
+
+  const save = async () => {
+    setBusy(true); setError('');
+    const body = { ip: modal.ip, port: Number(modal.port), ssl: Boolean(modal.ssl) };
+    try {
+      if (modal.id) await api(`/wmspanel/server/${serverId}/interfaces/${modal.id}`, { method: 'PUT', body });
+      else await api(`/wmspanel/server/${serverId}/interfaces`, { method: 'POST', body });
+      setModal(null); await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  const remove = async (i) => {
+    if (!window.confirm(`Delete RTMP interface ${i.ip}:${i.port}? Publishers using it will disconnect.`)) return;
+    setBusy(true); setError('');
+    try { await api(`/wmspanel/server/${serverId}/interfaces/${i.id}`, { method: 'DELETE' }); await load(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  if (!data) return <div className="hint">Loading…</div>;
   return (
     <div>
+      <SyncNote />
       {error && <div className="error-box">{error}</div>}
       <div className="panel">
         <table>
-          <thead><tr><th>IP</th><th>Port</th><th>SSL</th></tr></thead>
+          <thead><tr><th>IP</th><th>Port</th><th>SSL</th><th></th></tr></thead>
           <tbody>
             {list.map(i => (
               <tr key={i.id}>
                 <td className="mono">{i.ip}</td>
                 <td className="mono">{i.port}</td>
                 <td>{i.ssl ? <span className="badge">ssl</span> : <span className="hint">no</span>}</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {can('wmsobjects.manage') && <>
+                    <button disabled={busy} onClick={() => setModal({ id: i.id, ip: i.ip, port: i.port, ssl: i.ssl })}>Edit</button>{' '}
+                    <button className="danger" disabled={busy} onClick={() => remove(i)}>Delete</button>
+                  </>}
+                </td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={3} className="hint">No RTMP interfaces.</td></tr>}
+            {list.length === 0 && <tr><td colSpan={4} className="hint">No RTMP interfaces.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}><button onClick={load}>Refresh</button></div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <button onClick={load} disabled={busy}>Refresh</button>
+          {can('wmsobjects.manage') && (
+            <button className="primary" disabled={busy} onClick={() => setModal({ ip: '0.0.0.0', port: 1935, ssl: false })}>+ New interface</button>
+          )}
+        </div>
       </div>
+      {modal && (
+        <div className="modal-back" onClick={() => setModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>{modal.id ? `Edit interface ${modal.ip}:${modal.port}` : 'New RTMP interface'}</h3>
+            <div className="field-inline">
+              <div><label>IP</label><input className="mono" value={modal.ip} onChange={e => setModal(m => ({ ...m, ip: e.target.value }))} /></div>
+              <div><label>Port</label><input type="number" value={modal.port} onChange={e => setModal(m => ({ ...m, port: e.target.value }))} /></div>
+            </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={modal.ssl} onChange={e => setModal(m => ({ ...m, ssl: e.target.checked }))} /> SSL
+            </label>
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)}>Cancel</button>
+              <button className="primary" disabled={busy || !modal.ip || !modal.port} onClick={save}>{modal.id ? 'Apply' : 'Create'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

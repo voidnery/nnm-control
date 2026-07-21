@@ -18,6 +18,7 @@ function WmspanelRules({ serverId }) {
   const [error, setError] = useState('');
   // Canonical WMSPanel republish fields: src_app/src_strm, dest_app/dest_strm
   const [edit, setEdit] = useState(null); // { ruleId, src_app, src_strm }
+  const [full, setFull] = useState(null); // full-rule edit modal
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ src_app: '', src_strm: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_strm: '' });
   const [busy, setBusy] = useState(false);
@@ -101,6 +102,12 @@ function WmspanelRules({ serverId }) {
                               onClick={() => setEdit({ ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '' })}>
                         Switch source
                       </button>{' '}
+                      <button disabled={busy} onClick={() => setFull({
+                        ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '',
+                        dest_addr: rule.dest_addr || '', dest_port: rule.dest_port || 1935,
+                        dest_app: rule.dest_app || '', dest_strm: rule.dest_strm || '',
+                        description: rule.description || '', paused: Boolean(rule.paused),
+                      })}>Edit</button>{' '}
                       <button disabled={busy} onClick={() => restart(rule)}>Restart</button>{' '}
                       <button className="danger" disabled={busy} onClick={() => remove(rule)}>Delete</button>
                     </>
@@ -140,6 +147,40 @@ function WmspanelRules({ serverId }) {
           <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 320, overflow: 'auto' }}>
             {JSON.stringify(raw, null, 2)}
           </pre>
+        </div>
+      )}
+      {full && (
+        <div className="modal-back" onClick={() => setFull(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Edit rule</h3>
+            <div className="field-inline">
+              <div><label>Source app</label><input value={full.src_app} onChange={e => setFull(m => ({ ...m, src_app: e.target.value }))} /></div>
+              <div><label>Source stream</label><input value={full.src_strm} onChange={e => setFull(m => ({ ...m, src_strm: e.target.value }))} /></div>
+            </div>
+            <div className="field-inline">
+              <div><label>Dest address</label><input value={full.dest_addr} onChange={e => setFull(m => ({ ...m, dest_addr: e.target.value }))} /></div>
+              <div><label>Dest port</label><input type="number" value={full.dest_port} onChange={e => setFull(m => ({ ...m, dest_port: e.target.value }))} /></div>
+            </div>
+            <div className="field-inline">
+              <div><label>Dest app</label><input value={full.dest_app} onChange={e => setFull(m => ({ ...m, dest_app: e.target.value }))} /></div>
+              <div><label>Dest stream</label><input value={full.dest_strm} onChange={e => setFull(m => ({ ...m, dest_strm: e.target.value }))} /></div>
+            </div>
+            <label>Description</label>
+            <input value={full.description} onChange={e => setFull(m => ({ ...m, description: e.target.value }))} />
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={full.paused}
+                     onChange={e => setFull(m => ({ ...m, paused: e.target.checked }))} /> Paused
+            </label>
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setFull(null)}>Cancel</button>
+              <button className="primary" disabled={busy} onClick={() => act(async () => {
+                const { ruleId, ...body } = full;
+                body.dest_port = Number(body.dest_port);
+                await api(`/wmspanel/server/${serverId}/republish/${ruleId}`, { method: 'PUT', body });
+                setFull(null);
+              })}>Apply</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

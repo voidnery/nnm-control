@@ -77,6 +77,8 @@ export const wmspanel = {
   udpList:   (cfg, sid) => call(cfg, `/server/${sid}/mpegts/udp`),
   udpGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/udp/${id}`),
   udpUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/mpegts/udp/${id}`, { method: 'PUT', body: patch }),
+  udpCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/mpegts/udp`, { method: 'POST', body }),
+  udpDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/udp/${id}`, { method: 'DELETE' }),
   // MPEGTS outgoing streams — confirmed: /server/{id}/mpegts/outgoing (+ pause/resume/restart)
   outgoingList:   (cfg, sid) => call(cfg, `/server/${sid}/mpegts/outgoing`),
   outgoingGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}`),
@@ -109,6 +111,7 @@ export const wmspanel = {
   transcoderPause:  (cfg, id) => call(cfg, `/transcoder/${id}/pause`),
   transcoderResume: (cfg, id) => call(cfg, `/transcoder/${id}/resume`),
   transcoderClone:  (cfg, id) => call(cfg, `/transcoder/${id}/clone`),
+  transcoderDelete: (cfg, id) => call(cfg, `/transcoder/${id}`, { method: 'DELETE' }),
   transcoderLicenses: (cfg) => call(cfg, `/licenses/transcoder`),
   // ABR (account-level): rendition ladder -> single ABR stream
   abrList:   (cfg, _sid) => call(cfg, `/abr`),
@@ -127,6 +130,9 @@ export const wmspanel = {
   originAppDelete: (cfg, id) => call(cfg, `/origin_apps/${id}`, { method: 'DELETE' }),
   // RTMP interfaces (view)
   rtmpInterfaceList: (cfg, sid) => call(cfg, `/server/${sid}/rtmp/interface`),
+  rtmpInterfaceCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/rtmp/interface`, { method: 'POST', body }),
+  rtmpInterfaceUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/rtmp/interface/${id}`, { method: 'PUT', body: patch }),
+  rtmpInterfaceDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/rtmp/interface/${id}`, { method: 'DELETE' }),
   // Hot swap settings — confirmed: /server/{id}/hotswap (Transcoder feature)
   hotswapList:   (cfg, sid) => call(cfg, `/server/${sid}/hotswap`),
   hotswapGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/hotswap/${id}`),

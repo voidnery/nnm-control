@@ -4,6 +4,25 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.19 (m11.2) — CRUD parity across all entity tabs
+- FIX during release validation: the first cut of this version shipped a
+  corrupted WmsObjectsTabs (inverted slice duplicated a file section; the
+  build failure was hidden by a truncated log). File rebuilt from the last
+  good commit with corrected patch boundaries; build validation now checks
+  the full build log and exit code instead of a tail
+- UDP/SRT: create output (name/protocol/ip/port/ttl/parameters; source set
+  afterwards via Edit source), Settings edit for the same fields, Delete
+- Interfaces: full CRUD (create/edit/delete RTMP listeners with disconnect
+  warning on delete)
+- Republish: full-rule Edit modal (source + destination + description +
+  paused) alongside the quick inline Switch source
+- Hotswap: prompt-based editing replaced with a full modal (original pair,
+  substitute pair, paused/disarmed)
+- Transcoders: Edit (name/description/tags) and Delete (with permanent-
+  pipelines warning)
+- Note: Outgoing already had full CRUD since v0.3.12; live Streams has no
+  create by nature (streams appear by publishing)
+
 ### v0.3.18 (m11.1) — FIX: UDP/SRT source editing covers both modes
 - Live data showed 604 of 755 UDP/SRT outputs set their source via
   `source_id` (a reference to an MPEGTS incoming stream = raw passthrough),
