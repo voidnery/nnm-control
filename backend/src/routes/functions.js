@@ -87,7 +87,7 @@ functionsRouter.get('/streams/:serverId', requirePerm('functions.manage'), async
     const ds = await wmspanel.dataSlices(cfg);
     const sliceId = ds.data_slices?.[0]?.id;
     if (sliceId) {
-      const d = await wmspanel.activeStreams(cfg, sliceId, sid);
+      const d = await wmspanel.streamsQuery(cfg, sliceId, sid, 'active');
       streams = (d.streams || [])
         .map(x => (typeof x === 'string' ? x : x?.name))
         .filter(Boolean)

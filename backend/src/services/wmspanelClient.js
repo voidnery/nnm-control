@@ -66,8 +66,8 @@ export const wmspanel = {
   // Streams helpers (for source pickers). Streams API needs Deep stats
   // enabled on the account; callers must handle failure and fall back.
   dataSlices: (cfg) => call(cfg, '/data_slices'),
-  activeStreams: (cfg, sliceId, sid) =>
-    call(cfg, `/streams?data_slice=${encodeURIComponent(sliceId)}&server=${encodeURIComponent(sid)}&kind=active&server_kind=nimble`),
+  streamsQuery: (cfg, sliceId, sid, kind) =>
+    call(cfg, `/streams?data_slice=${encodeURIComponent(sliceId)}&server=${encodeURIComponent(sid)}&server_kind=nimble${kind ? `&kind=${encodeURIComponent(kind)}` : ''}`),
   // UDP streaming settings (SRT/UDP outputs) — confirmed: /server/{id}/mpegts/udp
   udpList:   (cfg, sid) => call(cfg, `/server/${sid}/mpegts/udp`),
   udpGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/udp/${id}`),
@@ -77,6 +77,14 @@ export const wmspanel = {
   outgoingGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}`),
   outgoingUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}`, { method: 'PUT', body: patch }),
   outgoingAction: (cfg, sid, id, action) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}/${action}`),
+  outgoingCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/mpegts/outgoing`, { method: 'POST', body }),
+  outgoingDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}`, { method: 'DELETE' }),
+  // MPEGTS incoming streams — /server/{id}/mpegts/incoming (schema pinned
+  // from live dump; CRUD family-consistent with udp/outgoing)
+  incomingList:   (cfg, sid) => call(cfg, `/server/${sid}/mpegts/incoming`),
+  incomingCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/mpegts/incoming`, { method: 'POST', body }),
+  incomingUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/mpegts/incoming/${id}`, { method: 'PUT', body: patch }),
+  incomingDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/incoming/${id}`, { method: 'DELETE' }),
   // Hot swap settings — confirmed: /server/{id}/hotswap (Transcoder feature)
   hotswapList:   (cfg, sid) => call(cfg, `/server/${sid}/hotswap`),
   hotswapGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/hotswap/${id}`),

@@ -98,12 +98,39 @@ r.get('/server/:id/streams', requirePerm('streams.view'), loadMapped, proxy(asyn
     e.data = ds;
     throw e;
   }
-  const d = await wmspanel.activeStreams(c, sliceId, rq.mapped.wmspanelServerId);
+  // kind=active first; if empty, retry unfiltered (some accounts/kinds return
+  // nothing for 'active'); keep raw upstream for the Debug expander.
+  const tried = [];
+  let d = await wmspanel.streamsQuery(c, sliceId, rq.mapped.wmspanelServerId, 'active');
+  tried.push({ kind: 'active', count: (d.streams || []).length });
+  if (!(d.streams || []).length) {
+    d = await wmspanel.streamsQuery(c, sliceId, rq.mapped.wmspanelServerId, null);
+    tried.push({ kind: null, count: (d.streams || []).length });
+  }
   const streams = (d.streams || []).map(x => {
     const raw = typeof x === 'string' ? x : (x?.name || '');
     const parts = String(raw).split('/');
     const parsed = parts.length >= 3 ? { app: parts[1], stream: parts.slice(2).join('/') } : { app: '', stream: raw };
     return { raw, ...parsed, ...(typeof x === 'object' && x !== null ? { meta: x } : {}) };
   });
-  return { streams, sliceId };
+  return { streams, sliceId, debug: { tried, rawSample: (d.streams || []).slice(0, 3) } };
 }));
+
+
+// MPEGTS incoming: full CRUD (schema from live dump: name, protocol, ip,
+// port, receive_mode, parameters, description, tags; status/bandwidth are
+// read-only telemetry)
+r.get('/server/:id/incoming', requirePerm('wmsobjects.view'), loadMapped,
+  proxy(async rq => wmspanel.incomingList(await cfg(), rq.mapped.wmspanelServerId)));
+r.post('/server/:id/incoming', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.incomingCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
+r.put('/server/:id/incoming/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.incomingUpdate(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId, rq.body || {})));
+r.delete('/server/:id/incoming/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.incomingDelete(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));
+
+// MPEGTS outgoing: create/delete complete the earlier list/update/actions
+r.post('/server/:id/outgoing', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.outgoingCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
+r.delete('/server/:id/outgoing/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.outgoingDelete(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));

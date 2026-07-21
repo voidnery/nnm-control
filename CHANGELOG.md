@@ -4,6 +4,20 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.12 (m6) — MPEGTS In editor, outgoing CRUD, streams diagnostics
+- New MPEGTS In tab: settings editor for incoming streams (create/edit/delete
+  with protocol/mode selects and parameters JSON) plus telemetry — status
+  lamps, bitrate, codecs parsed from PMT/PIDs. Positioned honestly as the
+  settings view, NOT the full "Живые потоки" aggregate (that covers RTMP/HLS/
+  encoder inputs with codecs and uptime and lives in a different API section)
+- Outgoing tab: create/edit/delete with video/audio source pickers fed from
+  the incoming list (source names shown inline instead of raw ids)
+- Streams tab: when deep-stats returns 0, automatically retries without the
+  kind filter and offers a Debug expander with the queries tried + raw sample
+- Dump script v2: probes candidate live-streams endpoints (read-only; 404s
+  are recorded as useful signal) and /streams kind variants — to pin the true
+  full live view API
+
 ### v0.3.11 (m5.1) — FIX: missing wmspanel object routes
 - FIX (critical): backend routes for the UDP/SRT, Outgoing, Hotswap and
   Streams tabs were silently missing in v0.3.8–v0.3.10 — the code insertion

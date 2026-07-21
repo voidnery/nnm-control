@@ -60,13 +60,30 @@ fi
 # Per-server object kinds. Unknown/unavailable endpoints just land in _errors.txt
 # — that's useful information too (tells us what the account/API exposes).
 ENDPOINTS="rtmp/republish mpegts/udp mpegts/outgoing mpegts/incoming hotswap"
+# PROBE: candidate endpoints for the full live-streams view (all protocols,
+# codecs, uptime — what WMSPanel UI shows as "Живые потоки"). Read-only GETs;
+# 404s land in _errors.txt harmlessly and are useful signal themselves.
+PROBE_ENDPOINTS="streams livestreams live_streams rtmp/streams rtmp/stream_info media_info"
 for sid in $IDS; do
     echo "== Server $sid =="
     fetch "/server/${sid}" "server-${sid}.json"
     for ep in $ENDPOINTS; do
         fetch "/server/${sid}/${ep}" "server-${sid}-$(echo "$ep" | tr '/' '_').json"
     done
+    for ep in $PROBE_ENDPOINTS; do
+        fetch "/server/${sid}/${ep}" "probe-${sid}-$(echo "$ep" | tr '/' '_').json"
+    done
 done
+
+# Account-level stream queries with kind variants (deep stats)
+SLICE=$(python3 -c "import json;d=json.load(open('$OUT/data_slices.json'));print((d.get('data_slices') or [{}])[0].get('id',''))" 2>/dev/null || true)
+if [ -n "$SLICE" ]; then
+    FIRST_SID=$(echo $IDS | awk '{print $1}')
+    for kind in "" active live vod all; do
+        suffix=${kind:-none}
+        fetch "/streams?data_slice=${SLICE}&server=${FIRST_SID}&server_kind=nimble$( [ -n "$kind" ] && echo "&kind=${kind}" )" "probe-streams-kind-${suffix}.json"
+    done
+fi
 
 tar -czf "${OUT}.tar.gz" "$OUT"
 echo ""
