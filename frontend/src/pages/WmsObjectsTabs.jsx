@@ -281,3 +281,75 @@ export function HotswapTab({ serverId }) {
     </div>
   );
 }
+
+// ------------------------------------------------------------ Active streams
+// Source: WMSPanel Streams API (Deep stats). Manual refresh by default —
+// every load costs 2 API calls against the 15k/day account budget.
+export function WmsStreamsTab({ serverId }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState('');
+  const [auto, setAuto] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
+
+  const load = async () => {
+    setError('');
+    try {
+      setData(await api(`/wmspanel/server/${serverId}/streams`));
+      setLoadedAt(new Date());
+    } catch (e) {
+      setError(e.message + (e.data?.upstream ? ' :: ' + JSON.stringify(e.data.upstream) : ''));
+      setData({ streams: [] });
+    }
+  };
+  useEffect(() => { load(); }, [serverId]);
+  useEffect(() => {
+    if (!auto) return;
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [auto, serverId]);
+
+  if (!data) return <div className="hint">Loading…</div>;
+  const q = filter.trim().toLowerCase();
+  const list = data.streams.filter(s => !q || (s.app + '/' + s.stream).toLowerCase().includes(q));
+  const byApp = {};
+  for (const s of list) (byApp[s.app || '?'] ||= []).push(s);
+
+  return (
+    <div>
+      <div className="hint" style={{ marginBottom: 10 }}>
+        Active streams from WMSPanel Deep stats. If this errors about stats/slices — enable Deep stats
+        for the account in WMSPanel. Each refresh costs 2 API calls (15k/day account budget).
+      </div>
+      {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <input style={{ maxWidth: 280 }} placeholder="Filter app/stream…" value={filter} onChange={e => setFilter(e.target.value)} />
+        <button onClick={load}>Refresh</button>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={auto} onChange={e => setAuto(e.target.checked)} />
+          Auto (30s)
+        </label>
+        <span className="hint">
+          {list.length} of {data.streams.length} streams
+          {loadedAt && <> · loaded {loadedAt.toLocaleTimeString()}</>}
+        </span>
+      </div>
+      {Object.entries(byApp).sort(([a], [b]) => a.localeCompare(b)).map(([app, streams]) => (
+        <div className="panel" key={app}>
+          <h2 style={{ marginTop: 0 }}>{app} <span className="hint">({streams.length})</span></h2>
+          <table>
+            <tbody>
+              {streams.sort((a, b) => a.stream.localeCompare(b.stream)).map(s => (
+                <tr key={s.raw}>
+                  <td className="mono"><span className="lamp on" />{s.stream}</td>
+                  <td className="hint mono" style={{ textAlign: 'right' }}>{s.raw}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {list.length === 0 && !error && <div className="panel hint">No active streams{q ? ' matching the filter' : ''}.</div>}
+    </div>
+  );
+}

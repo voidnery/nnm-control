@@ -4,6 +4,13 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.9 (m4) — active Streams tab (Deep stats)
+- Server page (WMSPanel mode): Streams tab with active streams via WMSPanel
+  Streams API — grouped by application, filter, counts; clear error text if
+  Deep stats / data slices are unavailable on the account
+- API-budget-aware: manual Refresh by default, optional Auto (30s); each load
+  costs 2 upstream calls (data slice + streams) against the 15k/day limit
+
 ### v0.3.8 (m3) — WMSPanel object tabs & hotswap substitution
 - Server page (WMSPanel mode) gains three tabs on canonical schemas:
   UDP/SRT outputs (view; edit source_streams with PIDs preserved — full

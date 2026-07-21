@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import RepublishTab from './RepublishTab.jsx';
-import { UdpTab, OutgoingTab, HotswapTab } from './WmsObjectsTabs.jsx';
+import { UdpTab, OutgoingTab, HotswapTab, WmsStreamsTab } from './WmsObjectsTabs.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -215,6 +215,7 @@ const TABS = [
   { key: 'sessions',  label: 'Sessions',  perm: 'sessions.view',  el: SessionsTab,  plane: 'native' },
   { key: 'srt',       label: 'SRT',       perm: 'srt.view',       el: SrtTab,       plane: 'native' },
   { key: 'republish', label: 'Republish', perm: 'republish.view', el: RepublishTab, plane: 'both' },
+  { key: 'wstreams',  label: 'Streams',   perm: 'streams.view',    el: WmsStreamsTab, plane: 'wmspanel' },
   { key: 'wudp',      label: 'UDP/SRT',   perm: 'wmsobjects.view', el: UdpTab,      plane: 'wmspanel' },
   { key: 'wout',      label: 'Outgoing',  perm: 'wmsobjects.view', el: OutgoingTab, plane: 'wmspanel' },
   { key: 'whot',      label: 'Hotswap',   perm: 'wmsobjects.view', el: HotswapTab,  plane: 'wmspanel' },
