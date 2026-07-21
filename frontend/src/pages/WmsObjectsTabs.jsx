@@ -31,23 +31,35 @@ const SyncNote = () => (
 export function UdpTab({ serverId }) {
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'udp');
-  const [edit, setEdit] = useState(null); // { id, name, sources: [...] }
+  const [incoming, setIncoming] = useState([]);
+  const [edit, setEdit] = useState(null); // { id, name, mode: 'incoming'|'streams', source_id, sources: [...] }
   const [busy, setBusy] = useState(false);
   const settings = data?.settings || [];
 
+  useEffect(() => {
+    // source_id values reference MPEGTS incoming streams — resolve to names
+    api(`/wmspanel/server/${serverId}/incoming`).then(d => setIncoming(d.streams || [])).catch(() => setIncoming([]));
+  }, [serverId]);
+  const incomingName = (id) => incoming.find(x => String(x.id) === String(id))?.name || String(id || '').slice(-6);
+
   const openEdit = (o) => setEdit({
     id: o.id, name: o.name || o.id,
+    mode: o.source_id ? 'incoming' : 'streams',
+    source_id: o.source_id || '',
     sources: (o.source_streams || []).map(ss => ({ ...ss })),
   });
 
   const save = async () => {
     setBusy(true); setError('');
     try {
-      // PIDs are preserved: we send back the full entries with only
-      // application/stream changed by the operator.
-      await api(`/wmspanel/server/${serverId}/udp/${edit.id}`, {
-        method: 'PUT', body: { source_streams: edit.sources },
-      });
+      // Two source modes (from live data: 604/755 outputs use source_id -> an
+      // MPEGTS incoming stream; 151 use source_streams app/stream entries).
+      // We send ONLY the chosen mode's field. Existing entries keep their
+      // PIDs; newly added ones get PIDs assigned by WMSPanel.
+      const body = edit.mode === 'incoming'
+        ? { source_id: edit.source_id }
+        : { source_streams: edit.sources.filter(x => x.application && x.stream) };
+      await api(`/wmspanel/server/${serverId}/udp/${edit.id}`, { method: 'PUT', body });
       setEdit(null); await load();
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
@@ -69,7 +81,7 @@ export function UdpTab({ serverId }) {
       {error && <div className="error-box">{error}</div>}
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Proto</th><th>Destination</th><th>Source(s)</th><th>State</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Proto</th><th>Destination</th><th>Source</th><th>State</th><th></th></tr></thead>
           <tbody>
             {settings.map(o => (
               <tr key={o.id}>
@@ -77,10 +89,11 @@ export function UdpTab({ serverId }) {
                 <td><span className="badge">{o.protocol}</span></td>
                 <td className="mono">{o.ip}:{o.port}</td>
                 <td className="mono">
-                  {(o.source_streams || []).map((ss, i) => (
-                    <div key={i}>{ss.application}/{ss.stream}</div>
-                  ))}
-                  {(o.source_streams || []).length === 0 && <span className="hint">—</span>}
+                  {o.source_id
+                    ? <><span className="badge" style={{ marginRight: 4 }}>in</span>{incomingName(o.source_id)}</>
+                    : (o.source_streams || []).length
+                      ? (o.source_streams || []).map((ss, i) => <div key={i}>{ss.application}/{ss.stream}</div>)
+                      : <span className="hint">— no source —</span>}
                 </td>
                 <td><span className={'lamp ' + (o.paused ? 'off' : 'on')} />{o.paused ? 'paused' : 'active'}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -100,27 +113,47 @@ export function UdpTab({ serverId }) {
         <div className="modal-back" onClick={() => setEdit(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Source of {edit.name}</h3>
-            {edit.sources.map((ss, i) => (
-              <div key={i} className="panel" style={{ padding: 10 }}>
-                <div className="field-inline">
-                  <div><label>Application</label>
-                    <input value={ss.application || ''} onChange={e =>
-                      setEdit(s => ({ ...s, sources: s.sources.map((x, j) => j === i ? { ...x, application: e.target.value } : x) }))} />
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="radio" style={{ width: 'auto' }} checked={edit.mode === 'incoming'}
+                     onChange={() => setEdit(m => ({ ...m, mode: 'incoming' }))} />
+              MPEGTS incoming stream (raw passthrough)
+            </label>
+            {edit.mode === 'incoming' && (
+              <select value={edit.source_id} onChange={e => setEdit(m => ({ ...m, source_id: e.target.value }))}>
+                <option value="">— select incoming stream —</option>
+                {incoming.map(x => <option key={x.id} value={x.id}>{x.name} ({x.protocol}, {x.status})</option>)}
+              </select>
+            )}
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <input type="radio" style={{ width: 'auto' }} checked={edit.mode === 'streams'}
+                     onChange={() => setEdit(m => ({ ...m, mode: 'streams' }))} />
+              Application/stream entries (remux)
+            </label>
+            {edit.mode === 'streams' && (
+              <>
+                {edit.sources.map((ss, i) => (
+                  <div key={i} className="panel" style={{ padding: 10 }}>
+                    <div className="row">
+                      <input placeholder="application" value={ss.application || ''} onChange={e =>
+                        setEdit(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, application: e.target.value } : x) }))} />
+                      <input placeholder="stream" value={ss.stream || ''} onChange={e =>
+                        setEdit(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, stream: e.target.value } : x) }))} />
+                      <button onClick={() => setEdit(m => ({ ...m, sources: m.sources.filter((_, j) => j !== i) }))}>×</button>
+                    </div>
+                    <div className="hint mono">
+                      PIDs: {ss.pmt_pid !== undefined ? `pmt=${ss.pmt_pid} video=${ss.video_pid} audio=${ss.audio_pid} (preserved)` : 'assigned by WMSPanel on create'}
+                    </div>
                   </div>
-                  <div><label>Stream</label>
-                    <input value={ss.stream || ''} onChange={e =>
-                      setEdit(s => ({ ...s, sources: s.sources.map((x, j) => j === i ? { ...x, stream: e.target.value } : x) }))} />
-                  </div>
-                </div>
-                <div className="hint mono">
-                  PIDs preserved: pmt={ss.pmt_pid ?? 'auto'} video={ss.video_pid ?? 'auto'} audio={ss.audio_pid ?? 'auto'}
-                </div>
-              </div>
-            ))}
-            {edit.sources.length === 0 && <div className="hint">This output has no source_streams entries.</div>}
+                ))}
+                <button onClick={() => setEdit(m => ({ ...m, sources: [...m.sources, { application: '', stream: '' }] }))}>+ add entry</button>
+              </>
+            )}
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
               <button onClick={() => setEdit(null)}>Cancel</button>
-              <button className="primary" disabled={busy || edit.sources.length === 0} onClick={save}>Apply</button>
+              <button className="primary" onClick={save}
+                      disabled={busy || (edit.mode === 'incoming' ? !edit.source_id : edit.sources.filter(x => x.application && x.stream).length === 0)}>
+                Apply
+              </button>
             </div>
           </div>
         </div>

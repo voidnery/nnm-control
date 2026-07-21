@@ -4,6 +4,18 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.18 (m11.1) — FIX: UDP/SRT source editing covers both modes
+- Live data showed 604 of 755 UDP/SRT outputs set their source via
+  `source_id` (a reference to an MPEGTS incoming stream = raw passthrough),
+  not `source_streams` — the tab could neither display nor edit those, and
+  could not ADD app/stream entries either ("no source_streams entries" dead
+  end)
+- Edit source now mirrors WMSPanel: mode switch between "MPEGTS incoming
+  stream" (dropdown of incoming streams by name) and "application/stream
+  entries" (rows with add/remove; existing entries keep their PIDs, new ones
+  get PIDs from WMSPanel); the table shows the source for both modes with
+  incoming names resolved instead of raw ids
+
 ### v0.3.17 (m11) — backups & panel monitoring; ITER2 CLOSED
 - MongoDB backups: `nnm-control backup` (mongodump --archive --gzip of the
   panel DB into /var/lib/nnm-control/backups, 0600, retention
