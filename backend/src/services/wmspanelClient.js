@@ -66,6 +66,11 @@ export const wmspanel = {
   // Streams helpers (for source pickers). Streams API needs Deep stats
   // enabled on the account; callers must handle failure and fall back.
   dataSlices: (cfg) => call(cfg, '/data_slices'),
+  // Live streams — confirmed section "Live streams": full per-server live
+  // view (all protocols) with codecs, resolution, bandwidth, publisher_ip,
+  // publish_time; also supports delete.
+  liveStreams: (cfg, sid) => call(cfg, `/server/${sid}/live/streams`),
+  liveStreamDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/live/streams/${id}`, { method: 'DELETE' }),
   streamsQuery: (cfg, sliceId, sid, kind) =>
     call(cfg, `/streams?data_slice=${encodeURIComponent(sliceId)}&server=${encodeURIComponent(sid)}&server_kind=nimble${kind ? `&kind=${encodeURIComponent(kind)}` : ''}`),
   // UDP streaming settings (SRT/UDP outputs) — confirmed: /server/{id}/mpegts/udp

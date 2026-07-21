@@ -84,21 +84,11 @@ functionsRouter.get('/streams/:serverId', requirePerm('functions.manage'), async
   let streams = [];
   let source = 'aggregated';
   try {
-    const ds = await wmspanel.dataSlices(cfg);
-    const sliceId = ds.data_slices?.[0]?.id;
-    if (sliceId) {
-      const d = await wmspanel.streamsQuery(cfg, sliceId, sid, 'active');
-      streams = (d.streams || [])
-        .map(x => (typeof x === 'string' ? x : x?.name))
-        .filter(Boolean)
-        .map(full => {
-          const parts = String(full).split('/');
-          if (parts.length >= 3) return { app: parts[1], stream: parts.slice(2).join('/') };
-          return null;
-        })
-        .filter(Boolean);
-      if (streams.length) source = 'wmspanel-streams';
-    }
+    const d = await wmspanel.liveStreams(cfg, sid);
+    streams = (d.streams || [])
+      .filter(x => x.application)
+      .map(x => ({ app: x.application, stream: x.stream || '' }));
+    if (streams.length) source = 'live-streams';
   } catch { /* fall back below */ }
   if (streams.length === 0) {
     const pairs = new Map();

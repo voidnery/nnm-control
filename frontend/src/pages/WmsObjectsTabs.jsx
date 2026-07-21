@@ -363,16 +363,27 @@ export function HotswapTab({ serverId }) {
   );
 }
 
-// ------------------------------------------------------------ Active streams
-// Source: WMSPanel Streams API (Deep stats). Manual refresh by default —
-// every load costs 2 API calls against the 15k/day account budget.
+// ------------------------------------------------------------- Live streams
+// Confirmed endpoint /server/{sid}/live/streams — the same data WMSPanel
+// shows in "Живые потоки": all protocols, codecs, resolution, bandwidth,
+// publisher IP and publish time. 1 API call per refresh.
+const fmtUptime = (ts) => {
+  if (!ts) return '—';
+  let sec = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  const d = Math.floor(sec / 86400); sec %= 86400;
+  const h = Math.floor(sec / 3600); sec %= 3600;
+  const m = Math.floor(sec / 60);
+  return (d ? d + 'd ' : '') + (h ? h + 'h ' : '') + m + 'm';
+};
+
 export function WmsStreamsTab({ serverId }) {
+  const { can } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
   const [auto, setAuto] = useState(false);
   const [loadedAt, setLoadedAt] = useState(null);
-  const [showDebug, setShowDebug] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = async () => {
     setError('');
@@ -391,59 +402,67 @@ export function WmsStreamsTab({ serverId }) {
     return () => clearInterval(t);
   }, [auto, serverId]);
 
+  const removeStream = async (st) => {
+    if (!window.confirm(`Delete live stream ${st.application}/${st.stream} from the server?`)) return;
+    setBusy(true); setError('');
+    try { await api(`/wmspanel/server/${serverId}/streams/${st.id}`, { method: 'DELETE' }); await load(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
   if (!data) return <div className="hint">Loading…</div>;
   const q = filter.trim().toLowerCase();
-  const list = data.streams.filter(s => !q || (s.app + '/' + s.stream).toLowerCase().includes(q));
+  const list = (data.streams || []).filter(st =>
+    !q || (st.application + '/' + st.stream + ' ' + (st.description || '') + ' ' + (st.tags || []).join(' ')).toLowerCase().includes(q));
   const byApp = {};
-  for (const s of list) (byApp[s.app || '?'] ||= []).push(s);
+  for (const st of list) (byApp[st.application || '?'] ||= []).push(st);
 
   return (
     <div>
-      <div className="hint" style={{ marginBottom: 10 }}>
-        Active streams from WMSPanel Deep stats. If this errors about stats/slices — enable Deep stats
-        for the account in WMSPanel. Each refresh costs 2 API calls (15k/day account budget).
-      </div>
-      {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
-        <input style={{ maxWidth: 280 }} placeholder="Filter app/stream…" value={filter} onChange={e => setFilter(e.target.value)} />
-        <button onClick={load}>Refresh</button>
+        <input style={{ maxWidth: 280 }} placeholder="Filter app/stream/tag…" value={filter} onChange={e => setFilter(e.target.value)} />
+        <button onClick={load} disabled={busy}>Refresh</button>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={auto} onChange={e => setAuto(e.target.checked)} />
           Auto (30s)
         </label>
         <span className="hint">
-          {list.length} of {data.streams.length} streams
+          {list.length} of {(data.streams || []).length} streams
           {loadedAt && <> · loaded {loadedAt.toLocaleTimeString()}</>}
         </span>
-        {data.streams.length === 0 && data.debug && (
-          <button onClick={() => setShowDebug(v => !v)}>{showDebug ? 'Hide debug' : 'Debug'}</button>
-        )}
       </div>
-      {showDebug && data.debug && (
-        <div className="panel">
-          <div className="hint">Deep-stats queries tried (kind → count) and a raw sample — if counts are 0 while
-            WMSPanel UI shows streams, the full live view uses a different API section; probe dump will pin it.</div>
-          <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 240, overflow: 'auto' }}>
-            {JSON.stringify(data.debug, null, 2)}
-          </pre>
-        </div>
-      )}
+      {error && <div className="error-box">{error}</div>}
       {Object.entries(byApp).sort(([a], [b]) => a.localeCompare(b)).map(([app, streams]) => (
         <div className="panel" key={app}>
           <h2 style={{ marginTop: 0 }}>{app} <span className="hint">({streams.length})</span></h2>
           <table>
+            <thead><tr><th>Stream</th><th>Proto</th><th>Codecs</th><th>Res</th><th>Bitrate</th><th>Publisher</th><th>Uptime</th><th></th></tr></thead>
             <tbody>
-              {streams.sort((a, b) => a.stream.localeCompare(b.stream)).map(s => (
-                <tr key={s.raw}>
-                  <td className="mono"><span className="lamp on" />{s.stream}</td>
-                  <td className="hint mono" style={{ textAlign: 'right' }}>{s.raw}</td>
+              {streams.sort((a, b) => String(a.stream).localeCompare(String(b.stream))).map(st => (
+                <tr key={st.id}>
+                  <td className="mono">
+                    <span className={'lamp ' + (st.status === 'online' ? 'on' : 'off')} /><b>{st.stream}</b>
+                    {(st.tags || []).map(t => <span key={t} className="badge" style={{ marginLeft: 4 }}>{t}</span>)}
+                    {st.description && <div className="hint">{st.description}</div>}
+                  </td>
+                  <td><span className="badge">{st.protocol}</span></td>
+                  <td className="hint mono">{[st.video_codec, st.audio_codec].filter(Boolean).join(' / ') || '—'}</td>
+                  <td className="mono">{st.resolution || '—'}</td>
+                  <td className="mono">{st.bandwidth ? (st.bandwidth / 1e6).toFixed(1) + ' Mbps' : '—'}</td>
+                  <td className="mono hint">{st.publisher_ip || '—'}</td>
+                  <td className="mono">{st.status === 'online' ? fmtUptime(st.publish_time) : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {can('wmsobjects.manage') && (
+                      <button className="danger" disabled={busy} onClick={() => removeStream(st)}>Delete</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ))}
-      {list.length === 0 && !error && <div className="panel hint">No active streams{q ? ' matching the filter' : ''}.</div>}
+      {list.length === 0 && !error && <div className="panel hint">No live streams{q ? ' matching the filter' : ''}.</div>}
     </div>
   );
 }

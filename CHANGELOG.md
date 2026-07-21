@@ -4,6 +4,20 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.13 (m7) — real Live Streams + full API inventory tooling
+- Streams tab now uses the CONFIRMED endpoint /server/{id}/live/streams —
+  the same data as WMSPanel "Живые потоки": all protocols with status lamps,
+  video/audio codecs, resolution, bitrate, publisher IP, uptime, tags;
+  grouped by application, filter, optional 30s auto-refresh (1 call/load),
+  per-stream Delete (wmsobjects.manage). Deep-stats path removed
+- Function builder source picker now feeds from live streams (fallback:
+  aggregation from configured objects)
+- tools/wmspanel-api-inventory.sh: downloads the official API reference,
+  extracts EVERY "METHOD /v1/..." endpoint into api-inventory.txt, then
+  live-dumps every GET against your account (placeholders auto-filled;
+  unresolved ones listed in _skipped.txt; mutating methods never called) —
+  the complete no-guessing map of the WMSPanel API
+
 ### v0.3.12 (m6) — MPEGTS In editor, outgoing CRUD, streams diagnostics
 - New MPEGTS In tab: settings editor for incoming streams (create/edit/delete
   with protocol/mode selects and parameters JSON) plus telemetry — status
