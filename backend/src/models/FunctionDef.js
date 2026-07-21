@@ -11,7 +11,7 @@ const stepSchema = new mongoose.Schema({
   //  'delay'  — wait N seconds (no rollback)
   type: { type: String, enum: ['patch', 'action', 'delay'], required: true },
   serverId: { type: mongoose.Schema.Types.ObjectId, ref: 'NimbleServer' },
-  objectKind: { type: String, enum: ['republish', 'udp', 'outgoing', 'hotswap', 'live_pull', ''], default: '' },
+  objectKind: { type: String, enum: ['republish', 'udp', 'outgoing', 'hotswap', 'live_pull', 'transcoder', ''], default: '' },
   targetId: { type: String, default: '' },      // WMSPanel object id
   patch: { type: mongoose.Schema.Types.Mixed, default: {} },
   action: { type: String, enum: ['pause', 'resume', 'restart', ''], default: '' },

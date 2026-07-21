@@ -101,6 +101,15 @@ export const wmspanel = {
   liveAppCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/live/app`, { method: 'POST', body }),
   liveAppUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/live/app/${id}`, { method: 'PUT', body: patch }),
   liveAppDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/live/app/${id}`, { method: 'DELETE' }),
+  // Transcoders — ACCOUNT-level (server_id is an attribute). The _sid
+  // parameter is accepted but unused, keeping the KIND_OPS call shape uniform.
+  transcoderList:   (cfg, _sid) => call(cfg, `/transcoder`),
+  transcoderGet:    (cfg, id) => call(cfg, `/transcoder/${id}`),
+  transcoderUpdate: (cfg, _sid, id, patch) => call(cfg, `/transcoder/${id}`, { method: 'PUT', body: patch }),
+  transcoderPause:  (cfg, id) => call(cfg, `/transcoder/${id}/pause`),
+  transcoderResume: (cfg, id) => call(cfg, `/transcoder/${id}/resume`),
+  transcoderClone:  (cfg, id) => call(cfg, `/transcoder/${id}/clone`),
+  transcoderLicenses: (cfg) => call(cfg, `/licenses/transcoder`),
   // RTMP interfaces (view)
   rtmpInterfaceList: (cfg, sid) => call(cfg, `/server/${sid}/rtmp/interface`),
   // Hot swap settings — confirmed: /server/{id}/hotswap (Transcoder feature)

@@ -107,6 +107,16 @@ functionsRouter.get('/streams/:serverId', requirePerm('functions.manage'), async
 
 // Object browser for the builder: list WMSPanel objects of a kind on a server.
 functionsRouter.get('/objects/:serverId/:kind', requirePerm('functions.manage'), async (req, res) => {
+  // transcoders are account-level: serverId is ignored (frontend passes 'any')
+  if (req.params.kind === 'transcoder') {
+    const settings0 = await Settings.load();
+    try {
+      const d = await wmspanel.transcoderList(settings0.wmspanel);
+      return res.json({ objects: d.transcoders || [] });
+    } catch (e) {
+      return res.status(502).json({ error: e.message, upstream: e.data ?? null });
+    }
+  }
   const server = await NimbleServer.findById(req.params.serverId);
   if (!server?.wmspanelServerId) return res.status(409).json({ error: 'Server is not mapped to WMSPanel' });
   const settings = await Settings.load();

@@ -30,6 +30,8 @@ const KIND_OPS = {
   outgoing:  { get: 'outgoingList',  put: 'outgoingUpdate',  pickList: d => d.streams || d.settings || [] },
   hotswap:   { get: 'hotswapList',   put: 'hotswapUpdate',   pickList: d => d.settings || [] },
   live_pull: { get: 'livePullList',  put: 'livePullUpdate',  pickList: d => d.settings || [] },
+  // account-level: sid is ignored by the client methods
+  transcoder: { get: 'transcoderList', put: 'transcoderUpdate', pickList: d => d.transcoders || [] },
 };
 
 async function getObject(cfg, kind, sid, targetId) {
@@ -107,6 +109,36 @@ async function applyStep(cfg, run, idx, step) {
     return;
   }
 
+  // Transcoders are account-level: no server mapping needed.
+  if (step.type === 'action' && step.objectKind === 'transcoder') {
+    if (!['pause', 'resume'].includes(step.action)) throw new Error('transcoder actions: pause/resume only');
+    const before = await getObject(cfg, 'transcoder', null, step.targetId);
+    const snapshot = { kind: 'transcoder', targetId: step.targetId, wasPaused: Boolean(before.paused) };
+    await persistStep(run, idx, { status: 'applying', detail: `${step.action} transcoder ${step.targetId}`, snapshot });
+    await (step.action === 'pause' ? wmspanel.transcoderPause : wmspanel.transcoderResume)(cfg, step.targetId);
+    await persistStep(run, idx, { status: 'verifying', applied: true,
+      detail: 'Applied; verifying (WMSPanel ~30s sync cycle; window 180s)' });
+    await verifyPatched(cfg, 'transcoder', null, step.targetId, { paused: step.action === 'pause' });
+    await persistStep(run, idx, { status: 'done', detail: '' });
+    return;
+  }
+  if (step.type === 'patch' && step.objectKind === 'transcoder') {
+    // generic patch path but without server mapping
+    const patch = step.patch || {};
+    if (Object.keys(patch).length === 0) throw new Error('Empty patch');
+    await persistStep(run, idx, { status: 'applying', detail: `transcoder ${step.targetId}: ${JSON.stringify(patch)}` });
+    const before = await getObject(cfg, 'transcoder', null, step.targetId);
+    const snapshot = { sid: null, kind: 'transcoder', targetId: step.targetId, values: {} };
+    for (const k of Object.keys(patch)) snapshot.values[k] = before[k] ?? null;
+    await persistStep(run, idx, { snapshot });
+    await wmspanel.transcoderUpdate(cfg, null, step.targetId, patch);
+    await persistStep(run, idx, { applied: true, status: 'verifying',
+      detail: 'Applied; verifying (WMSPanel ~30s sync cycle; window 180s)' });
+    await verifyPatched(cfg, 'transcoder', null, step.targetId, patch);
+    await persistStep(run, idx, { status: 'done', detail: '' });
+    return;
+  }
+
   const server = await resolveServer(step);
   const sid = server.wmspanelServerId;
 
@@ -162,6 +194,8 @@ async function rollbackStep(cfg, run, idx, step) {
   try {
     if (step.type === 'patch' && snap?.values) {
       await wmspanel[KIND_OPS[snap.kind].put](cfg, snap.sid, snap.targetId, snap.values);
+    } else if (step.type === 'action' && snap?.kind === 'transcoder') {
+      await (snap.wasPaused ? wmspanel.transcoderPause : wmspanel.transcoderResume)(cfg, snap.targetId);
     } else if (step.type === 'action' && snap && (step.action === 'pause' || step.action === 'resume')) {
       const inverse = snap.wasPaused ? 'pause' : 'resume';
       await wmspanel.outgoingAction(cfg, snap.sid, snap.targetId, inverse);
@@ -187,9 +221,14 @@ async function preflight(cfg, fnDoc, run) {
     const step = fnDoc.steps[i];
     if (step.type === 'delay') continue;
     try {
-      const server = await resolveServer(step);
-      const sid = server.wmspanelServerId;
-      const kind = step.type === 'action' ? (step.objectKind === 'live_pull' ? 'live_pull' : 'outgoing') : step.objectKind;
+      let sid = null;
+      const kind = step.objectKind === 'transcoder' ? 'transcoder'
+        : step.type === 'action' ? (step.objectKind === 'live_pull' ? 'live_pull' : 'outgoing')
+        : step.objectKind;
+      if (kind !== 'transcoder') {
+        const server = await resolveServer(step);
+        sid = server.wmspanelServerId;
+      }
       if (!KIND_OPS[kind]) throw new Error(`Unknown object kind: ${kind}`);
       const obj = await getObject(cfg, kind, sid, step.targetId);
       if (step.type === 'patch') {

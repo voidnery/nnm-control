@@ -5,6 +5,7 @@ import { useAuth } from '../auth.jsx';
 const KINDS = [
   { value: 'republish', label: 'Republish rule' },
   { value: 'live_pull', label: 'RTMP live pull (feed reserve)' },
+  { value: 'transcoder', label: 'Transcoder (account-level)' },
   { value: 'udp',       label: 'UDP/SRT output (UDP streaming)' },
   { value: 'outgoing',  label: 'MPEGTS outgoing stream' },
   { value: 'hotswap',   label: 'Hot swap setting (Transcoder)' },
@@ -22,6 +23,8 @@ const PRESETS = [
   { label: 'Restart outgoing',step: { type: 'action', action: 'restart', label: 'Restart outgoing' } },
   { label: 'Live pull: switch source URL', step: { type: 'patch', objectKind: 'live_pull', patch: { url: 'rtmp://backup-host:1935/app/stream' }, label: 'Switch pull URL' } },
   { label: 'Restart live pull', step: { type: 'action', objectKind: 'live_pull', action: 'restart', label: 'Restart pull' } },
+  { label: 'Подмена: pause transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'pause', label: 'Pause transcoder' } },
+  { label: 'Подмена: resume transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'resume', label: 'Resume transcoder' } },
   { label: 'Delay (seconds)', step: { type: 'delay', waitSec: 10, label: 'Delay' } },
 ];
 
@@ -31,7 +34,7 @@ function ObjectPicker({ servers, step, onPick }) {
   const load = async () => {
     setError(''); setObjects(null);
     try {
-      const d = await api(`/functions/objects/${step.serverId}/${step.objectKind || 'outgoing'}`);
+      const d = await api(`/functions/objects/${step.objectKind === 'transcoder' ? 'any' : step.serverId}/${step.objectKind || 'outgoing'}`);
       setObjects(d.objects);
     } catch (e) { setError(e.message); }
   };
@@ -39,13 +42,14 @@ function ObjectPicker({ servers, step, onPick }) {
     const src = o.src_app !== undefined ? `${o.src_app}/${o.src_strm || '*'} → ${o.dest_addr || ''}` :
                 o.source_streams !== undefined ? `${o.name || o.protocol} ⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
                 o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}${o.emergency ? ' [EMERGENCY]' : ''}` :
+                (o.name !== undefined && o.paused !== undefined && o.server_id !== undefined) ? `${o.name}${o.paused ? ' [paused]' : ' [running]'}` :
                 o.application !== undefined ? `${o.application}/${o.stream || ''}${o.status ? ' · ' + o.status : ''}` :
                 o.name || o.protocol || '';
     return `${String(o.id).slice(-6)} · ${src}`;
   };
   return (
     <div style={{ marginTop: 6 }}>
-      <button disabled={!step.serverId} onClick={load}>Browse objects…</button>
+      <button disabled={!step.serverId && step.objectKind !== 'transcoder'} onClick={load}>Browse objects…</button>
       {error && <div className="error-box">{error}</div>}
       {objects && (
         <div className="panel" style={{ marginTop: 6, maxHeight: 180, overflow: 'auto', padding: 8 }}>
@@ -123,6 +127,7 @@ function StepEditor({ step, servers, onChange, onRemove }) {
           <select value={step.objectKind || 'outgoing'} onChange={e => set('objectKind', e.target.value === 'outgoing' ? '' : e.target.value)}>
             <option value="outgoing">MPEGTS outgoing (pause/resume/restart)</option>
             <option value="live_pull">RTMP live pull (restart only)</option>
+            <option value="transcoder">Transcoder (pause/resume; no server needed)</option>
           </select>
         </>
       )}

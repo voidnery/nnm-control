@@ -4,6 +4,21 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.15 (m9) — transcoders
+- New account-level Transcoders page (WMSPanel mode, wmsobjects perms):
+  list with server names resolved via mapping, tag/server filters, running/
+  paused lamps, Pause/Resume/Clone (clone confirmed), Details modal with raw
+  transcoder JSON incl. pipelines (editing arrives after schemas are pinned
+  from live use)
+- Transcoder licenses panel with expiry warnings (<30 days highlighted,
+  expired flagged)
+- Functions engine: object kind `transcoder` (account-level — no server
+  mapping needed): pause/resume actions with paused-state verification and
+  inverse rollback, generic patch steps; presets «Подмена: pause/resume
+  transcoder» — the third substitution mechanism alongside republish source
+  switching and hotswap emergency
+- Route-order runtime assert (licenses before :objId) added to validation
+
 ### v0.3.14 (m8) — distribution operations layer + at-rest encryption
 - Live Pull tab: RTMP pull feeds with fallback_urls (the built-in feed
   reserve) — create/edit/delete, pause/resume, Restart; fallbacks edited one

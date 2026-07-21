@@ -143,3 +143,18 @@ r.delete('/server/:id/apps/:objId', requirePerm('wmsobjects.manage'), loadMapped
 // RTMP interfaces: view
 r.get('/server/:id/interfaces', requirePerm('wmsobjects.view'), loadMapped,
   proxy(async rq => wmspanel.rtmpInterfaceList(await cfg(), rq.mapped.wmspanelServerId)));
+
+// --- m9: transcoders (account-level) ---
+r.get('/transcoders', requirePerm('wmsobjects.view'),
+  proxy(async () => wmspanel.transcoderList(await cfg())));
+r.get('/transcoders/licenses', requirePerm('wmsobjects.view'),
+  proxy(async () => wmspanel.transcoderLicenses(await cfg())));
+r.get('/transcoders/:objId', requirePerm('wmsobjects.view'),
+  proxy(async rq => wmspanel.transcoderGet(await cfg(), rq.params.objId)));
+r.post('/transcoders/:objId/:action(pause|resume|clone)', requirePerm('wmsobjects.manage'),
+  proxy(async rq => {
+    const c = await cfg();
+    if (rq.params.action === 'pause') return wmspanel.transcoderPause(c, rq.params.objId);
+    if (rq.params.action === 'resume') return wmspanel.transcoderResume(c, rq.params.objId);
+    return wmspanel.transcoderClone(c, rq.params.objId);
+  }));
