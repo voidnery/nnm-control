@@ -4,6 +4,16 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.10 (m5) — audit log
+- Every mutating API request (POST/PUT/DELETE) is audited: who, when, from
+  which IP, what action, sanitized payload (passwords/tokens/API keys are
+  masked recursively), HTTP outcome; plus explicit events for logins
+  (success/fail with reason) and function run completions (with run status)
+- Audit page (permission `audit.view`): filters by user / action substring /
+  outcome, expandable detail JSON, cursor-based "Load older"
+- Retention 90 days via Mongo TTL index; audit writes never break the main
+  request flow
+
 ### v0.3.9 (m4) — active Streams tab (Deep stats)
 - Server page (WMSPanel mode): Streams tab with active streams via WMSPanel
   Streams API — grouped by application, filter, counts; clear error text if

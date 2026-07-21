@@ -11,6 +11,8 @@ import { zabbixRouter } from './routes/zabbix.js';
 import { settingsRouter } from './routes/settings.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
+import { auditRouter } from './routes/audit.js';
+import { auditMutations } from './services/audit.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
 
 const app = express();
@@ -19,6 +21,7 @@ app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/setup', setupRouter);
+app.use('/api', auditMutations);
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
@@ -28,6 +31,7 @@ app.use('/api/zabbix', zabbixRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/wmspanel', wmspanelRouter);
 app.use('/api/functions', functionsRouter);
+app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {
   console.error('[unhandled]', err);

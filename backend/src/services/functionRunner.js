@@ -2,6 +2,7 @@ import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { FunctionRun } from '../models/FunctionRun.js';
 import { wmspanel } from './wmspanelClient.js';
+import { logEvent } from './audit.js';
 
 // Transactional executor for engineering functions.
 //
@@ -274,6 +275,13 @@ export async function executeFunction(fnDoc, startedBy) {
     }
     run.finishedAt = new Date();
     await run.save();
+    logEvent({
+      username: startedBy,
+      action: 'functions:run_finished',
+      target: fnDoc.name,
+      detail: { runId: String(run._id), status: run.status, cancelReason: run.cancelReason || null },
+      outcome: run.status === 'success' ? 'ok' : 'error',
+    });
   })().catch(async (e) => {
     run.status = 'rollback_failed';
     run.cancelReason = `Executor crashed: ${e.message}`;

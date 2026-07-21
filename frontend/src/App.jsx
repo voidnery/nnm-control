@@ -12,6 +12,7 @@ import RolesPage from './pages/RolesPage.jsx';
 import ZabbixPage from './pages/ZabbixPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import FunctionsPage from './pages/FunctionsPage.jsx';
+import AuditPage from './pages/AuditPage.jsx';
 
 function Layout({ children }) {
   const { user, logout, can } = useAuth();
@@ -26,6 +27,7 @@ function Layout({ children }) {
           {can('users.manage') && <NavLink to="/users">Users</NavLink>}
           {can('roles.manage') && <NavLink to="/roles">Roles</NavLink>}
           {can('zabbix.view') && <NavLink to="/zabbix">Zabbix</NavLink>}
+          {can('audit.view') && <NavLink to="/audit">Audit</NavLink>}
           {can('settings.manage') && <NavLink to="/settings">Settings</NavLink>}
         </nav>
         <div className="spacer" />
@@ -70,6 +72,7 @@ export default function App() {
         <Route path="/zabbix" element={<ZabbixPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/functions" element={<FunctionsPage />} />
+        <Route path="/audit" element={<AuditPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
