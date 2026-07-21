@@ -10,6 +10,7 @@ import { nimbleRouter } from './routes/nimbleProxy.js';
 import { zabbixRouter } from './routes/zabbix.js';
 import { settingsRouter } from './routes/settings.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
+import { functionsRouter } from './routes/functions.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/nimble', nimbleRouter);
 app.use('/api/zabbix', zabbixRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/wmspanel', wmspanelRouter);
+app.use('/api/functions', functionsRouter);
 
 app.use((err, _req, res, _next) => {
   console.error('[unhandled]', err);

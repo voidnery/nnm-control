@@ -121,3 +121,21 @@ label { display: block; font-size: 12px; color: var(--text-dim); margin: 10px 0 
   .main { padding: 14px; }
   .perm-grid { grid-template-columns: 1fr; }
 }
+
+/* Function run trace */
+.run-step { padding: 7px 8px; border-left: 2px solid var(--line); margin-bottom: 4px; }
+.run-icon { display: inline-block; width: 20px; font-family: var(--mono); }
+.run-step.applying { border-left-color: var(--accent); }
+.run-step.applying .run-icon { color: var(--accent); animation: pulse 1s infinite; }
+.run-step.verifying { border-left-color: var(--warn); }
+.run-step.verifying .run-icon { color: var(--warn); animation: spin-pulse 1.2s infinite; display: inline-block; }
+.run-step.done { border-left-color: var(--ok); }
+.run-step.done .run-icon { color: var(--ok); }
+.run-step.error { border-left-color: var(--danger); background: #2a1416; }
+.run-step.error .run-icon { color: var(--danger); }
+.run-step.rolling_back { border-left-color: var(--warn); }
+.run-step.rolling_back .run-icon { animation: pulse 0.8s infinite; color: var(--warn); }
+.run-step.rolled_back .run-icon { color: var(--warn); }
+.run-step.rollback_failed { border-left-color: var(--danger); background: #2a1416; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+@keyframes spin-pulse { 50% { opacity: 0.4; } }

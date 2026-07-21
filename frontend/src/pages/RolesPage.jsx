@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
-function RoleModal({ initial, catalog, onClose, onSaved }) {
+function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
   const isEdit = Boolean(initial._id);
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
   const [perms, setPerms] = useState(new Set(initial.permissions || []));
+  const [fnIds, setFnIds] = useState(new Set((initial.functionIds || []).map(String)));
   const [error, setError] = useState('');
+  const toggleFn = (id) => setFnIds(p => {
+    const next = new Set(p);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const toggle = (key) => setPerms(p => {
     const next = new Set(p);
@@ -17,7 +23,7 @@ function RoleModal({ initial, catalog, onClose, onSaved }) {
   const save = async () => {
     setError('');
     try {
-      const body = { name, description, permissions: [...perms] };
+      const body = { name, description, permissions: [...perms], functionIds: [...fnIds] };
       if (isEdit) await api(`/roles/${initial._id}`, { method: 'PUT', body });
       else await api('/roles', { method: 'POST', body });
       onSaved();
@@ -41,6 +47,20 @@ function RoleModal({ initial, catalog, onClose, onSaved }) {
             </label>
           ))}
         </div>
+        {perms.has('functions.execute') && (
+          <>
+            <label>Allowed functions (for functions.execute)</label>
+            <div className="perm-grid">
+              {functions.map(f => (
+                <label key={f._id}>
+                  <input type="checkbox" checked={fnIds.has(String(f._id))} onChange={() => toggleFn(String(f._id))} />
+                  <span>{f.name}</span>
+                </label>
+              ))}
+              {functions.length === 0 && <span className="hint">No functions defined yet.</span>}
+            </div>
+          </>
+        )}
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
           <button onClick={onClose}>Cancel</button>
@@ -54,6 +74,7 @@ function RoleModal({ initial, catalog, onClose, onSaved }) {
 export default function RolesPage() {
   const [roles, setRoles] = useState([]);
   const [catalog, setCatalog] = useState([]);
+  const [functions, setFunctions] = useState([]);
   const [modal, setModal] = useState(null);
   const [error, setError] = useState('');
 
@@ -61,6 +82,7 @@ export default function RolesPage() {
     try {
       setRoles(await api('/roles'));
       setCatalog(await api('/roles/permissions/catalog'));
+      setFunctions(await api('/functions').catch(() => []));
     } catch (e) { setError(e.message); }
   };
   useEffect(() => { load(); }, []);
@@ -96,7 +118,7 @@ export default function RolesPage() {
           </tbody>
         </table>
       </div>
-      {modal && <RoleModal initial={modal} catalog={catalog} onClose={() => setModal(null)}
+      {modal && <RoleModal initial={modal} catalog={catalog} functions={functions} onClose={() => setModal(null)}
                            onSaved={() => { setModal(null); load(); }} />}
     </div>
   );

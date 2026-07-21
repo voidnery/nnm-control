@@ -20,20 +20,21 @@ function sanitizePerms(perms) {
 }
 
 rolesRouter.post('/', async (req, res) => {
-  const { name, description = '', permissions = [] } = req.body || {};
+  const { name, description = '', permissions = [], functionIds = [] } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name required' });
   if (await Role.findOne({ name })) return res.status(409).json({ error: 'role name already exists' });
-  const role = await Role.create({ name, description, permissions: sanitizePerms(permissions) });
+  const role = await Role.create({ name, description, permissions: sanitizePerms(permissions), functionIds });
   res.status(201).json(role);
 });
 
 rolesRouter.put('/:id', async (req, res) => {
   const role = await Role.findById(req.params.id);
   if (!role) return res.status(404).json({ error: 'Not found' });
-  const { name, description, permissions } = req.body || {};
+  const { name, description, permissions, functionIds } = req.body || {};
   if (name) role.name = name;
   if (description !== undefined) role.description = description;
   if (permissions !== undefined) role.permissions = sanitizePerms(permissions);
+  if (functionIds !== undefined) role.functionIds = functionIds;
   await role.save();
   res.json(role);
 });

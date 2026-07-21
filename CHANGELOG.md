@@ -4,6 +4,23 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.3 (m2) — engineering functions engine
+- Functions: ordered transactional macros over WMSPanel-managed objects.
+  Step types: `patch` (republish rule / UDP+SRT output / MPEGTS outgoing /
+  hot swap setting — arbitrary fields), `action` (pause/resume/restart of
+  outgoing stream), `delay`
+- Transactional semantics: pre-change GET snapshot of patched fields → PUT →
+  verification by polling until fields reflect (window 120s, accounts for the
+  ~30s WMSPanel→Nimble sync cycle) → on any failure automatic reverse-order
+  rollback from snapshots; every transition persisted for live UI trace
+- Builder UI with presets ("Switch republish source", hot swap, pause/resume,
+  delay…) and a WMSPanel object browser per server/kind
+- Live run view: per-step animation (applying/verifying/done/error/rollback),
+  run history with full traces and cancellation reason
+- Permissions: `functions.manage`, `functions.execute`; custom roles get a
+  per-function allow-list (checkboxes in Roles) enforced on execute
+- WMSPanel client: udp/outgoing/hotswap families added
+
 ### v0.3.2 (m1.2)
 - Strict control-plane separation: while control plane is WMSPanel API the
   native Nimble API is fully disabled — backend rejects all /api/nimble calls

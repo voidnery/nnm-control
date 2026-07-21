@@ -63,4 +63,17 @@ export const wmspanel = {
   republishUpdate:  (cfg, sid, ruleId, patch) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'PUT', body: patch }),
   republishDelete:  (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'DELETE' }),
   republishRestart: (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}/restart`),
+  // UDP streaming settings (SRT/UDP outputs) — confirmed: /server/{id}/mpegts/udp
+  udpList:   (cfg, sid) => call(cfg, `/server/${sid}/mpegts/udp`),
+  udpGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/udp/${id}`),
+  udpUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/mpegts/udp/${id}`, { method: 'PUT', body: patch }),
+  // MPEGTS outgoing streams — confirmed: /server/{id}/mpegts/outgoing (+ pause/resume/restart)
+  outgoingList:   (cfg, sid) => call(cfg, `/server/${sid}/mpegts/outgoing`),
+  outgoingGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}`),
+  outgoingUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}`, { method: 'PUT', body: patch }),
+  outgoingAction: (cfg, sid, id, action) => call(cfg, `/server/${sid}/mpegts/outgoing/${id}/${action}`),
+  // Hot swap settings — confirmed: /server/{id}/hotswap (Transcoder feature)
+  hotswapList:   (cfg, sid) => call(cfg, `/server/${sid}/hotswap`),
+  hotswapGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/hotswap/${id}`),
+  hotswapUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/hotswap/${id}`, { method: 'PUT', body: patch }),
 };

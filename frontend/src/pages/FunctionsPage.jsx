@@ -1,0 +1,288 @@
+import { useEffect, useRef, useState } from 'react';
+import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
+
+const KINDS = [
+  { value: 'republish', label: 'Republish rule' },
+  { value: 'udp',       label: 'UDP/SRT output (UDP streaming)' },
+  { value: 'outgoing',  label: 'MPEGTS outgoing stream' },
+  { value: 'hotswap',   label: 'Hot swap setting (Transcoder)' },
+];
+
+const PRESETS = [
+  { label: 'Switch republish source', step: { type: 'patch', objectKind: 'republish', patch: { src_app: 'zagl_app', src_stream: 'zagl_stream' }, label: 'Switch republish source' } },
+  { label: 'Patch UDP/SRT output',    step: { type: 'patch', objectKind: 'udp', patch: {}, label: 'Patch SRT/UDP output' } },
+  { label: 'Patch outgoing stream',   step: { type: 'patch', objectKind: 'outgoing', patch: {}, label: 'Patch outgoing stream' } },
+  { label: 'Hot swap: enable substitute', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: true }, label: 'Hot swap ON' } },
+  { label: 'Pause outgoing',  step: { type: 'action', action: 'pause', label: 'Pause outgoing' } },
+  { label: 'Resume outgoing', step: { type: 'action', action: 'resume', label: 'Resume outgoing' } },
+  { label: 'Restart outgoing',step: { type: 'action', action: 'restart', label: 'Restart outgoing' } },
+  { label: 'Delay (seconds)', step: { type: 'delay', waitSec: 10, label: 'Delay' } },
+];
+
+function ObjectPicker({ servers, step, onPick }) {
+  const [objects, setObjects] = useState(null);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setError(''); setObjects(null);
+    try {
+      const d = await api(`/functions/objects/${step.serverId}/${step.objectKind || 'outgoing'}`);
+      setObjects(d.objects);
+    } catch (e) { setError(e.message); }
+  };
+  const describe = (o) => {
+    const src = o.src_app !== undefined ? `${o.src_app}/${o.src_stream || '*'}` :
+                o.application !== undefined ? `${o.application}/${o.stream || ''}` :
+                o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}` :
+                o.name || o.protocol || '';
+    return `${String(o.id).slice(-6)} · ${src}`;
+  };
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button disabled={!step.serverId} onClick={load}>Browse objects…</button>
+      {error && <div className="error-box">{error}</div>}
+      {objects && (
+        <div className="panel" style={{ marginTop: 6, maxHeight: 180, overflow: 'auto', padding: 8 }}>
+          {objects.map(o => (
+            <div key={o.id} className="mono" style={{ cursor: 'pointer', padding: '3px 6px' }}
+                 onClick={() => onPick(o)} title={JSON.stringify(o, null, 1)}>
+              {describe(o)}
+            </div>
+          ))}
+          {objects.length === 0 && <span className="hint">No objects of this kind on the server.</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepEditor({ step, servers, onChange, onRemove }) {
+  const set = (k, v) => onChange({ ...step, [k]: v });
+  const [patchText, setPatchText] = useState(JSON.stringify(step.patch || {}, null, 0));
+  const [patchErr, setPatchErr] = useState('');
+  const applyPatchText = (t) => {
+    setPatchText(t);
+    try { onChange({ ...step, patch: JSON.parse(t || '{}') }); setPatchErr(''); }
+    catch { setPatchErr('Invalid JSON'); }
+  };
+  return (
+    <div className="panel" style={{ padding: 12 }}>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <input style={{ maxWidth: 260 }} value={step.label} placeholder="Step label"
+               onChange={e => set('label', e.target.value)} />
+        <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
+        <button className="danger" onClick={onRemove}>Remove</button>
+      </div>
+      {step.type !== 'delay' && (
+        <>
+          <label>Server</label>
+          <select value={step.serverId || ''} onChange={e => set('serverId', e.target.value)}>
+            <option value="">— select —</option>
+            {servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {step.type === 'patch' && (
+            <>
+              <label>Object kind</label>
+              <select value={step.objectKind} onChange={e => set('objectKind', e.target.value)}>
+                {KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+              </select>
+            </>
+          )}
+          <label>Target object id</label>
+          <input className="mono" value={step.targetId || ''} onChange={e => set('targetId', e.target.value)} />
+          <ObjectPicker servers={servers} step={step} onPick={o => set('targetId', String(o.id))} />
+          {step.type === 'patch' && (
+            <>
+              <label>Patch (JSON: fields to change; snapshot/rollback is automatic)</label>
+              <textarea className="mono" rows={2} value={patchText} onChange={e => applyPatchText(e.target.value)} />
+              {patchErr && <div className="hint" style={{ color: 'var(--warn)' }}>{patchErr}</div>}
+            </>
+          )}
+        </>
+      )}
+      {step.type === 'delay' && (
+        <>
+          <label>Wait (seconds)</label>
+          <input type="number" value={step.waitSec || 0} onChange={e => set('waitSec', Number(e.target.value))} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function Builder({ initial, servers, onClose, onSaved }) {
+  const isEdit = Boolean(initial._id);
+  const [name, setName] = useState(initial.name || '');
+  const [description, setDescription] = useState(initial.description || '');
+  const [steps, setSteps] = useState(initial.steps || []);
+  const [error, setError] = useState('');
+
+  const addPreset = (preset) => setSteps(st => [...st, { serverId: '', targetId: '', waitSec: 0, ...JSON.parse(JSON.stringify(preset.step)) }]);
+  const save = async () => {
+    setError('');
+    try {
+      const body = { name, description, steps };
+      if (isEdit) await api(`/functions/${initial._id}`, { method: 'PUT', body });
+      else await api('/functions', { method: 'POST', body });
+      onSaved();
+    } catch (e) { setError(e.message); }
+  };
+
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className="modal" style={{ width: 640 }} onClick={e => e.stopPropagation()}>
+        <h3>{isEdit ? 'Edit function' : 'New function'}</h3>
+        <label>Name</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Подмена потоков картинкой" />
+        <label>Description</label>
+        <input value={description} onChange={e => setDescription(e.target.value)} />
+        <label>Steps (executed in order; on failure everything rolls back in reverse)</label>
+        {steps.map((st, i) => (
+          <StepEditor key={i} step={st} servers={servers}
+                      onChange={next => setSteps(all => all.map((s, j) => j === i ? next : s))}
+                      onRemove={() => setSteps(all => all.filter((_, j) => j !== i))} />
+        ))}
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.label}</button>)}
+        </div>
+        {error && <div className="error-box">{error}</div>}
+        <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
+          <button onClick={onClose}>Cancel</button>
+          <button className="primary" disabled={!name || steps.length === 0} onClick={save}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const STEP_ICON = {
+  pending: '·', applying: '▶', verifying: '⟳', done: '✓',
+  error: '✕', rolling_back: '↩', rolled_back: '↩✓', rollback_failed: '↩✕',
+};
+
+function RunView({ runId, onClose }) {
+  const [run, setRun] = useState(null);
+  const timer = useRef(null);
+  useEffect(() => {
+    const load = () => api(`/functions/runs/${runId}`).then(r => {
+      setRun(r);
+      if (r.status !== 'running' && timer.current) { clearInterval(timer.current); timer.current = null; }
+    }).catch(() => {});
+    load();
+    timer.current = setInterval(load, 1500);
+    return () => timer.current && clearInterval(timer.current);
+  }, [runId]);
+
+  if (!run) return null;
+  const statusColor = run.status === 'success' ? 'var(--ok)'
+    : run.status === 'running' ? 'var(--accent)' : 'var(--danger)';
+  return (
+    <div className="modal-back" onClick={run.status !== 'running' ? onClose : undefined}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h3>{run.functionName}</h3>
+        <div className="mono" style={{ color: statusColor, marginBottom: 10 }}>
+          {run.status === 'running' ? 'RUNNING…' : run.status.toUpperCase()}
+        </div>
+        {run.steps.map(st => (
+          <div key={st.index} className={'run-step ' + st.status}>
+            <span className="run-icon">{STEP_ICON[st.status] || '·'}</span>
+            <span><b>Step {st.index + 1}.</b> {st.label}</span>
+            {st.detail && <div className="hint" style={{ marginLeft: 26 }}>{st.detail}</div>}
+          </div>
+        ))}
+        {run.cancelReason && <div className="error-box">Cancelled: {run.cancelReason}</div>}
+        {run.status !== 'running' && (
+          <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+            <button onClick={onClose}>Close</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function FunctionsPage() {
+  const { can } = useAuth();
+  const [fns, setFns] = useState([]);
+  const [servers, setServers] = useState([]);
+  const [runs, setRuns] = useState([]);
+  const [builder, setBuilder] = useState(null);
+  const [activeRun, setActiveRun] = useState(null);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    try {
+      setFns(await api('/functions'));
+      setServers(await api('/servers').catch(() => []));
+      if (can('functions.execute')) setRuns(await api('/functions/runs').catch(() => []));
+    } catch (e) { setError(e.message); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const run = async (fn) => {
+    if (!window.confirm(`Execute function "${fn.name}"? Steps will apply and verify sequentially; any failure rolls everything back.`)) return;
+    try {
+      const r = await api(`/functions/${fn._id}/run`, { method: 'POST' });
+      setActiveRun(r.runId);
+    } catch (e) { setError(e.message); }
+  };
+
+  const remove = async (fn) => {
+    if (!window.confirm(`Delete function "${fn.name}"?`)) return;
+    await api(`/functions/${fn._id}`, { method: 'DELETE' });
+    load();
+  };
+
+  return (
+    <div>
+      <h1>Functions</h1>
+      <div className="sub">Engineering macros: ordered transactional steps over WMSPanel-managed streams, with verification and automatic rollback.</div>
+      {error && <div className="error-box">{error}</div>}
+      {can('functions.manage') && (
+        <button className="primary" style={{ marginBottom: 14 }} onClick={() => setBuilder({})}>+ New function</button>
+      )}
+      <div className="panel">
+        <table>
+          <thead><tr><th>Name</th><th>Description</th><th>Steps</th><th></th></tr></thead>
+          <tbody>
+            {fns.map(fn => (
+              <tr key={fn._id}>
+                <td><b>{fn.name}</b></td>
+                <td className="hint">{fn.description}</td>
+                <td>{fn.steps.map((s, i) => <span key={i} className="badge" style={{ margin: '1px 3px 1px 0' }}>{s.label || s.type}</span>)}</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {can('functions.execute') && <button className="primary" onClick={() => run(fn)}>Run</button>}{' '}
+                  {can('functions.manage') && <><button onClick={() => setBuilder(fn)}>Edit</button>{' '}
+                  <button className="danger" onClick={() => remove(fn)}>Delete</button></>}
+                </td>
+              </tr>
+            ))}
+            {fns.length === 0 && <tr><td colSpan={4} className="hint">No functions yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {can('functions.execute') && runs.length > 0 && (
+        <div className="panel">
+          <h2 style={{ marginTop: 0 }}>Run history</h2>
+          <table>
+            <thead><tr><th>Function</th><th>By</th><th>Started</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {runs.map(r => (
+                <tr key={r._id}>
+                  <td>{r.functionName}</td>
+                  <td className="mono">{r.startedBy}</td>
+                  <td className="hint">{new Date(r.startedAt).toLocaleString()}</td>
+                  <td><span className={'lamp ' + (r.status === 'success' ? 'on' : r.status === 'running' ? 'warn' : 'off')} />{r.status}</td>
+                  <td style={{ textAlign: 'right' }}><button onClick={() => setActiveRun(r._id)}>Trace</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {builder && <Builder initial={builder} servers={servers}
+                           onClose={() => setBuilder(null)} onSaved={() => { setBuilder(null); load(); }} />}
+      {activeRun && <RunView runId={activeRun} onClose={() => { setActiveRun(null); load(); }} />}
+    </div>
+  );
+}
