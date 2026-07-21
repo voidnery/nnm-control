@@ -244,21 +244,15 @@ function NativeRules({ serverId }) {
 }
 
 export default function RepublishTab({ serverId, server }) {
-  const [pubSettings, setPubSettings] = useState(null);
-  useEffect(() => {
-    api('/settings/public').then(setPubSettings).catch(() => setPubSettings({ controlPlane: 'native' }));
-  }, []);
-  if (!pubSettings) return <div className="hint">Loading…</div>;
+  const { sys } = useAuth();
+  if (!sys) return <div className="hint">Loading…</div>;
 
-  const wantWmspanel = pubSettings.controlPlane === 'wmspanel';
+  const wantWmspanel = sys.controlPlane === 'wmspanel';
   if (wantWmspanel && !server?.wmspanelServerId) {
     return (
-      <div>
-        <div className="error-box">
-          Control plane is WMSPanel API, but this server is not mapped to a WMSPanel server id.
-          Set the mapping in Servers → Edit, or switch to backup mode in Settings.
-        </div>
-        <NativeRules serverId={serverId} />
+      <div className="error-box">
+        Control plane is WMSPanel API, but this server is not mapped to a WMSPanel server id.
+        Run "Sync now" on the Servers page or set the mapping in Servers → Edit.
       </div>
     );
   }

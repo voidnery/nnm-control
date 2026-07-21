@@ -206,21 +206,28 @@ function ControlTab({ serverId }) {
   );
 }
 
+// Tabs are split by data source: 'native' tabs poll the instance's native API
+// and are only available in backup (native) control plane mode; 'wmspanel'
+// tabs work through WMSPanel API.
 const TABS = [
-  { key: 'streams',   label: 'Streams',   perm: 'streams.view',   el: StreamsTab },
-  { key: 'sessions',  label: 'Sessions',  perm: 'sessions.view',  el: SessionsTab },
-  { key: 'srt',       label: 'SRT',       perm: 'srt.view',       el: SrtTab },
-  { key: 'republish', label: 'Republish', perm: 'republish.view', el: RepublishTab },
-  { key: 'mpegts',    label: 'MPEG-TS',   perm: 'mpegts.view',    el: MpegtsTab },
-  { key: 'playlist',  label: 'Playout',   perm: 'playlist.view',  el: PlaylistTab },
-  { key: 'control',   label: 'Control',   perm: 'control.manage', el: ControlTab },
+  { key: 'streams',   label: 'Streams',   perm: 'streams.view',   el: StreamsTab,   plane: 'native' },
+  { key: 'sessions',  label: 'Sessions',  perm: 'sessions.view',  el: SessionsTab,  plane: 'native' },
+  { key: 'srt',       label: 'SRT',       perm: 'srt.view',       el: SrtTab,       plane: 'native' },
+  { key: 'republish', label: 'Republish', perm: 'republish.view', el: RepublishTab, plane: 'both' },
+  { key: 'mpegts',    label: 'MPEG-TS',   perm: 'mpegts.view',    el: MpegtsTab,    plane: 'native' },
+  { key: 'playlist',  label: 'Playout',   perm: 'playlist.view',  el: PlaylistTab,  plane: 'native' },
+  { key: 'control',   label: 'Control',   perm: 'control.manage', el: ControlTab,   plane: 'native' },
 ];
 
 export default function ServerDetailPage() {
   const { id } = useParams();
-  const { can } = useAuth();
+  const { can, sys } = useAuth();
   const [server, setServer] = useState(null);
-  const visibleTabs = useMemo(() => TABS.filter(t => can(t.perm)), [can]);
+  const wms = sys?.controlPlane === 'wmspanel';
+  const visibleTabs = useMemo(
+    () => TABS.filter(t => can(t.perm) && (wms ? t.plane !== 'native' : true)),
+    [can, wms]
+  );
   const [tab, setTab] = useState(null);
 
   useEffect(() => {
@@ -236,6 +243,12 @@ export default function ServerDetailPage() {
       <div className="hint"><Link to="/servers">← Servers</Link></div>
       <h1>{server ? server.name : '…'}</h1>
       {server && <div className="sub mono">{server.useSsl ? 'https' : 'http'}://{server.host}:{server.port}</div>}
+      {wms && (
+        <div className="hint" style={{ marginBottom: 10 }}>
+          Control plane: WMSPanel API — native-API sections (Streams, Sessions, SRT, MPEG-TS, Playout, Control)
+          are disabled in this mode. Switch to backup mode in Settings to access them.
+        </div>
+      )}
       <div className="tabs">
         {visibleTabs.map(t => (
           <button key={t.key} className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}>{t.label}</button>

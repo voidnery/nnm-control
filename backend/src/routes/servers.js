@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
+import { Settings } from '../models/Settings.js';
 
 export const serversRouter = Router();
 serversRouter.use(requireAuth);
@@ -48,8 +49,12 @@ serversRouter.delete('/:id', requirePerm('servers.manage'), async (req, res) => 
   res.json({ ok: true });
 });
 
-// Connectivity test — hits /manage/server_status.
+// Connectivity test — hits /manage/server_status (native API; backup mode only).
 serversRouter.post('/:id/test', requirePerm('servers.view'), async (req, res) => {
+  const settings = await Settings.load();
+  if (settings.controlPlane === 'wmspanel') {
+    return res.status(409).json({ error: 'Native API test is disabled: control plane is WMSPanel API' });
+  }
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Not found' });
   try {

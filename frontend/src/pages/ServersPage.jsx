@@ -5,7 +5,7 @@ import { useAuth } from '../auth.jsx';
 
 const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '' };
 
-function ServerModal({ initial, onClose, onSaved }) {
+function ServerModal({ initial, onClose, onSaved, wms }) {
   const isEdit = Boolean(initial.id);
   const [wpServers, setWpServers] = useState(null); // null = loading/unavailable
   const [form, setForm] = useState({
@@ -51,14 +51,18 @@ function ServerModal({ initial, onClose, onSaved }) {
             <label>Host (IP or DNS)</label>
             <input value={form.host} onChange={e => set('host', e.target.value)} placeholder="10.77.0.10" />
           </div>
-          <div>
-            <label>Management port</label>
-            <input type="number" value={form.port} onChange={e => set('port', e.target.value)} />
-          </div>
+          {!wms && (
+            <div>
+              <label>Management port</label>
+              <input type="number" value={form.port} onChange={e => set('port', e.target.value)} />
+            </div>
+          )}
         </div>
-        <label>Management token {isEdit && <span className="hint">(empty = keep current)</span>}</label>
-        <input type="password" value={form.token} onChange={e => set('token', e.target.value)}
-               placeholder={initial.hasToken ? '••••••• (set)' : 'empty = no auth on server'} />
+        {!wms && <>
+          <label>Management token {isEdit && <span className="hint">(empty = keep current)</span>}</label>
+          <input type="password" value={form.token} onChange={e => set('token', e.target.value)}
+                 placeholder={initial.hasToken ? '••••••• (set)' : 'empty = no auth on server'} />
+        </>}
         <label>WMSPanel server (for persistent control via WMSPanel API)</label>
         {wpServers ? (
           <select value={form.wmspanelServerId} onChange={e => set('wmspanelServerId', e.target.value)}>
@@ -73,10 +77,12 @@ function ServerModal({ initial, onClose, onSaved }) {
         <input value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="edge, moscow" />
         <label>Notes</label>
         <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="checkbox" style={{ width: 'auto' }} checked={form.useSsl}
-                 onChange={e => set('useSsl', e.target.checked)} /> Use HTTPS to reach management API
-        </label>
+        {!wms && (
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={form.useSsl}
+                   onChange={e => set('useSsl', e.target.checked)} /> Use HTTPS to reach management API
+          </label>
+        )}
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
           <button onClick={onClose}>Cancel</button>
@@ -90,20 +96,17 @@ function ServerModal({ initial, onClose, onSaved }) {
 }
 
 export default function ServersPage() {
-  const { can } = useAuth();
+  const { can, sys } = useAuth();
+  const wms = sys?.controlPlane === 'wmspanel';
   const [servers, setServers] = useState([]);
   const [modal, setModal] = useState(null);
   const [testResults, setTestResults] = useState({});
   const [error, setError] = useState('');
-  const [pubSettings, setPubSettings] = useState(null);
   const [syncMsg, setSyncMsg] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
 
   const load = () => api('/servers').then(setServers).catch(e => setError(e.message));
-  useEffect(() => {
-    load();
-    api('/settings/public').then(setPubSettings).catch(() => setPubSettings(null));
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const syncNow = async () => {
     setSyncBusy(true); setSyncMsg(null);
@@ -133,7 +136,7 @@ export default function ServersPage() {
       <h1>Servers</h1>
       <div className="sub">Managed Nimble Streamer instances (native management API endpoints).</div>
       {error && <div className="error-box">{error}</div>}
-      {pubSettings?.controlPlane === 'wmspanel' && (
+      {wms && (
         <div className="panel" style={{ padding: '10px 14px' }}>
           <span className="lamp on" />Control plane: <b>WMSPanel API</b> — the fleet is pulled from WMSPanel automatically
           (every 10 min). Native management token is not known to WMSPanel — set it per server to enable live status.
@@ -149,7 +152,7 @@ export default function ServersPage() {
       <div className="panel">
         <table>
           <thead>
-            <tr><th>Name</th><th>Endpoint</th><th>Tags</th><th>Auth</th><th>Check</th><th></th></tr>
+            <tr><th>Name</th><th>{wms ? 'Host' : 'Endpoint'}</th><th>Tags</th>{!wms && <th>Auth</th>}{!wms && <th>Check</th>}<th></th></tr>
           </thead>
           <tbody>
             {servers.map(s => {
@@ -165,15 +168,15 @@ export default function ServersPage() {
                       </span>
                     )}
                   </td>
-                  <td className="mono">{s.useSsl ? 'https' : 'http'}://{s.host}:{s.port}</td>
+                  <td className="mono">{wms ? (s.host || '—') : `${s.useSsl ? 'https' : 'http'}://${s.host}:${s.port}`}</td>
                   <td>{s.tags.map(tag => <span key={tag} className="badge" style={{ marginRight: 4 }}>{tag}</span>)}</td>
-                  <td>{s.hasToken ? <span className="badge">token</span> : <span className="badge">open</span>}</td>
-                  <td>
+                  {!wms && <td>{s.hasToken ? <span className="badge">token</span> : <span className="badge">open</span>}</td>}
+                  {!wms && <td>
                     <button onClick={() => test(s.id)} disabled={t?.busy}>{t?.busy ? '…' : 'Test'}</button>{' '}
                     {t && !t.busy && (
                       <span className={'lamp ' + (t.ok ? 'on' : 'off')} title={t.ok ? 'OK' : t.error} />
                     )}
-                  </td>
+                  </td>}
                   <td style={{ textAlign: 'right' }}>
                     {can('servers.manage') && <>
                       <button onClick={() => setModal(s)}>Edit</button>{' '}
@@ -183,11 +186,11 @@ export default function ServersPage() {
                 </tr>
               );
             })}
-            {servers.length === 0 && <tr><td colSpan={6} className="hint">No servers added yet.</td></tr>}
+            {servers.length === 0 && <tr><td colSpan={wms ? 4 : 6} className="hint">No servers added yet.</td></tr>}
           </tbody>
         </table>
       </div>
-      {modal && <ServerModal initial={modal} onClose={() => setModal(null)}
+      {modal && <ServerModal initial={modal} wms={wms} onClose={() => setModal(null)}
                              onSaved={() => { setModal(null); load(); }} />}
     </div>
   );

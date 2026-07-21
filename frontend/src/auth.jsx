@@ -7,6 +7,13 @@ export const useAuth = () => useContext(AuthCtx);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
+  const [sys, setSys] = useState(null); // { controlPlane, wmspanelConfigured }
+
+  const refreshSystem = async () => {
+    try { setSys(await api('/settings/public')); }
+    catch { setSys({ controlPlane: 'native', wmspanelConfigured: false }); }
+  };
+  useEffect(() => { if (user) refreshSystem(); }, [user]);
 
   useEffect(() => {
     (async () => {
@@ -25,5 +32,5 @@ export function AuthProvider({ children }) {
   const logout = () => { clearToken(); setUser(null); };
   const can = (perm) => !!user && (user.permissions.includes('*') || user.permissions.includes(perm));
 
-  return <AuthCtx.Provider value={{ user, ready, login, logout, can }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, ready, login, logout, can, sys, refreshSystem }}>{children}</AuthCtx.Provider>;
 }

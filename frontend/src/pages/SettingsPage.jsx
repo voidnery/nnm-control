@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
 
 const BASE_URLS = [
   'https://api.wmspanel.com/v1',
@@ -7,6 +8,7 @@ const BASE_URLS = [
 ];
 
 export default function SettingsPage() {
+  const { refreshSystem } = useAuth();
   const [settings, setSettings] = useState(null);
   const [clientId, setClientId] = useState('');
   const [apiKey, setApiKey] = useState('');       // empty = keep stored key
@@ -34,7 +36,10 @@ export default function SettingsPage() {
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
       setSettings(s); setApiKey('');
-      setMsg({ ok: true, text: 'Settings saved.' });
+      await refreshSystem();
+      setMsg({ ok: true, text: s.sync && !s.sync.skipped
+        ? `Settings saved. Fleet synced: +${s.sync.created} new, ${s.sync.updated} updated.`
+        : 'Settings saved.' });
     } catch (e) { setMsg({ ok: false, text: e.message }); }
     finally { setBusy(false); }
   };

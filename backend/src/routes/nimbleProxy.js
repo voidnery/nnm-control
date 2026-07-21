@@ -2,10 +2,21 @@ import { Router } from 'express';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
+import { Settings } from '../models/Settings.js';
 
 // Permission-gated proxy of Nimble native API per managed server.
 export const nimbleRouter = Router();
 nimbleRouter.use(requireAuth);
+
+// Hard gate: while the control plane is WMSPanel API, the native API is fully
+// disabled — no calls leave the panel through this router.
+nimbleRouter.use(async (_req, res, next) => {
+  const s = await Settings.load();
+  if (s.controlPlane === 'wmspanel') {
+    return res.status(409).json({ error: 'Native Nimble API is disabled: control plane is WMSPanel API (see Settings)' });
+  }
+  next();
+});
 
 async function loadServer(req, res, next) {
   const server = await NimbleServer.findById(req.params.id);

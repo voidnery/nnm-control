@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
 
 const fmtBytes = (b) => {
   if (b == null) return '—';
@@ -56,23 +57,55 @@ function ServerCard({ server }) {
   );
 }
 
+function WmspanelCard({ server }) {
+  const st = server.wmspanelStatus || 'unknown';
+  const lamp = st === 'online' ? 'on' : st === 'offline' ? 'off' : 'warn';
+  return (
+    <div className="panel">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div>
+          <span className={'lamp ' + lamp} />
+          <Link to={`/servers/${server.id}`}><b>{server.name}</b></Link>
+          <div className="hint mono">{server.host || '—'}</div>
+        </div>
+        <div className="hint mono">
+          WMSPanel: {st}
+          {server.lastSyncAt && <> · synced {new Date(server.lastSyncAt).toLocaleTimeString()}</>}
+        </div>
+      </div>
+      {server.tags?.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {server.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
+  const { sys } = useAuth();
   const [servers, setServers] = useState(null);
   const [error, setError] = useState('');
+  const wms = sys?.controlPlane === 'wmspanel';
 
   useEffect(() => {
     api('/servers').then(setServers).catch(e => setError(e.message));
   }, []);
 
+  if (!sys) return null;
   return (
     <div>
       <h1>Dashboard</h1>
-      <div className="sub">Live status of all managed Nimble Streamer instances. Refreshes every 15 s.</div>
+      <div className="sub">
+        {wms
+          ? 'Fleet status from WMSPanel (control plane: WMSPanel API; auto-sync every 10 min).'
+          : 'Live status of all managed Nimble Streamer instances. Refreshes every 15 s.'}
+      </div>
       {error && <div className="error-box">{error}</div>}
       {servers && servers.length === 0 && (
         <div className="panel">No servers yet. Add the first one on the <Link to="/servers">Servers</Link> page.</div>
       )}
-      {servers && servers.map(s => <ServerCard key={s.id} server={s} />)}
+      {servers && servers.map(s => wms ? <WmspanelCard key={s.id} server={s} /> : <ServerCard key={s.id} server={s} />)}
     </div>
   );
 }

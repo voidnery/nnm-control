@@ -4,6 +4,17 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.2 (m1.2)
+- Strict control-plane separation: while control plane is WMSPanel API the
+  native Nimble API is fully disabled — backend rejects all /api/nimble calls
+  and the native connectivity test (409), no native requests leave the panel
+- UI is gated by the same flag: Dashboard shows WMSPanel fleet status (no
+  native polling); server pages show only WMSPanel-backed tabs (Republish);
+  Servers page hides native-only fields/columns (management port/token/SSL,
+  Test, Auth); backup mode restores everything as before
+- Control plane is now provided app-wide via auth context and refreshes
+  immediately after saving Settings
+
 ### v0.3.1 (m1.1)
 - WMSPanel control plane now auto-manages the fleet: servers are pulled from
   WMSPanel and materialized in the panel automatically (on enabling the mode,
