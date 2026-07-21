@@ -16,7 +16,31 @@ case "${1:-}" in
         grep '^SETUP_TOKEN=' "$ENV_FILE" | cut -d= -f2 ;;
     version)
         dpkg-query -W -f='nnm-control ${Version}\n' nnm-control ;;
+    backup)
+        # mongodump of the panel DB into /var/lib/nnm-control/backups with retention.
+        BDIR=/var/lib/nnm-control/backups
+        mkdir -p "$BDIR"; chmod 700 "$BDIR"
+        KEEP=$(grep '^NNM_BACKUP_KEEP=' "$ENV_FILE" 2>/dev/null | cut -d= -f2)
+        KEEP=${KEEP:-14}
+        F="$BDIR/nnm-control-$(date +%Y%m%d-%H%M%S).archive.gz"
+        echo "Dumping MongoDB to $F ..."
+        $COMPOSE exec -T mongo mongodump --archive --gzip --db nnm_control > "$F"
+        chmod 600 "$F"
+        echo "Done: $(du -h "$F" | cut -f1). Retention: keeping last $KEEP."
+        ls -1t "$BDIR"/nnm-control-*.archive.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f
+        date -Iseconds > "$BDIR/last-backup.txt" ;;
+    backups)
+        ls -lh /var/lib/nnm-control/backups/ 2>/dev/null || echo "No backups yet." ;;
+    restore)
+        F="${2:?Usage: nnm-control restore /var/lib/nnm-control/backups/<file>}"
+        [ -f "$F" ] || { echo "File not found: $F"; exit 1; }
+        echo "!!! This will DROP and replace the nnm_control database with the backup contents."
+        printf "Type 'yes' to proceed: "; read -r ANSWER
+        [ "$ANSWER" = "yes" ] || { echo "Aborted."; exit 1; }
+        $COMPOSE exec -T mongo mongorestore --archive --gzip --drop < "$F"
+        echo "Restore complete. Restarting panel..."
+        systemctl restart nnm-control ;;
     *)
-        echo "Usage: nnm-control {status|logs [service]|start|stop|restart|pull|configure|setup-token|version}"
+        echo "Usage: nnm-control {status|logs [service]|start|stop|restart|pull|configure|setup-token|version|backup|backups|restore <file>}"
         exit 1 ;;
 esac

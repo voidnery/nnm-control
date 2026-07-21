@@ -110,6 +110,21 @@ export const wmspanel = {
   transcoderResume: (cfg, id) => call(cfg, `/transcoder/${id}/resume`),
   transcoderClone:  (cfg, id) => call(cfg, `/transcoder/${id}/clone`),
   transcoderLicenses: (cfg) => call(cfg, `/licenses/transcoder`),
+  // ABR (account-level): rendition ladder -> single ABR stream
+  abrList:   (cfg, _sid) => call(cfg, `/abr`),
+  abrCreate: (cfg, body) => call(cfg, `/abr`, { method: 'POST', body }),
+  abrUpdate: (cfg, _sid, id, patch) => call(cfg, `/abr/${id}`, { method: 'PUT', body: patch }),
+  abrDelete: (cfg, id) => call(cfg, `/abr/${id}`, { method: 'DELETE' }),
+  // Application aliases (account-level)
+  aliasList:   (cfg, _sid) => call(cfg, `/aliases`),
+  aliasCreate: (cfg, body) => call(cfg, `/aliases`, { method: 'POST', body }),
+  aliasUpdate: (cfg, _sid, id, patch) => call(cfg, `/aliases/${id}`, { method: 'PUT', body: patch }),
+  aliasDelete: (cfg, id) => call(cfg, `/aliases/${id}`, { method: 'DELETE' }),
+  // Origin applications (account-level)
+  originAppList:   (cfg) => call(cfg, `/origin_apps`),
+  originAppCreate: (cfg, body) => call(cfg, `/origin_apps`, { method: 'POST', body }),
+  originAppUpdate: (cfg, id, patch) => call(cfg, `/origin_apps/${id}`, { method: 'PUT', body: patch }),
+  originAppDelete: (cfg, id) => call(cfg, `/origin_apps/${id}`, { method: 'DELETE' }),
   // RTMP interfaces (view)
   rtmpInterfaceList: (cfg, sid) => call(cfg, `/server/${sid}/rtmp/interface`),
   // Hot swap settings — confirmed: /server/{id}/hotswap (Transcoder feature)

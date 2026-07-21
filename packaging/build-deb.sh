@@ -29,6 +29,7 @@ chmod 755 "$ROOT/usr/bin/nnm-control"
 cp tools/*.sh "$ROOT/usr/share/nnm-control/tools/"
 chmod 755 "$ROOT/usr/share/nnm-control/tools/"*.sh
 cp packaging/nnm-control.service "$ROOT/lib/systemd/system/nnm-control.service"
+cp packaging/nnm-control-backup.service packaging/nnm-control-backup.timer "$ROOT/lib/systemd/system/"
 
 mkdir -p "$OUT"
 dpkg-deb --build --root-owner-group "$ROOT" "$OUT/nnm-control_${VERSION}_all.deb"

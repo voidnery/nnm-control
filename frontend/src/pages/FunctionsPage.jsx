@@ -6,6 +6,8 @@ const KINDS = [
   { value: 'republish', label: 'Republish rule' },
   { value: 'live_pull', label: 'RTMP live pull (feed reserve)' },
   { value: 'transcoder', label: 'Transcoder (account-level)' },
+  { value: 'abr', label: 'ABR setting (account-level)' },
+  { value: 'alias', label: 'Application alias (account-level)' },
   { value: 'udp',       label: 'UDP/SRT output (UDP streaming)' },
   { value: 'outgoing',  label: 'MPEGTS outgoing stream' },
   { value: 'hotswap',   label: 'Hot swap setting (Transcoder)' },
@@ -34,7 +36,8 @@ function ObjectPicker({ servers, step, onPick }) {
   const load = async () => {
     setError(''); setObjects(null);
     try {
-      const d = await api(`/functions/objects/${step.objectKind === 'transcoder' ? 'any' : step.serverId}/${step.objectKind || 'outgoing'}`);
+      const accountKind = ['transcoder', 'abr', 'alias'].includes(step.objectKind);
+      const d = await api(`/functions/objects/${accountKind ? 'any' : step.serverId}/${step.objectKind || 'outgoing'}`);
       setObjects(d.objects);
     } catch (e) { setError(e.message); }
   };
@@ -49,7 +52,7 @@ function ObjectPicker({ servers, step, onPick }) {
   };
   return (
     <div style={{ marginTop: 6 }}>
-      <button disabled={!step.serverId && step.objectKind !== 'transcoder'} onClick={load}>Browse objects…</button>
+      <button disabled={!step.serverId && !['transcoder', 'abr', 'alias'].includes(step.objectKind)} onClick={load}>Browse objects…</button>
       {error && <div className="error-box">{error}</div>}
       {objects && (
         <div className="panel" style={{ marginTop: 6, maxHeight: 180, overflow: 'auto', padding: 8 }}>

@@ -14,6 +14,7 @@ import SettingsPage from './pages/SettingsPage.jsx';
 import FunctionsPage from './pages/FunctionsPage.jsx';
 import AuditPage from './pages/AuditPage.jsx';
 import TranscodersPage from './pages/TranscodersPage.jsx';
+import DistributionPage from './pages/DistributionPage.jsx';
 
 function Layout({ children }) {
   const { user, logout, can, sys } = useAuth();
@@ -26,6 +27,7 @@ function Layout({ children }) {
           {can('servers.view') && <NavLink to="/servers">Servers</NavLink>}
           {(can('functions.execute') || can('functions.manage')) && <NavLink to="/functions">Functions</NavLink>}
           {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/transcoders">Transcoders</NavLink>}
+          {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/distribution">Distribution</NavLink>}
           {can('users.manage') && <NavLink to="/users">Users</NavLink>}
           {can('roles.manage') && <NavLink to="/roles">Roles</NavLink>}
           {can('zabbix.view') && <NavLink to="/zabbix">Zabbix</NavLink>}
@@ -76,6 +78,7 @@ export default function App() {
         <Route path="/functions" element={<FunctionsPage />} />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/transcoders" element={<TranscodersPage />} />
+        <Route path="/distribution" element={<DistributionPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

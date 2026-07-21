@@ -48,6 +48,9 @@ fi
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
     systemctl enable nnm-control.service >/dev/null 2>&1 || true
+        mkdir -p /var/lib/nnm-control/backups && chmod 700 /var/lib/nnm-control/backups
+        systemctl enable nnm-control-backup.timer >/dev/null 2>&1 || true
+        systemctl start nnm-control-backup.timer >/dev/null 2>&1 || true
     # Pull images before (re)start so a broken pull doesn't leave old stack down.
     if docker compose -f /opt/nnm-control/docker-compose.yml \
         --env-file "$ENV_FILE" pull --quiet 2>/dev/null; then :; else

@@ -108,11 +108,15 @@ functionsRouter.get('/streams/:serverId', requirePerm('functions.manage'), async
 // Object browser for the builder: list WMSPanel objects of a kind on a server.
 functionsRouter.get('/objects/:serverId/:kind', requirePerm('functions.manage'), async (req, res) => {
   // transcoders are account-level: serverId is ignored (frontend passes 'any')
-  if (req.params.kind === 'transcoder') {
+  const ACCOUNT_BROWSE = {
+    transcoder: async (c) => (await wmspanel.transcoderList(c)).transcoders || [],
+    abr: async (c) => (await wmspanel.abrList(c)).settings || [],
+    alias: async (c) => (await wmspanel.aliasList(c)).settings || [],
+  };
+  if (ACCOUNT_BROWSE[req.params.kind]) {
     const settings0 = await Settings.load();
     try {
-      const d = await wmspanel.transcoderList(settings0.wmspanel);
-      return res.json({ objects: d.transcoders || [] });
+      return res.json({ objects: await ACCOUNT_BROWSE[req.params.kind](settings0.wmspanel) });
     } catch (e) {
       return res.status(502).json({ error: e.message, upstream: e.data ?? null });
     }

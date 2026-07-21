@@ -30,9 +30,13 @@ const KIND_OPS = {
   outgoing:  { get: 'outgoingList',  put: 'outgoingUpdate',  pickList: d => d.streams || d.settings || [] },
   hotswap:   { get: 'hotswapList',   put: 'hotswapUpdate',   pickList: d => d.settings || [] },
   live_pull: { get: 'livePullList',  put: 'livePullUpdate',  pickList: d => d.settings || [] },
-  // account-level: sid is ignored by the client methods
+  // account-level kinds: sid is ignored by the client methods
   transcoder: { get: 'transcoderList', put: 'transcoderUpdate', pickList: d => d.transcoders || [] },
+  abr:        { get: 'abrList',        put: 'abrUpdate',        pickList: d => d.settings || [] },
+  alias:      { get: 'aliasList',      put: 'aliasUpdate',      pickList: d => d.settings || [] },
 };
+
+const ACCOUNT_KINDS = new Set(['transcoder', 'abr', 'alias']);
 
 async function getObject(cfg, kind, sid, targetId) {
   // List-then-find: single-object GET shapes vary; list shapes are confirmed.
@@ -122,19 +126,20 @@ async function applyStep(cfg, run, idx, step) {
     await persistStep(run, idx, { status: 'done', detail: '' });
     return;
   }
-  if (step.type === 'patch' && step.objectKind === 'transcoder') {
+  if (step.type === 'patch' && ACCOUNT_KINDS.has(step.objectKind)) {
     // generic patch path but without server mapping
     const patch = step.patch || {};
     if (Object.keys(patch).length === 0) throw new Error('Empty patch');
-    await persistStep(run, idx, { status: 'applying', detail: `transcoder ${step.targetId}: ${JSON.stringify(patch)}` });
-    const before = await getObject(cfg, 'transcoder', null, step.targetId);
-    const snapshot = { sid: null, kind: 'transcoder', targetId: step.targetId, values: {} };
+    const akind = step.objectKind;
+    await persistStep(run, idx, { status: 'applying', detail: `${akind} ${step.targetId}: ${JSON.stringify(patch)}` });
+    const before = await getObject(cfg, akind, null, step.targetId);
+    const snapshot = { sid: null, kind: akind, targetId: step.targetId, values: {} };
     for (const k of Object.keys(patch)) snapshot.values[k] = before[k] ?? null;
     await persistStep(run, idx, { snapshot });
-    await wmspanel.transcoderUpdate(cfg, null, step.targetId, patch);
+    await wmspanel[KIND_OPS[akind].put](cfg, null, step.targetId, patch);
     await persistStep(run, idx, { applied: true, status: 'verifying',
       detail: 'Applied; verifying (WMSPanel ~30s sync cycle; window 180s)' });
-    await verifyPatched(cfg, 'transcoder', null, step.targetId, patch);
+    await verifyPatched(cfg, akind, null, step.targetId, patch);
     await persistStep(run, idx, { status: 'done', detail: '' });
     return;
   }
@@ -222,10 +227,10 @@ async function preflight(cfg, fnDoc, run) {
     if (step.type === 'delay') continue;
     try {
       let sid = null;
-      const kind = step.objectKind === 'transcoder' ? 'transcoder'
+      const kind = ACCOUNT_KINDS.has(step.objectKind) ? step.objectKind
         : step.type === 'action' ? (step.objectKind === 'live_pull' ? 'live_pull' : 'outgoing')
         : step.objectKind;
-      if (kind !== 'transcoder') {
+      if (!ACCOUNT_KINDS.has(kind)) {
         const server = await resolveServer(step);
         sid = server.wmspanelServerId;
       }

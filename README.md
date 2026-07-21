@@ -119,6 +119,16 @@ docker compose -f docker-compose.dev.yml up -d --build   # builds from sources
 
 ## Iteration journal
 
+- **iter2 (v0.3.x, CLOSED at v0.3.17)** — WMSPanel control plane epic:
+  manageable API base (.com/.ru), strict control-plane separation, fleet
+  auto-sync, transactional engineering functions (preflight / snapshot /
+  verify / rollback, per-function role permissions), full object management
+  (republish, MPEGTS in/out, UDP/SRT, hotswap, live pull, apps, interfaces),
+  real Live Streams view, account-level transcoders and distribution
+  (ABR/aliases/origins), audit log, at-rest encryption, mongodump backups
+  with nightly timer, Zabbix panel-status item. API ground truth pinned by
+  live dump + full-reference inventory tooling (tools/).
+
 - **iter2 m1 (v0.3.0)** — WMSPanel control plane: system Settings page
   (WMSPanel API creds, manageable base URL .com/.ru, control-plane switch
   primary/backup), server↔WMSPanel mapping, persistent Republish management

@@ -4,6 +4,33 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.17 (m11) — backups & panel monitoring; ITER2 CLOSED
+- MongoDB backups: `nnm-control backup` (mongodump --archive --gzip of the
+  panel DB into /var/lib/nnm-control/backups, 0600, retention
+  NNM_BACKUP_KEEP, default 14), `nnm-control backups` (list),
+  `nnm-control restore <file>` (typed-yes confirmation, --drop, panel
+  restart); nightly systemd timer 03:30 (+ up to 15 min jitter), enabled by
+  the deb automatically
+- Zabbix: new /api/zabbix/panel item — version, control plane, mongo state,
+  fleet sync age (alert if > 900s in WMSPanel mode), servers total/mapped,
+  functions and 24h run outcomes; URL shown on the Zabbix page
+- iter2 epic closed: WMSPanel control plane (m1), strict mode separation
+  (m1.2), transactional functions engine with preflight (m2), object tabs +
+  hotswap (m3), live streams (m4/m7), audit log (m5), MPEGTS editors (m6),
+  distribution ops + at-rest encryption (m8), transcoders (m9),
+  ABR/aliases/origins (m10), backups & monitoring (m11)
+
+### v0.3.16 (m10) — distribution: ABR / aliases / origin apps
+- New account-level Distribution page (WMSPanel mode): ABR ladders (output
+  app/stream + rendition rows editor, order preserved), application aliases
+  (aliases one per line, protocols, pause/resume, description) and origin
+  apps — full CRUD for all three; server_ids everywhere edited as checkboxes
+  of mapped panel servers and displayed as names (empty = all servers)
+- Functions engine: account-level kinds generalized (ACCOUNT_KINDS) — `abr`
+  and `alias` join `transcoder` as patchable object kinds with the full
+  preflight/snapshot/verify/rollback cycle (e.g. alias pause via patch);
+  builder Browse works for them without selecting a server
+
 ### v0.3.15 (m9) — transcoders
 - New account-level Transcoders page (WMSPanel mode, wmsobjects perms):
   list with server names resolved via mapping, tag/server filters, running/

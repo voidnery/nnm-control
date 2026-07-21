@@ -1,0 +1,8 @@
+[Unit]
+Description=NNM Control nightly MongoDB backup
+Requires=nnm-control.service
+After=nnm-control.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nnm-control backup

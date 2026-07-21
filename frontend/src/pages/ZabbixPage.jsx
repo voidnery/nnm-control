@@ -6,6 +6,8 @@ export default function ZabbixPage() {
       <div className="sub">HTTP Agent endpoints for Zabbix items. The token was generated at first deployment (see .env, ZABBIX_TOKEN).</div>
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>Endpoints</h2>
+        <p className="mono">{base}/api/zabbix/panel?token=&lt;ZABBIX_TOKEN&gt;</p>
+        <p className="hint">Panel status: version, control plane, mongo, fleet sync age, servers mapped, function runs 24h. Alert if fleet_sync_age_sec &gt; 900 in WMSPanel mode.</p>
         <p className="mono">{base}/api/zabbix/app?token=&lt;ZABBIX_TOKEN&gt;</p>
         <p className="hint">Application metrics: uptime, RSS/heap, Mongo connectivity, managed server count.</p>
         <p className="mono">{base}/api/zabbix/system?token=&lt;ZABBIX_TOKEN&gt;</p>

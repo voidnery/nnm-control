@@ -158,3 +158,19 @@ r.post('/transcoders/:objId/:action(pause|resume|clone)', requirePerm('wmsobject
     if (rq.params.action === 'resume') return wmspanel.transcoderResume(c, rq.params.objId);
     return wmspanel.transcoderClone(c, rq.params.objId);
   }));
+
+// --- m10: distribution (account-level: ABR / aliases / origin apps) ---
+r.get('/abr', requirePerm('wmsobjects.view'), proxy(async () => wmspanel.abrList(await cfg())));
+r.post('/abr', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.abrCreate(await cfg(), rq.body || {})));
+r.put('/abr/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.abrUpdate(await cfg(), null, rq.params.objId, rq.body || {})));
+r.delete('/abr/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.abrDelete(await cfg(), rq.params.objId)));
+
+r.get('/aliases', requirePerm('wmsobjects.view'), proxy(async () => wmspanel.aliasList(await cfg())));
+r.post('/aliases', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.aliasCreate(await cfg(), rq.body || {})));
+r.put('/aliases/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.aliasUpdate(await cfg(), null, rq.params.objId, rq.body || {})));
+r.delete('/aliases/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.aliasDelete(await cfg(), rq.params.objId)));
+
+r.get('/originapps', requirePerm('wmsobjects.view'), proxy(async () => wmspanel.originAppList(await cfg())));
+r.post('/originapps', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.originAppCreate(await cfg(), rq.body || {})));
+r.put('/originapps/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.originAppUpdate(await cfg(), rq.params.objId, rq.body || {})));
+r.delete('/originapps/:objId', requirePerm('wmsobjects.manage'), proxy(async rq => wmspanel.originAppDelete(await cfg(), rq.params.objId)));
