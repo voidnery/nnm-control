@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 
 const KINDS = [
   { value: 'republish', label: 'Republish rule' },
+  { value: 'live_pull', label: 'RTMP live pull (feed reserve)' },
   { value: 'udp',       label: 'UDP/SRT output (UDP streaming)' },
   { value: 'outgoing',  label: 'MPEGTS outgoing stream' },
   { value: 'hotswap',   label: 'Hot swap setting (Transcoder)' },
@@ -19,6 +20,8 @@ const PRESETS = [
   { label: 'Pause outgoing',  step: { type: 'action', action: 'pause', label: 'Pause outgoing' } },
   { label: 'Resume outgoing', step: { type: 'action', action: 'resume', label: 'Resume outgoing' } },
   { label: 'Restart outgoing',step: { type: 'action', action: 'restart', label: 'Restart outgoing' } },
+  { label: 'Live pull: switch source URL', step: { type: 'patch', objectKind: 'live_pull', patch: { url: 'rtmp://backup-host:1935/app/stream' }, label: 'Switch pull URL' } },
+  { label: 'Restart live pull', step: { type: 'action', objectKind: 'live_pull', action: 'restart', label: 'Restart pull' } },
   { label: 'Delay (seconds)', step: { type: 'delay', waitSec: 10, label: 'Delay' } },
 ];
 
@@ -114,6 +117,15 @@ function StepEditor({ step, servers, onChange, onRemove }) {
         <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
         <button className="danger" onClick={onRemove}>Remove</button>
       </div>
+      {step.type === 'action' && (
+        <>
+          <label>Action target kind</label>
+          <select value={step.objectKind || 'outgoing'} onChange={e => set('objectKind', e.target.value === 'outgoing' ? '' : e.target.value)}>
+            <option value="outgoing">MPEGTS outgoing (pause/resume/restart)</option>
+            <option value="live_pull">RTMP live pull (restart only)</option>
+          </select>
+        </>
+      )}
       {step.type !== 'delay' && (
         <>
           <label>Server</label>

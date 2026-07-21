@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import RepublishTab from './RepublishTab.jsx';
-import { UdpTab, OutgoingTab, HotswapTab, WmsStreamsTab, MpegtsInTab } from './WmsObjectsTabs.jsx';
+import { UdpTab, OutgoingTab, HotswapTab, WmsStreamsTab, MpegtsInTab, LivePullTab, AppsTab, InterfacesTab } from './WmsObjectsTabs.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -220,6 +220,9 @@ const TABS = [
   { key: 'wudp',      label: 'UDP/SRT',   perm: 'wmsobjects.view', el: UdpTab,      plane: 'wmspanel' },
   { key: 'wout',      label: 'Outgoing',  perm: 'wmsobjects.view', el: OutgoingTab, plane: 'wmspanel' },
   { key: 'whot',      label: 'Hotswap',   perm: 'wmsobjects.view', el: HotswapTab,  plane: 'wmspanel' },
+  { key: 'wpull',     label: 'Live Pull', perm: 'wmsobjects.view', el: LivePullTab, plane: 'wmspanel' },
+  { key: 'wapps',     label: 'Apps',      perm: 'wmsobjects.view', el: AppsTab,     plane: 'wmspanel' },
+  { key: 'wifaces',   label: 'Interfaces',perm: 'wmsobjects.view', el: InterfacesTab, plane: 'wmspanel' },
   { key: 'mpegts',    label: 'MPEG-TS',   perm: 'mpegts.view',    el: MpegtsTab,    plane: 'native' },
   { key: 'playlist',  label: 'Playout',   perm: 'playlist.view',  el: PlaylistTab,  plane: 'native' },
   { key: 'control',   label: 'Control',   perm: 'control.manage', el: ControlTab,   plane: 'native' },

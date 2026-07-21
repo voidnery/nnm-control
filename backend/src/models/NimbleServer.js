@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { encryptField, decryptField } from '../services/fieldCrypto.js';
 
 // A managed Nimble Streamer instance (its native management API endpoint).
 // SECURITY NOTE: management token is stored as-is in Mongo (needed to sign
@@ -9,7 +10,7 @@ const serverSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   host: { type: String, required: true, trim: true },   // IP or hostname
   port: { type: Number, default: 8082 },                // management_port
-  token: { type: String, default: '' },                 // management_token ('' = no auth)
+  token: { type: String, default: '', set: encryptField, get: decryptField },                 // management_token ('' = no auth)
   useSsl: { type: Boolean, default: false },
   tags: { type: [String], default: [] },
   notes: { type: String, default: '' },

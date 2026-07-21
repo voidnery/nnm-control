@@ -90,6 +90,19 @@ export const wmspanel = {
   incomingCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/mpegts/incoming`, { method: 'POST', body }),
   incomingUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/mpegts/incoming/${id}`, { method: 'PUT', body: patch }),
   incomingDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/mpegts/incoming/${id}`, { method: 'DELETE' }),
+  // RTMP live pull (pull feeds with fallback_urls) — schema from inventory
+  livePullList:    (cfg, sid) => call(cfg, `/server/${sid}/rtmp/live_pull`),
+  livePullCreate:  (cfg, sid, body) => call(cfg, `/server/${sid}/rtmp/live_pull`, { method: 'POST', body }),
+  livePullUpdate:  (cfg, sid, id, patch) => call(cfg, `/server/${sid}/rtmp/live_pull/${id}`, { method: 'PUT', body: patch }),
+  livePullDelete:  (cfg, sid, id) => call(cfg, `/server/${sid}/rtmp/live_pull/${id}`, { method: 'DELETE' }),
+  livePullRestart: (cfg, sid, id) => call(cfg, `/server/${sid}/rtmp/live_pull/${id}/restart`),
+  // Live applications (settings incl. push credentials) — /server/{id}/live/app
+  liveAppList:   (cfg, sid) => call(cfg, `/server/${sid}/live/app`),
+  liveAppCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/live/app`, { method: 'POST', body }),
+  liveAppUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/live/app/${id}`, { method: 'PUT', body: patch }),
+  liveAppDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/live/app/${id}`, { method: 'DELETE' }),
+  // RTMP interfaces (view)
+  rtmpInterfaceList: (cfg, sid) => call(cfg, `/server/${sid}/rtmp/interface`),
   // Hot swap settings — confirmed: /server/{id}/hotswap (Transcoder feature)
   hotswapList:   (cfg, sid) => call(cfg, `/server/${sid}/hotswap`),
   hotswapGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/hotswap/${id}`),

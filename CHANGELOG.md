@@ -4,6 +4,22 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.14 (m8) — distribution operations layer + at-rest encryption
+- Live Pull tab: RTMP pull feeds with fallback_urls (the built-in feed
+  reserve) — create/edit/delete, pause/resume, Restart; fallbacks edited one
+  per line
+- Apps tab: live applications CRUD — protocols, chunking, push credentials
+  (masked in the table with per-row reveal); Interfaces tab (view)
+- Functions engine: new object kind `live_pull` — patch steps (e.g. switch
+  source URL with snapshot/rollback/preflight) and `restart` action; builder
+  presets "Live pull: switch source URL" / "Restart live pull"; action steps
+  can now target outgoing or live_pull
+- At-rest encryption (AES-256-GCM) for the WMSPanel API key and server
+  management tokens in MongoDB; key derived from the panel JWT secret
+  (persisted in /etc/nnm-control/nnm-control.env — must stay stable); legacy
+  plaintext values are read transparently and encrypted on next save;
+  roundtrip covered by a build-time self-test
+
 ### v0.3.13 (m7) — real Live Streams + full API inventory tooling
 - Streams tab now uses the CONFIRMED endpoint /server/{id}/live/streams —
   the same data as WMSPanel "Живые потоки": all protocols with status lamps,

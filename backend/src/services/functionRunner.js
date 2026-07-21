@@ -29,6 +29,7 @@ const KIND_OPS = {
   udp:       { get: 'udpList',       put: 'udpUpdate',       pickList: d => d.settings || [] },
   outgoing:  { get: 'outgoingList',  put: 'outgoingUpdate',  pickList: d => d.streams || d.settings || [] },
   hotswap:   { get: 'hotswapList',   put: 'hotswapUpdate',   pickList: d => d.settings || [] },
+  live_pull: { get: 'livePullList',  put: 'livePullUpdate',  pickList: d => d.settings || [] },
 };
 
 async function getObject(cfg, kind, sid, targetId) {
@@ -110,6 +111,14 @@ async function applyStep(cfg, run, idx, step) {
   const sid = server.wmspanelServerId;
 
   if (step.type === 'action') {
+    // live_pull supports restart only (no synced field -> no verify, no rollback)
+    if (step.objectKind === 'live_pull') {
+      if (step.action !== 'restart') throw new Error('live_pull actions: only restart is supported');
+      await persistStep(run, idx, { status: 'applying', detail: `restart live_pull ${step.targetId}` });
+      await wmspanel.livePullRestart(cfg, sid, step.targetId);
+      await persistStep(run, idx, { status: 'done', applied: true, detail: '' });
+      return;
+    }
     await persistStep(run, idx, { status: 'applying', detail: `${step.action} on outgoing ${step.targetId}` });
     // snapshot paused-state for pause/resume rollback
     let snapshot = null;
@@ -180,7 +189,7 @@ async function preflight(cfg, fnDoc, run) {
     try {
       const server = await resolveServer(step);
       const sid = server.wmspanelServerId;
-      const kind = step.type === 'action' ? 'outgoing' : step.objectKind;
+      const kind = step.type === 'action' ? (step.objectKind === 'live_pull' ? 'live_pull' : 'outgoing') : step.objectKind;
       if (!KIND_OPS[kind]) throw new Error(`Unknown object kind: ${kind}`);
       const obj = await getObject(cfg, kind, sid, step.targetId);
       if (step.type === 'patch') {

@@ -119,6 +119,7 @@ functionsRouter.get('/objects/:serverId/:kind', requirePerm('functions.manage'),
     else if (kind === 'udp') { data = await wmspanel.udpList(cfg, sid); data = data.settings || []; }
     else if (kind === 'outgoing') { data = await wmspanel.outgoingList(cfg, sid); data = data.streams || data.settings || []; }
     else if (kind === 'hotswap') { data = await wmspanel.hotswapList(cfg, sid); data = data.settings || []; }
+    else if (kind === 'live_pull') { data = await wmspanel.livePullList(cfg, sid); data = data.settings || []; }
     else return res.status(400).json({ error: 'Unknown kind' });
     res.json({ objects: data });
   } catch (e) {

@@ -116,3 +116,30 @@ r.post('/server/:id/outgoing', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.outgoingCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
 r.delete('/server/:id/outgoing/:objId', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.outgoingDelete(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));
+
+// --- m8: distribution operations layer ---
+// RTMP live pull: full CRUD + restart (fallback_urls = built-in feed reserve)
+r.get('/server/:id/livepull', requirePerm('wmsobjects.view'), loadMapped,
+  proxy(async rq => wmspanel.livePullList(await cfg(), rq.mapped.wmspanelServerId)));
+r.post('/server/:id/livepull', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.livePullCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
+r.put('/server/:id/livepull/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.livePullUpdate(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId, rq.body || {})));
+r.delete('/server/:id/livepull/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.livePullDelete(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));
+r.post('/server/:id/livepull/:objId/restart', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.livePullRestart(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));
+
+// Live applications: CRUD (contains push credentials — audit masks them)
+r.get('/server/:id/apps', requirePerm('wmsobjects.view'), loadMapped,
+  proxy(async rq => wmspanel.liveAppList(await cfg(), rq.mapped.wmspanelServerId)));
+r.post('/server/:id/apps', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.liveAppCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
+r.put('/server/:id/apps/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.liveAppUpdate(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId, rq.body || {})));
+r.delete('/server/:id/apps/:objId', requirePerm('wmsobjects.manage'), loadMapped,
+  proxy(async rq => wmspanel.liveAppDelete(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId)));
+
+// RTMP interfaces: view
+r.get('/server/:id/interfaces', requirePerm('wmsobjects.view'), loadMapped,
+  proxy(async rq => wmspanel.rtmpInterfaceList(await cfg(), rq.mapped.wmspanelServerId)));

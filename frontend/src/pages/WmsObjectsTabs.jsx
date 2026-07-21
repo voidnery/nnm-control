@@ -598,3 +598,241 @@ export function MpegtsInTab({ serverId }) {
     </div>
   );
 }
+
+// ------------------------------------------------------------- Live Pull
+// RTMP pull feeds with fallback_urls — the built-in feed reserve mechanism.
+export function LivePullTab({ serverId }) {
+  const { can } = useAuth();
+  const { data, error, setError, load } = useObjects(serverId, 'livepull');
+  const [busy, setBusy] = useState(false);
+  const [modal, setModal] = useState(null);
+  const settings = data?.settings || [];
+
+  const act = async (fn) => {
+    setBusy(true); setError('');
+    try { await fn(); await load(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  const save = () => act(async () => {
+    const body = {
+      url: modal.url,
+      fallback_urls: modal.fallback_urls.split('\n').map(x => x.trim()).filter(Boolean),
+      application: modal.application, stream: modal.stream,
+      description: modal.description || '',
+    };
+    if (modal.id) await api(`/wmspanel/server/${serverId}/livepull/${modal.id}`, { method: 'PUT', body });
+    else await api(`/wmspanel/server/${serverId}/livepull`, { method: 'POST', body });
+    setModal(null);
+  });
+
+  if (!data) return <div className="hint">Loading…</div>;
+  return (
+    <div>
+      <SyncNote />
+      {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load} disabled={busy}>Refresh</button>
+        {can('wmsobjects.manage') && (
+          <button className="primary" disabled={busy}
+                  onClick={() => setModal({ url: '', fallback_urls: '', application: '', stream: '', description: '' })}>
+            + New pull
+          </button>
+        )}
+      </div>
+      <div className="panel">
+        <table>
+          <thead><tr><th>Local app/stream</th><th>Source URL</th><th>Fallbacks</th><th>State</th><th></th></tr></thead>
+          <tbody>
+            {settings.map(o => (
+              <tr key={o.id}>
+                <td className="mono"><b>{o.application}/{o.stream}</b>{o.description && <div className="hint">{o.description}</div>}</td>
+                <td className="mono hint" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.url}</td>
+                <td>{(o.fallback_urls || []).length ? <span className="badge">{o.fallback_urls.length} fallback</span> : <span className="hint">—</span>}</td>
+                <td><span className={'lamp ' + (o.paused ? 'off' : 'on')} />{o.paused ? 'paused' : 'active'}</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {can('wmsobjects.manage') && <>
+                    <button disabled={busy} onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}/restart`, { method: 'POST' }))}>Restart</button>{' '}
+                    <button disabled={busy} onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}`, { method: 'PUT', body: { paused: !o.paused } }))}>
+                      {o.paused ? 'Resume' : 'Pause'}
+                    </button>{' '}
+                    <button disabled={busy} onClick={() => setModal({
+                      id: o.id, url: o.url, fallback_urls: (o.fallback_urls || []).join('\n'),
+                      application: o.application, stream: o.stream, description: o.description || '',
+                    })}>Edit</button>{' '}
+                    <button className="danger" disabled={busy} onClick={() => {
+                      if (window.confirm(`Delete pull ${o.application}/${o.stream}?`))
+                        act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}`, { method: 'DELETE' }));
+                    }}>Delete</button>
+                  </>}
+                </td>
+              </tr>
+            ))}
+            {settings.length === 0 && <tr><td colSpan={5} className="hint">No RTMP pull settings on this server.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {modal && (
+        <div className="modal-back" onClick={() => setModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>{modal.id ? `Edit pull ${modal.application}/${modal.stream}` : 'New RTMP pull'}</h3>
+            <label>Source URL</label>
+            <input className="mono" value={modal.url} onChange={e => setModal(m => ({ ...m, url: e.target.value }))}
+                   placeholder="rtmp://host:1935/app/stream" />
+            <label>Fallback URLs (one per line — reserve sources, tried in order)</label>
+            <textarea className="mono" rows={3} value={modal.fallback_urls}
+                      onChange={e => setModal(m => ({ ...m, fallback_urls: e.target.value }))} />
+            <div className="field-inline">
+              <div><label>Local application</label><input value={modal.application} onChange={e => setModal(m => ({ ...m, application: e.target.value }))} /></div>
+              <div><label>Local stream</label><input value={modal.stream} onChange={e => setModal(m => ({ ...m, stream: e.target.value }))} /></div>
+            </div>
+            <label>Description</label>
+            <input value={modal.description} onChange={e => setModal(m => ({ ...m, description: e.target.value }))} />
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)}>Cancel</button>
+              <button className="primary" disabled={busy || !modal.url || !modal.application || !modal.stream} onClick={save}>
+                {modal.id ? 'Apply' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------- Applications
+// live/app settings incl. push credentials (masked with reveal toggle).
+export function AppsTab({ serverId }) {
+  const { can } = useAuth();
+  const { data, error, setError, load } = useObjects(serverId, 'apps');
+  const [busy, setBusy] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [reveal, setReveal] = useState({});
+  const apps = data?.applications || [];
+
+  const save = async () => {
+    setBusy(true); setError('');
+    const body = {
+      application: modal.application,
+      chunk_duration: Number(modal.chunk_duration),
+      chunk_count: Number(modal.chunk_count),
+      protocols: modal.protocols.split(',').map(x => x.trim()).filter(Boolean),
+    };
+    if (modal.push_login !== '') body.push_login = modal.push_login;
+    if (modal.push_password !== '') body.push_password = modal.push_password;
+    try {
+      if (modal.id) await api(`/wmspanel/server/${serverId}/apps/${modal.id}`, { method: 'PUT', body });
+      else await api(`/wmspanel/server/${serverId}/apps`, { method: 'POST', body });
+      setModal(null); await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  if (!data) return <div className="hint">Loading…</div>;
+  return (
+    <div>
+      <SyncNote />
+      {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load} disabled={busy}>Refresh</button>
+        {can('wmsobjects.manage') && (
+          <button className="primary" disabled={busy}
+                  onClick={() => setModal({ application: '', chunk_duration: 6, chunk_count: 4, protocols: 'HLS,RTMP', push_login: '', push_password: '' })}>
+            + New application
+          </button>
+        )}
+      </div>
+      <div className="panel">
+        <table>
+          <thead><tr><th>Application</th><th>Protocols</th><th>Chunks</th><th>Push auth</th><th></th></tr></thead>
+          <tbody>
+            {apps.map(a => (
+              <tr key={a.id}>
+                <td className="mono"><b>{a.application}</b></td>
+                <td>{(a.protocols || []).map(pr => <span key={pr} className="badge" style={{ marginRight: 3 }}>{pr}</span>)}</td>
+                <td className="mono">{a.chunk_duration}s × {a.chunk_count}</td>
+                <td className="mono">
+                  {a.push_login || a.push_password ? (
+                    reveal[a.id]
+                      ? <>{a.push_login} / {a.push_password} <button onClick={() => setReveal(r => ({ ...r, [a.id]: false }))}>hide</button></>
+                      : <>{a.push_login} / •••••• <button onClick={() => setReveal(r => ({ ...r, [a.id]: true }))}>show</button></>
+                  ) : <span className="hint">open</span>}
+                </td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {can('wmsobjects.manage') && <>
+                    <button disabled={busy} onClick={() => setModal({
+                      id: a.id, application: a.application,
+                      chunk_duration: a.chunk_duration, chunk_count: a.chunk_count,
+                      protocols: (a.protocols || []).join(','),
+                      push_login: a.push_login || '', push_password: a.push_password || '',
+                    })}>Edit</button>{' '}
+                    <button className="danger" disabled={busy} onClick={async () => {
+                      if (!window.confirm(`Delete application "${a.application}"?`)) return;
+                      setBusy(true); setError('');
+                      try { await api(`/wmspanel/server/${serverId}/apps/${a.id}`, { method: 'DELETE' }); await load(); }
+                      catch (e) { setError(e.message); }
+                      finally { setBusy(false); }
+                    }}>Delete</button>
+                  </>}
+                </td>
+              </tr>
+            ))}
+            {apps.length === 0 && <tr><td colSpan={5} className="hint">No applications on this server.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {modal && (
+        <div className="modal-back" onClick={() => setModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>{modal.id ? `Edit ${modal.application}` : 'New application'}</h3>
+            <label>Application name</label>
+            <input value={modal.application} onChange={e => setModal(m => ({ ...m, application: e.target.value }))} />
+            <div className="field-inline">
+              <div><label>Chunk duration (s)</label><input type="number" value={modal.chunk_duration} onChange={e => setModal(m => ({ ...m, chunk_duration: e.target.value }))} /></div>
+              <div><label>Chunk count</label><input type="number" value={modal.chunk_count} onChange={e => setModal(m => ({ ...m, chunk_count: e.target.value }))} /></div>
+            </div>
+            <label>Protocols (comma separated: HLS,RTMP,DASH…)</label>
+            <input value={modal.protocols} onChange={e => setModal(m => ({ ...m, protocols: e.target.value }))} />
+            <div className="field-inline">
+              <div><label>Push login</label><input value={modal.push_login} onChange={e => setModal(m => ({ ...m, push_login: e.target.value }))} /></div>
+              <div><label>Push password</label><input type="password" value={modal.push_password} onChange={e => setModal(m => ({ ...m, push_password: e.target.value }))} /></div>
+            </div>
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModal(null)}>Cancel</button>
+              <button className="primary" disabled={busy || !modal.application} onClick={save}>{modal.id ? 'Apply' : 'Create'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------- Interfaces
+export function InterfacesTab({ serverId }) {
+  const { data, error, load } = useObjects(serverId, 'interfaces');
+  if (!data) return <div className="hint">Loading…</div>;
+  const list = data?.interfaces || [];
+  return (
+    <div>
+      {error && <div className="error-box">{error}</div>}
+      <div className="panel">
+        <table>
+          <thead><tr><th>IP</th><th>Port</th><th>SSL</th></tr></thead>
+          <tbody>
+            {list.map(i => (
+              <tr key={i.id}>
+                <td className="mono">{i.ip}</td>
+                <td className="mono">{i.port}</td>
+                <td>{i.ssl ? <span className="badge">ssl</span> : <span className="hint">no</span>}</td>
+              </tr>
+            ))}
+            {list.length === 0 && <tr><td colSpan={3} className="hint">No RTMP interfaces.</td></tr>}
+          </tbody>
+        </table>
+        <div className="row" style={{ marginTop: 8 }}><button onClick={load}>Refresh</button></div>
+      </div>
+    </div>
+  );
+}
