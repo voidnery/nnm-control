@@ -16,9 +16,10 @@ function WmspanelRules({ serverId }) {
   const [raw, setRaw] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
   const [error, setError] = useState('');
-  const [edit, setEdit] = useState(null); // { ruleId, src_app, src_stream }
+  // Canonical WMSPanel republish fields: src_app/src_strm, dest_app/dest_strm
+  const [edit, setEdit] = useState(null); // { ruleId, src_app, src_strm }
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ src_app: '', src_stream: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_stream: '' });
+  const [form, setForm] = useState({ src_app: '', src_strm: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_strm: '' });
   const [busy, setBusy] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -41,7 +42,7 @@ function WmspanelRules({ serverId }) {
 
   const saveEdit = () => act(async () => {
     await api(`/wmspanel/server/${serverId}/republish/${edit.ruleId}`, {
-      method: 'PUT', body: { src_app: edit.src_app, src_stream: edit.src_stream },
+      method: 'PUT', body: { src_app: edit.src_app, src_strm: edit.src_strm },
     });
     setEdit(null);
   });
@@ -51,11 +52,11 @@ function WmspanelRules({ serverId }) {
       method: 'POST', body: { ...form, dest_port: Number(form.dest_port) },
     });
     setCreating(false);
-    setForm({ src_app: '', src_stream: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_stream: '' });
+    setForm({ src_app: '', src_strm: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_strm: '' });
   });
 
   const remove = (rule) => {
-    if (!window.confirm(`Delete PERSISTENT rule ${rule.src_app}/${rule.src_stream || '*'} → ${rule.dest_addr}? This changes WMSPanel config.`)) return;
+    if (!window.confirm(`Delete PERSISTENT rule ${rule.src_app}/${rule.src_strm || '*'} → ${rule.dest_addr}? This changes WMSPanel config.`)) return;
     act(() => api(`/wmspanel/server/${serverId}/republish/${rule.id}`, { method: 'DELETE' }));
   };
   const restart = (rule) =>
@@ -81,13 +82,13 @@ function WmspanelRules({ serverId }) {
                     <span className="row">
                       <input style={{ width: 130 }} value={edit.src_app} onChange={e => setEdit(s => ({ ...s, src_app: e.target.value }))} />
                       /
-                      <input style={{ width: 170 }} value={edit.src_stream} onChange={e => setEdit(s => ({ ...s, src_stream: e.target.value }))} />
+                      <input style={{ width: 170 }} value={edit.src_strm} onChange={e => setEdit(s => ({ ...s, src_strm: e.target.value }))} />
                     </span>
                   ) : (
-                    <b>{rule.src_app}/{rule.src_stream || '*'}</b>
+                    <b>{rule.src_app}/{rule.src_strm || '*'}</b>
                   )}
                 </td>
-                <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_stream}</td>
+                <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_strm}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('republish.manage') && (edit?.ruleId === rule.id ? (
                     <>
@@ -97,7 +98,7 @@ function WmspanelRules({ serverId }) {
                   ) : (
                     <>
                       <button disabled={busy}
-                              onClick={() => setEdit({ ruleId: rule.id, src_app: rule.src_app || '', src_stream: rule.src_stream || '' })}>
+                              onClick={() => setEdit({ ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '' })}>
                         Switch source
                       </button>{' '}
                       <button disabled={busy} onClick={() => restart(rule)}>Restart</button>{' '}
@@ -120,7 +121,7 @@ function WmspanelRules({ serverId }) {
           <h2 style={{ marginTop: 0 }}>New persistent rule (WMSPanel)</h2>
           <div className="field-inline">
             <div><label>Source app</label><input value={form.src_app} onChange={e => set('src_app', e.target.value)} /></div>
-            <div><label>Source stream (empty = all)</label><input value={form.src_stream} onChange={e => set('src_stream', e.target.value)} /></div>
+            <div><label>Source stream (empty = all)</label><input value={form.src_strm} onChange={e => set('src_strm', e.target.value)} /></div>
           </div>
           <div className="field-inline">
             <div><label>Dest address</label><input value={form.dest_addr} onChange={e => set('dest_addr', e.target.value)} /></div>
@@ -128,7 +129,7 @@ function WmspanelRules({ serverId }) {
           </div>
           <div className="field-inline">
             <div><label>Dest app</label><input value={form.dest_app} onChange={e => set('dest_app', e.target.value)} /></div>
-            <div><label>Dest stream</label><input value={form.dest_stream} onChange={e => set('dest_stream', e.target.value)} /></div>
+            <div><label>Dest stream</label><input value={form.dest_strm} onChange={e => set('dest_strm', e.target.value)} /></div>
           </div>
           <button className="primary" style={{ marginTop: 12 }} disabled={busy || !form.src_app || !form.dest_addr || !form.dest_app}
                   onClick={create}>{busy ? 'Creating…' : 'Create persistent rule'}</button>
@@ -206,7 +207,7 @@ function NativeRules({ serverId }) {
                 <tr key={rule.id} className={st?.state === 'connected' ? 'tally' : ''}>
                   <td className="mono">{rule.id}</td>
                   <td className="mono">{rule.src_app}/{rule.src_stream || '*'}</td>
-                  <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_stream}</td>
+                  <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_strm}</td>
                   <td>{st ? <><span className={'lamp ' + (st.state === 'connected' ? 'on' : 'warn')} />{st.state}</> : '—'}</td>
                   <td className="mono">{st ? fmtBps(st.bandwidth) : '—'}</td>
                   <td style={{ textAlign: 'right' }}>

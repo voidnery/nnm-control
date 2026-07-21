@@ -4,6 +4,20 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.6 (m2.3) — canonical WMSPanel schemas (pinned from live dump)
+- Field names pinned from a live-account dump (13 servers, 3295 objects):
+  republish uses `src_app`/`src_strm` and `dest_strm` (NOT src_stream);
+  SRT/UDP output source lives in `source_streams: [{application, stream,
+  pmt/video/audio pids}]`; outgoing uses `application`/`stream` and exposes
+  `status: synced`; hotswap fields confirmed and WORKING on the account
+- All presets, key-pair picker, object browser, stream aggregation and the
+  WMSPanel Republish tab now use canonical names; new preset "Switch SRT/UDP
+  output source" (inserts source_streams; PIDs omitted — WMSPanel reassigns
+  them, copy the full array from Browse tooltip if fixed PIDs matter)
+- FIX: verification deep-compares object/array patch values (source_streams
+  would previously false-match via '[object Object]')
+- tools/ now ships in the deb at /usr/share/nnm-control/tools/
+
 ### v0.3.5 (m2.2) — preflight: doomed transactions touch nothing
 - New phase 0 for every run: all steps are validated BEFORE any mutation —
   server mapping, object existence, and (for patch steps) that every patch

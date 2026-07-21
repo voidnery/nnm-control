@@ -10,8 +10,9 @@ const KINDS = [
 ];
 
 const PRESETS = [
-  { label: 'Switch republish source', step: { type: 'patch', objectKind: 'republish', patch: { src_app: 'zagl_app', src_stream: 'zagl_stream' }, label: 'Switch republish source' } },
-  { label: 'Patch UDP/SRT output',    step: { type: 'patch', objectKind: 'udp', patch: {}, label: 'Patch SRT/UDP output' } },
+  // Canonical WMSPanel field names (pinned from live account dump 2026-07-21)
+  { label: 'Switch republish source', step: { type: 'patch', objectKind: 'republish', patch: { src_app: 'zagl_app', src_strm: 'zagl_stream' }, label: 'Switch republish source' } },
+  { label: 'Switch SRT/UDP output source', step: { type: 'patch', objectKind: 'udp', patch: { source_streams: [{ application: 'zagl_app', stream: 'zagl_stream' }] }, label: 'Switch SRT/UDP source' } },
   { label: 'Patch outgoing stream',   step: { type: 'patch', objectKind: 'outgoing', patch: {}, label: 'Patch outgoing stream' } },
   { label: 'Hot swap: enable substitute', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: true }, label: 'Hot swap ON' } },
   { label: 'Pause outgoing',  step: { type: 'action', action: 'pause', label: 'Pause outgoing' } },
@@ -31,9 +32,10 @@ function ObjectPicker({ servers, step, onPick }) {
     } catch (e) { setError(e.message); }
   };
   const describe = (o) => {
-    const src = o.src_app !== undefined ? `${o.src_app}/${o.src_stream || '*'}` :
-                o.application !== undefined ? `${o.application}/${o.stream || ''}` :
-                o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}` :
+    const src = o.src_app !== undefined ? `${o.src_app}/${o.src_strm || '*'} → ${o.dest_addr || ''}` :
+                o.source_streams !== undefined ? `${o.name || o.protocol} ⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
+                o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}${o.emergency ? ' [EMERGENCY]' : ''}` :
+                o.application !== undefined ? `${o.application}/${o.stream || ''}${o.status ? ' · ' + o.status : ''}` :
                 o.name || o.protocol || '';
     return `${String(o.id).slice(-6)} · ${src}`;
   };
@@ -57,12 +59,13 @@ function ObjectPicker({ servers, step, onPick }) {
 }
 
 const KEY_PAIRS = [
-  { value: 'src', label: 'src_app / src_stream (republish)', keys: ['src_app', 'src_stream'] },
-  { value: 'app', label: 'application / stream (outgoing, udp)', keys: ['application', 'stream'] },
-  { value: 'sub', label: 'substitute_app / substitute_stream (hot swap)', keys: ['substitute_app', 'substitute_stream'] },
+  { value: 'src',  label: 'src_app / src_strm (republish)', keys: ['src_app', 'src_strm'] },
+  { value: 'app',  label: 'application / stream (outgoing)', keys: ['application', 'stream'] },
+  { value: 'udps', label: 'source_streams (SRT/UDP output)', keys: null }, // special: array form
+  { value: 'sub',  label: 'substitute_app / substitute_stream (hot swap)', keys: ['substitute_app', 'substitute_stream'] },
   { value: 'orig', label: 'original_app / original_stream (hot swap)', keys: ['original_app', 'original_stream'] },
 ];
-const defaultPairFor = (kind) => kind === 'republish' ? 'src' : kind === 'hotswap' ? 'sub' : 'app';
+const defaultPairFor = (kind) => kind === 'republish' ? 'src' : kind === 'hotswap' ? 'sub' : kind === 'udp' ? 'udps' : 'app';
 
 function StepEditor({ step, servers, onChange, onRemove }) {
   const set = (k, v) => onChange({ ...step, [k]: v });
@@ -87,8 +90,17 @@ function StepEditor({ step, servers, onChange, onRemove }) {
     if (slash < 0) return;
     const app = pick.slice(0, slash);
     const stream = pick.slice(slash + 1);
-    const keys = KEY_PAIRS.find(k => k.value === pairKind)?.keys || ['src_app', 'src_stream'];
-    const nextPatch = { ...(step.patch || {}), [keys[0]]: app, [keys[1]]: stream };
+    const pair = KEY_PAIRS.find(k => k.value === pairKind);
+    let nextPatch;
+    if (pair && pair.keys === null) {
+      // SRT/UDP output: source is the source_streams array. NOTE: PIDs
+      // (pmt/video/audio) are omitted — WMSPanel re-assigns them; if fixed
+      // PIDs matter, copy the full array from Browse tooltip and edit here.
+      nextPatch = { ...(step.patch || {}), source_streams: [{ application: app, stream }] };
+    } else {
+      const keys = pair?.keys || ['src_app', 'src_strm'];
+      nextPatch = { ...(step.patch || {}), [keys[0]]: app, [keys[1]]: stream };
+    }
     onChange({ ...step, patch: nextPatch });
     setPatchText(JSON.stringify(nextPatch, null, 0));
     setPatchErr('');

@@ -103,9 +103,12 @@ functionsRouter.get('/streams/:serverId', requirePerm('functions.manage'), async
   if (streams.length === 0) {
     const pairs = new Map();
     const add = (a, st) => { if (a) pairs.set(`${a}/${st || ''}`, { app: a, stream: st || '' }); };
-    try { const d = await wmspanel.republishList(cfg, sid); (d.rules || d.republish_rules || []).forEach(r => add(r.src_app, r.src_stream)); } catch {}
-    try { const d = await wmspanel.outgoingList(cfg, sid); (d.streams || d.settings || []).forEach(o => add(o.application, o.stream)); } catch {}
-    try { const d = await wmspanel.udpList(cfg, sid); (d.settings || []).forEach(o => { add(o.application, o.stream); add(o.src_app, o.src_stream); }); } catch {}
+    // Canonical field names pinned from the live account dump (2026-07-21):
+    // republish: src_app/src_strm; outgoing: application/stream;
+    // udp: source_streams[] of {application, stream, *_pid}
+    try { const d = await wmspanel.republishList(cfg, sid); (d.rules || []).forEach(r => add(r.src_app, r.src_strm)); } catch {}
+    try { const d = await wmspanel.outgoingList(cfg, sid); (d.streams || []).forEach(o => add(o.application, o.stream)); } catch {}
+    try { const d = await wmspanel.udpList(cfg, sid); (d.settings || []).forEach(o => (o.source_streams || []).forEach(ss => add(ss.application, ss.stream))); } catch {}
     streams = [...pairs.values()];
   }
   streams.sort((a, b) => (a.app + '/' + a.stream).localeCompare(b.app + '/' + b.stream));

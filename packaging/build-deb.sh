@@ -12,7 +12,7 @@ ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT
 chmod 755 "$ROOT"
 
-mkdir -p "$ROOT/DEBIAN" "$ROOT/opt/nnm-control" "$ROOT/usr/bin" "$ROOT/lib/systemd/system"
+mkdir -p "$ROOT/DEBIAN" "$ROOT/opt/nnm-control" "$ROOT/usr/bin" "$ROOT/lib/systemd/system" "$ROOT/usr/share/nnm-control/tools"
 
 sed -e "s/__VERSION__/${VERSION}/" -e "s/__OWNER__/${OWNER}/" packaging/debian/control > "$ROOT/DEBIAN/control"
 cp packaging/debian/templates "$ROOT/DEBIAN/templates"
@@ -25,6 +25,9 @@ chmod 755 "$ROOT/DEBIAN/config" "$ROOT/DEBIAN/postinst" "$ROOT/DEBIAN/prerm" "$R
 cp docker-compose.yml "$ROOT/opt/nnm-control/docker-compose.yml"
 cp packaging/nnm-control-cli "$ROOT/usr/bin/nnm-control"
 chmod 755 "$ROOT/usr/bin/nnm-control"
+# Engineering tools shipped with the panel (e.g. WMSPanel API dump)
+cp tools/*.sh "$ROOT/usr/share/nnm-control/tools/"
+chmod 755 "$ROOT/usr/share/nnm-control/tools/"*.sh
 cp packaging/nnm-control.service "$ROOT/lib/systemd/system/nnm-control.service"
 
 mkdir -p "$OUT"

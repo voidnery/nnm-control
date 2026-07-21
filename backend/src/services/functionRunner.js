@@ -39,8 +39,17 @@ async function getObject(cfg, kind, sid, targetId) {
   return obj;
 }
 
+// Deep-tolerant comparison: primitives via String() (WMSPanel mixes "false"
+// and false), objects/arrays via canonical JSON (source_streams is an array
+// of objects — String() would falsely equal '[object Object]').
+function valueEq(a, b) {
+  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object') {
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+  }
+  return String(a) === String(b);
+}
 function valuesMatch(obj, patch) {
-  return Object.keys(patch).every(k => String(obj[k]) === String(patch[k]));
+  return Object.keys(patch).every(k => valueEq(obj[k], patch[k]));
 }
 
 // Poll until the object's patched keys reflect desired values. Transient GET
