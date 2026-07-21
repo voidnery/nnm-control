@@ -4,6 +4,22 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.11 (m5.1) — FIX: missing wmspanel object routes
+- FIX (critical): backend routes for the UDP/SRT, Outgoing, Hotswap and
+  Streams tabs were silently missing in v0.3.8–v0.3.10 — the code insertion
+  anchored on a comment removed earlier and no-opped without failing, so the
+  tabs shipped frontend-only and returned HTTP 404. Routes are now present
+  and verified at runtime (express route-table introspection is part of the
+  build validation), covering: udp list/update, outgoing list/update/pause/
+  resume/restart, hotswap full CRUD, active streams via Deep stats
+- FIX: the permission catalog was missing six keys added since m1
+  (settings.manage, wmsobjects.view/manage, functions.manage/execute,
+  audit.view) — same silent-patch class; invisible to superadmin/admin
+  (implicit all) but custom roles could not be granted these. Catalog is now
+  rewritten wholesale and runtime-asserted
+- Process hardening: patch steps are now verified with grep + runtime checks
+  instead of unconditional success messages
+
 ### v0.3.10 (m5) — audit log
 - Every mutating API request (POST/PUT/DELETE) is audited: who, when, from
   which IP, what action, sanitized payload (passwords/tokens/API keys are
