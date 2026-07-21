@@ -4,6 +4,12 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.7 (m2.4)
+- Preflight now suggests canonical twins for unknown patch keys
+  ("'src_stream' → did you mean 'src_strm'?") — saved functions are data and
+  are never rewritten by panel upgrades, so legacy keys in old functions get
+  an actionable hint instead of just a field list
+
 ### v0.3.6 (m2.3) — canonical WMSPanel schemas (pinned from live dump)
 - Field names pinned from a live-account dump (13 servers, 3295 objects):
   republish uses `src_app`/`src_strm` and `dest_strm` (NOT src_stream);

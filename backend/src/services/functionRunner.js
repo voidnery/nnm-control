@@ -181,9 +181,21 @@ async function preflight(cfg, fnDoc, run) {
         if (keys.length === 0) throw new Error('Empty patch');
         const missing = keys.filter(k => !(k in obj));
         if (missing.length) {
+          // Suggest canonical twins for common legacy/typo keys, e.g.
+          // src_stream -> src_strm (functions are stored data: panel upgrades
+          // never rewrite saved patches, so old keys can linger).
+          const avail = Object.keys(obj);
+          const hint = missing.map(m => {
+            const twin = avail.find(k =>
+              k === m.replace(/stream/g, 'strm') ||
+              m === k.replace(/stream/g, 'strm') ||
+              k.replace(/_/g, '') === m.replace(/_/g, ''));
+            return twin ? `'${m}' → did you mean '${twin}'?` : null;
+          }).filter(Boolean);
           throw new Error(
             `Field(s) not present on ${kind} object: [${missing.join(', ')}]. ` +
-            `Available fields: [${Object.keys(obj).join(', ')}]`
+            (hint.length ? `${hint.join(' ')} ` : '') +
+            `Available fields: [${avail.join(', ')}]`
           );
         }
       }
