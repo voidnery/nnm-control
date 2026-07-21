@@ -4,6 +4,21 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.5 (m2.2) — preflight: doomed transactions touch nothing
+- New phase 0 for every run: all steps are validated BEFORE any mutation —
+  server mapping, object existence, and (for patch steps) that every patch
+  key exists in the object's real WMSPanel schema. Any problem →
+  PREFLIGHT_FAILED with per-step reasons + the list of actually available
+  fields; zero changes are sent (production streams are never touched by a
+  predictably failing function)
+- Honest limit: mid-run environment failures (network/WMSPanel outage between
+  steps) are still handled by snapshot rollback — full two-phase commit is
+  not possible over the WMSPanel API
+- tools/wmspanel-api-dump.sh: dumps raw JSON of servers, data slices and all
+  per-server object kinds (republish, mpegts/udp, mpegts/outgoing,
+  mpegts/incoming, hotswap) via your API key — for pinning exact field names
+  from the live account instead of docs; output contains no credentials
+
 ### v0.3.4 (m2.1) — transactional integrity fixes
 - FIX (critical): the failed step itself is now rolled back when its mutation
   was actually sent — a PUT that applied but whose verification timed out no

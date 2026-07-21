@@ -229,6 +229,7 @@ function RunView({ runId, onClose }) {
         <h3>{run.functionName}</h3>
         <div className="mono" style={{ color: statusColor, marginBottom: 10 }}>
           {run.status === 'running' ? 'RUNNING…' : run.status.toUpperCase()}
+          {run.status === 'preflight_failed' && <span className="hint" style={{ marginLeft: 10 }}>— nothing was changed</span>}
         </div>
         {run.steps.map(st => (
           <div key={st.index} className={'run-step ' + st.status}>

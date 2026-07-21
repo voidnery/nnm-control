@@ -150,6 +150,43 @@ async function rollbackStep(cfg, run, idx, step) {
   }
 }
 
+// Preflight: validate EVERY step before sending any mutation. Predictable
+// failures (unmapped server, missing object, patch keys that do not exist in
+// the object's real schema) abort the run with ZERO changes applied — a
+// doomed transaction must not touch production streams at all. What preflight
+// cannot rule out: mid-run environment failures (network, WMSPanel outage
+// between steps) — those are still handled by rollback.
+async function preflight(cfg, fnDoc, run) {
+  const problems = [];
+  for (let i = 0; i < fnDoc.steps.length; i++) {
+    const step = fnDoc.steps[i];
+    if (step.type === 'delay') continue;
+    try {
+      const server = await resolveServer(step);
+      const sid = server.wmspanelServerId;
+      const kind = step.type === 'action' ? 'outgoing' : step.objectKind;
+      if (!KIND_OPS[kind]) throw new Error(`Unknown object kind: ${kind}`);
+      const obj = await getObject(cfg, kind, sid, step.targetId);
+      if (step.type === 'patch') {
+        const keys = Object.keys(step.patch || {});
+        if (keys.length === 0) throw new Error('Empty patch');
+        const missing = keys.filter(k => !(k in obj));
+        if (missing.length) {
+          throw new Error(
+            `Field(s) not present on ${kind} object: [${missing.join(', ')}]. ` +
+            `Available fields: [${Object.keys(obj).join(', ')}]`
+          );
+        }
+      }
+      await persistStep(run, i, { detail: 'Preflight OK' });
+    } catch (e) {
+      problems.push({ index: i, message: e.message });
+      await persistStep(run, i, { status: 'error', detail: `Preflight: ${e.message}` });
+    }
+  }
+  return problems;
+}
+
 export async function executeFunction(fnDoc, startedBy) {
   const settings = await Settings.load();
   if (settings.controlPlane !== 'wmspanel') {
@@ -170,6 +207,18 @@ export async function executeFunction(fnDoc, startedBy) {
 
   // Fire-and-forget executor; UI polls the run document.
   (async () => {
+    // Phase 0: preflight — zero mutations unless every step validates.
+    const problems = await preflight(cfg, fnDoc, run);
+    if (problems.length > 0) {
+      run.status = 'preflight_failed';
+      run.cancelReason = 'Preflight failed, nothing was changed: ' +
+        problems.map(p => `step ${p.index + 1}: ${p.message}`).join(' | ');
+      run.finishedAt = new Date();
+      await run.save();
+      return;
+    }
+    for (let i = 0; i < fnDoc.steps.length; i++) await persistStep(run, i, { detail: '' });
+
     let failedAt = -1;
     for (let i = 0; i < fnDoc.steps.length; i++) {
       try {
