@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "private": true,
   "type": "module",
   "scripts": { "start": "node src/index.js" },

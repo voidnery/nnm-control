@@ -57,6 +57,10 @@ function valuesMatch(obj, patch) {
 // carries the LAST SEEN values of the patched keys: if WMSPanel names a field
 // differently than the patch, this makes it immediately visible in the trace.
 async function verifyPatched(cfg, kind, sid, targetId, want) {
+  // Outgoing streams expose their own delivery confirmation: status becomes
+  // 'synced' once WMSPanel has delivered the config to the Nimble instance —
+  // stronger than field comparison alone, so we require it for that kind.
+  const requireSynced = kind === 'outgoing';
   const deadline = Date.now() + VERIFY_TIMEOUT_MS;
   let lastSeen = null, lastErr = null;
   for (;;) {
@@ -64,8 +68,10 @@ async function verifyPatched(cfg, kind, sid, targetId, want) {
       const obj = await getObject(cfg, kind, sid, targetId);
       lastSeen = {};
       for (const k of Object.keys(want)) lastSeen[k] = obj[k] ?? null;
+      if (requireSynced && 'status' in obj) lastSeen.status = obj.status;
       lastErr = null;
-      if (valuesMatch(obj, want)) return;
+      const synced = !requireSynced || !('status' in obj) || obj.status === 'synced';
+      if (valuesMatch(obj, want) && synced) return;
     } catch (e) {
       lastErr = e.message;
     }

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import RepublishTab from './RepublishTab.jsx';
+import { UdpTab, OutgoingTab, HotswapTab } from './WmsObjectsTabs.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -214,6 +215,9 @@ const TABS = [
   { key: 'sessions',  label: 'Sessions',  perm: 'sessions.view',  el: SessionsTab,  plane: 'native' },
   { key: 'srt',       label: 'SRT',       perm: 'srt.view',       el: SrtTab,       plane: 'native' },
   { key: 'republish', label: 'Republish', perm: 'republish.view', el: RepublishTab, plane: 'both' },
+  { key: 'wudp',      label: 'UDP/SRT',   perm: 'wmsobjects.view', el: UdpTab,      plane: 'wmspanel' },
+  { key: 'wout',      label: 'Outgoing',  perm: 'wmsobjects.view', el: OutgoingTab, plane: 'wmspanel' },
+  { key: 'whot',      label: 'Hotswap',   perm: 'wmsobjects.view', el: HotswapTab,  plane: 'wmspanel' },
   { key: 'mpegts',    label: 'MPEG-TS',   perm: 'mpegts.view',    el: MpegtsTab,    plane: 'native' },
   { key: 'playlist',  label: 'Playout',   perm: 'playlist.view',  el: PlaylistTab,  plane: 'native' },
   { key: 'control',   label: 'Control',   perm: 'control.manage', el: ControlTab,   plane: 'native' },
@@ -225,7 +229,7 @@ export default function ServerDetailPage() {
   const [server, setServer] = useState(null);
   const wms = sys?.controlPlane === 'wmspanel';
   const visibleTabs = useMemo(
-    () => TABS.filter(t => can(t.perm) && (wms ? t.plane !== 'native' : true)),
+    () => TABS.filter(t => can(t.perm) && (wms ? t.plane !== 'native' : t.plane !== 'wmspanel')),
     [can, wms]
   );
   const [tab, setTab] = useState(null);

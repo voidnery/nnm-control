@@ -4,6 +4,19 @@ Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
 ## iter2 (v0.3.x) — engineering functions & WMSPanel control plane
+### v0.3.8 (m3) — WMSPanel object tabs & hotswap substitution
+- Server page (WMSPanel mode) gains three tabs on canonical schemas:
+  UDP/SRT outputs (view; edit source_streams with PIDs preserved — full
+  entries are sent back with only application/stream changed; pause/resume),
+  MPEGTS Outgoing (view with native delivery status lamp; pause/resume/
+  restart), Hot swap (full CRUD, EMERGENCY toggle = picture substitution,
+  edit substitute pair; created disarmed)
+- Functions: outgoing patch/action steps now additionally require the native
+  `status: synced` confirmation during verification — proof of delivery to
+  the Nimble instance, stronger than field comparison
+- Builder presets: «Подмена картинкой ON/OFF» via hotswap emergency
+- New permissions: `wmsobjects.view` / `wmsobjects.manage`
+
 ### v0.3.7 (m2.4)
 - Preflight now suggests canonical twins for unknown patch keys
   ("'src_stream' → did you mean 'src_strm'?") — saved functions are data and

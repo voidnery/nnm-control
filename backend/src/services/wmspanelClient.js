@@ -81,4 +81,6 @@ export const wmspanel = {
   hotswapList:   (cfg, sid) => call(cfg, `/server/${sid}/hotswap`),
   hotswapGet:    (cfg, sid, id) => call(cfg, `/server/${sid}/hotswap/${id}`),
   hotswapUpdate: (cfg, sid, id, patch) => call(cfg, `/server/${sid}/hotswap/${id}`, { method: 'PUT', body: patch }),
+  hotswapCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/hotswap`, { method: 'POST', body }),
+  hotswapDelete: (cfg, sid, id) => call(cfg, `/server/${sid}/hotswap/${id}`, { method: 'DELETE' }),
 };
