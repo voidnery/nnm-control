@@ -10,6 +10,7 @@ import { nimbleRouter } from './routes/nimbleProxy.js';
 import { zabbixRouter } from './routes/zabbix.js';
 import { settingsRouter } from './routes/settings.js';
 import { playlistsRouter } from './routes/playlists.js';
+import { streamTagsRouter } from './routes/streamTags.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
 import { auditRouter } from './routes/audit.js';
@@ -33,6 +34,7 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/wmspanel', wmspanelRouter);
 app.use('/api/functions', functionsRouter);
 app.use('/api/playlists', playlistsRouter);
+app.use('/api/stream-tags', streamTagsRouter);
 app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {

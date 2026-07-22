@@ -253,3 +253,19 @@ input[type="radio"]:checked::after {
 
 /* Tab group separator (server detail) */
 .tab-sep { width:1px; align-self:stretch; margin:4px 6px; background:var(--line); opacity:.7; }
+
+
+/* Stream tags */
+.tagcell { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; }
+.tagchip { font-size:11px; padding:2px 8px; border-radius:11px; border:1px solid var(--line);
+  background:var(--bg-raise); color:var(--fg); cursor:pointer; line-height:1.5; }
+.tagchip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.tagchip.static { cursor:default; }
+.tagchip .x { border:none; background:none; color:inherit; cursor:pointer; margin-left:4px; padding:0 2px; font-size:13px; }
+.tag-input { width:120px; font-size:12px; padding:2px 6px; }
+.tag-btn { font-size:12px; padding:2px 8px; }
+.tag-btn.ghost { opacity:.65; }
+.tag-modeswitch { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+.tag-modeswitch button { border:none; background:var(--bg-raise); padding:2px 10px; font-size:11px; cursor:pointer; color:var(--fg); }
+.tag-modeswitch button.on { background:var(--accent); color:#fff; }
+.linklike { border:none; background:none; color:var(--accent); cursor:pointer; font-size:12px; text-decoration:underline; }

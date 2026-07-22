@@ -1,6 +1,18 @@
 # Changelog
 
 ## iter6 — server functionality in the panel (in progress)
+### v0.6.2 (m3) — stream tags with OR/AND filtering
+- Panel-side tags for WMSPanel stream objects (SRT Out, SRT in Nimble, RTMP
+  Pull, SRT In). Tags live in the panel DB keyed by (serverId, kind, objId),
+  so assigning a tag is a panel-only write — the stream is NEVER reloaded
+- Inline chip editor per row (add via autocomplete from the server's tag
+  catalog, remove); a filter bar of catalog chips with an OR/AND mode switch
+  (OR = any selected tag, AND = all selected tags), matching WMSPanel behaviour
+- Backend: StreamTag model (unique on serverId+kind+objId) + routes
+  GET /stream-tags/:serverId (map + catalog) and PUT /:serverId/:kind/:objId
+  (audited streamtag:set); view=wmsobjects.view, edit=wmsobjects.manage
+- OR/AND matcher unit-tested; EN/RU
+
 ### v0.6.1 (m2) — edit server (WMSPanel "Server" object)
 - "Edit" button in the server detail header (right of the name) opens a modal
   editing the WMSPanel server object per the API "Server" tag: display name,

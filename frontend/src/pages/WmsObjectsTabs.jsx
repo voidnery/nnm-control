@@ -6,6 +6,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
+import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
 // - UDP/SRT outputs: source_streams[{application, stream, pmt/video/audio pid}]
@@ -34,6 +35,7 @@ const SyncNote = () => (
 
 // ---------------------------------------------------------------- UDP / SRT
 export function UdpTab({ serverId }) {
+  const st = useStreamTags(serverId);
   const confirm = useConfirm();
   const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'udp');
@@ -119,11 +121,12 @@ export function UdpTab({ serverId }) {
         <button onClick={load} disabled={busy}>Refresh</button>
         {can('wmsobjects.manage') && <button className="primary" disabled={busy} onClick={() => openCfg(null)}>+ New output</button>}
       </div>
+      <TagFilterBar st={st} />
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Proto</th><th>Destination</th><th>Source</th><th>State</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Proto</th><th>Destination</th><th>Source</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
-            {settings.map(o => (
+            {settings.filter(o => st.matches('udp', o.id)).map(o => (
               <tr key={o.id}>
                 <td><b>{o.name || String(o.id).slice(-6)}</b>{o.description && <div className="hint">{o.description}</div>}</td>
                 <td><span className="badge">{o.protocol}</span></td>
@@ -136,6 +139,7 @@ export function UdpTab({ serverId }) {
                       : <span className="hint">— no source —</span>}
                 </td>
                 <td><span className={'lamp ' + (o.paused ? 'off' : 'on')} />{o.paused ? 'paused' : 'active'}</td>
+                <td><TagChips st={st} kind="udp" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => openEdit(o)}>Edit source</button>{' '}
@@ -146,7 +150,7 @@ export function UdpTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {settings.length === 0 && <tr><td colSpan={6} className="hint">No UDP/SRT outputs on this server.</td></tr>}
+            {settings.length === 0 && <tr><td colSpan={7} className="hint">No UDP/SRT outputs on this server.</td></tr>}
           </tbody>
         </table>
 
@@ -236,6 +240,7 @@ export function UdpTab({ serverId }) {
 
 // ----------------------------------------------------------------- Outgoing
 export function OutgoingTab({ serverId }) {
+  const st = useStreamTags(serverId);
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'outgoing');
@@ -300,11 +305,12 @@ export function OutgoingTab({ serverId }) {
           </button>
         )}
       </div>
+      <TagFilterBar st={st} />
       <div className="panel">
         <table>
-          <thead><tr><th>Output</th><th>Delivery</th><th>State</th><th></th></tr></thead>
+          <thead><tr><th>Output</th><th>Delivery</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
-            {streams.map(o => (
+            {streams.filter(o => st.matches('outgoing', o.id)).map(o => (
               <tr key={o.id}>
                 <td className="mono"><b>{o.application}/{o.stream}</b>{o.description && <div className="hint">{o.description}</div>}</td>
                 <td>
@@ -313,6 +319,7 @@ export function OutgoingTab({ serverId }) {
                   <div className="hint">src: {srcName(o.video_source) || '—'}{o.audio_source?.id && o.audio_source.id !== o.video_source?.id ? ' / ' + srcName(o.audio_source) : ''}</div>
                 </td>
                 <td>{String(o.paused) === 'true' ? 'paused' : 'active'}</td>
+                <td><TagChips st={st} kind="outgoing" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     {String(o.paused) === 'true'
@@ -329,7 +336,7 @@ export function OutgoingTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {streams.length === 0 && <tr><td colSpan={4} className="hint">No MPEGTS outgoing streams on this server.</td></tr>}
+            {streams.length === 0 && <tr><td colSpan={5} className="hint">No MPEGTS outgoing streams on this server.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -621,6 +628,7 @@ const codecsOf = (o) => {
 };
 
 export function MpegtsInTab({ serverId }) {
+  const st = useStreamTags(serverId);
   const confirm = useConfirm();
   const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'incoming');
@@ -628,7 +636,8 @@ export function MpegtsInTab({ serverId }) {
   const [modal, setModal] = useState(null); // {} for create, object for edit
   const [busy, setBusy] = useState(false);
   const streams = (data?.streams || []).filter(o =>
-    !filter || (o.name + ' ' + (o.description || '')).toLowerCase().includes(filter.toLowerCase()));
+    (!filter || (o.name + ' ' + (o.description || '')).toLowerCase().includes(filter.toLowerCase())) &&
+    st.matches('incoming', o.id));
 
   const save = async () => {
     setBusy(true); setError('');
@@ -671,9 +680,10 @@ export function MpegtsInTab({ serverId }) {
         )}
         <span className="hint">{streams.length} of {(data?.streams || []).length}</span>
       </div>
+      <TagFilterBar st={st} />
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Proto</th><th>Endpoint</th><th>Mode</th><th>Codecs</th><th>Bitrate</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Proto</th><th>Endpoint</th><th>Mode</th><th>Codecs</th><th>Bitrate</th><th>Status</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {streams.map(o => (
               <tr key={o.id}>
@@ -684,6 +694,7 @@ export function MpegtsInTab({ serverId }) {
                 <td className="hint">{codecsOf(o) || '—'}</td>
                 <td className="mono">{fmtMbps(o.bandwidth)}</td>
                 <td><span className={'lamp ' + (o.status === 'online' ? 'on' : o.status === 'paused' ? 'warn' : 'off')} />{o.status}</td>
+                <td><TagChips st={st} kind="incoming" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => setModal({
@@ -697,7 +708,7 @@ export function MpegtsInTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {streams.length === 0 && <tr><td colSpan={8} className="hint">No incoming MPEGTS/SRT streams{filter ? ' matching filter' : ''}.</td></tr>}
+            {streams.length === 0 && <tr><td colSpan={9} className="hint">No incoming MPEGTS/SRT streams{filter ? ' matching filter' : ''}.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -743,6 +754,7 @@ export function MpegtsInTab({ serverId }) {
 // ------------------------------------------------------------- Live Pull
 // RTMP pull feeds with fallback_urls — the built-in feed reserve mechanism.
 export function LivePullTab({ serverId }) {
+  const st = useStreamTags(serverId);
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'livepull');
@@ -782,16 +794,18 @@ export function LivePullTab({ serverId }) {
           </button>
         )}
       </div>
+      <TagFilterBar st={st} />
       <div className="panel">
         <table>
-          <thead><tr><th>Local app/stream</th><th>Source URL</th><th>Fallbacks</th><th>State</th><th></th></tr></thead>
+          <thead><tr><th>Local app/stream</th><th>Source URL</th><th>Fallbacks</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
-            {settings.map(o => (
+            {settings.filter(o => st.matches('livepull', o.id)).map(o => (
               <tr key={o.id}>
                 <td className="mono"><b>{o.application}/{o.stream}</b>{o.description && <div className="hint">{o.description}</div>}</td>
                 <td className="mono hint" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.url}</td>
                 <td>{(o.fallback_urls || []).length ? <span className="badge">{o.fallback_urls.length} fallback</span> : <span className="hint">—</span>}</td>
                 <td><span className={'lamp ' + (o.paused ? 'off' : 'on')} />{o.paused ? 'paused' : 'active'}</td>
+                <td><TagChips st={st} kind="livepull" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}/restart`, { method: 'POST' }))}>Restart</button>{' '}
@@ -810,7 +824,7 @@ export function LivePullTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {settings.length === 0 && <tr><td colSpan={5} className="hint">No RTMP pull settings on this server.</td></tr>}
+            {settings.length === 0 && <tr><td colSpan={6} className="hint">No RTMP pull settings on this server.</td></tr>}
           </tbody>
         </table>
       </div>
