@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Select from '../components/Select.jsx';
+import DataView from '../components/DataView.jsx';
 
 export default function AuditPage() {
   const [items, setItems] = useState([]);
@@ -72,9 +73,7 @@ export default function AuditPage() {
             {items.map(it => expanded === it._id && (
               <tr key={it._id + 'x'}>
                 <td colSpan={6}>
-                  <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 220, overflow: 'auto' }}>
-                    {JSON.stringify(it.detail, null, 2)}
-                  </pre>
+                  <DataView data={it.detail} />
                 </td>
               </tr>
             ))}

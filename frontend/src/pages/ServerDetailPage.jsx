@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import RepublishTab from './RepublishTab.jsx';
 import { UdpTab, OutgoingTab, HotswapTab, WmsStreamsTab, MpegtsInTab, LivePullTab, AppsTab, InterfacesTab } from './WmsObjectsTabs.jsx';
+import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -116,10 +117,11 @@ function SessionsTab({ serverId }) {
 function JsonPanel({ title, data }) {
   return (
     <div className="panel">
-      {title && <h2 style={{ marginTop: 0 }}>{title}</h2>}
-      <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 420, overflow: 'auto' }}>
-        {JSON.stringify(data, null, 2)}
-      </pre>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        {title && <h2 style={{ marginTop: 0 }}>{title}</h2>}
+        <CopyJsonButton data={data} />
+      </div>
+      <div style={{ maxHeight: 420, overflow: 'auto' }}><DataView data={data} /></div>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api, getToken, setToken, clearToken } from './api.js';
+import { useToast } from './toast.jsx';
 
 const AuthCtx = createContext(null);
 export const useAuth = () => useContext(AuthCtx);
 
 export function AuthProvider({ children }) {
+  const { push } = useToast();
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
   const [sys, setSys] = useState(null); // { controlPlane, wmspanelConfigured }
@@ -31,6 +33,7 @@ export function AuthProvider({ children }) {
     if (data.twoFactorRequired) return { twoFactorRequired: true, ticket: data.ticket };
     setToken(data.token);
     setUser(data.user);
+    push({ type: 'ok', title: 'Welcome', message: data.user.username });
     return { ok: true };
   };
 
@@ -38,6 +41,7 @@ export function AuthProvider({ children }) {
     const data = await api('/auth/login/2fa', { method: 'POST', body: { ticket, code } });
     setToken(data.token);
     setUser(data.user);
+    push({ type: 'ok', title: 'Welcome', message: data.user.username });
     return { ok: true };
   };
   const logout = () => { clearToken(); setUser(null); };

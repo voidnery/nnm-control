@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
+import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 
@@ -145,9 +146,8 @@ function WmspanelRules({ serverId }) {
       )}
       {showRaw && (
         <div className="panel">
-          <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 320, overflow: 'auto' }}>
-            {JSON.stringify(raw, null, 2)}
-          </pre>
+          <div className="row" style={{ justifyContent: 'flex-end' }}><CopyJsonButton data={raw} /></div>
+          <div style={{ maxHeight: 320, overflow: 'auto' }}><DataView data={raw} /></div>
         </div>
       )}
       {full && (

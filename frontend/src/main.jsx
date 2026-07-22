@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './auth.jsx';
 import { ThemeProvider } from './theme.jsx';
 import { I18nProvider } from './i18n.jsx';
+import { ToastProvider } from './toast.jsx';
 import App from './App.jsx';
 import './styles.css';
 
@@ -11,11 +12,13 @@ createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <AuthProvider>
-          <I18nProvider>
-            <App />
-          </I18nProvider>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <I18nProvider>
+              <App />
+            </I18nProvider>
+          </AuthProvider>
+        </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>

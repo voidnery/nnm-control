@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { useI18n } from '../i18n.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 
@@ -499,6 +500,7 @@ const fmtUptime = (ts) => {
 
 export function WmsStreamsTab({ serverId }) {
   const { can } = useAuth();
+  const { t } = useI18n();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
@@ -523,11 +525,19 @@ export function WmsStreamsTab({ serverId }) {
     return () => clearInterval(t);
   }, [auto, serverId]);
 
-  const removeStream = async (st) => {
-    if (!window.confirm(`Delete live stream ${st.application}/${st.stream} from the server?`)) return;
+  // Live/running streams cannot be deleted (matches WMSPanel). Only DOWN
+  // (offline) entries can be cleared, exactly like "Живые потоки".
+  const downStreams = (data?.streams || []).filter(st => st.status !== 'online');
+  const deleteAllDown = async () => {
+    if (downStreams.length === 0) return;
+    if (!window.confirm(`Remove ${downStreams.length} offline stream(s) from the list? Running streams are untouched.`)) return;
     setBusy(true); setError('');
-    try { await api(`/wmspanel/server/${serverId}/streams/${st.id}`, { method: 'DELETE' }); await load(); }
-    catch (e) { setError(e.message); }
+    try {
+      for (const st of downStreams) {
+        try { await api(`/wmspanel/server/${serverId}/streams/${st.id}`, { method: 'DELETE' }); } catch { /* skip individual */ }
+      }
+      await load();
+    } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
 
@@ -540,14 +550,19 @@ export function WmsStreamsTab({ serverId }) {
 
   return (
     <div>
-      <div className="row" style={{ marginBottom: 10 }}>
+      <div className="row" style={{ marginBottom: 10, alignItems: 'center' }}>
         <input style={{ maxWidth: 280 }} placeholder="Filter app/stream/tag…" value={filter} onChange={e => setFilter(e.target.value)} />
-        <button onClick={load} disabled={busy}>Refresh</button>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input type="checkbox" style={{ width: 'auto' }} checked={auto} onChange={e => setAuto(e.target.checked)} />
+        <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+          <input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} />
           Auto (30s)
         </label>
-        <span className="hint">
+        {can('wmsobjects.manage') && (
+          <button disabled={busy || downStreams.length === 0} onClick={deleteAllDown}>
+            Delete all down streams{downStreams.length ? ` (${downStreams.length})` : ''}
+          </button>
+        )}
+        <span className="hint" style={{ marginLeft: 'auto' }}>
           {list.length} of {(data.streams || []).length} streams
           {loadedAt && <> · loaded {loadedAt.toLocaleTimeString()}</>}
         </span>
@@ -557,7 +572,7 @@ export function WmsStreamsTab({ serverId }) {
         <div className="panel" key={app}>
           <h2 style={{ marginTop: 0 }}>{app} <span className="hint">({streams.length})</span></h2>
           <table>
-            <thead><tr><th>Stream</th><th>Proto</th><th>Codecs</th><th>Res</th><th>Bitrate</th><th>Publisher</th><th>Uptime</th><th></th></tr></thead>
+            <thead><tr><th>Stream</th><th>Proto</th><th>Codecs</th><th>Res</th><th>Bitrate</th><th>Publisher</th><th>Uptime</th></tr></thead>
             <tbody>
               {streams.sort((a, b) => String(a.stream).localeCompare(String(b.stream))).map(st => (
                 <tr key={st.id}>
@@ -572,11 +587,7 @@ export function WmsStreamsTab({ serverId }) {
                   <td className="mono">{st.bandwidth ? (st.bandwidth / 1e6).toFixed(1) + ' Mbps' : '—'}</td>
                   <td className="mono hint">{st.publisher_ip || '—'}</td>
                   <td className="mono">{st.status === 'online' ? fmtUptime(st.publish_time) : '—'}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {can('wmsobjects.manage') && (
-                      <button className="danger" disabled={busy} onClick={() => removeStream(st)}>Delete</button>
-                    )}
-                  </td>
+
                 </tr>
               ))}
             </tbody>

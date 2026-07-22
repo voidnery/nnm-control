@@ -231,15 +231,17 @@ export default function DistributionPage() {
             </div>
             <label>Renditions (top = highest quality)</label>
             {abrModal.sources.map((src, i) => (
-              <div className="row" key={i} style={{ marginBottom: 6 }}>
-                <input placeholder="application" value={src.application}
+              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+                <span className="hint mono" style={{ width: 18, textAlign: 'right' }}>{i + 1}</span>
+                <input style={{ flex: 1 }} placeholder="application" value={src.application}
                        onChange={e => setAbrModal(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, application: e.target.value } : x) }))} />
-                <input placeholder="stream" value={src.stream}
+                <input style={{ flex: 1 }} placeholder="stream" value={src.stream}
                        onChange={e => setAbrModal(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, stream: e.target.value } : x) }))} />
-                <button onClick={() => setAbrModal(m => ({ ...m, sources: m.sources.filter((_, j) => j !== i) }))}>×</button>
+                <button title="Remove rendition" style={{ flexShrink: 0 }}
+                        onClick={() => setAbrModal(m => ({ ...m, sources: m.sources.filter((_, j) => j !== i) }))}>✕</button>
               </div>
             ))}
-            <button onClick={() => setAbrModal(m => ({ ...m, sources: [...m.sources, { application: '', stream: '' }] }))}>+ rendition</button>
+            <button style={{ marginTop: 2 }} onClick={() => setAbrModal(m => ({ ...m, sources: [...m.sources, { application: '', stream: '' }] }))}>+ Add rendition</button>
             <label style={{ marginTop: 10 }}>Servers (none = all)</label>
             <ServerPicker servers={servers} value={abrModal.server_ids} onChange={v => setAbrModal(m => ({ ...m, server_ids: v }))} />
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>

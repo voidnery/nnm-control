@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import Select from '../components/Select.jsx';
+import { useToast } from '../toast.jsx';
 
 const BASE_URLS = [
   'https://api.wmspanel.com/v1',
@@ -9,6 +10,7 @@ const BASE_URLS = [
 ];
 
 export default function SettingsPage() {
+  const { push } = useToast();
   const { refreshSystem } = useAuth();
   const [settings, setSettings] = useState(null);
   const [clientId, setClientId] = useState('');
@@ -22,6 +24,7 @@ export default function SettingsPage() {
 
   const load = async () => {
     const s = await api('/settings');
+      push({ type: 'ok', message: 'Settings saved' });
     setSettings(s);
     setClientId(s.wmspanel.clientId);
     setBaseUrl(s.wmspanel.baseUrl);

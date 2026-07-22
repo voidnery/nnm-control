@@ -163,11 +163,39 @@ export default function TranscodersPage() {
             <h3>{detail.name}</h3>
             {detail.loading && <div className="hint">Loading…</div>}
             {detail.error && <div className="error-box">{detail.error}</div>}
-            {detail.data && (
-              <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 420, overflow: 'auto' }}>
-                {JSON.stringify(detail.data, null, 2)}
-              </pre>
-            )}
+            {detail.data && (() => {
+              const tr = detail.data.transcoder || detail.data;
+              const pipelines = tr.pipelines || tr.pipeline || [];
+              return (
+                <div>
+                  <div className="kv-grid">
+                    <div className="kv-k">Name</div><div className="kv-v mono">{tr.name || '—'}</div>
+                    <div className="kv-k">Description</div><div className="kv-v">{tr.description || <span className="hint">—</span>}</div>
+                    <div className="kv-k">Server</div><div className="kv-v mono">{serverName(tr.server_id)}</div>
+                    <div className="kv-k">State</div><div className="kv-v"><span className={'lamp ' + (tr.paused ? 'off' : 'on')} />{tr.paused ? 'paused' : 'running'}</div>
+                    <div className="kv-k">Tags</div><div className="kv-v">{(tr.tags || []).map(x => <span key={x} className="badge" style={{ marginRight: 3 }}>{x}</span>) || '—'}</div>
+                    {tr.id && <><div className="kv-k">ID</div><div className="kv-v mono hint">{tr.id}</div></>}
+                  </div>
+                  {Array.isArray(pipelines) && pipelines.length > 0 && (
+                    <>
+                      <h4 style={{ margin: '14px 0 6px' }}>Pipelines ({pipelines.length})</h4>
+                      {pipelines.map((pl, i) => (
+                        <div key={i} className="panel" style={{ padding: 10, marginBottom: 6 }}>
+                          <div className="kv-grid">
+                            {Object.entries(pl).map(([k, v]) => (
+                              <div key={k} style={{ display: 'contents' }}>
+                                <div className="kv-k">{k}</div>
+                                <div className="kv-v mono">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
               <button onClick={() => setDetail(null)}>Close</button>
             </div>

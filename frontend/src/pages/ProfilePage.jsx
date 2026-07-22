@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useTheme } from '../theme.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useToast } from '../toast.jsx';
 import Select from '../components/Select.jsx';
 import TwoFactorSection from '../components/TwoFactorSection.jsx';
 
@@ -10,6 +11,7 @@ export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
   const { setTheme } = useTheme();
   const { t } = useI18n();
+  const { push } = useToast();
 
   const [prefs, setPrefs] = useState(user?.preferences || { theme: 'system', lang: 'en', functionModalWidth: 'default' });
   const [savedMsg, setSavedMsg] = useState('');
@@ -28,8 +30,7 @@ export default function ProfilePage() {
     try {
       await api('/auth/me/preferences', { method: 'PUT', body: patch });
       await refreshUser();
-      setSavedMsg(t('profile.saved'));
-      setTimeout(() => setSavedMsg(''), 1500);
+      push({ type: 'ok', message: t('profile.saved') });
     } catch (e) { setSavedMsg(e.message); }
   };
 
@@ -40,7 +41,7 @@ export default function ProfilePage() {
     try {
       await api('/auth/me/password', { method: 'POST', body: { currentPassword: pwCur, newPassword: pwNew } });
       setPwCur(''); setPwNew(''); setPwConf('');
-      setPwMsg({ ok: true, text: t('profile.passwordChanged') });
+      push({ type: 'ok', message: t('profile.passwordChanged') });
     } catch (e) { setPwMsg({ ok: false, text: e.message }); }
     finally { setBusy(false); }
   };

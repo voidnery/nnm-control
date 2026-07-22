@@ -1,6 +1,27 @@
 # Changelog
 
-## iter3 (v0.4.x) — UX & design overhaul
+## iter4 (v0.4.x) — UX refinement round 2
+### v0.4.4 (iter4) — checkboxes, toasts, JSON→fields, streams & notes
+- Custom-designed checkboxes and radios across the whole app (themed, replace
+  native controls everywhere automatically)
+- Toast notifications (bottom-right) for system events: login/2FA success,
+  preferences saved, settings saved — non-blocking, auto-dismiss, click to
+  close
+- No more raw JSON dumps in the UI: transcoder Details now shows structured
+  fields + pipelines; the native raw panels, republish raw and audit detail
+  render via a reusable DataView (key/value fields, nested objects, arrays)
+  with a "Copy JSON" affordance kept for diagnostics
+- Streams tab: per-stream Delete removed (a running stream can't be deleted,
+  matching WMSPanel); added "Delete all down streams" that clears only
+  offline entries; top control row aligned, counts pushed to the right
+- ABR rendition editor: numbered rows, aligned inputs, clearer remove/add
+  ("+ Add rendition")
+- Notes/textarea fields can no longer be dragged wider — vertical resize only
+- Confirmed shipping since v0.4.3 (sidebar in the reported screenshots showed
+  v0.4.2): safe modal close on outside-release, and the function builder
+  showing the picked app/stream under the id + per-user dialog width
+
+
 ### v0.4.3 (m4) — UX polish; ITER3 CLOSED
 - All 18 modals across the app now close safely: a text-selection drag that
   starts inside and releases on the backdrop no longer closes them (only a
