@@ -382,6 +382,8 @@ export function OutgoingTab({ serverId }) {
 
 // ------------------------------------------------------------------ Hotswap
 export function HotswapTab({ serverId }) {
+  const tg = useStreamTags(serverId);
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'hotswap');
@@ -430,9 +432,10 @@ export function HotswapTab({ serverId }) {
         <button onClick={load} disabled={busy}>Refresh</button>
         {can('wmsobjects.manage') && <button onClick={() => setCreating(v => !v)}>{creating ? 'Close form' : '+ New hot swap'}</button>}
       </div>
+      <TagFilterBar st={tg} />
       <div className="panel">
         <table>
-          <thead><tr><th>Original</th><th>Substitute</th><th>Emergency</th><th>State</th><th></th></tr></thead>
+          <thead><tr><th>Original</th><th>Substitute</th><th>Emergency</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {settings.map(o => (
               <tr key={o.id} style={o.emergency ? { background: '#2a1416' } : undefined}>
@@ -443,6 +446,7 @@ export function HotswapTab({ serverId }) {
                   {o.emergency ? 'SUBSTITUTE ACTIVE' : 'original on air'}
                 </td>
                 <td>{o.paused ? 'paused' : 'armed'}</td>
+                <td><TagChips st={tg} kind="hotswap" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button className={o.emergency ? 'primary' : 'danger'} disabled={busy}
@@ -459,7 +463,7 @@ export function HotswapTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {settings.length === 0 && <tr><td colSpan={5} className="hint">No hot swap settings on this server.</td></tr>}
+            {settings.length === 0 && <tr><td colSpan={6} className="hint">No hot swap settings on this server.</td></tr>}
           </tbody>
         </table>
 
@@ -525,6 +529,7 @@ const fmtUptime = (ts) => {
 };
 
 export function WmsStreamsTab({ serverId }) {
+  const tg = useStreamTags(serverId);
   const confirm = useConfirm();
   const { can } = useAuth();
   const { t } = useI18n();
@@ -595,13 +600,14 @@ export function WmsStreamsTab({ serverId }) {
         </span>
       </div>
       {error && <div className="error-box">{error}</div>}
+      <TagFilterBar st={tg} />
       {Object.entries(byApp).sort(([a], [b]) => a.localeCompare(b)).map(([app, streams]) => (
         <div className="panel" key={app}>
           <h2 style={{ marginTop: 0 }}>{app} <span className="hint">({streams.length})</span></h2>
           <table>
-            <thead><tr><th>Stream</th><th>Proto</th><th>Codecs</th><th>Res</th><th>Bitrate</th><th>Publisher</th><th>Uptime</th></tr></thead>
+            <thead><tr><th>Stream</th><th>Proto</th><th>Codecs</th><th>Res</th><th>Bitrate</th><th>Publisher</th><th>Uptime</th><th>{t('tags.col')}</th></tr></thead>
             <tbody>
-              {streams.sort((a, b) => String(a.stream).localeCompare(String(b.stream))).map(st => (
+              {streams.filter(st => tg.matches('streams', `${st.application}/${st.stream}`)).sort((a, b) => String(a.stream).localeCompare(String(b.stream))).map(st => (
                 <tr key={st.id}>
                   <td className="mono">
                     <span className={'lamp ' + (st.status === 'online' ? 'on' : 'off')} /><b>{st.stream}</b>
@@ -614,7 +620,7 @@ export function WmsStreamsTab({ serverId }) {
                   <td className="mono">{st.bandwidth ? (st.bandwidth / 1e6).toFixed(1) + ' Mbps' : '—'}</td>
                   <td className="mono hint">{st.publisher_ip || '—'}</td>
                   <td className="mono">{st.status === 'online' ? fmtUptime(st.publish_time) : '—'}</td>
-
+                  <td><TagChips st={tg} kind="streams" objId={`${st.application}/${st.stream}`} /></td>
                 </tr>
               ))}
             </tbody>
@@ -881,6 +887,8 @@ export function LivePullTab({ serverId }) {
 // ------------------------------------------------------------- Applications
 // live/app settings incl. push credentials (masked with reveal toggle).
 export function AppsTab({ serverId }) {
+  const tg = useStreamTags(serverId);
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'apps');
@@ -921,9 +929,10 @@ export function AppsTab({ serverId }) {
           </button>
         )}
       </div>
+      <TagFilterBar st={tg} />
       <div className="panel">
         <table>
-          <thead><tr><th>Application</th><th>Protocols</th><th>Chunks</th><th>Push auth</th><th></th></tr></thead>
+          <thead><tr><th>Application</th><th>Protocols</th><th>Chunks</th><th>Push auth</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {apps.map(a => (
               <tr key={a.id}>
@@ -937,6 +946,7 @@ export function AppsTab({ serverId }) {
                       : <>{a.push_login} / •••••• <button onClick={() => setReveal(r => ({ ...r, [a.id]: true }))}>show</button></>
                   ) : <span className="hint">open</span>}
                 </td>
+                <td><TagChips st={tg} kind="apps" objId={a.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => setModal({
@@ -956,7 +966,7 @@ export function AppsTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {apps.length === 0 && <tr><td colSpan={5} className="hint">No applications on this server.</td></tr>}
+            {apps.length === 0 && <tr><td colSpan={6} className="hint">No applications on this server.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -989,6 +999,8 @@ export function AppsTab({ serverId }) {
 
 // ------------------------------------------------------------- Interfaces
 export function InterfacesTab({ serverId }) {
+  const tg = useStreamTags(serverId);
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'interfaces');
@@ -1025,15 +1037,17 @@ export function InterfacesTab({ serverId }) {
           <button className="primary" disabled={busy} onClick={() => setModal({ ip: '0.0.0.0', port: 1935, ssl: false })}>+ New interface</button>
         )}
       </div>
+      <TagFilterBar st={tg} />
       <div className="panel">
         <table>
-          <thead><tr><th>IP</th><th>Port</th><th>SSL</th><th></th></tr></thead>
+          <thead><tr><th>IP</th><th>Port</th><th>SSL</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {list.map(i => (
               <tr key={i.id}>
                 <td className="mono">{i.ip}</td>
                 <td className="mono">{i.port}</td>
                 <td>{i.ssl ? <span className="badge">ssl</span> : <span className="hint">no</span>}</td>
+                <td><TagChips st={tg} kind="interfaces" objId={i.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => setModal({ id: i.id, ip: i.ip, port: i.port, ssl: i.ssl })}>Edit</button>{' '}
@@ -1042,7 +1056,7 @@ export function InterfacesTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={4} className="hint">No RTMP interfaces.</td></tr>}
+            {list.length === 0 && <tr><td colSpan={5} className="hint">No RTMP interfaces.</td></tr>}
           </tbody>
         </table>
 

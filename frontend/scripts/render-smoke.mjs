@@ -8,12 +8,15 @@ const SAMPLE = {
   outgoing: { streams: [{ id: 'o1', application: 'app', stream: 'st', paused: 'false', status: 'synced', video_source: { id: 'v' } }] },
   livepull: { settings: [{ id: 'p1', application: 'app', stream: 'st', url: 'rtmp://x', fallback_urls: [], paused: false }] },
   incoming: { streams: [{ id: 'i1', name: 'in1', protocol: 'srt', ip: '1.2.3.4', port: 9000, status: 'online', receive_mode: 'listen' }] },
-  hotswap: { settings: [] }, apps: { applications: [] }, interfaces: { interfaces: [] }, streams: { streams: [] },
+  hotswap: { settings: [] }, apps: { applications: [] }, interfaces: { interfaces: [] },
+  streams: { streams: [{ id: 'st1', application: 'live', stream: 'cam1', status: 'online', protocol: 'RTMP' }] },
+  republish: { rules: [{ id: 'r1', src_app: 'live', src_strm: 's', dest_addr: '1.2.3.4', dest_port: 1935, dest_app: 'out', dest_strm: 's' }] },
   tags: { map: {}, catalog: [] },
 };
 function pick(u){
   u=String(u);
   if(u.includes('/stream-tags/'))return SAMPLE.tags;
+  if(/\/streams(\b|$|\?)/.test(u)&&!u.includes('stream-tags'))return SAMPLE.streams;
   if(u.endsWith('/servers'))return SAMPLE.servers;
   if(u.includes('/udp'))return SAMPLE.udp;
   if(u.includes('/outgoing'))return SAMPLE.outgoing;
@@ -22,6 +25,7 @@ function pick(u){
   if(u.includes('/hotswap'))return SAMPLE.hotswap;
   if(u.includes('/applications')||u.includes('/apps'))return SAMPLE.apps;
   if(u.includes('/interfaces'))return SAMPLE.interfaces;
+  if(u.includes('republish'))return SAMPLE.republish;
   return { status:'Ok' };
 }
 
@@ -34,11 +38,13 @@ import { ConfirmProvider } from '${SRC}/confirm.jsx';
 import { AuthProvider } from '${SRC}/auth.jsx';
 import { ThemeProvider } from '${SRC}/theme.jsx';
 import * as Tabs from '${SRC}/pages/WmsObjectsTabs.jsx';
-const NAMES = ['UdpTab','OutgoingTab','LivePullTab','MpegtsInTab','HotswapTab','AppsTab','InterfacesTab','WmsStreamsTab'];
+import RepublishTab from '${SRC}/pages/RepublishTab.jsx';
+const ALL = { ...Tabs, RepublishTab };
+const NAMES = ['UdpTab','OutgoingTab','LivePullTab','MpegtsInTab','HotswapTab','AppsTab','InterfacesTab','WmsStreamsTab','RepublishTab'];
 window.__RENDER_ALL = async () => {
   const out = {};
   for (const name of NAMES) {
-    const Comp = Tabs[name];
+    const Comp = ALL[name];
     const el = document.createElement('div'); document.body.appendChild(el);
     try {
       const root = createRoot(el);
@@ -47,7 +53,7 @@ window.__RENDER_ALL = async () => {
           React.createElement(AuthProvider,null,
             React.createElement(I18nProvider,null,
               React.createElement(ConfirmProvider,null,
-                React.createElement(Comp,{serverId:'S1'})))))));
+                React.createElement(Comp,{serverId:'S1', server:{ id:'S1', name:'Src', wmspanelServerId:'w1' }})))))));
       await new Promise(r=>setTimeout(r,200));
       out[name] = { ok:true, len: el.innerHTML.length };
     } catch(e){ out[name] = { ok:false, error:String(e&&e.message||e) }; }

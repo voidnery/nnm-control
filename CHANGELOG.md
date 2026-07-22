@@ -1,5 +1,19 @@
 # Changelog
 
+## iter6 follow-up
+### v0.6.5 — tags on the remaining stream tabs
+- Extended panel-side tags (no reload) to the tabs that were missing them:
+  Streams, Apps, Interfaces, RTMP Push (both wmspanel + native rule variants),
+  and Hotswap. Same inline chip editor + OR/AND filter bar as the other tabs
+- Tag keys: object id for Apps/Interfaces/Hotswap/RTMP Push; for live Streams
+  the stable app/stream path (live ids are ephemeral). kind namespaces:
+  streams, apps, interfaces, republish, hotswap
+- Bound useI18n t in Apps/Interfaces/Hotswap (they didn't use t before); used a
+  distinct hook alias (tg) to avoid shadowing the `st` row variable in Streams
+  and the per-rule status `st` in native RTMP Push
+- Verified: hook-binding audit + headless render smoke (now 9 tabs incl. RTMP
+  Push, with sample data) both green
+
 ## iter6 hotfix
 ### v0.6.4 — fix blank screen on RTMP Pull / SRT tabs
 - Root cause: UdpTab, OutgoingTab, LivePullTab and MpegtsInTab used t() in JSX

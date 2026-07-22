@@ -5,6 +5,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 
@@ -15,6 +16,7 @@ const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps
 // on a live account is immediately visible and fixable.
 // ---------------------------------------------------------------------------
 function WmspanelRules({ serverId }) {
+  const tg = useStreamTags(serverId);
   const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
@@ -77,11 +79,12 @@ function WmspanelRules({ serverId }) {
         <button style={{ marginLeft: 12 }} onClick={() => setShowRaw(v => !v)}>{showRaw ? 'Hide raw' : 'Raw'}</button>
       </div>
       {error && <div className="error-box">{error}</div>}
+      <TagFilterBar st={tg} />
       <div className="panel">
         <table>
-          <thead><tr><th>ID</th><th>Source app/stream</th><th>Destination</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Source app/stream</th><th>Destination</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
-            {rules.map(rule => (
+            {rules.filter(rule => tg.matches('republish', rule.id)).map(rule => (
               <tr key={rule.id}>
                 <td className="mono">{String(rule.id).slice(-6)}</td>
                 <td className="mono">
@@ -96,6 +99,7 @@ function WmspanelRules({ serverId }) {
                   )}
                 </td>
                 <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_strm}</td>
+                <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('republish.manage') && (edit?.ruleId === rule.id ? (
                     <>
@@ -121,7 +125,7 @@ function WmspanelRules({ serverId }) {
                 </td>
               </tr>
             ))}
-            {rules.length === 0 && <tr><td colSpan={4} className="hint">No republish rules on the mapped WMSPanel server.</td></tr>}
+            {rules.length === 0 && <tr><td colSpan={5} className="hint">No republish rules on the mapped WMSPanel server.</td></tr>}
           </tbody>
         </table>
         <div className="row" style={{ marginTop: 8 }}>
@@ -196,6 +200,7 @@ function WmspanelRules({ serverId }) {
 // Native mode (backup): ephemeral rules via Nimble native API. Kept from iter1.
 // ---------------------------------------------------------------------------
 function NativeRules({ serverId }) {
+  const tg = useStreamTags(serverId);
   const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
@@ -245,11 +250,12 @@ function NativeRules({ serverId }) {
         online, two publishers may collide — remove backup rules manually after recovery.
       </div>
       {error && <div className="error-box">{error}</div>}
+      <TagFilterBar st={tg} />
       <div className="panel">
         <table>
-          <thead><tr><th>ID</th><th>Source</th><th>Destination</th><th>State</th><th>Bandwidth</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Source</th><th>Destination</th><th>State</th><th>Bandwidth</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
-            {(rules || []).map(rule => {
+            {(rules || []).filter(rule => tg.matches('republish', rule.id)).map(rule => {
               const st = statFor(rule.id);
               return (
                 <tr key={rule.id} className={st?.state === 'connected' ? 'tally' : ''}>
@@ -258,13 +264,14 @@ function NativeRules({ serverId }) {
                   <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_strm}</td>
                   <td>{st ? <><span className={'lamp ' + (st.state === 'connected' ? 'on' : 'warn')} />{st.state}</> : '—'}</td>
                   <td className="mono">{st ? fmtBps(st.bandwidth) : '—'}</td>
+                  <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>
                   <td style={{ textAlign: 'right' }}>
                     {can('republish.manage') && <button className="danger" onClick={() => remove(rule.id)}>{t('action.delete')}</button>}
                   </td>
                 </tr>
               );
             })}
-            {rules && rules.length === 0 && <tr><td colSpan={6} className="hint">No API-created republish rules.</td></tr>}
+            {rules && rules.length === 0 && <tr><td colSpan={7} className="hint">No API-created republish rules.</td></tr>}
           </tbody>
         </table>
         <div className="row" style={{ marginTop: 8 }}><button onClick={load}>Refresh</button></div>
