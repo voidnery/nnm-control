@@ -38,6 +38,7 @@ const SyncNote = () => (
 export function UdpTab({ serverId }) {
   const st = useStreamTags(serverId);
   const cp = useStreamCopy(serverId, 'udp');
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'udp');
@@ -247,6 +248,7 @@ export function UdpTab({ serverId }) {
 export function OutgoingTab({ serverId }) {
   const st = useStreamTags(serverId);
   const cp = useStreamCopy(serverId, 'outgoing');
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'outgoing');
@@ -639,6 +641,7 @@ const codecsOf = (o) => {
 export function MpegtsInTab({ serverId }) {
   const st = useStreamTags(serverId);
   const cp = useStreamCopy(serverId, 'incoming');
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'incoming');
@@ -769,6 +772,7 @@ export function MpegtsInTab({ serverId }) {
 export function LivePullTab({ serverId }) {
   const st = useStreamTags(serverId);
   const cp = useStreamCopy(serverId, 'livepull');
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'livepull');

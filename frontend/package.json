@@ -1,11 +1,13 @@
 {
   "name": "nnm-control-frontend",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "audit:hooks": "python3 scripts/hook-binding-audit.py",
+    "audit:render": "node scripts/render-smoke.mjs"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
@@ -15,6 +17,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^25.0.1",
     "vite": "^5.4.0"
   }
 }

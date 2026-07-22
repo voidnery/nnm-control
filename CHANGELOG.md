@@ -1,5 +1,19 @@
 # Changelog
 
+## iter6 hotfix
+### v0.6.4 — fix blank screen on RTMP Pull / SRT tabs
+- Root cause: UdpTab, OutgoingTab, LivePullTab and MpegtsInTab used t() in JSX
+  (added with the tags column in m3) but never bound `const { t } = useI18n()`,
+  so `t` was undefined and those tabs threw at render → blank screen. This is
+  a runtime error esbuild can't catch, which is why the build was green
+- Fix: bound t in all four components
+- Hardening: added a per-component hook-binding static audit
+  (scripts/hook-binding-audit.py, `npm run audit:hooks`) that flags any
+  component using t/can/push/confirm without declaring it, and a headless
+  render smoke test (scripts/render-smoke.mjs, `npm run audit:render`) that
+  mounts every stream tab with sample data and asserts no crash. Both pass;
+  the earlier file-level i18n check that missed this is superseded
+
 ## iter6 — server functionality in the panel (in progress)
 ### v0.6.3 (m4) — copy streams between servers
 - Multi-select streams in SRT Out / SRT in Nimble / RTMP Pull / SRT In (leading
