@@ -106,7 +106,12 @@ export const wmspanel = {
   // Transcoders — ACCOUNT-level (server_id is an attribute). The _sid
   // parameter is accepted but unused, keeping the KIND_OPS call shape uniform.
   transcoderList:   (cfg, _sid) => call(cfg, `/transcoder`),
-  transcoderGet:    (cfg, id) => call(cfg, `/transcoder/${id}`),
+  transcoderGet:    (cfg, id) => call(cfg, `/transcoder/${id}?details=true`),
+  // Pipeline sub-objects (kind = 'video'|'audio', io = 'input'|'filter'|'output').
+  pipelineGet:      (cfg, id, kind, pid) => call(cfg, `/transcoder/${id}/pipeline/${kind}/${pid}`),
+  pipelineDelete:   (cfg, id, kind, pid) => call(cfg, `/transcoder/${id}/pipeline/${kind}/${pid}`, { method: 'DELETE' }),
+  pipelineIoUpdate: (cfg, id, kind, pid, io, ioId, body) => call(cfg, `/transcoder/${id}/pipeline/${kind}/${pid}/${io}/${ioId}`, { method: 'PUT', body }),
+  pipelineIoDelete: (cfg, id, kind, pid, io, ioId) => call(cfg, `/transcoder/${id}/pipeline/${kind}/${pid}/${io}/${ioId}`, { method: 'DELETE' }),
   transcoderUpdate: (cfg, _sid, id, patch) => call(cfg, `/transcoder/${id}`, { method: 'PUT', body: patch }),
   transcoderPause:  (cfg, id) => call(cfg, `/transcoder/${id}/pause`),
   transcoderResume: (cfg, id) => call(cfg, `/transcoder/${id}/resume`),

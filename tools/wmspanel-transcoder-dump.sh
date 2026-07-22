@@ -18,6 +18,8 @@
 # Optional:
 #   BASE_URL=https://api.wmspanel.com/v1   (default: .com — transcoders live there)
 #   MAX_TRANSCODERS=5                      (how many scenarios to walk deeply)
+#   TRANSCODER_ID=<id>                     (dump ONLY this transcoder, deeply —
+#                                           use one that HAS pipelines)
 #
 # Output: ./wmspanel-transcoder-<ts>/ + a .tar.gz next to it.
 #   *.json           — raw responses (MAY contain stream keys/urls — private!)
@@ -30,6 +32,7 @@ BASE_URL="${BASE_URL:-https://api.wmspanel.com/v1}"
 : "${CLIENT_ID:?Set CLIENT_ID env var}"
 : "${API_KEY:?Set API_KEY env var}"
 MAX_TRANSCODERS="${MAX_TRANSCODERS:-5}"
+TARGET_ID="${TRANSCODER_ID:-}"
 
 OUT="wmspanel-transcoder-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$OUT"
@@ -52,10 +55,11 @@ fetch "/transcoder" "transcoder-list.json" || { echo "FATAL: cannot list transco
 fetch "/licenses/transcoder" "licenses-transcoder.json" || true
 
 # Walk each transcoder scenario and its pipeline sub-objects.
-python3 - "$OUT" "$BASE_URL" "$AUTH" "$MAX_TRANSCODERS" << 'PY'
+python3 - "$OUT" "$BASE_URL" "$AUTH" "$MAX_TRANSCODERS" "$TARGET_ID" << 'PY'
 import json, sys, os, urllib.request, urllib.error
 
 out, base, auth, maxn = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+target = sys.argv[5] if len(sys.argv) > 5 else ""
 
 def get(path, outfile):
     sep = '&' if '?' in path else '?'
@@ -79,22 +83,42 @@ def get(path, outfile):
 
 lst = json.load(open(os.path.join(out, 'transcoder-list.json')))
 tcs = lst.get('transcoders') or lst.get('transcoder') or []
-print(f"  {len(tcs)} transcoder(s); walking up to {maxn} deeply")
+if target:
+    tcs = [t for t in tcs if t.get('id') == target]
+    print(f"  targeting transcoder {target}: {'found' if tcs else 'NOT FOUND in list'}")
+else:
+    print(f"  {len(tcs)} transcoder(s); walking up to {maxn} deeply")
+
+pipeline_report = []
 
 for tc in tcs[:maxn]:
     tid = tc.get('id')
     if not tid:
         continue
-    scen = get(f"/transcoder/{tid}", f"scenario-{tid}.json")
+    scen = get(f"/transcoder/{tid}?details=true", f"scenario-{tid}.json")
     if not scen:
         continue
     t = scen.get('transcoder') or scen
-    pipelines = t.get('pipelines') or t.get('pipeline') or []
+    # Real schema (from details=true): video_pipelines[] and audio_pipelines[],
+    # each with inputs[]/filters[]/outputs[]. Keep legacy fallbacks just in case.
+    vpls = t.get('video_pipelines') or []
+    apls = t.get('audio_pipelines') or []
+    if not vpls and not apls:
+        legacy = t.get('pipelines') or t.get('pipeline') or []
+        if isinstance(legacy, dict):
+            vpls, apls = legacy.get('video') or [], legacy.get('audio') or []
+        elif isinstance(legacy, list):
+            for pl in legacy:
+                (vpls if (pl.get('type') or '').lower() != 'audio' else apls).append(pl)
+    n_pl = len(vpls) + len(apls)
+    pipeline_report.append((t.get('name', tid), n_pl))
     # pipelines may be a list of {id, type, ...} or split video/audio arrays
     def walk_pipeline(kind, pl):
         pid = pl.get('id')
         if not pid:
             return
+        # The pipeline object is already embedded in the details response, but
+        # also fetch the dedicated endpoint to capture its exact standalone shape.
         get(f"/transcoder/{tid}/pipeline/{kind}/{pid}", f"pipeline-{kind}-{pid}.json")
         for io in ('input', 'filter', 'output'):
             for item in (pl.get(io + 's') or pl.get(io) or []):
@@ -102,19 +126,20 @@ for tc in tcs[:maxn]:
                 if iid:
                     get(f"/transcoder/{tid}/pipeline/{kind}/{pid}/{io}/{iid}",
                         f"{kind}-{io}-{iid}.json")
-    if isinstance(pipelines, list):
-        for pl in pipelines:
-            kind = (pl.get('type') or pl.get('kind') or '').lower()
-            if kind not in ('video', 'audio'):
-                # try both if unknown
-                for k in ('video', 'audio'):
-                    walk_pipeline(k, pl)
-            else:
-                walk_pipeline(kind, pl)
-    elif isinstance(pipelines, dict):
-        for kind in ('video', 'audio'):
-            for pl in (pipelines.get(kind) or []):
-                walk_pipeline(kind, pl)
+    for pl in vpls:
+        walk_pipeline('video', pl)
+    for pl in apls:
+        walk_pipeline('audio', pl)
+
+print("")
+print("  PIPELINE REPORT (transcoder -> pipelines found):")
+for name, n in pipeline_report:
+    flag = "" if n else "   <-- no pipelines (passthrough)"
+    print(f"    {name}: {n}{flag}")
+if not any(n for _, n in pipeline_report):
+    print("  >> NONE of the sampled transcoders have pipelines. To build the")
+    print("  >> pipeline editor, re-run with TRANSCODER_ID=<id> pointing at a")
+    print("  >> transcoder that actually transcodes (has video/audio pipelines).")
 PY
 
 # Build a redacted schema summary from all pretty JSON files.

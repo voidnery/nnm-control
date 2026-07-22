@@ -1,6 +1,41 @@
 # Changelog
 
+## iter5 (v0.5.x) — continued
+### v0.5.2 (m3) — transcoder pipeline editor
+- Built from the real WMSPanel schema captured via ?details=true (8 video +
+  8 audio pipelines dumped): editor for video/audio pipelines with correct,
+  differing field sets — inputs (app/stream/main + forward flags: video has
+  sei_timecodes/dvb_teletext, audio has metadata), outputs (codec/encoder/
+  key-value params/key_frame_alignment + forward flags), filters (video
+  type/name/params incl. picture overlay filename/width/x/y; audio type/
+  outputs_number)
+- Backend: GET /transcoder/{id} now requests details=true so pipelines come
+  through; proxy routes for pipeline sub-object GET/PUT/DELETE and pipeline
+  DELETE; client methods pipelineGet/Delete/IoUpdate/IoDelete
+- Frontend: "Pipelines" button on each transcoder opens an editor modal;
+  per-input/filter/output Save (PUT) and Delete, per-pipeline delete; EN/RU
+- Editor logic verified against the real dumped scenario (fields/params parse
+  correctly). NOTE: write paths (PUT/DELETE) are built to the documented
+  endpoints but not yet exercised against the live API — validate on one
+  non-critical transcoder first (flagged, per our deferred-validation rule)
+
 ## iter5 (v0.5.x) — transcoder pipelines, playlists, SRT helper
+### v0.5.x (m3 prep) — transcoder pipeline schema probe
+- FIX dump script: `GET /transcoder/{id}` needs `?details=true` to return
+  `video_pipelines[]`/`audio_pipelines[]` (each with inputs/filters/outputs;
+  inputs have a `main` flag). Earlier empty results were the missing param,
+  not passthrough transcoders. Script now requests details and parses the
+  real field names; verified against a details=true fixture
+- Dump of 5 production transcoders showed all are passthrough — `GET
+  /transcoder/{id}` returns metadata only, no pipelines; WMSPanel exposes
+  pipeline ids only via the scenario response and has no list-pipelines
+  endpoint. Pipeline editor forms need a populated transcoder to pin the
+  input/filter/output schema (won't guess from docs)
+- `wmspanel-transcoder-dump.sh` gained TRANSCODER_ID targeting and an explicit
+  per-transcoder pipeline-count report so the next sample is decisive
+- Transcoder metadata editing (name/description/tags) already shipped earlier;
+  no fabricated pipeline UI added
+
 ### v0.5.1 (m2) — Playlist Builder (Nimble Playout)
 - Ported the Playout playlist engine to JS (playlist_engine.py): model
   Tasks → Blocks → Sources, clean JSON build (drops empty/default fields;

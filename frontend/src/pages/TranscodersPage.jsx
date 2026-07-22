@@ -5,6 +5,8 @@ import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import Modal from '../components/Modal.jsx';
+import PipelineEditor from '../components/PipelineEditor.jsx';
 
 // Transcoders are account-level in WMSPanel; server_id is an attribute.
 // Scope here: list + pause/resume/clone + raw details; licenses with expiry
@@ -12,6 +14,7 @@ import { useConfirm } from '../confirm.jsx';
 export default function TranscodersPage() {
   const confirm = useConfirm();
   const { t } = useI18n();
+  const tt = t; // i18n alias usable inside the `t`(transcoder) map scope
   const { can } = useAuth();
   const [transcoders, setTranscoders] = useState(null);
   const [licenses, setLicenses] = useState([]);
@@ -20,6 +23,7 @@ export default function TranscodersPage() {
   const [serverFilter, setServerFilter] = useState('');
   const [detail, setDetail] = useState(null);
   const [editModal, setEditModal] = useState(null);
+  const [pipeModal, setPipeModal] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -89,6 +93,7 @@ export default function TranscodersPage() {
                 <td><span className={'lamp ' + (t.paused ? 'off' : 'on')} />{t.paused ? 'paused' : 'running'}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button onClick={() => openDetail(t)}>Details</button>{' '}
+                    <button onClick={() => setPipeModal({ id: t.id, name: t.name })}>{tt('tc.pipelines')}</button>{' '}
                   {can('wmsobjects.manage') && <>
                     {t.paused
                       ? <button className="primary" disabled={busy} onClick={() => act(t, 'resume')}>Resume</button>
@@ -205,6 +210,17 @@ export default function TranscodersPage() {
             </div>
           </div>
         </div>
+      )}
+    {pipeModal && (
+        <Modal onClose={() => setPipeModal(null)} size="xwide">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0 }}>{tt('tc.pipelines')} — {pipeModal.name}</h3>
+            <button onClick={() => setPipeModal(null)}>{tt('action.close')}</button>
+          </div>
+          <div style={{ maxHeight: '78vh', overflow: 'auto', marginTop: 10 }}>
+            <PipelineEditor transcoderId={pipeModal.id} onClose={() => setPipeModal(null)} />
+          </div>
+        </Modal>
       )}
     </div>
   );

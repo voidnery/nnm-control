@@ -192,3 +192,13 @@ r.delete('/transcoders/:objId', requirePerm('wmsobjects.manage'),
   proxy(async rq => wmspanel.transcoderDelete(await cfg(), rq.params.objId)));
 r.put('/transcoders/:objId', requirePerm('wmsobjects.manage'),
   proxy(async rq => wmspanel.transcoderUpdate(await cfg(), null, rq.params.objId, rq.body || {})));
+
+// Transcoder pipeline sub-objects. kind ∈ video|audio, io ∈ input|filter|output.
+r.get('/transcoders/:objId/pipeline/:kind(video|audio)/:pid', requirePerm('wmsobjects.view'),
+  proxy(async rq => wmspanel.pipelineGet(await cfg(), rq.params.objId, rq.params.kind, rq.params.pid)));
+r.delete('/transcoders/:objId/pipeline/:kind(video|audio)/:pid', requirePerm('wmsobjects.manage'),
+  proxy(async rq => wmspanel.pipelineDelete(await cfg(), rq.params.objId, rq.params.kind, rq.params.pid)));
+r.put('/transcoders/:objId/pipeline/:kind(video|audio)/:pid/:io(input|filter|output)/:ioId', requirePerm('wmsobjects.manage'),
+  proxy(async rq => wmspanel.pipelineIoUpdate(await cfg(), rq.params.objId, rq.params.kind, rq.params.pid, rq.params.io, rq.params.ioId, rq.body || {})));
+r.delete('/transcoders/:objId/pipeline/:kind(video|audio)/:pid/:io(input|filter|output)/:ioId', requirePerm('wmsobjects.manage'),
+  proxy(async rq => wmspanel.pipelineIoDelete(await cfg(), rq.params.objId, rq.params.kind, rq.params.pid, rq.params.io, rq.params.ioId)));
