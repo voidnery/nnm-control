@@ -217,22 +217,25 @@ function ControlTab({ serverId }) {
 // and are only available in backup (native) control plane mode; 'wmspanel'
 // tabs work through WMSPanel API.
 const TABS = [
-  { key: 'streams',   label: 'Streams',   perm: 'streams.view',   el: StreamsTab,   plane: 'native' },
-  { key: 'sessions',  label: 'Sessions',  perm: 'sessions.view',  el: SessionsTab,  plane: 'native' },
-  { key: 'srt',       label: 'SRT',       perm: 'srt.view',       el: SrtTab,       plane: 'native' },
-  { key: 'republish', label: 'RTMP Push', perm: 'republish.view', el: RepublishTab, plane: 'both' },
-  { key: 'wstreams',  label: 'Streams',   perm: 'streams.view',    el: WmsStreamsTab, plane: 'wmspanel' },
-  { key: 'win',       label: 'SRT In', perm: 'wmsobjects.view', el: MpegtsInTab, plane: 'wmspanel' },
-  { key: 'wudp',      label: 'SRT Out',   perm: 'wmsobjects.view', el: UdpTab,      plane: 'wmspanel' },
-  { key: 'wout',      label: 'SRT in Nimble',  perm: 'wmsobjects.view', el: OutgoingTab, plane: 'wmspanel' },
-  { key: 'whot',      label: 'Hotswap',   perm: 'wmsobjects.view', el: HotswapTab,  plane: 'wmspanel' },
-  { key: 'wpull',     label: 'RTMP Pull', perm: 'wmsobjects.view', el: LivePullTab, plane: 'wmspanel' },
-  { key: 'wapps',     label: 'Apps',      perm: 'wmsobjects.view', el: AppsTab,     plane: 'wmspanel' },
-  { key: 'wifaces',   label: 'Interfaces',perm: 'wmsobjects.view', el: InterfacesTab, plane: 'wmspanel' },
-  { key: 'mpegts',    label: 'MPEG-TS',   perm: 'mpegts.view',    el: MpegtsTab,    plane: 'native' },
-  { key: 'playlist',  label: 'Playout',   perm: 'playlist.view',  el: PlaylistTab,  plane: 'native' },
-  { key: 'control',   label: 'Control',   perm: 'control.manage', el: ControlTab,   plane: 'native' },
+  { key: 'streams',   label: 'Streams',   perm: 'streams.view',   el: StreamsTab,   plane: 'native',   group: 'general' },
+  { key: 'sessions',  label: 'Sessions',  perm: 'sessions.view',  el: SessionsTab,  plane: 'native',   group: 'general' },
+  { key: 'wstreams',  label: 'Streams',   perm: 'streams.view',    el: WmsStreamsTab, plane: 'wmspanel', group: 'general' },
+  { key: 'wapps',     label: 'Apps',      perm: 'wmsobjects.view', el: AppsTab,     plane: 'wmspanel', group: 'general' },
+  { key: 'wifaces',   label: 'Interfaces',perm: 'wmsobjects.view', el: InterfacesTab, plane: 'wmspanel', group: 'general' },
+  { key: 'republish', label: 'RTMP Push', perm: 'republish.view', el: RepublishTab, plane: 'both',      group: 'rtmp' },
+  { key: 'wpull',     label: 'RTMP Pull', perm: 'wmsobjects.view', el: LivePullTab, plane: 'wmspanel', group: 'rtmp' },
+  { key: 'srt',       label: 'SRT',       perm: 'srt.view',       el: SrtTab,       plane: 'native',   group: 'srt' },
+  { key: 'win',       label: 'SRT In',    perm: 'wmsobjects.view', el: MpegtsInTab, plane: 'wmspanel', group: 'srt' },
+  { key: 'wudp',      label: 'SRT Out',   perm: 'wmsobjects.view', el: UdpTab,      plane: 'wmspanel', group: 'srt' },
+  { key: 'wout',      label: 'SRT in Nimble', perm: 'wmsobjects.view', el: OutgoingTab, plane: 'wmspanel', group: 'srt' },
+  { key: 'mpegts',    label: 'MPEG-TS',   perm: 'mpegts.view',    el: MpegtsTab,    plane: 'native',   group: 'srt' },
+  { key: 'whot',      label: 'Hotswap',   perm: 'wmsobjects.view', el: HotswapTab,  plane: 'wmspanel', group: 'other' },
+  { key: 'playlist',  label: 'Playout',   perm: 'playlist.view',  el: PlaylistTab,  plane: 'native',   group: 'other' },
+  { key: 'control',   label: 'Control',   perm: 'control.manage', el: ControlTab,   plane: 'native',   group: 'system' },
 ];
+
+const GROUP_ORDER = ['general', 'rtmp', 'srt', 'other', 'system'];
+const GROUP_LABEL = { general: 'general', rtmp: 'RTMP', srt: 'SRT', other: 'other', system: 'system' };
 
 export default function ServerDetailPage() {
   const { id } = useParams();
@@ -240,10 +243,13 @@ export default function ServerDetailPage() {
   const { t } = useI18n();
   const [server, setServer] = useState(null);
   const wms = sys?.controlPlane === 'wmspanel';
-  const visibleTabs = useMemo(
-    () => TABS.filter(tab => can(tab.perm) && (wms ? tab.plane !== 'native' : tab.plane !== 'wmspanel')),
-    [can, wms]
-  );
+  const visibleTabs = useMemo(() => {
+    const shown = TABS.filter(tab => can(tab.perm) && (wms ? tab.plane !== 'native' : tab.plane !== 'wmspanel'));
+    return shown
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => (GROUP_ORDER.indexOf(a.t.group) - GROUP_ORDER.indexOf(b.t.group)) || (a.i - b.i))
+      .map(x => x.t);
+  }, [can, wms]);
   const [tab, setTab] = useState(null);
 
   useEffect(() => {
@@ -253,6 +259,11 @@ export default function ServerDetailPage() {
     if (!tab && visibleTabs.length) setTab(visibleTabs[0].key);
   }, [visibleTabs, tab]);
 
+  const t2GroupTitle = (g) => {
+    const key = 'tabgroup.' + g;
+    const v = t(key);
+    return v === key ? g : v;
+  };
   const Active = visibleTabs.find(t => t.key === tab)?.el;
   return (
     <div>
@@ -265,9 +276,16 @@ export default function ServerDetailPage() {
         </div>
       )}
       <div className="tabs">
-        {visibleTabs.map(t => (
-          <button key={t.key} className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}>{t.label}</button>
-        ))}
+        {visibleTabs.map((t, i) => {
+          const newGroup = i === 0 || visibleTabs[i - 1].group !== t.group;
+          return (
+            <span key={t.key} style={{ display: 'contents' }}>
+              {newGroup && i !== 0 && <span className="tab-sep" aria-hidden="true" />}
+              <button className={tab === t.key ? 'active' : ''} onClick={() => setTab(t.key)}
+                      title={GROUP_LABEL[t.group] ? t2GroupTitle(t.group) : undefined}>{t.label}</button>
+            </span>
+          );
+        })}
       </div>
       {Active && <Active serverId={id} server={server} />}
     </div>

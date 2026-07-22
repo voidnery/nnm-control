@@ -1,5 +1,15 @@
 # Changelog
 
+## iter6 — server functionality in the panel (in progress)
+### v0.6.0 (m1) — button placement + tab grouping
+- Moved Refresh/New buttons above the list on the tabs where they were below
+  (SRT Out, SRT in Nimble, Hotswap, Interfaces); the rest already had them on
+  top. Consistent with the RTMP Pull layout
+- Grouped server tabs by category with visual separators: General (leftmost) →
+  RTMP (Push, Pull) → SRT (SRT/SRT In/SRT Out/SRT in Nimble/MPEG-TS) → Other
+  (Hotswap, Playout) → System (Control). Works in both control planes; EN/RU
+  group labels on hover
+
 ## iter5 (v0.5.x) — continued
 ### v0.5.2 (m3) — transcoder pipeline editor
 - Built from the real WMSPanel schema captured via ?details=true (8 video +

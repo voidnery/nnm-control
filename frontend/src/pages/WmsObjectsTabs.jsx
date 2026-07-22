@@ -115,6 +115,10 @@ export function UdpTab({ serverId }) {
       <SyncNote />
       {sys?.srtHelperEnabled && <SrtHelper />}
       {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load} disabled={busy}>Refresh</button>
+        {can('wmsobjects.manage') && <button className="primary" disabled={busy} onClick={() => openCfg(null)}>+ New output</button>}
+      </div>
       <div className="panel">
         <table>
           <thead><tr><th>Name</th><th>Proto</th><th>Destination</th><th>Source</th><th>State</th><th></th></tr></thead>
@@ -145,10 +149,7 @@ export function UdpTab({ serverId }) {
             {settings.length === 0 && <tr><td colSpan={6} className="hint">No UDP/SRT outputs on this server.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}>
-          <button onClick={load} disabled={busy}>Refresh</button>
-          {can('wmsobjects.manage') && <button className="primary" disabled={busy} onClick={() => openCfg(null)}>+ New output</button>}
-        </div>
+
       </div>
       {cfgModal && (
         <div className="modal-back" {...backdropClose(() => setCfgModal(null))}>
@@ -290,6 +291,15 @@ export function OutgoingTab({ serverId }) {
     <div>
       <SyncNote />
       {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load} disabled={busy}>Refresh</button>
+        {can('wmsobjects.manage') && (
+          <button className="primary" disabled={busy}
+                  onClick={() => setModal({ application: '', stream: '', description: '', video_source: '', audio_source: '' })}>
+            + New outgoing
+          </button>
+        )}
+      </div>
       <div className="panel">
         <table>
           <thead><tr><th>Output</th><th>Delivery</th><th>State</th><th></th></tr></thead>
@@ -322,15 +332,6 @@ export function OutgoingTab({ serverId }) {
             {streams.length === 0 && <tr><td colSpan={4} className="hint">No MPEGTS outgoing streams on this server.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}>
-          <button onClick={load} disabled={busy}>Refresh</button>
-          {can('wmsobjects.manage') && (
-            <button className="primary" disabled={busy}
-                    onClick={() => setModal({ application: '', stream: '', description: '', video_source: '', audio_source: '' })}>
-              + New outgoing
-            </button>
-          )}
-        </div>
       </div>
       {modal && (
         <div className="modal-back" {...backdropClose(() => setModal(null))}>
@@ -407,6 +408,10 @@ export function HotswapTab({ serverId }) {
         substitute-поток вместо оригинала; выключение возвращает оригинал. Правила и выходы не трогаются.
       </div>
       {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load} disabled={busy}>Refresh</button>
+        {can('wmsobjects.manage') && <button onClick={() => setCreating(v => !v)}>{creating ? 'Close form' : '+ New hot swap'}</button>}
+      </div>
       <div className="panel">
         <table>
           <thead><tr><th>Original</th><th>Substitute</th><th>Emergency</th><th>State</th><th></th></tr></thead>
@@ -439,10 +444,7 @@ export function HotswapTab({ serverId }) {
             {settings.length === 0 && <tr><td colSpan={5} className="hint">No hot swap settings on this server.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}>
-          <button onClick={load} disabled={busy}>Refresh</button>
-          {can('wmsobjects.manage') && <button onClick={() => setCreating(v => !v)}>{creating ? 'Close form' : '+ New hot swap'}</button>}
-        </div>
+
       </div>
       {creating && (
         <div className="panel">
@@ -982,6 +984,12 @@ export function InterfacesTab({ serverId }) {
     <div>
       <SyncNote />
       {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load} disabled={busy}>Refresh</button>
+        {can('wmsobjects.manage') && (
+          <button className="primary" disabled={busy} onClick={() => setModal({ ip: '0.0.0.0', port: 1935, ssl: false })}>+ New interface</button>
+        )}
+      </div>
       <div className="panel">
         <table>
           <thead><tr><th>IP</th><th>Port</th><th>SSL</th><th></th></tr></thead>
@@ -1002,12 +1010,7 @@ export function InterfacesTab({ serverId }) {
             {list.length === 0 && <tr><td colSpan={4} className="hint">No RTMP interfaces.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}>
-          <button onClick={load} disabled={busy}>Refresh</button>
-          {can('wmsobjects.manage') && (
-            <button className="primary" disabled={busy} onClick={() => setModal({ ip: '0.0.0.0', port: 1935, ssl: false })}>+ New interface</button>
-          )}
-        </div>
+
       </div>
       {modal && (
         <div className="modal-back" {...backdropClose(() => setModal(null))}>
