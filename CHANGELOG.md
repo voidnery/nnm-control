@@ -1,7 +1,27 @@
 # Changelog
 
 ## iter5 (v0.5.x) — transcoder pipelines, playlists, SRT helper
-### v0.5.0 (m1) — SRT settings helper
+### v0.5.1 (m2) — Playlist Builder (Nimble Playout)
+- Ported the Playout playlist engine to JS (playlist_engine.py): model
+  Tasks → Blocks → Sources, clean JSON build (drops empty/default fields;
+  VOD-only fields excluded for live sources), parse/round-trip and validation.
+  Output verified byte-for-byte identical to the Python original, round-trip
+  stable
+- New Playlists page: full CRUD stored in the panel DB (no WMSPanel API exists
+  for playlists — native Nimble feature). Nested editor for tasks/blocks/
+  sources with add/duplicate/remove, seconds↔ms time fields, "GMT now" and
+  "new block Id" helpers, live JSON preview, import existing JSON, copy and
+  download, and live validation with human-readable notes (EN/RU)
+- Backend: Playlist model + CRUD routes (audited: playlist:create/update/
+  delete), new `playlist.manage` permission; `playlist.view` grants read
+- EN/RU strings throughout
+
+### v0.5.0 (m1) — SRT settings helper + transcoder scenario probe
+- New tool `tools/wmspanel-transcoder-dump.sh`: walks the full transcoder
+  "Scenario" API subtree (list → scenario → video/audio pipeline →
+  input/filter/output) and the transcoder license view; emits raw JSON plus a
+  redacted `_schema.txt` (field names + types, values masked) to design the
+  pipeline editor from the real schema. Prep for m3.
 - Ported the SRT Settings Helper engine to JS (faithful to the desktop tool;
   outputs verified equal to the Python original across scenarios): given a
   bitrate, channel scenario (local/russia/inter) and a drops flag, it computes

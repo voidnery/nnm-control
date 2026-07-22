@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   { key: 'republish.manage',  label: 'Republish: create / delete rules' },
   { key: 'mpegts.view',       label: 'MPEG-TS: view status & settings' },
   { key: 'playlist.view',     label: 'Playout: view server playlist status' },
+  { key: 'playlist.manage',   label: 'Playlists: create / edit / delete server playlists' },
   { key: 'control.manage',    label: 'Control: reload config / SSL, sync WMSPanel' },
   { key: 'users.manage',      label: 'Users: manage panel users' },
   { key: 'roles.manage',      label: 'Roles: manage custom roles' },
