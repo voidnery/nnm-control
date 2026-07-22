@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
+
+export const APP_VERSION = '0.4.0'; // keep in sync with package.json
 import { api } from './api.js';
 import SetupPage from './pages/SetupPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
@@ -35,6 +37,7 @@ function Layout({ children }) {
           {can('settings.manage') && <NavLink to="/settings">Settings</NavLink>}
         </nav>
         <div className="spacer" />
+        <div className="verline">NNM Control v{APP_VERSION}</div>
         <div className="userbox">
           <div className="mono">{user.username}</div>
           <div>{user.roleType}</div>

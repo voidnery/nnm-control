@@ -1,5 +1,21 @@
 # Changelog
 
+## iter3 (v0.4.x) — UX & design overhaul
+### v0.4.0 (m1) — design foundation
+- Theme system: dark / light / system (auto), via `data-theme` and CSS
+  variables; light palette added; persisted in a cookie (no localStorage)
+- Custom `Modal` component with SAFE close: a drag that starts inside the
+  dialog and releases on the backdrop no longer closes it — only a genuine
+  press-and-release on the backdrop (or Esc) closes; open animation; width
+  variants (narrow/default/wide/xwide) for later per-user preference
+- Custom themed `Select` component (button + popover, optional search) — base
+  for migrating all dropdowns next
+- App version shown above the profile box in the sidebar
+- Server tabs renamed to operator-friendly labels: Republish→RTMP Push,
+  MPEGTS In→SRT In, UDP/SRT→SRT Out, Outgoing→SRT in Nimble, Live Pull→RTMP
+  Pull (Streams unchanged; keys/permissions unchanged)
+- Native caret styling unified for remaining native selects across themes
+
 Iteration ↔ version mapping: new iteration = minor bump, fixes inside an
 iteration = patch bump.
 
