@@ -1,5 +1,16 @@
 # Changelog
 
+## iter5 (v0.5.x) — transcoder pipelines, playlists, SRT helper
+### v0.5.0 (m1) — SRT settings helper
+- Ported the SRT Settings Helper engine to JS (faithful to the desktop tool;
+  outputs verified equal to the Python original across scenarios): given a
+  bitrate, channel scenario (local/russia/inter) and a drops flag, it computes
+  latency, maxbw (bytes/s), snd/rcv buffers, fc and a sysctl block, with URL
+  query and localized guidance notes
+- SRT helper widget on the SRT In and SRT Out tabs (collapsible, copy buttons)
+- Toggle in system Settings (srtHelperEnabled, default on) to show/hide it
+- Full EN/RU strings; notes preserved from the original tool
+
 ## iter4 (v0.4.x) — UX refinement round 2
 ### v0.4.6 (iter4) — styled confirms, pinned sidebar, toast fix, more i18n
 - All confirmation dialogs are now in-app styled modals (promise-based

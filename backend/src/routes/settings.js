@@ -10,13 +10,14 @@ settingsRouter.use(requireAuth);
 // Public subset for any authenticated user (UI needs the active control plane).
 settingsRouter.get('/public', async (_req, res) => {
   const s = await Settings.load();
-  res.json({ controlPlane: s.controlPlane, wmspanelConfigured: Boolean(s.wmspanel.clientId && s.wmspanel.apiKey) });
+  res.json({ controlPlane: s.controlPlane, wmspanelConfigured: Boolean(s.wmspanel.clientId && s.wmspanel.apiKey), srtHelperEnabled: s.srtHelperEnabled !== false });
 });
 
 settingsRouter.use(requirePerm('settings.manage'));
 
 const pub = (s) => ({
   controlPlane: s.controlPlane,
+  srtHelperEnabled: s.srtHelperEnabled !== false,
   wmspanel: {
     baseUrl: s.wmspanel.baseUrl,
     clientId: s.wmspanel.clientId,
@@ -28,7 +29,7 @@ settingsRouter.get('/', async (_req, res) => res.json(pub(await Settings.load())
 
 settingsRouter.put('/', async (req, res) => {
   const s = await Settings.load();
-  const { controlPlane, wmspanel: wp } = req.body || {};
+  const { controlPlane, wmspanel: wp, srtHelperEnabled } = req.body || {};
   if (controlPlane !== undefined) {
     if (!['wmspanel', 'native'].includes(controlPlane)) return res.status(400).json({ error: 'controlPlane must be wmspanel or native' });
     if (controlPlane === 'wmspanel' && !( (wp?.clientId ?? s.wmspanel.clientId) && (wp?.apiKey ?? s.wmspanel.apiKey) )) {
@@ -36,6 +37,7 @@ settingsRouter.put('/', async (req, res) => {
     }
     s.controlPlane = controlPlane;
   }
+  if (srtHelperEnabled !== undefined) s.srtHelperEnabled = Boolean(srtHelperEnabled);
   if (wp) {
     if (wp.baseUrl !== undefined) {
       const url = String(wp.baseUrl).trim();

@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
+import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
@@ -34,7 +35,7 @@ const SyncNote = () => (
 // ---------------------------------------------------------------- UDP / SRT
 export function UdpTab({ serverId }) {
   const confirm = useConfirm();
-  const { can } = useAuth();
+  const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'udp');
   const [incoming, setIncoming] = useState([]);
   const [edit, setEdit] = useState(null); // { id, name, mode: 'incoming'|'streams', source_id, sources: [...] }
@@ -112,6 +113,7 @@ export function UdpTab({ serverId }) {
   return (
     <div>
       <SyncNote />
+      {sys?.srtHelperEnabled && <SrtHelper />}
       {error && <div className="error-box">{error}</div>}
       <div className="panel">
         <table>
@@ -618,7 +620,7 @@ const codecsOf = (o) => {
 
 export function MpegtsInTab({ serverId }) {
   const confirm = useConfirm();
-  const { can } = useAuth();
+  const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'incoming');
   const [filter, setFilter] = useState('');
   const [modal, setModal] = useState(null); // {} for create, object for edit
@@ -654,6 +656,7 @@ export function MpegtsInTab({ serverId }) {
   return (
     <div>
       <SyncNote />
+      {sys?.srtHelperEnabled && <SrtHelper />}
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
         <input style={{ maxWidth: 260 }} placeholder="Filter name/description…" value={filter} onChange={e => setFilter(e.target.value)} />

@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState(BASE_URLS[0]);
   const [customUrl, setCustomUrl] = useState(false);
   const [controlPlane, setControlPlane] = useState('native');
+  const [srtHelperEnabled, setSrtHelperEnabled] = useState(true);
   const [test, setTest] = useState(null);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -31,13 +32,14 @@ export default function SettingsPage() {
     setBaseUrl(s.wmspanel.baseUrl);
     setCustomUrl(!BASE_URLS.includes(s.wmspanel.baseUrl));
     setControlPlane(s.controlPlane);
+    setSrtHelperEnabled(s.srtHelperEnabled !== false);
   };
   useEffect(() => { load().catch(e => setMsg({ ok: false, text: e.message })); }, []);
 
   const save = async () => {
     setBusy(true); setMsg(null);
     try {
-      const body = { controlPlane, wmspanel: { baseUrl, clientId } };
+      const body = { controlPlane, srtHelperEnabled, wmspanel: { baseUrl, clientId } };
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
       push({ type: 'ok', message: 'Settings saved' });
@@ -107,7 +109,14 @@ export default function SettingsPage() {
         <label>API key {settings.wmspanel.hasApiKey && <span className="hint">(set — leave empty to keep)</span>}</label>
         <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
                placeholder={settings.wmspanel.hasApiKey ? '•••••••••••' : ''} className="mono" />
-        <div className="row" style={{ marginTop: 14 }}>
+        <div className="panel">
+        <h2 style={{ marginTop: 0 }}>{t('settings.srtHelper')}</h2>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="checkbox" checked={srtHelperEnabled} onChange={e => setSrtHelperEnabled(e.target.checked)} />
+          {t('settings.srtHelper.desc')}
+        </label>
+      </div>
+      <div className="row" style={{ marginTop: 14 }}>
           <button onClick={runTest} disabled={busy || !clientId}>Test connection</button>
           <button className="primary" onClick={save} disabled={busy}>Save settings</button>
         </div>

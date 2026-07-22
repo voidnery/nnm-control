@@ -13,6 +13,8 @@ const settingsSchema = new mongoose.Schema({
   // 'wmspanel' — persistent changes via WMSPanel Control API (primary mode).
   // 'native'   — backup mode via Nimble native API (ephemeral rules; limited).
   controlPlane: { type: String, enum: ['wmspanel', 'native'], default: 'native' },
+  // Show the SRT settings helper (latency/maxbw/buffers calculator) on SRT tabs.
+  srtHelperEnabled: { type: Boolean, default: true },
 }, { timestamps: true });
 
 settingsSchema.statics.load = async function () {
