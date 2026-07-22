@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useConfirm } from '../confirm.jsx';
 
 // Account-level distribution: ABR ladders, application aliases, origin apps.
 // server_ids are edited as checkboxes of mapped panel servers and displayed
@@ -29,6 +30,7 @@ function ServerPicker({ servers, value, onChange }) {
 }
 
 export default function DistributionPage() {
+  const confirm = useConfirm();
   const { t } = useI18n();
   const { can } = useAuth();
   const [servers, setServers] = useState([]);
@@ -135,8 +137,8 @@ export default function DistributionPage() {
                       server_ids: o.server_ids || [],
                       sources: (o.source_streams || []).map(ss => ({ ...ss })),
                     })}>Edit</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => {
-                      if (window.confirm(`Delete ABR ${o.application}/${o.stream}?`))
+                    <button className="danger" disabled={busy} onClick={async () => {
+                      if (await confirm(`Delete ABR ${o.application}/${o.stream}?`))
                         act(() => api(`/wmspanel/abr/${o.id}`, { method: 'DELETE' }));
                     }}>Delete</button>
                   </>}
@@ -178,8 +180,8 @@ export default function DistributionPage() {
                       protocols: (o.protocols || []).join(','),
                       server_ids: o.server_ids || [], description: o.description || '',
                     })}>Edit</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => {
-                      if (window.confirm(`Delete alias set for ${o.application}?`))
+                    <button className="danger" disabled={busy} onClick={async () => {
+                      if (await confirm(`Delete alias set for ${o.application}?`))
                         act(() => api(`/wmspanel/aliases/${o.id}`, { method: 'DELETE' }));
                     }}>Delete</button>
                   </>}
@@ -210,8 +212,8 @@ export default function DistributionPage() {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => setOriginModal({ id: o.id, application: o.application, server_ids: o.server_ids || [] })}>Edit</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => {
-                      if (window.confirm(`Delete origin app ${o.application}?`))
+                    <button className="danger" disabled={busy} onClick={async () => {
+                      if (await confirm(`Delete origin app ${o.application}?`))
                         act(() => api(`/wmspanel/originapps/${o.id}`, { method: 'DELETE' }));
                     }}>Delete</button>
                   </>}

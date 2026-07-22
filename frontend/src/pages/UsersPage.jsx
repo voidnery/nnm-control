@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useConfirm } from '../confirm.jsx';
 
 function UserModal({ initial, roles, onClose, onSaved }) {
   const { user: me } = useAuth();
@@ -81,6 +82,7 @@ function UserModal({ initial, roles, onClose, onSaved }) {
 }
 
 export default function UsersPage() {
+  const confirm = useConfirm();
   const { t } = useI18n();
   const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
@@ -102,7 +104,7 @@ export default function UsersPage() {
   };
 
   const remove = async (u) => {
-    if (!window.confirm(`Delete user "${u.username}"?`)) return;
+    if (!(await confirm(`Delete user "${u.username}"?`))) return;
     try { await api(`/users/${u.id}`, { method: 'DELETE' }); load(); }
     catch (e) { setError(e.message); }
   };
@@ -128,7 +130,7 @@ export default function UsersPage() {
                   {u.twoFactorEnabled && (
                     <>
                       <button title="Reset this user's 2FA" onClick={async () => {
-                        if (!window.confirm(`Reset 2FA for ${u.username}? They will sign in with password only until they set it up again.`)) return;
+                        if (!(await confirm(`Reset 2FA for ${u.username}? They will sign in with password only until they set it up again.`))) return;
                         try { await api(`/users/${u.id}/reset-2fa`, { method: 'POST' }); await load(); }
                         catch (e) { setError(e.message); }
                       }}>Reset 2FA</button>{' '}

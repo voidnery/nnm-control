@@ -5,6 +5,8 @@ import { useAuth } from '../auth.jsx';
 import RepublishTab from './RepublishTab.jsx';
 import { UdpTab, OutgoingTab, HotswapTab, WmsStreamsTab, MpegtsInTab, LivePullTab, AppsTab, InterfacesTab } from './WmsObjectsTabs.jsx';
 import DataView, { CopyJsonButton } from '../components/DataView.jsx';
+import { useConfirm } from '../confirm.jsx';
+import { useI18n } from '../i18n.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -65,6 +67,7 @@ function StreamsTab({ serverId }) {
 }
 
 function SessionsTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [state] = useNimble(serverId, `sessions?k=${refreshKey}`, { poll: 15000 });
@@ -75,7 +78,7 @@ function SessionsTab({ serverId }) {
   const ids = Object.keys(selected).filter(k => selected[k]).map(Number);
 
   const disconnect = async () => {
-    if (!window.confirm(`Disconnect ${ids.length} session(s)?`)) return;
+    if (!(await confirm(`Disconnect ${ids.length} session(s)?`))) return;
     await api(`/nimble/${serverId}/sessions/delete`, { method: 'POST', body: { ids } });
     setSelected({});
     setRefreshKey(k => k + 1);
@@ -181,9 +184,10 @@ function PlaylistTab({ serverId }) {
 }
 
 function ControlTab({ serverId }) {
+  const confirm = useConfirm();
   const [log, setLog] = useState([]);
   const run = async (label, path) => {
-    if (!window.confirm(`Execute "${label}" on this server?`)) return;
+    if (!(await confirm(`Execute "${label}" on this server?`))) return;
     try {
       const data = await api(`/nimble/${serverId}/control/${path}`, { method: 'POST' });
       setLog(l => [{ t: new Date().toLocaleTimeString(), label, ok: true, msg: JSON.stringify(data) }, ...l]);
@@ -233,10 +237,11 @@ const TABS = [
 export default function ServerDetailPage() {
   const { id } = useParams();
   const { can, sys } = useAuth();
+  const { t } = useI18n();
   const [server, setServer] = useState(null);
   const wms = sys?.controlPlane === 'wmspanel';
   const visibleTabs = useMemo(
-    () => TABS.filter(t => can(t.perm) && (wms ? t.plane !== 'native' : t.plane !== 'wmspanel')),
+    () => TABS.filter(tab => can(tab.perm) && (wms ? tab.plane !== 'native' : tab.plane !== 'wmspanel')),
     [can, wms]
   );
   const [tab, setTab] = useState(null);
@@ -256,8 +261,7 @@ export default function ServerDetailPage() {
       {server && <div className="sub mono">{server.useSsl ? 'https' : 'http'}://{server.host}:{server.port}</div>}
       {wms && (
         <div className="hint" style={{ marginBottom: 10 }}>
-          Control plane: WMSPanel API — native-API sections (Streams, Sessions, SRT, MPEG-TS, Playout, Control)
-          are disabled in this mode. Switch to backup mode in Settings to access them.
+          {t('server.bannerWms')}
         </div>
       )}
       <div className="tabs">

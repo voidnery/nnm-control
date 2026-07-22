@@ -1,6 +1,20 @@
 # Changelog
 
 ## iter4 (v0.4.x) — UX refinement round 2
+### v0.4.6 (iter4) — styled confirms, pinned sidebar, toast fix, more i18n
+- All confirmation dialogs are now in-app styled modals (promise-based
+  useConfirm) instead of the browser's native confirm() — 23 call sites
+  converted across every page; safe-close behaviour applies to them too
+- Sidebar (version + profile + logout) is pinned to the viewport: it no
+  longer scrolls out of sight on tall pages; the nav scrolls internally
+- FIX: the "Settings saved" toast fired on entering the Settings page — the
+  notification was wired to the initial load call instead of the save; moved
+  to the actual save
+- i18n: server control-plane banners and the RTMP Push (republish) tab —
+  buttons and notices — now translate with the RU locale
+- Validation: reran the runtime i18n-hook audit; confirmed every t() caller
+  imports the hook
+
 ### v0.4.5 (iter4) — function builder pickers & wider i18n
 - Function builder: the Browse-objects list now collapses after you pick an
   object (was staying open), and gained a filter box for long lists

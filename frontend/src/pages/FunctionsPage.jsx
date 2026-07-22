@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useConfirm } from '../confirm.jsx';
 
 const KINDS = [
   { value: 'republish', label: 'Republish rule' },
@@ -299,6 +300,7 @@ function RunView({ runId, onClose }) {
 }
 
 export default function FunctionsPage() {
+  const confirm = useConfirm();
   const { t } = useI18n();
   const { can } = useAuth();
   const [fns, setFns] = useState([]);
@@ -318,7 +320,7 @@ export default function FunctionsPage() {
   useEffect(() => { load(); }, []);
 
   const run = async (fn) => {
-    if (!window.confirm(`Execute function "${fn.name}"? Steps will apply and verify sequentially; any failure rolls everything back.`)) return;
+    if (!(await confirm(`Execute function "${fn.name}"? Steps will apply and verify sequentially; any failure rolls everything back.`))) return;
     try {
       const r = await api(`/functions/${fn._id}/run`, { method: 'POST' });
       setActiveRun(r.runId);
@@ -326,7 +328,7 @@ export default function FunctionsPage() {
   };
 
   const remove = async (fn) => {
-    if (!window.confirm(`Delete function "${fn.name}"?`)) return;
+    if (!(await confirm(`Delete function "${fn.name}"?`))) return;
     await api(`/functions/${fn._id}`, { method: 'DELETE' });
     load();
   };

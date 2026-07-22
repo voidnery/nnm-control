@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { backdropClose } from '../components/Modal.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useConfirm } from '../confirm.jsx';
 
 function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
   const isEdit = Boolean(initial._id);
@@ -74,6 +75,7 @@ function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
 }
 
 export default function RolesPage() {
+  const confirm = useConfirm();
   const { t } = useI18n();
   const [roles, setRoles] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -91,7 +93,7 @@ export default function RolesPage() {
   useEffect(() => { load(); }, []);
 
   const remove = async (r) => {
-    if (!window.confirm(`Delete role "${r.name}"?`)) return;
+    if (!(await confirm(`Delete role "${r.name}"?`))) return;
     try { await api(`/roles/${r._id}`, { method: 'DELETE' }); load(); }
     catch (e) { setError(e.message); }
   };

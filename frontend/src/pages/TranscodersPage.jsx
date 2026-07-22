@@ -4,11 +4,13 @@ import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useConfirm } from '../confirm.jsx';
 
 // Transcoders are account-level in WMSPanel; server_id is an attribute.
 // Scope here: list + pause/resume/clone + raw details; licenses with expiry
 // warnings. Pipeline editing is a later step (schemas land from live use).
 export default function TranscodersPage() {
+  const confirm = useConfirm();
   const { t } = useI18n();
   const { can } = useAuth();
   const [transcoders, setTranscoders] = useState(null);
@@ -39,7 +41,7 @@ export default function TranscodersPage() {
   const serverName = (wsid) => servers.find(s => s.wmspanelServerId === wsid)?.name || String(wsid || '').slice(-6);
 
   const act = async (t, action) => {
-    if (action === 'clone' && !window.confirm(`Clone transcoder "${t.name}"? A copy will be created (paused).`)) return;
+    if (action === 'clone' && !(await confirm(`Clone transcoder "${t.name}"? A copy will be created (paused).`))) return;
     setBusy(true); setError('');
     try { await api(`/wmspanel/transcoders/${t.id}/${action}`, { method: 'POST' }); await load(); }
     catch (e) { setError(e.message); }
@@ -94,7 +96,7 @@ export default function TranscodersPage() {
                     <button disabled={busy} onClick={() => act(t, 'clone')}>Clone</button>{' '}
                     <button disabled={busy} onClick={() => setEditModal({ id: t.id, name: t.name, description: t.description || '', tags: (t.tags || []).join(',') })}>Edit</button>{' '}
                     <button className="danger" disabled={busy} onClick={async () => {
-                      if (!window.confirm(`DELETE transcoder "${t.name}"? Its pipelines are removed permanently.`)) return;
+                      if (!(await confirm(`DELETE transcoder "${t.name}"? Its pipelines are removed permanently.`))) return;
                       setBusy(true); setError('');
                       try { await api(`/wmspanel/transcoders/${t.id}`, { method: 'DELETE' }); await load(); }
                       catch (e) { setError(e.message); }

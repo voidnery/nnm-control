@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
+import { useConfirm } from '../confirm.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
 // - UDP/SRT outputs: source_streams[{application, stream, pmt/video/audio pid}]
@@ -32,6 +33,7 @@ const SyncNote = () => (
 
 // ---------------------------------------------------------------- UDP / SRT
 export function UdpTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'udp');
   const [incoming, setIncoming] = useState([]);
@@ -74,7 +76,7 @@ export function UdpTab({ serverId }) {
     finally { setBusy(false); }
   };
   const removeUdp = async (o) => {
-    if (!window.confirm(`Delete SRT/UDP output "${o.name || o.id}" (${o.ip}:${o.port})?`)) return;
+    if (!(await confirm(`Delete SRT/UDP output "${o.name || o.id}" (${o.ip}:${o.port})?`))) return;
     setBusy(true); setError('');
     try { await api(`/wmspanel/server/${serverId}/udp/${o.id}`, { method: 'DELETE' }); await load(); }
     catch (e) { setError(e.message); }
@@ -231,6 +233,7 @@ export function UdpTab({ serverId }) {
 
 // ----------------------------------------------------------------- Outgoing
 export function OutgoingTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'outgoing');
   const [busy, setBusy] = useState(false);
@@ -260,7 +263,7 @@ export function OutgoingTab({ serverId }) {
   };
 
   const remove = async (o) => {
-    if (!window.confirm(`Delete outgoing ${o.application}/${o.stream}?`)) return;
+    if (!(await confirm(`Delete outgoing ${o.application}/${o.stream}?`))) return;
     setBusy(true); setError('');
     try { await api(`/wmspanel/server/${serverId}/outgoing/${o.id}`, { method: 'DELETE' }); await load(); }
     catch (e) { setError(e.message); }
@@ -358,6 +361,7 @@ export function OutgoingTab({ serverId }) {
 
 // ------------------------------------------------------------------ Hotswap
 export function HotswapTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'hotswap');
   const [busy, setBusy] = useState(false);
@@ -386,7 +390,7 @@ export function HotswapTab({ serverId }) {
   };
 
   const remove = async (o) => {
-    if (!window.confirm(`Delete hot swap ${o.original_app}/${o.original_stream}?`)) return;
+    if (!(await confirm(`Delete hot swap ${o.original_app}/${o.original_stream}?`))) return;
     setBusy(true); setError('');
     try { await api(`/wmspanel/server/${serverId}/hotswap/${o.id}`, { method: 'DELETE' }); await load(); }
     catch (e) { setError(e.message); }
@@ -499,6 +503,7 @@ const fmtUptime = (ts) => {
 };
 
 export function WmsStreamsTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { t } = useI18n();
   const [data, setData] = useState(null);
@@ -530,7 +535,7 @@ export function WmsStreamsTab({ serverId }) {
   const downStreams = (data?.streams || []).filter(st => st.status !== 'online');
   const deleteAllDown = async () => {
     if (downStreams.length === 0) return;
-    if (!window.confirm(`Remove ${downStreams.length} offline stream(s) from the list? Running streams are untouched.`)) return;
+    if (!(await confirm(`Remove ${downStreams.length} offline stream(s) from the list? Running streams are untouched.`))) return;
     setBusy(true); setError('');
     try {
       for (const st of downStreams) {
@@ -612,6 +617,7 @@ const codecsOf = (o) => {
 };
 
 export function MpegtsInTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'incoming');
   const [filter, setFilter] = useState('');
@@ -637,7 +643,7 @@ export function MpegtsInTab({ serverId }) {
   };
 
   const remove = async (o) => {
-    if (!window.confirm(`Delete incoming stream "${o.name}"? Outgoing streams using it as source will lose it.`)) return;
+    if (!(await confirm(`Delete incoming stream "${o.name}"? Outgoing streams using it as source will lose it.`))) return;
     setBusy(true); setError('');
     try { await api(`/wmspanel/server/${serverId}/incoming/${o.id}`, { method: 'DELETE' }); await load(); }
     catch (e) { setError(e.message); }
@@ -732,6 +738,7 @@ export function MpegtsInTab({ serverId }) {
 // ------------------------------------------------------------- Live Pull
 // RTMP pull feeds with fallback_urls — the built-in feed reserve mechanism.
 export function LivePullTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'livepull');
   const [busy, setBusy] = useState(false);
@@ -790,8 +797,8 @@ export function LivePullTab({ serverId }) {
                       id: o.id, url: o.url, fallback_urls: (o.fallback_urls || []).join('\n'),
                       application: o.application, stream: o.stream, description: o.description || '',
                     })}>Edit</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => {
-                      if (window.confirm(`Delete pull ${o.application}/${o.stream}?`))
+                    <button className="danger" disabled={busy} onClick={async () => {
+                      if (await confirm(`Delete pull ${o.application}/${o.stream}?`))
                         act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}`, { method: 'DELETE' }));
                     }}>Delete</button>
                   </>}
@@ -834,6 +841,7 @@ export function LivePullTab({ serverId }) {
 // ------------------------------------------------------------- Applications
 // live/app settings incl. push credentials (masked with reveal toggle).
 export function AppsTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'apps');
   const [busy, setBusy] = useState(false);
@@ -898,7 +906,7 @@ export function AppsTab({ serverId }) {
                       push_login: a.push_login || '', push_password: a.push_password || '',
                     })}>Edit</button>{' '}
                     <button className="danger" disabled={busy} onClick={async () => {
-                      if (!window.confirm(`Delete application "${a.application}"?`)) return;
+                      if (!(await confirm(`Delete application "${a.application}"?`))) return;
                       setBusy(true); setError('');
                       try { await api(`/wmspanel/server/${serverId}/apps/${a.id}`, { method: 'DELETE' }); await load(); }
                       catch (e) { setError(e.message); }
@@ -941,6 +949,7 @@ export function AppsTab({ serverId }) {
 
 // ------------------------------------------------------------- Interfaces
 export function InterfacesTab({ serverId }) {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'interfaces');
   const [busy, setBusy] = useState(false);
@@ -958,7 +967,7 @@ export function InterfacesTab({ serverId }) {
     finally { setBusy(false); }
   };
   const remove = async (i) => {
-    if (!window.confirm(`Delete RTMP interface ${i.ip}:${i.port}? Publishers using it will disconnect.`)) return;
+    if (!(await confirm(`Delete RTMP interface ${i.ip}:${i.port}? Publishers using it will disconnect.`))) return;
     setBusy(true); setError('');
     try { await api(`/wmspanel/server/${serverId}/interfaces/${i.id}`, { method: 'DELETE' }); await load(); }
     catch (e) { setError(e.message); }

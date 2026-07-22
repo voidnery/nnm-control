@@ -26,7 +26,6 @@ export default function SettingsPage() {
 
   const load = async () => {
     const s = await api('/settings');
-      push({ type: 'ok', message: 'Settings saved' });
     setSettings(s);
     setClientId(s.wmspanel.clientId);
     setBaseUrl(s.wmspanel.baseUrl);
@@ -41,6 +40,7 @@ export default function SettingsPage() {
       const body = { controlPlane, wmspanel: { baseUrl, clientId } };
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
+      push({ type: 'ok', message: 'Settings saved' });
       setSettings(s); setApiKey('');
       await refreshSystem();
       setMsg({ ok: true, text: s.sync && !s.sync.skipped

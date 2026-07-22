@@ -5,6 +5,7 @@ import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useConfirm } from '../confirm.jsx';
 
 const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '' };
 
@@ -97,6 +98,7 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
 }
 
 export default function ServersPage() {
+  const confirm = useConfirm();
   const { t } = useI18n();
   const { can, sys } = useAuth();
   const wms = sys?.controlPlane === 'wmspanel';
@@ -128,7 +130,7 @@ export default function ServersPage() {
   };
 
   const remove = async (s) => {
-    if (!window.confirm(`Delete server "${s.name}"? This only removes it from the panel.`)) return;
+    if (!(await confirm(`Delete server "${s.name}"? This only removes it from the panel.`))) return;
     await api(`/servers/${s.id}`, { method: 'DELETE' });
     load();
   };

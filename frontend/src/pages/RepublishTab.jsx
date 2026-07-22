@@ -3,6 +3,8 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import DataView, { CopyJsonButton } from '../components/DataView.jsx';
+import { useConfirm } from '../confirm.jsx';
+import { useI18n } from '../i18n.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 
@@ -13,6 +15,8 @@ const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps
 // on a live account is immediately visible and fixable.
 // ---------------------------------------------------------------------------
 function WmspanelRules({ serverId }) {
+  const { t } = useI18n();
+  const confirm = useConfirm();
   const { can } = useAuth();
   const [rules, setRules] = useState(null);
   const [raw, setRaw] = useState(null);
@@ -58,8 +62,8 @@ function WmspanelRules({ serverId }) {
     setForm({ src_app: '', src_strm: '', dest_addr: '', dest_port: 1935, dest_app: '', dest_strm: '' });
   });
 
-  const remove = (rule) => {
-    if (!window.confirm(`Delete PERSISTENT rule ${rule.src_app}/${rule.src_strm || '*'} → ${rule.dest_addr}? This changes WMSPanel config.`)) return;
+  const remove = async (rule) => {
+    if (!(await confirm(`Delete PERSISTENT rule ${rule.src_app}/${rule.src_strm || '*'} → ${rule.dest_addr}? This changes WMSPanel config.`))) return;
     act(() => api(`/wmspanel/server/${serverId}/republish/${rule.id}`, { method: 'DELETE' }));
   };
   const restart = (rule) =>
@@ -102,16 +106,16 @@ function WmspanelRules({ serverId }) {
                     <>
                       <button disabled={busy}
                               onClick={() => setEdit({ ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '' })}>
-                        Switch source
+                        {t('republish.switchSource')}
                       </button>{' '}
                       <button disabled={busy} onClick={() => setFull({
                         ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '',
                         dest_addr: rule.dest_addr || '', dest_port: rule.dest_port || 1935,
                         dest_app: rule.dest_app || '', dest_strm: rule.dest_strm || '',
                         description: rule.description || '', paused: Boolean(rule.paused),
-                      })}>Edit</button>{' '}
-                      <button disabled={busy} onClick={() => restart(rule)}>Restart</button>{' '}
-                      <button className="danger" disabled={busy} onClick={() => remove(rule)}>Delete</button>
+                      })}>{t('action.edit')}</button>{' '}
+                      <button disabled={busy} onClick={() => restart(rule)}>{t('action.restart')}</button>{' '}
+                      <button className="danger" disabled={busy} onClick={() => remove(rule)}>{t('action.delete')}</button>
                     </>
                   ))}
                 </td>
@@ -141,7 +145,7 @@ function WmspanelRules({ serverId }) {
             <div><label>Dest stream</label><input value={form.dest_strm} onChange={e => set('dest_strm', e.target.value)} /></div>
           </div>
           <button className="primary" style={{ marginTop: 12 }} disabled={busy || !form.src_app || !form.dest_addr || !form.dest_app}
-                  onClick={create}>{busy ? 'Creating…' : 'Create persistent rule'}</button>
+                  onClick={create}>{busy ? '…' : t('republish.createRule')}</button>
         </div>
       )}
       {showRaw && (
@@ -192,6 +196,8 @@ function WmspanelRules({ serverId }) {
 // Native mode (backup): ephemeral rules via Nimble native API. Kept from iter1.
 // ---------------------------------------------------------------------------
 function NativeRules({ serverId }) {
+  const { t } = useI18n();
+  const confirm = useConfirm();
   const { can } = useAuth();
   const [rules, setRules] = useState(null);
   const [stats, setStats] = useState(null);
@@ -224,7 +230,7 @@ function NativeRules({ serverId }) {
   };
 
   const remove = async (id) => {
-    if (!window.confirm(`Delete republish rule #${id}?`)) return;
+    if (!(await confirm(`Delete republish rule #${id}?`))) return;
     await api(`/nimble/${serverId}/republish/${id}`, { method: 'DELETE' });
     load();
   };
@@ -253,7 +259,7 @@ function NativeRules({ serverId }) {
                   <td>{st ? <><span className={'lamp ' + (st.state === 'connected' ? 'on' : 'warn')} />{st.state}</> : '—'}</td>
                   <td className="mono">{st ? fmtBps(st.bandwidth) : '—'}</td>
                   <td style={{ textAlign: 'right' }}>
-                    {can('republish.manage') && <button className="danger" onClick={() => remove(rule.id)}>Delete</button>}
+                    {can('republish.manage') && <button className="danger" onClick={() => remove(rule.id)}>{t('action.delete')}</button>}
                   </td>
                 </tr>
               );

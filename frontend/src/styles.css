@@ -41,7 +41,11 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 .sidebar {
   width: 216px; flex-shrink: 0; background: var(--bg-raise);
   border-right: 1px solid var(--line); padding: 16px 10px; display: flex; flex-direction: column;
+  /* Pin to viewport so the version/profile/logout footer never scrolls away
+     on tall pages; the nav scrolls internally if it overflows. */
+  position: sticky; top: 0; height: 100vh; align-self: flex-start;
 }
+.sidebar .nav { overflow-y: auto; flex-shrink: 1; }
 .brand { font-family: var(--mono); font-size: 15px; letter-spacing: 1px; padding: 4px 10px 18px; }
 .brand b { color: var(--accent); }
 .nav a {
