@@ -48,6 +48,19 @@ async function loadMapped(req, res, next) {
 }
 
 const r = wmspanelRouter;
+
+// WMSPanel server object (tag "Server"): view + edit name/custom_ips/tags.
+r.get('/server/:id/wmsinfo', requirePerm('servers.view'), loadMapped,
+  proxy(async rq => wmspanel.getServer(await cfg(), rq.mapped.wmspanelServerId)));
+r.put('/server/:id/wmsinfo', requirePerm('servers.manage'), loadMapped,
+  proxy(async rq => {
+    const b = rq.body || {};
+    const patch = {};
+    if (b.name !== undefined) patch.name = String(b.name);
+    if (b.custom_ips !== undefined) patch.custom_ips = Array.isArray(b.custom_ips) ? b.custom_ips : [];
+    if (b.tags !== undefined) patch.tags = Array.isArray(b.tags) ? b.tags : [];
+    return wmspanel.serverUpdate(await cfg(), rq.mapped.wmspanelServerId, patch);
+  }));
 r.get('/server/:id/republish', requirePerm('republish.view'), loadMapped,
   proxy(async rq => wmspanel.republishList(await cfg(), rq.mapped.wmspanelServerId)));
 r.post('/server/:id/republish', requirePerm('republish.manage'), loadMapped,

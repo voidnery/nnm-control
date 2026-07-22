@@ -4,7 +4,7 @@ import { useAuth } from './auth.jsx';
 import { useTheme } from './theme.jsx';
 import { useI18n } from './i18n.jsx';
 
-export const APP_VERSION = '0.6.0'; // keep in sync with package.json
+export const APP_VERSION = '0.6.1'; // keep in sync with package.json
 import { api } from './api.js';
 import SetupPage from './pages/SetupPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';

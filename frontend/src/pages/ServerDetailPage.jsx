@@ -7,6 +7,7 @@ import { UdpTab, OutgoingTab, HotswapTab, WmsStreamsTab, MpegtsInTab, LivePullTa
 import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useI18n } from '../i18n.jsx';
+import ServerEditModal from '../components/ServerEditModal.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -251,6 +252,7 @@ export default function ServerDetailPage() {
       .map(x => x.t);
   }, [can, wms]);
   const [tab, setTab] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     api('/servers').then(list => setServer(list.find(s => s.id === id) || null));
@@ -268,7 +270,12 @@ export default function ServerDetailPage() {
   return (
     <div>
       <div className="hint"><Link to="/servers">← Servers</Link></div>
-      <h1>{server ? server.name : '…'}</h1>
+      <div className="row" style={{ alignItems: 'center', gap: 12 }}>
+        <h1 style={{ margin: 0 }}>{server ? server.name : '…'}</h1>
+        {wms && server?.wmspanelServerId && can('servers.manage') && (
+          <button onClick={() => setEditOpen(true)}>{t('action.edit')}</button>
+        )}
+      </div>
       {server && <div className="sub mono">{server.useSsl ? 'https' : 'http'}://{server.host}:{server.port}</div>}
       {wms && (
         <div className="hint" style={{ marginBottom: 10 }}>
@@ -288,6 +295,10 @@ export default function ServerDetailPage() {
         })}
       </div>
       {Active && <Active serverId={id} server={server} />}
+      {editOpen && (
+        <ServerEditModal serverId={id} onClose={() => setEditOpen(false)}
+          onSaved={() => { setEditOpen(false); api('/servers').then(list => setServer(list.find(s => s.id === id) || null)); }} />
+      )}
     </div>
   );
 }

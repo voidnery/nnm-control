@@ -57,6 +57,8 @@ export const wmspanel = {
   // Confirmed by official reference: GET /v1/server
   listServers: (cfg) => call(cfg, '/server'),
   getServer: (cfg, sid) => call(cfg, `/server/${encodeURIComponent(sid)}`),
+  // WMSPanel "Server" tag: update display name, custom IPs/domains, and tags.
+  serverUpdate: (cfg, sid, patch) => call(cfg, `/server/${encodeURIComponent(sid)}`, { method: 'PUT', body: patch }),
   // Republish family (persistent rules, unlike native API):
   republishList:    (cfg, sid) => call(cfg, `/server/${sid}/rtmp/republish`),
   republishCreate:  (cfg, sid, rule) => call(cfg, `/server/${sid}/rtmp/republish`, { method: 'POST', body: rule }),

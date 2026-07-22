@@ -1,6 +1,17 @@
 # Changelog
 
 ## iter6 — server functionality in the panel (in progress)
+### v0.6.1 (m2) — edit server (WMSPanel "Server" object)
+- "Edit" button in the server detail header (right of the name) opens a modal
+  editing the WMSPanel server object per the API "Server" tag: display name,
+  custom IPs/domains (add/remove list), and tags. Shows reported IPs/status/
+  kind read-only. Applies on the next WMSPanel sync
+- Backend: wmspanelClient.serverUpdate (PUT /server/{id}); proxy GET/PUT
+  /server/:id/wmsinfo (view=servers.view, edit=servers.manage) resolving the
+  mapped wmspanelServerId; body whitelisted to name/custom_ips/tags
+- Button shown only in wmspanel plane for mapped servers with servers.manage;
+  parses the documented GET /server response; EN/RU
+
 ### v0.6.0 (m1) — button placement + tab grouping
 - Moved Refresh/New buttons above the list on the tabs where they were below
   (SRT Out, SRT in Nimble, Hotswap, Interfaces); the rest already had them on
