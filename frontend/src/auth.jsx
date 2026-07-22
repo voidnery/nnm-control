@@ -28,11 +28,20 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password) => {
     const data = await api('/auth/login', { method: 'POST', body: { username, password } });
+    if (data.twoFactorRequired) return { twoFactorRequired: true, ticket: data.ticket };
     setToken(data.token);
     setUser(data.user);
+    return { ok: true };
+  };
+
+  const loginVerify2fa = async (ticket, code) => {
+    const data = await api('/auth/login/2fa', { method: 'POST', body: { ticket, code } });
+    setToken(data.token);
+    setUser(data.user);
+    return { ok: true };
   };
   const logout = () => { clearToken(); setUser(null); };
   const can = (perm) => !!user && (user.permissions.includes('*') || user.permissions.includes(perm));
 
-  return <AuthCtx.Provider value={{ user, ready, login, logout, can, sys, refreshSystem, refreshUser, setUser }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, ready, login, loginVerify2fa, logout, can, sys, refreshSystem, refreshUser, setUser }}>{children}</AuthCtx.Provider>;
 }

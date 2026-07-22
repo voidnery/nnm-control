@@ -1,7 +1,7 @@
 import { AuditLog } from '../models/AuditLog.js';
 
 // Deep-sanitize: any key smelling of a secret is masked before persisting.
-const SECRET_RE = /(password|token|api_?key|secret)/i;
+const SECRET_RE = /(password|token|api_?key|secret|ticket|code|backup)/i;
 export function sanitize(value, depth = 0) {
   if (depth > 6 || value === null || value === undefined) return value ?? null;
   if (Array.isArray(value)) return value.map(v => sanitize(v, depth + 1));

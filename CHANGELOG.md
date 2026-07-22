@@ -1,6 +1,21 @@
 # Changelog
 
 ## iter3 (v0.4.x) — UX & design overhaul
+### v0.4.2 (m3) — two-factor authentication (TOTP)
+- Optional TOTP 2FA (RFC 6238, dependency-free implementation with a
+  build-time check against the RFC test vectors): setup with QR code +
+  manual key, enable after verifying a code, one-time backup codes (bcrypt-
+  hashed, single-use), disable requiring password + a valid code, backup-code
+  regeneration
+- Login is now two-step when 2FA is on: password returns a short-lived signed
+  ticket that grants nothing but step 2; step 2 accepts a TOTP or a backup
+  code and only then issues the session token
+- Secret and pending secret encrypted at rest (fieldCrypto); backup codes
+  stored hashed; audit events for enable/disable/verify/backup-code use;
+  audit sanitizer widened to mask ticket/code/backup fields
+- Profile page 2FA section (QR via bundled qrcode lib) and login second-step
+  screen; EN/RU strings
+
 ### v0.4.1 (m2) — profile settings & i18n
 - New Profile page: theme (system/dark/light, instant preview + persisted),
   language EN/RU, function-dialog width preference, self-service password

@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useTheme } from '../theme.jsx';
 import { useI18n } from '../i18n.jsx';
 import Select from '../components/Select.jsx';
+import TwoFactorSection from '../components/TwoFactorSection.jsx';
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -95,9 +96,8 @@ export default function ProfilePage() {
             ? <div className="hint" style={{ marginTop: 10 }}><span className="lamp on" />{pwMsg.text}</div>
             : <div className="error-box">{pwMsg.text}</div>)}
         </div>
-        <div style={{ marginTop: 18, opacity: .6 }}>
-          <label>{t('profile.2fa')}</label>
-          <div className="hint">{t('profile.2fa.soon')}</div>
+        <div style={{ marginTop: 18 }}>
+          <TwoFactorSection />
         </div>
       </div>
     </div>

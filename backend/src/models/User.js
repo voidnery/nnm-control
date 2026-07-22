@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { encryptField, decryptField } from '../services/fieldCrypto.js';
 
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
@@ -8,6 +9,14 @@ const userSchema = new mongoose.Schema({
   roleType: { type: String, enum: ['superadmin', 'admin', 'custom'], required: true },
   roleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Role', default: null },
   active: { type: Boolean, default: true },
+  // Two-factor auth (TOTP). secret & pendingSecret are encrypted at rest;
+  // backupCodes are bcrypt hashes (single-use, spliced out when consumed).
+  twoFactor: {
+    enabled: { type: Boolean, default: false },
+    secret: { type: String, default: '', set: encryptField, get: decryptField },
+    pendingSecret: { type: String, default: '', set: encryptField, get: decryptField },
+    backupCodes: { type: [String], default: [] },
+  },
   // Per-user UI preferences (profile settings).
   preferences: {
     theme: { type: String, enum: ['system', 'dark', 'light'], default: 'system' },
