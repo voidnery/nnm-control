@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { backdropClose } from '../components/Modal.jsx';
 
 // Account-level distribution: ABR ladders, application aliases, origin apps.
 // server_ids are edited as checkboxes of mapped panel servers and displayed
@@ -221,7 +222,7 @@ export default function DistributionPage() {
       </div>
 
       {abrModal && (
-        <div className="modal-back" onClick={() => setAbrModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setAbrModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{abrModal.id ? `Edit ABR ${abrModal.application}/${abrModal.stream}` : 'New ABR'}</h3>
             <div className="field-inline">
@@ -252,7 +253,7 @@ export default function DistributionPage() {
       )}
 
       {aliasModal && (
-        <div className="modal-back" onClick={() => setAliasModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setAliasModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{aliasModal.id ? `Edit aliases of ${aliasModal.application}` : 'New alias set'}</h3>
             <label>Application</label>
@@ -276,7 +277,7 @@ export default function DistributionPage() {
       )}
 
       {originModal && (
-        <div className="modal-back" onClick={() => setOriginModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setOriginModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{originModal.id ? `Edit origin app ${originModal.application}` : 'New origin app'}</h3>
             <label>Application</label>

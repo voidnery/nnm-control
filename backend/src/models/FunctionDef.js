@@ -13,6 +13,7 @@ const stepSchema = new mongoose.Schema({
   serverId: { type: mongoose.Schema.Types.ObjectId, ref: 'NimbleServer' },
   objectKind: { type: String, enum: ['republish', 'udp', 'outgoing', 'hotswap', 'live_pull', 'transcoder', 'abr', 'alias', ''], default: '' },
   targetId: { type: String, default: '' },      // WMSPanel object id
+  targetLabel: { type: String, default: '' },   // human-readable app/stream of the picked object (UI aid)
   patch: { type: mongoose.Schema.Types.Mixed, default: {} },
   action: { type: String, enum: ['pause', 'resume', 'restart', ''], default: '' },
   waitSec: { type: Number, default: 0 },

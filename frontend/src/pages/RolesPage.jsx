@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { backdropClose } from '../components/Modal.jsx';
 
 function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
   const isEdit = Boolean(initial._id);
@@ -31,7 +32,7 @@ function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-back" onClick={onClose}>
+    <div className="modal-back" {...backdropClose(onClose)}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Edit role' : 'New custom role'}</h3>
         <label>Name</label>

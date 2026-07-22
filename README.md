@@ -119,6 +119,14 @@ docker compose -f docker-compose.dev.yml up -d --build   # builds from sources
 
 ## Iteration journal
 
+- **iter3 (v0.4.x, CLOSED at v0.4.3)** — UX & design overhaul: theme system
+  (dark/light/system), per-user profile settings (theme, language EN/RU with
+  an i18n scaffold, function-dialog width, self-service password change),
+  optional TOTP two-factor auth (QR setup, backup codes, two-step login,
+  admin reset), a custom themed Select used everywhere, safe-close modals
+  across the app, clearer function builder (shows the picked app/stream), and
+  operator-friendly server tab names.
+
 - **iter2 (v0.3.x, CLOSED at v0.3.17)** — WMSPanel control plane epic:
   manageable API base (.com/.ru), strict control-plane separation, fleet
   auto-sync, transactional engineering functions (preflight / snapshot /

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { backdropClose } from '../components/Modal.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 
@@ -150,7 +151,7 @@ function WmspanelRules({ serverId }) {
         </div>
       )}
       {full && (
-        <div className="modal-back" onClick={() => setFull(null)}>
+        <div className="modal-back" {...backdropClose(() => setFull(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Edit rule</h3>
             <div className="field-inline">

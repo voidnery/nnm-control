@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import Select from '../components/Select.jsx';
 
 const BASE_URLS = [
   'https://api.wmspanel.com/v1',
@@ -87,13 +88,9 @@ export default function SettingsPage() {
         </p>
         <label>API base URL</label>
         {!customUrl ? (
-          <select value={baseUrl} onChange={e => {
-            if (e.target.value === 'custom') { setCustomUrl(true); }
-            else setBaseUrl(e.target.value);
-          }}>
-            {BASE_URLS.map(u => <option key={u} value={u}>{u}</option>)}
-            <option value="custom">Custom…</option>
-          </select>
+          <Select value={baseUrl}
+                  onChange={v => { if (v === 'custom') setCustomUrl(true); else setBaseUrl(v); }}
+                  options={[...BASE_URLS.map(u => ({ value: u, label: u })), { value: 'custom', label: 'Custom…' }]} />
         ) : (
           <div className="row">
             <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://api.wmspanel.com/v1" />

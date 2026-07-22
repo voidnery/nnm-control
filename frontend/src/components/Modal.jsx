@@ -27,3 +27,17 @@ export default function Modal({ children, onClose, size = '' }) {
     </div>
   );
 }
+
+
+// Lightweight helper to retrofit existing `.modal-back` divs with SAFE close
+// semantics without converting them to <Modal>. Spread onto the backdrop:
+//   <div className="modal-back" {...backdropClose(() => setX(null))}>
+// Close fires only when BOTH mousedown and mouseup land on the backdrop
+// itself — a text-selection drag released outside no longer closes.
+export function backdropClose(onClose) {
+  const state = { down: false };
+  return {
+    onMouseDown: (e) => { state.down = e.target === e.currentTarget; },
+    onMouseUp: (e) => { if (state.down && e.target === e.currentTarget) onClose?.(); state.down = false; },
+  };
+}

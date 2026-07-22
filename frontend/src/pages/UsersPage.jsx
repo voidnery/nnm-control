@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { backdropClose } from '../components/Modal.jsx';
+import Select from '../components/Select.jsx';
 
 function UserModal({ initial, roles, onClose, onSaved }) {
   const { user: me } = useAuth();
@@ -37,7 +39,7 @@ function UserModal({ initial, roles, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-back" onClick={onClose}>
+    <div className="modal-back" {...backdropClose(onClose)}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? `Edit user: ${initial.username}` : 'New user'}</h3>
         {!isEdit && <>
@@ -48,16 +50,13 @@ function UserModal({ initial, roles, onClose, onSaved }) {
         <input type="password" value={form.password} onChange={e => set('password', e.target.value)} />
         {!isSuperTarget && <>
           <label>Role</label>
-          <select value={form.roleType} onChange={e => set('roleType', e.target.value)}>
-            {me.roleType === 'superadmin' && <option value="admin">Administrator (full access)</option>}
-            <option value="custom">Custom role</option>
-          </select>
+          <Select value={form.roleType} onChange={v => set('roleType', v)}
+                  options={[{ value: 'admin', label: 'Administrator (full access)' }, { value: 'custom', label: 'Custom role' }]} />
           {form.roleType === 'custom' && (
             <>
               <label>Custom role</label>
-              <select value={form.roleId} onChange={e => set('roleId', e.target.value)}>
-                {roles.map(r => <option key={r._id} value={r._id}>{r.name}</option>)}
-              </select>
+              <Select value={form.roleId} onChange={v => set('roleId', v)}
+                  options={[{ value: '', label: '— select role —' }, ...roles.map(r => ({ value: r._id, label: r.name }))]} />
               {roles.length === 0 && <div className="hint">No custom roles yet — create one on the Roles page.</div>}
             </>
           )}
@@ -124,6 +123,15 @@ export default function UsersPage() {
                 <td className="hint">{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td style={{ textAlign: 'right' }}>
                   <button onClick={() => setModal(u)}>Edit</button>{' '}
+                  {u.twoFactorEnabled && (
+                    <>
+                      <button title="Reset this user's 2FA" onClick={async () => {
+                        if (!window.confirm(`Reset 2FA for ${u.username}? They will sign in with password only until they set it up again.`)) return;
+                        try { await api(`/users/${u.id}/reset-2fa`, { method: 'POST' }); await load(); }
+                        catch (e) { setError(e.message); }
+                      }}>Reset 2FA</button>{' '}
+                    </>
+                  )}
                   {u.roleType !== 'superadmin' &&
                     <button className="danger" onClick={() => remove(u)}>Delete</button>}
                 </td>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { backdropClose } from '../components/Modal.jsx';
+import Select from '../components/Select.jsx';
 
 // Transcoders are account-level in WMSPanel; server_id is an attribute.
 // Scope here: list + pause/resume/clone + raw details; licenses with expiry
@@ -64,10 +66,10 @@ export default function TranscodersPage() {
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
         <input style={{ maxWidth: 260 }} placeholder="Filter name/tag…" value={filter} onChange={e => setFilter(e.target.value)} />
-        <select style={{ maxWidth: 240 }} value={serverFilter} onChange={e => setServerFilter(e.target.value)}>
-          <option value="">all servers</option>
-          {usedServerIds.map(id => <option key={id} value={id}>{serverName(id)}</option>)}
-        </select>
+        <div style={{ maxWidth: 240 }}>
+          <Select value={serverFilter} onChange={setServerFilter}
+                  options={[{ value: '', label: 'all servers' }, ...usedServerIds.map(id => ({ value: id, label: serverName(id) }))]} />
+        </div>
         <button onClick={load} disabled={busy}>Refresh</button>
         <span className="hint">{list.length} of {transcoders.length}</span>
       </div>
@@ -129,7 +131,7 @@ export default function TranscodersPage() {
       </div>
 
       {editModal && (
-        <div className="modal-back" onClick={() => setEditModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setEditModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Edit transcoder</h3>
             <label>Name</label>
@@ -156,7 +158,7 @@ export default function TranscodersPage() {
         </div>
       )}
       {detail && (
-        <div className="modal-back" onClick={() => setDetail(null)}>
+        <div className="modal-back" {...backdropClose(() => setDetail(null))}>
           <div className="modal" style={{ width: 700 }} onClick={e => e.stopPropagation()}>
             <h3>{detail.name}</h3>
             {detail.loading && <div className="hint">Loading…</div>}

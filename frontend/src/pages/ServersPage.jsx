@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { backdropClose } from '../components/Modal.jsx';
+import Select from '../components/Select.jsx';
 
 const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '' };
 
@@ -41,7 +43,7 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
   };
 
   return (
-    <div className="modal-back" onClick={onClose}>
+    <div className="modal-back" {...backdropClose(onClose)}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Edit server' : 'Add server'}</h3>
         <label>Name</label>
@@ -65,10 +67,8 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
         </>}
         <label>WMSPanel server (for persistent control via WMSPanel API)</label>
         {wpServers ? (
-          <select value={form.wmspanelServerId} onChange={e => set('wmspanelServerId', e.target.value)}>
-            <option value="">— not mapped —</option>
-            {wpServers.map(ws => <option key={ws.id} value={ws.id}>{ws.name} ({ws.status})</option>)}
-          </select>
+          <Select value={form.wmspanelServerId} onChange={v => set('wmspanelServerId', v)}
+                  options={[{ value: '', label: '— not mapped —' }, ...wpServers.map(ws => ({ value: ws.id, label: `${ws.name} (${ws.status})` }))]} />
         ) : (
           <input value={form.wmspanelServerId} onChange={e => set('wmspanelServerId', e.target.value)}
                  placeholder="WMSPanel server id (auto-list needs API creds in Settings)" className="mono" />

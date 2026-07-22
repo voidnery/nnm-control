@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
 import { Role } from '../models/Role.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
+import { logEvent } from '../services/audit.js';
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth, requirePerm('users.manage'));
@@ -10,6 +11,7 @@ usersRouter.use(requireAuth, requirePerm('users.manage'));
 const pub = (u) => ({
   id: u.id, username: u.username, roleType: u.roleType,
   roleId: u.roleId, active: u.active, createdAt: u.createdAt,
+  twoFactorEnabled: Boolean(u.twoFactor?.enabled),
 });
 
 usersRouter.get('/', async (_req, res) => {
@@ -62,6 +64,21 @@ usersRouter.put('/:id', async (req, res) => {
   if (password) target.passwordHash = await bcrypt.hash(password, 10);
   await target.save();
   res.json(pub(target));
+});
+
+// Admin: reset (disable) another user's 2FA — recovery when they lose their
+// device and backup codes. Cannot target the superadmin unless you are them.
+usersRouter.post('/:id/reset-2fa', async (req, res) => {
+  const target = await User.findById(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.roleType === 'superadmin' && req.user.roleType !== 'superadmin') {
+    return res.status(403).json({ error: 'Only the superadmin can reset the superadmin account' });
+  }
+  target.twoFactor = { enabled: false, secret: '', pendingSecret: '', backupCodes: [] };
+  target.markModified('twoFactor');
+  await target.save();
+  logEvent({ req, action: 'users:reset_2fa', target: target.username, outcome: 'ok', status: 200 });
+  res.json({ ok: true });
 });
 
 usersRouter.delete('/:id', async (req, res) => {

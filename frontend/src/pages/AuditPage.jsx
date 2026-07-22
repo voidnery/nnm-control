@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import Select from '../components/Select.jsx';
 
 export default function AuditPage() {
   const [items, setItems] = useState([]);
@@ -44,11 +45,10 @@ export default function AuditPage() {
       <div className="row" style={{ marginBottom: 12 }}>
         <input style={{ maxWidth: 160 }} placeholder="User" value={username} onChange={e => setUsername(e.target.value)} />
         <input style={{ maxWidth: 260 }} placeholder="Action contains…" value={action} onChange={e => setAction(e.target.value)} />
-        <select style={{ maxWidth: 130 }} value={outcome} onChange={e => setOutcome(e.target.value)}>
-          <option value="">any outcome</option>
-          <option value="ok">ok</option>
-          <option value="error">error</option>
-        </select>
+        <div style={{ maxWidth: 130 }}>
+          <Select value={outcome} onChange={setOutcome}
+                  options={[{ value: '', label: 'any outcome' }, { value: 'ok', label: 'ok' }, { value: 'error', label: 'error' }]} />
+        </div>
         <button className="primary" disabled={busy} onClick={load}>Apply</button>
       </div>
       <div className="panel">

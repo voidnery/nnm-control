@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { backdropClose } from '../components/Modal.jsx';
+import Select from '../components/Select.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
 // - UDP/SRT outputs: source_streams[{application, stream, pmt/video/audio pid}]
@@ -144,7 +146,7 @@ export function UdpTab({ serverId }) {
         </div>
       </div>
       {cfgModal && (
-        <div className="modal-back" onClick={() => setCfgModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setCfgModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{cfgModal.id ? `Settings of ${cfgModal.name}` : 'New SRT/UDP output'}</h3>
             <label>Name</label>
@@ -154,9 +156,8 @@ export function UdpTab({ serverId }) {
             <div className="field-inline">
               <div>
                 <label>Protocol</label>
-                <select value={cfgModal.protocol} onChange={e => setCfgModal(m => ({ ...m, protocol: e.target.value }))}>
-                  {['srt', 'udp', 'rist'].map(x => <option key={x} value={x}>{x}</option>)}
-                </select>
+                <Select value={cfgModal.protocol} onChange={v => setCfgModal(m => ({ ...m, protocol: v }))}
+                        options={['srt', 'udp', 'rist'].map(x => ({ value: x, label: x }))} />
               </div>
               <div><label>TTL</label><input type="number" value={cfgModal.ttl} onChange={e => setCfgModal(m => ({ ...m, ttl: e.target.value }))} /></div>
             </div>
@@ -177,7 +178,7 @@ export function UdpTab({ serverId }) {
         </div>
       )}
       {edit && (
-        <div className="modal-back" onClick={() => setEdit(null)}>
+        <div className="modal-back" {...backdropClose(() => setEdit(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Source of {edit.name}</h3>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -186,10 +187,8 @@ export function UdpTab({ serverId }) {
               MPEGTS incoming stream (raw passthrough)
             </label>
             {edit.mode === 'incoming' && (
-              <select value={edit.source_id} onChange={e => setEdit(m => ({ ...m, source_id: e.target.value }))}>
-                <option value="">— select incoming stream —</option>
-                {incoming.map(x => <option key={x.id} value={x.id}>{x.name} ({x.protocol}, {x.status})</option>)}
-              </select>
+              <Select value={edit.source_id} onChange={v => setEdit(m => ({ ...m, source_id: v }))} searchable
+                      options={[{ value: '', label: '— select incoming stream —' }, ...incoming.map(x => ({ value: x.id, label: `${x.name} (${x.protocol}, ${x.status})` }))]} />
             )}
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
               <input type="radio" style={{ width: 'auto' }} checked={edit.mode === 'streams'}
@@ -328,7 +327,7 @@ export function OutgoingTab({ serverId }) {
         </div>
       </div>
       {modal && (
-        <div className="modal-back" onClick={() => setModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{modal.id ? `Edit ${modal.application}/${modal.stream}` : 'New outgoing stream'}</h3>
             <div className="field-inline">
@@ -338,15 +337,11 @@ export function OutgoingTab({ serverId }) {
             <label>Description</label>
             <input value={modal.description} onChange={e => setModal(m => ({ ...m, description: e.target.value }))} />
             <label>Video source (incoming stream)</label>
-            <select value={modal.video_source} onChange={e => setModal(m => ({ ...m, video_source: e.target.value }))}>
-              <option value="">— keep / none —</option>
-              {incoming.map(x => <option key={x.id} value={x.id}>{x.name} ({x.status})</option>)}
-            </select>
+            <Select value={modal.video_source} onChange={v => setModal(m => ({ ...m, video_source: v }))} searchable
+                    options={[{ value: '', label: '— keep / none —' }, ...incoming.map(x => ({ value: x.id, label: `${x.name} (${x.status})` }))]} />
             <label>Audio source (incoming stream)</label>
-            <select value={modal.audio_source} onChange={e => setModal(m => ({ ...m, audio_source: e.target.value }))}>
-              <option value="">— same as video / none —</option>
-              {incoming.map(x => <option key={x.id} value={x.id}>{x.name} ({x.status})</option>)}
-            </select>
+            <Select value={modal.audio_source} onChange={v => setModal(m => ({ ...m, audio_source: v }))} searchable
+                    options={[{ value: '', label: '— same as video / none —' }, ...incoming.map(x => ({ value: x.id, label: `${x.name} (${x.status})` }))]} />
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
               <button onClick={() => setModal(null)}>Cancel</button>
               <button className="primary" disabled={busy || !modal.application || !modal.stream} onClick={save}>
@@ -459,7 +454,7 @@ export function HotswapTab({ serverId }) {
         </div>
       )}
       {editModal && (
-        <div className="modal-back" onClick={() => setEditModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setEditModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Edit hot swap</h3>
             <div className="field-inline">
@@ -685,7 +680,7 @@ export function MpegtsInTab({ serverId }) {
         </table>
       </div>
       {modal && (
-        <div className="modal-back" onClick={() => setModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{modal.id ? `Edit ${modal.name}` : 'New incoming stream'}</h3>
             <label>Name</label>
@@ -695,15 +690,13 @@ export function MpegtsInTab({ serverId }) {
             <div className="field-inline">
               <div>
                 <label>Protocol</label>
-                <select value={modal.protocol} onChange={e => setModal(m => ({ ...m, protocol: e.target.value }))}>
-                  {['srt', 'udp', 'rist', 'http', 'hls'].map(x => <option key={x} value={x}>{x}</option>)}
-                </select>
+                <Select value={modal.protocol} onChange={v => setModal(m => ({ ...m, protocol: v }))}
+                        options={['srt', 'udp', 'rist', 'http', 'hls'].map(x => ({ value: x, label: x }))} />
               </div>
               <div>
                 <label>Receive mode</label>
-                <select value={modal.receive_mode} onChange={e => setModal(m => ({ ...m, receive_mode: e.target.value }))}>
-                  {['listen', 'pull'].map(x => <option key={x} value={x}>{x}</option>)}
-                </select>
+                <Select value={modal.receive_mode} onChange={v => setModal(m => ({ ...m, receive_mode: v }))}
+                        options={['listen', 'pull'].map(x => ({ value: x, label: x }))} />
               </div>
             </div>
             <div className="field-inline">
@@ -799,7 +792,7 @@ export function LivePullTab({ serverId }) {
         </table>
       </div>
       {modal && (
-        <div className="modal-back" onClick={() => setModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{modal.id ? `Edit pull ${modal.application}/${modal.stream}` : 'New RTMP pull'}</h3>
             <label>Source URL</label>
@@ -909,7 +902,7 @@ export function AppsTab({ serverId }) {
         </table>
       </div>
       {modal && (
-        <div className="modal-back" onClick={() => setModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{modal.id ? `Edit ${modal.application}` : 'New application'}</h3>
             <label>Application name</label>
@@ -994,7 +987,7 @@ export function InterfacesTab({ serverId }) {
         </div>
       </div>
       {modal && (
-        <div className="modal-back" onClick={() => setModal(null)}>
+        <div className="modal-back" {...backdropClose(() => setModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{modal.id ? `Edit interface ${modal.ip}:${modal.port}` : 'New RTMP interface'}</h3>
             <div className="field-inline">

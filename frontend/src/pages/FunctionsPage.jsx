@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { backdropClose } from '../components/Modal.jsx';
+import Select from '../components/Select.jsx';
 
 const KINDS = [
   { value: 'republish', label: 'Republish rule' },
@@ -41,15 +43,14 @@ function ObjectPicker({ servers, step, onPick }) {
       setObjects(d.objects);
     } catch (e) { setError(e.message); }
   };
-  const describe = (o) => {
-    const src = o.src_app !== undefined ? `${o.src_app}/${o.src_strm || '*'} → ${o.dest_addr || ''}` :
-                o.source_streams !== undefined ? `${o.name || o.protocol} ⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
-                o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}${o.emergency ? ' [EMERGENCY]' : ''}` :
-                (o.name !== undefined && o.paused !== undefined && o.server_id !== undefined) ? `${o.name}${o.paused ? ' [paused]' : ' [running]'}` :
-                o.application !== undefined ? `${o.application}/${o.stream || ''}${o.status ? ' · ' + o.status : ''}` :
-                o.name || o.protocol || '';
-    return `${String(o.id).slice(-6)} · ${src}`;
-  };
+  const labelOf = (o) =>
+    o.src_app !== undefined ? `${o.src_app}/${o.src_strm || '*'} → ${o.dest_addr || ''}` :
+    o.source_streams !== undefined ? `${o.name || o.protocol} ⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
+    o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}${o.emergency ? ' [EMERGENCY]' : ''}` :
+    (o.name !== undefined && o.paused !== undefined && o.server_id !== undefined) ? `${o.name}${o.paused ? ' [paused]' : ' [running]'}` :
+    o.application !== undefined ? `${o.application}/${o.stream || ''}${o.status ? ' · ' + o.status : ''}` :
+    o.name || o.protocol || '';
+  const describe = (o) => `${String(o.id).slice(-6)} · ${labelOf(o)}`;
   return (
     <div style={{ marginTop: 6 }}>
       <button disabled={!step.serverId && !['transcoder', 'abr', 'alias'].includes(step.objectKind)} onClick={load}>Browse objects…</button>
@@ -58,7 +59,7 @@ function ObjectPicker({ servers, step, onPick }) {
         <div className="panel" style={{ marginTop: 6, maxHeight: 180, overflow: 'auto', padding: 8 }}>
           {objects.map(o => (
             <div key={o.id} className="mono" style={{ cursor: 'pointer', padding: '3px 6px' }}
-                 onClick={() => onPick(o)} title={JSON.stringify(o, null, 1)}>
+                 onClick={() => onPick(o, labelOf(o))} title={JSON.stringify(o, null, 1)}>
               {describe(o)}
             </div>
           ))}
@@ -127,31 +128,30 @@ function StepEditor({ step, servers, onChange, onRemove }) {
       {step.type === 'action' && (
         <>
           <label>Action target kind</label>
-          <select value={step.objectKind || 'outgoing'} onChange={e => set('objectKind', e.target.value === 'outgoing' ? '' : e.target.value)}>
-            <option value="outgoing">MPEGTS outgoing (pause/resume/restart)</option>
-            <option value="live_pull">RTMP live pull (restart only)</option>
-            <option value="transcoder">Transcoder (pause/resume; no server needed)</option>
-          </select>
+          <Select value={step.objectKind || 'outgoing'} onChange={v => set('objectKind', v === 'outgoing' ? '' : v)}
+                  options={[
+                    { value: 'outgoing', label: 'MPEGTS outgoing (pause/resume/restart)' },
+                    { value: 'live_pull', label: 'RTMP live pull (restart only)' },
+                    { value: 'transcoder', label: 'Transcoder (pause/resume; no server needed)' },
+                  ]} />
         </>
       )}
       {step.type !== 'delay' && (
         <>
           <label>Server</label>
-          <select value={step.serverId || ''} onChange={e => set('serverId', e.target.value)}>
-            <option value="">— select —</option>
-            {servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <Select value={step.serverId || ''} onChange={v => set('serverId', v)} searchable
+                  options={[{ value: '', label: '— select —' }, ...servers.map(s => ({ value: s.id, label: s.name }))]} />
           {step.type === 'patch' && (
             <>
               <label>Object kind</label>
-              <select value={step.objectKind} onChange={e => set('objectKind', e.target.value)}>
-                {KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-              </select>
+              <Select value={step.objectKind} onChange={v => set('objectKind', v)}
+                      options={KINDS.map(k => ({ value: k.value, label: k.label }))} />
             </>
           )}
           <label>Target object id</label>
           <input className="mono" value={step.targetId || ''} onChange={e => set('targetId', e.target.value)} />
-          <ObjectPicker servers={servers} step={step} onPick={o => set('targetId', String(o.id))} />
+          <ObjectPicker servers={servers} step={step} onPick={(o, label) => { set('targetId', String(o.id)); set('targetLabel', label); }} />
+          {step.targetLabel && <div className="hint" style={{ marginTop: 4 }}>Selected: <b className="mono">{step.targetLabel}</b></div>}
           {step.type === 'patch' && (
             <>
               <label>Source picker (apps/streams on the selected server)</label>
@@ -167,9 +167,10 @@ function StepEditor({ step, servers, onChange, onRemove }) {
                   <datalist id={`live-${step.serverId}-${step.targetId}`}>
                     {live.streams.map(st => <option key={st.app + '/' + st.stream} value={st.app + '/' + st.stream} />)}
                   </datalist>
-                  <select style={{ flex: 3 }} value={pairKind} onChange={e => setPairKind(e.target.value)}>
-                    {KEY_PAIRS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-                  </select>
+                  <div style={{ flex: 3 }}>
+                    <Select value={pairKind} onChange={setPairKind}
+                            options={KEY_PAIRS.map(k => ({ value: k.value, label: k.label }))} />
+                  </div>
                   <button disabled={!pick.includes('/')} onClick={insertPick}>Insert</button>
                 </div>
               )}
@@ -262,7 +263,7 @@ function RunView({ runId, onClose }) {
   const statusColor = run.status === 'success' ? 'var(--ok)'
     : run.status === 'running' ? 'var(--accent)' : 'var(--danger)';
   return (
-    <div className="modal-back" onClick={run.status !== 'running' ? onClose : undefined}>
+    <div className="modal-back" {...backdropClose(run.status !== 'running' ? onClose : () => {})}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{run.functionName}</h3>
         <div className="mono" style={{ color: statusColor, marginBottom: 10 }}>

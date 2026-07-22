@@ -1,6 +1,23 @@
 # Changelog
 
 ## iter3 (v0.4.x) — UX & design overhaul
+### v0.4.3 (m4) — UX polish; ITER3 CLOSED
+- All 18 modals across the app now close safely: a text-selection drag that
+  starts inside and releases on the backdrop no longer closes them (only a
+  genuine backdrop press-release, or Esc). Retrofit via a shared
+  `backdropClose` helper; no native browser confirm-on-drag behaviour left
+- All 16 native <select> dropdowns replaced with the themed custom Select
+  (searchable where the list is long: server/incoming pickers); consistent
+  look in both dark and light themes, including the option list
+- Function builder clarity (5a): after picking an object via Browse, the
+  chosen app/stream is shown under the id ("Selected: app/stream") and stored
+  on the step, so the meaning of the inserted id is never ambiguous
+- Admin can reset another user's 2FA (recovery for lost device/backup codes):
+  button in Users (hidden unless that user has 2FA on), superadmin protected,
+  audited as users:reset_2fa
+- iter3 epic closed: theme system (m1), profile settings + i18n (m2), TOTP
+  2FA (m3), UX polish (m4)
+
 ### v0.4.2 (m3) — two-factor authentication (TOTP)
 - Optional TOTP 2FA (RFC 6238, dependency-free implementation with a
   build-time check against the RFC test vectors): setup with QR code +
