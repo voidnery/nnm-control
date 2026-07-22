@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
+import { useI18n } from '../i18n.jsx';
 
 const KINDS = [
   { value: 'republish', label: 'Republish rule' },
@@ -35,8 +36,9 @@ const PRESETS = [
 function ObjectPicker({ servers, step, onPick }) {
   const [objects, setObjects] = useState(null);
   const [error, setError] = useState('');
+  const [q, setQ] = useState('');
   const load = async () => {
-    setError(''); setObjects(null);
+    setError(''); setObjects(null); setQ('');
     try {
       const accountKind = ['transcoder', 'abr', 'alias'].includes(step.objectKind);
       const d = await api(`/functions/objects/${accountKind ? 'any' : step.serverId}/${step.objectKind || 'outgoing'}`);
@@ -56,14 +58,23 @@ function ObjectPicker({ servers, step, onPick }) {
       <button disabled={!step.serverId && !['transcoder', 'abr', 'alias'].includes(step.objectKind)} onClick={load}>Browse objects…</button>
       {error && <div className="error-box">{error}</div>}
       {objects && (
-        <div className="panel" style={{ marginTop: 6, maxHeight: 180, overflow: 'auto', padding: 8 }}>
-          {objects.map(o => (
-            <div key={o.id} className="mono" style={{ cursor: 'pointer', padding: '3px 6px' }}
-                 onClick={() => onPick(o, labelOf(o))} title={JSON.stringify(o, null, 1)}>
-              {describe(o)}
-            </div>
-          ))}
-          {objects.length === 0 && <span className="hint">No objects of this kind on the server.</span>}
+        <div className="panel" style={{ marginTop: 6, padding: 8 }}>
+          <input autoFocus placeholder="Filter…" value={q} onChange={e => setQ(e.target.value)} style={{ marginBottom: 6 }} />
+          <div style={{ maxHeight: 180, overflow: 'auto' }}>
+            {objects.filter(o => !q || describe(o).toLowerCase().includes(q.toLowerCase())).map(o => (
+              <div key={o.id} className="mono" style={{ cursor: 'pointer', padding: '3px 6px', borderRadius: 4 }}
+                   onClick={() => { onPick(o, labelOf(o)); setObjects(null); setQ(''); }}
+                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-raise)'}
+                   onMouseLeave={e => e.currentTarget.style.background = ''}
+                   title={labelOf(o)}>
+                {describe(o)}
+              </div>
+            ))}
+            {objects.length === 0 && <span className="hint">No objects of this kind on the server.</span>}
+          </div>
+          <div className="row" style={{ marginTop: 6, justifyContent: 'flex-end' }}>
+            <button onClick={() => setObjects(null)}>Close</button>
+          </div>
         </div>
       )}
     </div>
@@ -162,11 +173,10 @@ function StepEditor({ step, servers, onChange, onRemove }) {
               {liveErr && <div className="error-box">{liveErr}</div>}
               {live && (
                 <div className="row" style={{ marginTop: 6 }}>
-                  <input className="mono" style={{ flex: 2 }} list={`live-${step.serverId}-${step.targetId}`}
-                         placeholder="app/stream" value={pick} onChange={e => setPick(e.target.value)} />
-                  <datalist id={`live-${step.serverId}-${step.targetId}`}>
-                    {live.streams.map(st => <option key={st.app + '/' + st.stream} value={st.app + '/' + st.stream} />)}
-                  </datalist>
+                  <div style={{ flex: 2 }}>
+                    <Select value={pick} onChange={setPick} searchable placeholder="app/stream…"
+                            options={live.streams.map(st => ({ value: `${st.app}/${st.stream}`, label: `${st.app}/${st.stream}` }))} />
+                  </div>
                   <div style={{ flex: 3 }}>
                     <Select value={pairKind} onChange={setPairKind}
                             options={KEY_PAIRS.map(k => ({ value: k.value, label: k.label }))} />
@@ -289,6 +299,7 @@ function RunView({ runId, onClose }) {
 }
 
 export default function FunctionsPage() {
+  const { t } = useI18n();
   const { can } = useAuth();
   const [fns, setFns] = useState([]);
   const [servers, setServers] = useState([]);
@@ -322,7 +333,7 @@ export default function FunctionsPage() {
 
   return (
     <div>
-      <h1>Functions</h1>
+      <h1>{t('page.functions.title')}</h1>
       <div className="sub">Engineering macros: ordered transactional steps over WMSPanel-managed streams, with verification and automatic rollback.</div>
       {error && <div className="error-box">{error}</div>}
       {can('functions.manage') && (

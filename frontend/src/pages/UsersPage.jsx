@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
+import { useI18n } from '../i18n.jsx';
 
 function UserModal({ initial, roles, onClose, onSaved }) {
   const { user: me } = useAuth();
@@ -80,6 +81,7 @@ function UserModal({ initial, roles, onClose, onSaved }) {
 }
 
 export default function UsersPage() {
+  const { t } = useI18n();
   const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -107,8 +109,8 @@ export default function UsersPage() {
 
   return (
     <div>
-      <h1>Users</h1>
-      <div className="sub">Panel accounts. Superadmin is unique and protected; admins have full access; custom roles are granular.</div>
+      <h1>{t('page.users.title')}</h1>
+      <div className="sub">{t('page.users.sub')}</div>
       {error && <div className="error-box">{error}</div>}
       <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ New user</button>
       <div className="panel">

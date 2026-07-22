@@ -3,11 +3,13 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
+import { useI18n } from '../i18n.jsx';
 
 // Transcoders are account-level in WMSPanel; server_id is an attribute.
 // Scope here: list + pause/resume/clone + raw details; licenses with expiry
 // warnings. Pipeline editing is a later step (schemas land from live use).
 export default function TranscodersPage() {
+  const { t } = useI18n();
   const { can } = useAuth();
   const [transcoders, setTranscoders] = useState(null);
   const [licenses, setLicenses] = useState([]);
@@ -61,8 +63,8 @@ export default function TranscodersPage() {
 
   return (
     <div>
-      <h1>Transcoders</h1>
-      <div className="sub">Account-level Nimble Transcoder instances: pause/resume/clone and details. Pipeline editing arrives next.</div>
+      <h1>{t('page.transcoders.title')}</h1>
+      <div className="sub">{t('page.transcoders.sub')}</div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
         <input style={{ maxWidth: 260 }} placeholder="Filter name/tag…" value={filter} onChange={e => setFilter(e.target.value)} />

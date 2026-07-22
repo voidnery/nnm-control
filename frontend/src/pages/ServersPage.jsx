@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
+import { useI18n } from '../i18n.jsx';
 
 const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '' };
 
@@ -96,6 +97,7 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
 }
 
 export default function ServersPage() {
+  const { t } = useI18n();
   const { can, sys } = useAuth();
   const wms = sys?.controlPlane === 'wmspanel';
   const [servers, setServers] = useState([]);
@@ -133,8 +135,8 @@ export default function ServersPage() {
 
   return (
     <div>
-      <h1>Servers</h1>
-      <div className="sub">Managed Nimble Streamer instances (native management API endpoints).</div>
+      <h1>{t('page.servers.title')}</h1>
+      <div className="sub">{t('page.servers.sub')}</div>
       {error && <div className="error-box">{error}</div>}
       {wms && (
         <div className="panel" style={{ padding: '10px 14px' }}>

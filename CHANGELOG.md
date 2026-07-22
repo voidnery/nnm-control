@@ -1,6 +1,20 @@
 # Changelog
 
 ## iter4 (v0.4.x) — UX refinement round 2
+### v0.4.5 (iter4) — function builder pickers & wider i18n
+- Function builder: the Browse-objects list now collapses after you pick an
+  object (was staying open), and gained a filter box for long lists
+- Source picker "app/stream" dropdown replaced the native datalist with the
+  themed searchable Select (was rendering as a browser-default popup)
+- Both function pickers are now searchable
+- i18n coverage widened: page titles/subtitles and common actions across
+  Dashboard, Servers, Settings, Users, Roles, Transcoders, Distribution,
+  Zabbix, Functions, Audit now translate with the RU locale (full string
+  coverage of every page is still in progress)
+- Validation hardened: added a runtime-safety audit that every component
+  calling t() actually imports the i18n hook (esbuild does not catch missing
+  identifiers) — caught before shipping
+
 ### v0.4.4 (iter4) — checkboxes, toasts, JSON→fields, streams & notes
 - Custom-designed checkboxes and radios across the whole app (themed, replace
   native controls everywhere automatically)

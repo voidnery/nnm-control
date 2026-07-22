@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { backdropClose } from '../components/Modal.jsx';
+import { useI18n } from '../i18n.jsx';
 
 function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
   const isEdit = Boolean(initial._id);
@@ -73,6 +74,7 @@ function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
 }
 
 export default function RolesPage() {
+  const { t } = useI18n();
   const [roles, setRoles] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [functions, setFunctions] = useState([]);
@@ -96,8 +98,8 @@ export default function RolesPage() {
 
   return (
     <div>
-      <h1>Roles</h1>
-      <div className="sub">Custom roles grant access to specific panel functions. Superadmin/admin bypass this list.</div>
+      <h1>{t('page.roles.title')}</h1>
+      <div className="sub">{t('page.roles.sub')}</div>
       {error && <div className="error-box">{error}</div>}
       <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ New role</button>
       <div className="panel">

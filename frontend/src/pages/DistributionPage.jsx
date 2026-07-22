@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
+import { useI18n } from '../i18n.jsx';
 
 // Account-level distribution: ABR ladders, application aliases, origin apps.
 // server_ids are edited as checkboxes of mapped panel servers and displayed
@@ -28,6 +29,7 @@ function ServerPicker({ servers, value, onChange }) {
 }
 
 export default function DistributionPage() {
+  const { t } = useI18n();
   const { can } = useAuth();
   const [servers, setServers] = useState([]);
   const [abr, setAbr] = useState(null);
@@ -105,8 +107,8 @@ export default function DistributionPage() {
   if (abr === null) return <div className="hint">Loading…</div>;
   return (
     <div>
-      <h1>Distribution</h1>
-      <div className="sub">Account-level: ABR ladders, application aliases and origin apps. Changes reach servers on the ~30s WMSPanel sync.</div>
+      <h1>{t('page.distribution.title')}</h1>
+      <div className="sub">{t('page.distribution.sub')}</div>
       {error && <div className="error-box">{error}</div>}
 
       <div className="panel">

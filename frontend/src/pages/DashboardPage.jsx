@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import { useI18n } from '../i18n.jsx';
 
 const fmtBytes = (b) => {
   if (b == null) return '—';
@@ -83,6 +84,7 @@ function WmspanelCard({ server }) {
 }
 
 export default function DashboardPage() {
+  const { t } = useI18n();
   const { sys } = useAuth();
   const [servers, setServers] = useState(null);
   const [error, setError] = useState('');
@@ -95,7 +97,7 @@ export default function DashboardPage() {
   if (!sys) return null;
   return (
     <div>
-      <h1>Dashboard</h1>
+      <h1>{t('page.dashboard.title')}</h1>
       <div className="sub">
         {wms
           ? 'Fleet status from WMSPanel (control plane: WMSPanel API; auto-sync every 10 min).'

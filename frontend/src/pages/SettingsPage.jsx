@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import Select from '../components/Select.jsx';
 import { useToast } from '../toast.jsx';
+import { useI18n } from '../i18n.jsx';
 
 const BASE_URLS = [
   'https://api.wmspanel.com/v1',
@@ -10,6 +11,7 @@ const BASE_URLS = [
 ];
 
 export default function SettingsPage() {
+  const { t } = useI18n();
   const { push } = useToast();
   const { refreshSystem } = useAuth();
   const [settings, setSettings] = useState(null);
@@ -61,8 +63,8 @@ export default function SettingsPage() {
   if (!settings) return <div className="hint">Loading…</div>;
   return (
     <div>
-      <h1>Settings</h1>
-      <div className="sub">System settings. Visible to superadmin, admins and roles with the settings permission.</div>
+      <h1>{t('page.settings.title')}</h1>
+      <div className="sub">{t('page.settings.sub')}</div>
 
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>Control plane</h2>

@@ -1,9 +1,11 @@
+import { useI18n } from '../i18n.jsx';
 export default function ZabbixPage() {
+  const { t } = useI18n();
   const base = window.location.origin;
   return (
     <div>
-      <h1>Zabbix integration</h1>
-      <div className="sub">HTTP Agent endpoints for Zabbix items. The token was generated at first deployment (see .env, ZABBIX_TOKEN).</div>
+      <h1>{t('page.zabbix.title')}</h1>
+      <div className="sub">{t('page.zabbix.sub')}</div>
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>Endpoints</h2>
         <p className="mono">{base}/api/zabbix/panel?token=&lt;ZABBIX_TOKEN&gt;</p>

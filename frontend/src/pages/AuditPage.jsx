@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Select from '../components/Select.jsx';
 import DataView from '../components/DataView.jsx';
+import { useI18n } from '../i18n.jsx';
 
 export default function AuditPage() {
+  const { t } = useI18n();
   const [items, setItems] = useState([]);
   const [username, setUsername] = useState('');
   const [action, setAction] = useState('');
@@ -40,7 +42,7 @@ export default function AuditPage() {
 
   return (
     <div>
-      <h1>Audit log</h1>
+      <h1>{t('page.audit.title')}</h1>
       <div className="sub">Who changed what and when. Mutating actions, logins and function runs; secrets are masked; retention 90 days.</div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
