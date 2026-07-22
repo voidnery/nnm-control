@@ -1,6 +1,21 @@
 # Changelog
 
 ## iter6 — server functionality in the panel (in progress)
+### v0.6.3 (m4) — copy streams between servers
+- Multi-select streams in SRT Out / SRT in Nimble / RTMP Pull / SRT In (leading
+  checkbox column + "select all visible"), then "Copy to server…" to another
+  mapped server. Created stopped (paused) by default
+- Backend POST /wmspanel/copy-streams: lists authoritative source objects,
+  maps ONLY portable fields per kind, POSTs on the target, then pauses
+  (field or action per kind), and copies udp source_streams. Per-item result
+  with warnings; audited streams:copy
+- Honest portability handling: udp source_id and outgoing video/audio_source
+  reference server-local objects and are NOT copied — each such item is flagged
+  "re-link source on target". livepull and incoming copy fully
+- NOTE: create-response id extraction and paused-on-create are built to the
+  documented shapes but validated only against fixtures — verify one copy on a
+  non-critical target live (flagged per our deferred-validation rule); EN/RU
+
 ### v0.6.2 (m3) — stream tags with OR/AND filtering
 - Panel-side tags for WMSPanel stream objects (SRT Out, SRT in Nimble, RTMP
   Pull, SRT In). Tags live in the panel DB keyed by (serverId, kind, objId),

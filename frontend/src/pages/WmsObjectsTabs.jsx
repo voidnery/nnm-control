@@ -7,6 +7,7 @@ import Select from '../components/Select.jsx';
 import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
+import { useStreamCopy, CopyCheckbox, CopySelectionBar, CopyModal } from '../components/StreamCopy.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
 // - UDP/SRT outputs: source_streams[{application, stream, pmt/video/audio pid}]
@@ -36,6 +37,7 @@ const SyncNote = () => (
 // ---------------------------------------------------------------- UDP / SRT
 export function UdpTab({ serverId }) {
   const st = useStreamTags(serverId);
+  const cp = useStreamCopy(serverId, 'udp');
   const confirm = useConfirm();
   const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'udp');
@@ -122,12 +124,14 @@ export function UdpTab({ serverId }) {
         {can('wmsobjects.manage') && <button className="primary" disabled={busy} onClick={() => openCfg(null)}>+ New output</button>}
       </div>
       <TagFilterBar st={st} />
+      <CopySelectionBar cp={cp} visibleIds={settings.filter(o => st.matches('udp', o.id)).map(o => o.id)} />
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Proto</th><th>Destination</th><th>Source</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th>Proto</th><th>Destination</th><th>Source</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {settings.filter(o => st.matches('udp', o.id)).map(o => (
               <tr key={o.id}>
+                <td><CopyCheckbox cp={cp} id={o.id} /></td>
                 <td><b>{o.name || String(o.id).slice(-6)}</b>{o.description && <div className="hint">{o.description}</div>}</td>
                 <td><span className="badge">{o.protocol}</span></td>
                 <td className="mono">{o.ip}:{o.port}</td>
@@ -150,7 +154,7 @@ export function UdpTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {settings.length === 0 && <tr><td colSpan={7} className="hint">No UDP/SRT outputs on this server.</td></tr>}
+            {settings.length === 0 && <tr><td colSpan={8} className="hint">No UDP/SRT outputs on this server.</td></tr>}
           </tbody>
         </table>
 
@@ -234,6 +238,7 @@ export function UdpTab({ serverId }) {
           </div>
         </div>
       )}
+      <CopyModal cp={cp} currentServerId={serverId} />
     </div>
   );
 }
@@ -241,6 +246,7 @@ export function UdpTab({ serverId }) {
 // ----------------------------------------------------------------- Outgoing
 export function OutgoingTab({ serverId }) {
   const st = useStreamTags(serverId);
+  const cp = useStreamCopy(serverId, 'outgoing');
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'outgoing');
@@ -306,12 +312,14 @@ export function OutgoingTab({ serverId }) {
         )}
       </div>
       <TagFilterBar st={st} />
+      <CopySelectionBar cp={cp} visibleIds={streams.filter(o => st.matches('outgoing', o.id)).map(o => o.id)} />
       <div className="panel">
         <table>
-          <thead><tr><th>Output</th><th>Delivery</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Output</th><th>Delivery</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {streams.filter(o => st.matches('outgoing', o.id)).map(o => (
               <tr key={o.id}>
+                <td><CopyCheckbox cp={cp} id={o.id} /></td>
                 <td className="mono"><b>{o.application}/{o.stream}</b>{o.description && <div className="hint">{o.description}</div>}</td>
                 <td>
                   <span className={'lamp ' + (o.status === 'synced' ? 'on' : 'warn')} />
@@ -336,7 +344,7 @@ export function OutgoingTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {streams.length === 0 && <tr><td colSpan={5} className="hint">No MPEGTS outgoing streams on this server.</td></tr>}
+            {streams.length === 0 && <tr><td colSpan={6} className="hint">No MPEGTS outgoing streams on this server.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -365,6 +373,7 @@ export function OutgoingTab({ serverId }) {
           </div>
         </div>
       )}
+      <CopyModal cp={cp} currentServerId={serverId} />
     </div>
   );
 }
@@ -629,6 +638,7 @@ const codecsOf = (o) => {
 
 export function MpegtsInTab({ serverId }) {
   const st = useStreamTags(serverId);
+  const cp = useStreamCopy(serverId, 'incoming');
   const confirm = useConfirm();
   const { can, sys } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'incoming');
@@ -681,12 +691,14 @@ export function MpegtsInTab({ serverId }) {
         <span className="hint">{streams.length} of {(data?.streams || []).length}</span>
       </div>
       <TagFilterBar st={st} />
+      <CopySelectionBar cp={cp} visibleIds={streams.map(o => o.id)} />
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Proto</th><th>Endpoint</th><th>Mode</th><th>Codecs</th><th>Bitrate</th><th>Status</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th>Proto</th><th>Endpoint</th><th>Mode</th><th>Codecs</th><th>Bitrate</th><th>Status</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {streams.map(o => (
               <tr key={o.id}>
+                <td><CopyCheckbox cp={cp} id={o.id} /></td>
                 <td><b>{o.name}</b>{o.description && <div className="hint">{o.description}</div>}</td>
                 <td><span className="badge">{o.protocol}</span></td>
                 <td className="mono">{o.ip}:{o.port}</td>
@@ -708,7 +720,7 @@ export function MpegtsInTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {streams.length === 0 && <tr><td colSpan={9} className="hint">No incoming MPEGTS/SRT streams{filter ? ' matching filter' : ''}.</td></tr>}
+            {streams.length === 0 && <tr><td colSpan={10} className="hint">No incoming MPEGTS/SRT streams{filter ? ' matching filter' : ''}.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -747,6 +759,7 @@ export function MpegtsInTab({ serverId }) {
           </div>
         </div>
       )}
+      <CopyModal cp={cp} currentServerId={serverId} />
     </div>
   );
 }
@@ -755,6 +768,7 @@ export function MpegtsInTab({ serverId }) {
 // RTMP pull feeds with fallback_urls — the built-in feed reserve mechanism.
 export function LivePullTab({ serverId }) {
   const st = useStreamTags(serverId);
+  const cp = useStreamCopy(serverId, 'livepull');
   const confirm = useConfirm();
   const { can } = useAuth();
   const { data, error, setError, load } = useObjects(serverId, 'livepull');
@@ -795,12 +809,14 @@ export function LivePullTab({ serverId }) {
         )}
       </div>
       <TagFilterBar st={st} />
+      <CopySelectionBar cp={cp} visibleIds={settings.filter(o => st.matches('livepull', o.id)).map(o => o.id)} />
       <div className="panel">
         <table>
-          <thead><tr><th>Local app/stream</th><th>Source URL</th><th>Fallbacks</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Local app/stream</th><th>Source URL</th><th>Fallbacks</th><th>State</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {settings.filter(o => st.matches('livepull', o.id)).map(o => (
               <tr key={o.id}>
+                <td><CopyCheckbox cp={cp} id={o.id} /></td>
                 <td className="mono"><b>{o.application}/{o.stream}</b>{o.description && <div className="hint">{o.description}</div>}</td>
                 <td className="mono hint" style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.url}</td>
                 <td>{(o.fallback_urls || []).length ? <span className="badge">{o.fallback_urls.length} fallback</span> : <span className="hint">—</span>}</td>
@@ -824,7 +840,7 @@ export function LivePullTab({ serverId }) {
                 </td>
               </tr>
             ))}
-            {settings.length === 0 && <tr><td colSpan={6} className="hint">No RTMP pull settings on this server.</td></tr>}
+            {settings.length === 0 && <tr><td colSpan={7} className="hint">No RTMP pull settings on this server.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -853,6 +869,7 @@ export function LivePullTab({ serverId }) {
           </div>
         </div>
       )}
+      <CopyModal cp={cp} currentServerId={serverId} />
     </div>
   );
 }

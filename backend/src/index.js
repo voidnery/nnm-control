@@ -11,6 +11,7 @@ import { zabbixRouter } from './routes/zabbix.js';
 import { settingsRouter } from './routes/settings.js';
 import { playlistsRouter } from './routes/playlists.js';
 import { streamTagsRouter } from './routes/streamTags.js';
+import { copyStreamsRouter } from './routes/copyStreams.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
 import { auditRouter } from './routes/audit.js';
@@ -35,6 +36,7 @@ app.use('/api/wmspanel', wmspanelRouter);
 app.use('/api/functions', functionsRouter);
 app.use('/api/playlists', playlistsRouter);
 app.use('/api/stream-tags', streamTagsRouter);
+app.use('/api/wmspanel', copyStreamsRouter);
 app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {

@@ -269,3 +269,6 @@ input[type="radio"]:checked::after {
 .tag-modeswitch button { border:none; background:var(--bg-raise); padding:2px 10px; font-size:11px; cursor:pointer; color:var(--fg); }
 .tag-modeswitch button.on { background:var(--accent); color:#fff; }
 .linklike { border:none; background:none; color:var(--accent); cursor:pointer; font-size:12px; text-decoration:underline; }
+
+/* Cross-server copy */
+.copybar { background:var(--bg-raise); border:1px solid var(--accent-dim); border-radius:8px; padding:6px 10px; }
