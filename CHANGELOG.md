@@ -1,6 +1,18 @@
 # Changelog
 
 ## iter3 (v0.4.x) — UX & design overhaul
+### v0.4.1 (m2) — profile settings & i18n
+- New Profile page: theme (system/dark/light, instant preview + persisted),
+  language EN/RU, function-dialog width preference, self-service password
+  change (verifies current password, min 8 chars, audited); 2FA placeholder
+- Per-user preferences persisted server-side (User.preferences); `/auth/me`
+  returns them; PUT /auth/me/preferences and POST /auth/me/password added
+- i18n scaffold: flat EN/RU dictionary with {var} interpolation, English
+  fallback; sidebar navigation and Profile page translated; language follows
+  the saved preference and applies app-wide
+- Saved theme is applied on login/app load; function builder dialog uses the
+  user's chosen width; password change events recorded in the audit log
+
 ### v0.4.0 (m1) — design foundation
 - Theme system: dark / light / system (auto), via `data-theme` and CSS
   variables; light palette added; persisted in a cookie (no localStorage)

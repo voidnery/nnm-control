@@ -24,6 +24,8 @@ export function AuthProvider({ children }) {
     })();
   }, []);
 
+  const refreshUser = async () => { try { setUser(await api('/auth/me')); } catch { /* ignore */ } };
+
   const login = async (username, password) => {
     const data = await api('/auth/login', { method: 'POST', body: { username, password } });
     setToken(data.token);
@@ -32,5 +34,5 @@ export function AuthProvider({ children }) {
   const logout = () => { clearToken(); setUser(null); };
   const can = (perm) => !!user && (user.permissions.includes('*') || user.permissions.includes(perm));
 
-  return <AuthCtx.Provider value={{ user, ready, login, logout, can, sys, refreshSystem }}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={{ user, ready, login, logout, can, sys, refreshSystem, refreshUser, setUser }}>{children}</AuthCtx.Provider>;
 }

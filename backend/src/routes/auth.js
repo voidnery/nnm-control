@@ -28,5 +28,43 @@ authRouter.post('/login', async (req, res) => {
 });
 
 authRouter.get('/me', requireAuth, async (req, res) => {
-  res.json({ id: req.user.id, username: req.user.username, roleType: req.user.roleType, permissions: req.perms });
+  res.json({ id: req.user.id, username: req.user.username, roleType: req.user.roleType, permissions: req.perms, preferences: req.user.preferences || {} });
+});
+
+// Self-service: update own UI preferences.
+authRouter.put('/me/preferences', requireAuth, async (req, res) => {
+  const { theme, lang, functionModalWidth } = req.body || {};
+  const p = req.user.preferences || {};
+  if (theme !== undefined) {
+    if (!['system', 'dark', 'light'].includes(theme)) return res.status(400).json({ error: 'bad theme' });
+    p.theme = theme;
+  }
+  if (lang !== undefined) {
+    if (!['en', 'ru'].includes(lang)) return res.status(400).json({ error: 'bad lang' });
+    p.lang = lang;
+  }
+  if (functionModalWidth !== undefined) {
+    if (!['narrow', 'default', 'wide', 'xwide'].includes(functionModalWidth)) return res.status(400).json({ error: 'bad width' });
+    p.functionModalWidth = functionModalWidth;
+  }
+  req.user.preferences = p;
+  req.user.markModified('preferences');
+  await req.user.save();
+  res.json({ preferences: req.user.preferences });
+});
+
+// Self-service: change own password (requires current password).
+authRouter.post('/me/password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword required' });
+  if (String(newPassword).length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  const ok = await bcrypt.compare(currentPassword, req.user.passwordHash);
+  if (!ok) {
+    logEvent({ req, action: 'auth:password_change', outcome: 'error', status: 401, detail: { reason: 'wrong current password' } });
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+  req.user.passwordHash = await bcrypt.hash(newPassword, 10);
+  await req.user.save();
+  logEvent({ req, action: 'auth:password_change', outcome: 'ok', status: 200 });
+  res.json({ ok: true });
 });

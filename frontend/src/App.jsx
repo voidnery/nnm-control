@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
+import { useTheme } from './theme.jsx';
+import { useI18n } from './i18n.jsx';
 
-export const APP_VERSION = '0.4.0'; // keep in sync with package.json
+export const APP_VERSION = '0.4.1'; // keep in sync with package.json
 import { api } from './api.js';
 import SetupPage from './pages/SetupPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
@@ -15,33 +17,38 @@ import ZabbixPage from './pages/ZabbixPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import FunctionsPage from './pages/FunctionsPage.jsx';
 import AuditPage from './pages/AuditPage.jsx';
+import ProfilePage from './pages/ProfilePage.jsx';
 import TranscodersPage from './pages/TranscodersPage.jsx';
 import DistributionPage from './pages/DistributionPage.jsx';
 
 function Layout({ children }) {
   const { user, logout, can, sys } = useAuth();
+  const { applyPreferred } = useTheme();
+  const { t } = useI18n();
+  useEffect(() => { if (user?.preferences?.theme) applyPreferred(user.preferences.theme); }, [user]);
   return (
     <div className="layout">
       <aside className="sidebar">
         <div className="brand">NNM<b>CONTROL</b></div>
         <nav className="nav">
           {can('servers.view') && <NavLink to="/" end>Dashboard</NavLink>}
-          {can('servers.view') && <NavLink to="/servers">Servers</NavLink>}
-          {(can('functions.execute') || can('functions.manage')) && <NavLink to="/functions">Functions</NavLink>}
-          {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/transcoders">Transcoders</NavLink>}
-          {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/distribution">Distribution</NavLink>}
-          {can('users.manage') && <NavLink to="/users">Users</NavLink>}
-          {can('roles.manage') && <NavLink to="/roles">Roles</NavLink>}
-          {can('zabbix.view') && <NavLink to="/zabbix">Zabbix</NavLink>}
-          {can('audit.view') && <NavLink to="/audit">Audit</NavLink>}
-          {can('settings.manage') && <NavLink to="/settings">Settings</NavLink>}
+          {can('servers.view') && <NavLink to="/servers">{t('nav.servers')}</NavLink>}
+          {(can('functions.execute') || can('functions.manage')) && <NavLink to="/functions">{t('nav.functions')}</NavLink>}
+          {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/transcoders">{t('nav.transcoders')}</NavLink>}
+          {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/distribution">{t('nav.distribution')}</NavLink>}
+          {can('users.manage') && <NavLink to="/users">{t('nav.users')}</NavLink>}
+          {can('roles.manage') && <NavLink to="/roles">{t('nav.roles')}</NavLink>}
+          {can('zabbix.view') && <NavLink to="/zabbix">{t('nav.zabbix')}</NavLink>}
+          {can('audit.view') && <NavLink to="/audit">{t('nav.audit')}</NavLink>}
+          {can('settings.manage') && <NavLink to="/settings">{t('nav.settings')}</NavLink>}
+          <NavLink to="/profile">{t('nav.profile')}</NavLink>
         </nav>
         <div className="spacer" />
         <div className="verline">NNM Control v{APP_VERSION}</div>
         <div className="userbox">
           <div className="mono">{user.username}</div>
           <div>{user.roleType}</div>
-          <button style={{ marginTop: 8 }} onClick={logout}>Log out</button>
+          <button style={{ marginTop: 8 }} onClick={logout}>{t('action.logout')}</button>
         </div>
       </aside>
       <main className="main">{children}</main>
@@ -80,6 +87,7 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/functions" element={<FunctionsPage />} />
         <Route path="/audit" element={<AuditPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/transcoders" element={<TranscodersPage />} />
         <Route path="/distribution" element={<DistributionPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

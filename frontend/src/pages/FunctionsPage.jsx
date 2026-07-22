@@ -191,6 +191,10 @@ function StepEditor({ step, servers, onChange, onRemove }) {
 }
 
 function Builder({ initial, servers, onClose, onSaved }) {
+  const { user } = useAuth();
+  const backDown = useRef(false);
+  const w = user?.preferences?.functionModalWidth || 'default';
+  const widthClass = w === 'default' ? '' : 'w-' + w;
   const isEdit = Boolean(initial._id);
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
@@ -209,8 +213,9 @@ function Builder({ initial, servers, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-back" onClick={onClose}>
-      <div className="modal" style={{ width: 640 }} onClick={e => e.stopPropagation()}>
+    <div className="modal-back" onMouseDown={e => { if (e.target === e.currentTarget) backDown.current = true; }}
+         onMouseUp={e => { if (backDown.current && e.target === e.currentTarget) onClose(); backDown.current = false; }}>
+      <div className={'modal ' + widthClass} onMouseDown={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Edit function' : 'New function'}</h3>
         <label>Name</label>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Подмена потоков картинкой" />

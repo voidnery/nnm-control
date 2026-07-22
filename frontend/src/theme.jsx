@@ -32,6 +32,8 @@ export function ThemeProvider({ children }) {
     }
   }, [theme]);
   const setTheme = (t) => { writeCookie(t); setThemeState(t); };
-  return <ThemeCtx.Provider value={{ theme, setTheme }}>{children}</ThemeCtx.Provider>;
+  // Applied when the user's saved preference loads (does not fight cookie).
+  const applyPreferred = (t) => { if (t && t !== theme) { writeCookie(t); setThemeState(t); } };
+  return <ThemeCtx.Provider value={{ theme, setTheme, applyPreferred }}>{children}</ThemeCtx.Provider>;
 }
 export const useTheme = () => useContext(ThemeCtx);
