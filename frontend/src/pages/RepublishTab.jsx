@@ -79,6 +79,10 @@ function WmspanelRules({ serverId }) {
         <button style={{ marginLeft: 12 }} onClick={() => setShowRaw(v => !v)}>{showRaw ? 'Hide raw' : 'Raw'}</button>
       </div>
       {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load} disabled={busy}>Refresh</button>
+        {can('republish.manage') && <button className="primary" onClick={() => setCreating(v => !v)}>{creating ? 'Close form' : '+ New rule'}</button>}
+      </div>
       <TagFilterBar st={tg} />
       <div className="panel">
         <table>
@@ -128,10 +132,6 @@ function WmspanelRules({ serverId }) {
             {rules.length === 0 && <tr><td colSpan={5} className="hint">No republish rules on the mapped WMSPanel server.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}>
-          <button onClick={load} disabled={busy}>Refresh</button>
-          {can('republish.manage') && <button onClick={() => setCreating(v => !v)}>{creating ? 'Close form' : '+ New rule'}</button>}
-        </div>
       </div>
       {creating && (
         <div className="panel">
@@ -250,6 +250,9 @@ function NativeRules({ serverId }) {
         online, two publishers may collide — remove backup rules manually after recovery.
       </div>
       {error && <div className="error-box">{error}</div>}
+      <div className="row" style={{ marginBottom: 10 }}>
+        <button onClick={load}>Refresh</button>
+      </div>
       <TagFilterBar st={tg} />
       <div className="panel">
         <table>
@@ -274,7 +277,6 @@ function NativeRules({ serverId }) {
             {rules && rules.length === 0 && <tr><td colSpan={7} className="hint">No API-created republish rules.</td></tr>}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 8 }}><button onClick={load}>Refresh</button></div>
       </div>
       {can('republish.manage') && (
         <div className="panel">

@@ -1,6 +1,27 @@
 # Changelog
 
 ## iter6 follow-up
+### v0.6.6 — UI bug fixes
+- Select dropdowns no longer break modal forms: the popup now renders in a
+  portal with fixed positioning (modals are overflow:auto scroll containers,
+  which clipped the absolutely-positioned popup — visible on "SRT in Nimble"
+  create/edit). It also flips upward when there's no room below and follows
+  scroll/resize. Fix applies to every Select in the app
+- RTMP Push: moved Refresh / + New rule above the list in both variants
+  (wmspanel rules and native rules) — the last tabs still having them below
+- Server title: replaced the full-size Edit button with a compact inline
+  pencil icon button (muted by default, accent on hover, tooltip + aria-label)
+- Functions: "Browse objects…" now toggles the picker closed on a second click
+  (label switches to "Hide objects"); the selected object line is now a
+  highlighted row with an accent bar instead of a muted hint
+- Functions: object labels can no longer render the literal "undefined" —
+  kinds whose schema isn't pinned (e.g. ABR settings, which carry
+  source_streams but no name/protocol) fall back to a short id
+- Hardening: render smoke now mocks auth so RepublishTab renders its real
+  table, and asserts the "action buttons above the table" invariant on all 9
+  tabs; added a Select portal test (`npm run audit:select`)
+
+## iter6 follow-up
 ### v0.6.5 — tags on the remaining stream tabs
 - Extended panel-side tags (no reload) to the tabs that were missing them:
   Streams, Apps, Interfaces, RTMP Push (both wmspanel + native rule variants),

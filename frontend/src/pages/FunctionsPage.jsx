@@ -39,6 +39,8 @@ function ObjectPicker({ servers, step, onPick }) {
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
   const load = async () => {
+    // Toggle: a second click closes the picker instead of re-fetching.
+    if (objects) { setObjects(null); setQ(''); setError(''); return; }
     setError(''); setObjects(null); setQ('');
     try {
       const accountKind = ['transcoder', 'abr', 'alias'].includes(step.objectKind);
@@ -46,9 +48,13 @@ function ObjectPicker({ servers, step, onPick }) {
       setObjects(d.objects);
     } catch (e) { setError(e.message); }
   };
+  // Head of the label; falls back to a short id so unpinned schemas (e.g. ABR
+  // settings, which carry source_streams but no name/protocol) never render
+  // the literal "undefined".
+  const headOf = (o) => o.name || o.protocol || o.title || (o.id ? '#' + String(o.id).slice(-6) : 'object');
   const labelOf = (o) =>
     o.src_app !== undefined ? `${o.src_app}/${o.src_strm || '*'} → ${o.dest_addr || ''}` :
-    o.source_streams !== undefined ? `${o.name || o.protocol} ⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
+    o.source_streams !== undefined ? `${headOf(o)} ⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
     o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}${o.emergency ? ' [EMERGENCY]' : ''}` :
     (o.name !== undefined && o.paused !== undefined && o.server_id !== undefined) ? `${o.name}${o.paused ? ' [paused]' : ' [running]'}` :
     o.application !== undefined ? `${o.application}/${o.stream || ''}${o.status ? ' · ' + o.status : ''}` :
@@ -56,7 +62,9 @@ function ObjectPicker({ servers, step, onPick }) {
   const describe = (o) => `${String(o.id).slice(-6)} · ${labelOf(o)}`;
   return (
     <div style={{ marginTop: 6 }}>
-      <button disabled={!step.serverId && !['transcoder', 'abr', 'alias'].includes(step.objectKind)} onClick={load}>Browse objects…</button>
+      <button className={objects ? 'active' : ''}
+              disabled={!step.serverId && !['transcoder', 'abr', 'alias'].includes(step.objectKind)}
+              onClick={load}>{objects ? 'Hide objects' : 'Browse objects…'}</button>
       {error && <div className="error-box">{error}</div>}
       {objects && (
         <div className="panel" style={{ marginTop: 6, padding: 8 }}>
@@ -163,7 +171,12 @@ function StepEditor({ step, servers, onChange, onRemove }) {
           <label>Target object id</label>
           <input className="mono" value={step.targetId || ''} onChange={e => set('targetId', e.target.value)} />
           <ObjectPicker servers={servers} step={step} onPick={(o, label) => { set('targetId', String(o.id)); set('targetLabel', label); }} />
-          {step.targetLabel && <div className="hint" style={{ marginTop: 4 }}>Selected: <b className="mono">{step.targetLabel}</b></div>}
+          {step.targetLabel && (
+            <div className="picked-row">
+              <span className="picked-tag">Selected</span>
+              <b className="mono picked-val">{step.targetLabel}</b>
+            </div>
+          )}
           {step.type === 'patch' && (
             <>
               <label>Source picker (apps/streams on the selected server)</label>

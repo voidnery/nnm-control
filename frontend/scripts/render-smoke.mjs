@@ -12,10 +12,14 @@ const SAMPLE = {
   streams: { streams: [{ id: 'st1', application: 'live', stream: 'cam1', status: 'online', protocol: 'RTMP' }] },
   republish: { rules: [{ id: 'r1', src_app: 'live', src_strm: 's', dest_addr: '1.2.3.4', dest_port: 1935, dest_app: 'out', dest_strm: 's' }] },
   tags: { map: {}, catalog: [] },
+  me: { id: 'U1', username: 'smoke', permissions: ['*'] },
+  publicSettings: { controlPlane: 'wmspanel', wmspanelConfigured: true },
 };
 function pick(u){
   u=String(u);
   if(u.includes('/stream-tags/'))return SAMPLE.tags;
+  if(u.includes('/auth/me'))return SAMPLE.me;
+  if(u.includes('/settings/public'))return SAMPLE.publicSettings;
   if(/\/streams(\b|$|\?)/.test(u)&&!u.includes('stream-tags'))return SAMPLE.streams;
   if(u.endsWith('/servers'))return SAMPLE.servers;
   if(u.includes('/udp'))return SAMPLE.udp;
@@ -54,8 +58,8 @@ window.__RENDER_ALL = async () => {
             React.createElement(I18nProvider,null,
               React.createElement(ConfirmProvider,null,
                 React.createElement(Comp,{serverId:'S1', server:{ id:'S1', name:'Src', wmspanelServerId:'w1' }})))))));
-      await new Promise(r=>setTimeout(r,200));
-      out[name] = { ok:true, len: el.innerHTML.length };
+      await new Promise(r=>setTimeout(r,400));
+      out[name] = { ok:true, len: el.innerHTML.length, html: el.innerHTML };
     } catch(e){ out[name] = { ok:false, error:String(e&&e.message||e) }; }
   }
   return out;
@@ -69,12 +73,25 @@ const { window } = dom;
 const consoleErrors = [];
 window.console.error = (...a)=>consoleErrors.push(a.map(String).join(' '));
 window.fetch = (u)=>Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve(pick(u)), text:()=>Promise.resolve(JSON.stringify(pick(u))) });
+window.localStorage.setItem('nc_token','smoke-token');
 window.eval(code);
 const results = await window.__RENDER_ALL();
 
 console.log('RENDER SMOKE (with data):');
 let bad=0;
 for (const [n,r] of Object.entries(results)){ if(!r.ok)bad++; console.log(`  ${r.ok?'✓':'✗'} ${n}: ${r.ok?('ok, '+r.len+' chars'):('CRASH: '+r.error)}`); }
+// Invariant: action buttons (Refresh / + New) must render ABOVE the list table.
+console.log('\nBUTTON PLACEMENT (Refresh must precede <table>):');
+for (const [n,r] of Object.entries(results)) {
+  if (!r.ok || !r.html) continue;
+  const iBtn = r.html.indexOf('Refresh');
+  const iTbl = r.html.indexOf('<table');
+  if (iBtn === -1 || iTbl === -1) { console.log(`  – ${n}: n/a`); continue; }
+  const good = iBtn < iTbl;
+  if (!good) bad++;
+  console.log(`  ${good?'✓':'✗'} ${n}: ${good?'buttons on top':'BUTTONS BELOW TABLE'}`);
+}
+
 const realErrs = consoleErrors.filter(e=>/is not defined|Cannot read|is not a function|Minified React error/.test(e));
 if(realErrs.length){ console.log('\nRENDER ERRORS:'); realErrs.slice(0,8).forEach(e=>console.log('  !', e.slice(0,160))); bad+=realErrs.length; }
 process.exit(bad?1:0);

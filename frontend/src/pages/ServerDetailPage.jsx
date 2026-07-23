@@ -270,10 +270,15 @@ export default function ServerDetailPage() {
   return (
     <div>
       <div className="hint"><Link to="/servers">← Servers</Link></div>
-      <div className="row" style={{ alignItems: 'center', gap: 12 }}>
+      <div className="title-row">
         <h1 style={{ margin: 0 }}>{server ? server.name : '…'}</h1>
         {wms && server?.wmspanelServerId && can('servers.manage') && (
-          <button onClick={() => setEditOpen(true)}>{t('action.edit')}</button>
+          <button className="title-edit" onClick={() => setEditOpen(true)}
+                  title={t('srv.editTitle')} aria-label={t('srv.editTitle')}>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path fill="currentColor" d="M11.6 1.6a1.4 1.4 0 0 1 2 0l.8.8a1.4 1.4 0 0 1 0 2l-.9.9-2.8-2.8.9-.9ZM9.8 3.4l2.8 2.8-6.6 6.6-3.3.5.5-3.3 6.6-6.6Z"/>
+            </svg>
+          </button>
         )}
       </div>
       {server && <div className="sub mono">{server.useSsl ? 'https' : 'http'}://{server.host}:{server.port}</div>}
