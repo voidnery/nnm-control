@@ -12,6 +12,10 @@ import { settingsRouter } from './routes/settings.js';
 import { playlistsRouter } from './routes/playlists.js';
 import { streamTagsRouter } from './routes/streamTags.js';
 import { copyStreamsRouter } from './routes/copyStreams.js';
+import { categoriesRouter } from './routes/categories.js';
+import { statsRouter } from './routes/stats.js';
+import { agentRouter } from './routes/agentProxy.js';
+import { startStatsCollector } from './services/statsCollector.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
 import { auditRouter } from './routes/audit.js';
@@ -20,7 +24,10 @@ import { startPeriodicSync } from './services/wmspanelSync.js';
 
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '1mb' }));
+// Media uploads are streamed straight through to the server agent, so the JSON
+// parser must not consume (or reject) their binary body.
+const isMediaUpload = (req) => req.method === 'PUT' && /^\/api\/servers\/[^/]+\/agent\/media$/.test(req.path);
+app.use((req, res, next) => (isMediaUpload(req) ? next() : express.json({ limit: '1mb' })(req, res, next)));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/setup', setupRouter);
@@ -37,6 +44,9 @@ app.use('/api/functions', functionsRouter);
 app.use('/api/playlists', playlistsRouter);
 app.use('/api/stream-tags', streamTagsRouter);
 app.use('/api/wmspanel', copyStreamsRouter);
+app.use('/api/categories', categoriesRouter);
+app.use('/api/stats', statsRouter);
+app.use('/api/servers', agentRouter);
 app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {
@@ -47,6 +57,7 @@ app.use((err, _req, res, _next) => {
 const start = async () => {
   await connectDb();
   startPeriodicSync();
+  await startStatsCollector();
   if (!config.setupToken) {
     console.warn('[setup] SETUP_TOKEN is empty — first-run setup via web UI is disabled until it is set.');
   }

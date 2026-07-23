@@ -5,12 +5,25 @@ import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
 
 export const serversRouter = Router();
+
+// Keep only well-formed endpoints; ports fall back to Nimble's defaults.
+const cleanEndpoints = (list) => (Array.isArray(list) ? list : [])
+  .filter(e => e && String(e.host || '').trim())
+  .slice(0, 20)
+  .map(e => ({
+    label: String(e.label || '').trim(),
+    host: String(e.host).trim(),
+    hlsPort: Number(e.hlsPort) > 0 ? Number(e.hlsPort) : 8081,
+    rtmpPort: Number(e.rtmpPort) > 0 ? Number(e.rtmpPort) : 1935,
+    ssl: Boolean(e.ssl),
+  }));
 serversRouter.use(requireAuth);
 
 // Token is never returned to the UI — only a hasToken flag.
 const pub = (s) => ({
   id: s.id, name: s.name, host: s.host, port: s.port, useSsl: s.useSsl,
   tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '',
+  playbackEndpoints: (s.playbackEndpoints || []).map(e => ({ label: e.label || '', host: e.host, hlsPort: e.hlsPort, rtmpPort: e.rtmpPort, ssl: Boolean(e.ssl) })),
   syncedFromWmspanel: Boolean(s.syncedFromWmspanel), wmspanelStatus: s.wmspanelStatus || '', lastSyncAt: s.lastSyncAt, createdAt: s.createdAt,
 });
 
@@ -20,16 +33,16 @@ serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
 });
 
 serversRouter.post('/', requirePerm('servers.manage'), async (req, res) => {
-  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '' } = req.body || {};
+  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [] } = req.body || {};
   if (!name || !host) return res.status(400).json({ error: 'name and host required' });
-  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId });
+  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints: cleanEndpoints(playbackEndpoints) });
   res.status(201).json(pub(server));
 });
 
 serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Not found' });
-  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId } = req.body || {};
+  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints } = req.body || {};
   if (name !== undefined) server.name = name;
   if (host !== undefined) server.host = host;
   if (port !== undefined) server.port = port;
@@ -39,6 +52,7 @@ serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   if (tags !== undefined) server.tags = tags;
   if (notes !== undefined) server.notes = notes;
   if (wmspanelServerId !== undefined) server.wmspanelServerId = String(wmspanelServerId).trim();
+  if (playbackEndpoints !== undefined) server.playbackEndpoints = cleanEndpoints(playbackEndpoints);
   await server.save();
   res.json(pub(server));
 });

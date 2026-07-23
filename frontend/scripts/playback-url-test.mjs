@@ -1,0 +1,24 @@
+import { build } from 'esbuild';
+const SRC='/home/claude/nnm-control/frontend/src';
+import { writeFileSync, rmSync } from 'fs';
+const out = '/tmp/.playback-bundle.mjs';
+await build({ stdin:{contents:`
+export { playbackUrls, endpointLabel } from '${SRC}/components/StreamPlayback.jsx';
+`, resolveDir:SRC, loader:'jsx'}, bundle:true, format:'esm', outfile:out, jsx:'automatic', logLevel:'silent' });
+const { playbackUrls, endpointLabel } = await import(out);
+rmSync(out, { force: true });
+let bad = 0;
+const check = (n, got, want) => { const ok = got === want; if (!ok) bad++; console.log(`  ${ok?'✓':'✗'} ${n}: ${got}${ok?'':' (want '+want+')'}`); };
+let u = playbackUrls({ host:'cdn.example.com', hlsPort:8081, rtmpPort:1935, ssl:false }, 'live', 'cam1');
+check('HLS default ports', u.hls, 'http://cdn.example.com:8081/live/cam1/playlist.m3u8');
+check('RTMP default ports', u.rtmp, 'rtmp://cdn.example.com:1935/live/cam1');
+u = playbackUrls({ host:'edge.tv', hlsPort:443, rtmpPort:1936, ssl:true }, 'app', 'st');
+check('HTTPS + custom ports', u.hls, 'https://edge.tv:443/app/st/playlist.m3u8');
+check('RTMP custom port', u.rtmp, 'rtmp://edge.tv:1936/app/st');
+u = playbackUrls({ host:'h' }, 'a', 's');
+check('falls back to Nimble defaults', u.hls, 'http://h:8081/a/s/playlist.m3u8');
+check('no endpoint -> null', String(playbackUrls(null,'a','s')), 'null');
+check('label with name', endpointLabel({ label:'CDN', host:'h' }), 'CDN (h)');
+check('label without name', endpointLabel({ host:'h' }), 'h');
+console.log(bad ? `${bad} failed` : 'all URL checks passed');
+process.exit(bad?1:0);

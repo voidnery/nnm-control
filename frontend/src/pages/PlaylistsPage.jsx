@@ -7,6 +7,7 @@ import { useConfirm } from '../confirm.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import * as E from '../lib/playlistEngine.js';
+import { AgentServersModal, DeployPlaylistModal } from '../components/AgentPanel.jsx';
 
 // ---- small field helpers ----
 function Field({ label, children }) {
@@ -276,9 +277,12 @@ export default function PlaylistsPage() {
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // playlist object or {} for new
+  const [servers, setServers] = useState([]);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [deploying, setDeploying] = useState(null);
 
   const load = () => api('/playlists').then(setItems).catch(e => setError(e.message));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api('/servers').then(setServers).catch(() => {}); }, []);
 
   const remove = async (p) => {
     if (!(await confirm({ danger: true, message: t('pl.deleteConfirm', { name: p.name }) }))) return;
@@ -295,9 +299,14 @@ export default function PlaylistsPage() {
       <div className="sub">{t('page.playlists.sub')}</div>
       {error && <div className="error-box">{error}</div>}
 
-      {can('playlist.manage') && (
-        <button className="primary" style={{ marginBottom: 12 }} onClick={() => setEditing({})}>+ {t('pl.newTitle')}</button>
-      )}
+      <div className="row" style={{ marginBottom: 12 }}>
+        {can('playlist.manage') && (
+          <button className="primary" onClick={() => setEditing({})}>+ {t('pl.newTitle')}</button>
+        )}
+        {can('playlist.manage') && (
+          <button onClick={() => setAgentOpen(true)}>{t('agent.menu')}</button>
+        )}
+      </div>
 
       {!items ? <div className="hint">Loading…</div> : (
         <div className="panel">
@@ -311,7 +320,8 @@ export default function PlaylistsPage() {
                   <td className="hint mono">{p.updatedAt ? new Date(p.updatedAt).toLocaleString() : '—'}{p.updatedBy ? ` · ${p.updatedBy}` : ''}</td>
                   <td style={{ textAlign: 'right' }}>
                     {can('playlist.manage')
-                      ? <><button onClick={() => openEdit(p)}>{t('action.edit')}</button>{' '}
+                      ? <><button onClick={() => setDeploying(p)}>{t('agent.deploy')}</button>{' '}
+                          <button onClick={() => openEdit(p)}>{t('action.edit')}</button>{' '}
                           <button className="danger" onClick={() => remove(p)}>{t('action.delete')}</button></>
                       : <button onClick={() => openEdit(p)}>{t('action.details')}</button>}
                   </td>
@@ -326,6 +336,8 @@ export default function PlaylistsPage() {
       {editing && (
         <Builder initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
       )}
+      {agentOpen && <AgentServersModal servers={servers} onClose={() => setAgentOpen(false)} />}
+      {deploying && <DeployPlaylistModal playlist={deploying} servers={servers} onClose={() => setDeploying(null)} />}
     </div>
   );
 }

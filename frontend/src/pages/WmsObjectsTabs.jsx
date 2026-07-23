@@ -8,6 +8,7 @@ import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 import { useStreamCopy, CopyCheckbox, CopySelectionBar, CopyModal } from '../components/StreamCopy.jsx';
+import { PlaybackModal } from '../components/StreamPlayback.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
@@ -540,8 +541,10 @@ const fmtUptime = (ts) => {
   return (d ? d + 'd ' : '') + (h ? h + 'h ' : '') + m + 'm';
 };
 
-export function WmsStreamsTab({ serverId }) {
+export function WmsStreamsTab({ serverId, server }) {
   const tg = useStreamTags(serverId, 'streams');
+  const endpoints = server?.playbackEndpoints || [];
+  const [watch, setWatch] = useState(null);   // { app, stream }
   const confirm = useConfirm();
   const { can } = useAuth();
   const { t } = useI18n();
@@ -612,12 +615,15 @@ export function WmsStreamsTab({ serverId }) {
         </span>
       </div>
       {error && <div className="error-box">{error}</div>}
+      {endpoints.length === 0 && (
+        <div className="hint" style={{ marginBottom: 8 }}>{t('play.setupHint')}</div>
+      )}
       <TagFilterBar st={tg} />
       {Object.entries(byApp).sort(([a], [b]) => a.localeCompare(b)).map(([app, streams]) => (
         <div className="panel" key={app}>
           <h2 style={{ marginTop: 0 }}>{app} <span className="hint">({streams.length})</span></h2>
           <table>
-            <thead><tr><th>{t('wo.stream')}</th><th>{t('wo.proto')}</th><th>{t('wo.codecs')}</th><th>{t('wo.res')}</th><th>{t('wo.bitrate')}</th><th>{t('wo.publisher')}</th><th>{t('wo.uptime')}</th><th>{t('tags.col')}</th></tr></thead>
+            <thead><tr><th>{t('wo.stream')}</th><th>{t('wo.proto')}</th><th>{t('wo.codecs')}</th><th>{t('wo.res')}</th><th>{t('wo.bitrate')}</th><th>{t('wo.publisher')}</th><th>{t('wo.uptime')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
             <tbody>
               {streams.filter(st => tg.matches('streams', `${st.application}/${st.stream}`)).sort((a, b) => String(a.stream).localeCompare(String(b.stream))).map(st => (
                 <tr key={st.id}>
@@ -633,6 +639,13 @@ export function WmsStreamsTab({ serverId }) {
                   <td className="mono hint">{st.publisher_ip || '—'}</td>
                   <td className="mono">{st.status === 'online' ? fmtUptime(st.publish_time) : '—'}</td>
                   <td><TagChips st={tg} kind="streams" objId={`${st.application}/${st.stream}`} /></td>
+                  <td style={{ textAlign: 'right' }}>
+                    {endpoints.length > 0 && (
+                      <button onClick={() => setWatch({ app: st.application, stream: st.stream })}>
+                        ▶ {t('play.watch')}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -640,6 +653,10 @@ export function WmsStreamsTab({ serverId }) {
         </div>
       ))}
       {list.length === 0 && !error && <div className="panel hint">No live streams{q ? ' matching the filter' : ''}.</div>}
+      {watch && (
+        <PlaybackModal endpoints={endpoints} initialEndpoint={endpoints[0]}
+                       app={watch.app} stream={watch.stream} onClose={() => setWatch(null)} />
+      )}
     </div>
   );
 }

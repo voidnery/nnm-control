@@ -1,11 +1,13 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.7.1",
+  "version": "0.7.5",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "test:functions": "node tests/function-actions.test.mjs"
+    "test:functions": "node tests/function-actions.test.mjs",
+    "test:stats": "node tests/stats-collector.test.mjs",
+    "test": "npm run test:functions && npm run test:stats"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

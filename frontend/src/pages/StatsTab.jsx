@@ -1,0 +1,130 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { api } from '../api.js';
+import { useI18n } from '../i18n.jsx';
+import Select from '../components/Select.jsx';
+import SearchInput from '../components/SearchInput.jsx';
+import TimeChart from '../components/TimeChart.jsx';
+
+const RANGES = [15, 60, 360, 1440, 4320];   // minutes; the last matches 3-day retention
+const GROUP_ORDER = ['streams', 'republish', 'srt', 'server'];
+// Counters that are bandwidth-like get byte-rate formatting.
+const isRate = (m) => /bandwidth|bitrate|bps|byte.*rate|rate.*byte/i.test(m);
+
+export default function StatsTab({ serverId }) {
+  const { t } = useI18n();
+  const [subjects, setSubjects] = useState(null);
+  const [subject, setSubject] = useState('');
+  const [metrics, setMetrics] = useState([]);
+  const [minutes, setMinutes] = useState(60);
+  const [data, setData] = useState(null);
+  const [filter, setFilter] = useState('');
+  const [error, setError] = useState('');
+  const [live, setLive] = useState(true);
+
+  const loadSubjects = useCallback(async () => {
+    try {
+      const d = await api(`/stats/${serverId}/subjects`);
+      setSubjects(d.subjects || []);
+      setSubject(s => s || d.subjects?.[0]?.subject || '');
+    } catch (e) { setError(e.message); }
+  }, [serverId]);
+  useEffect(() => { loadSubjects(); }, [loadSubjects]);
+
+  const current = useMemo(() => (subjects || []).find(s => s.subject === subject) || null, [subjects, subject]);
+
+  // Default to the most useful counters for the subject instead of an empty chart.
+  useEffect(() => {
+    if (!current) return;
+    const preferred = current.metrics.filter(isRate).slice(0, 2);
+    setMetrics(preferred.length ? preferred : current.metrics.slice(0, 1));
+  }, [current]);
+
+  const loadSeries = useCallback(async () => {
+    if (!subject || !metrics.length) { setData(null); return; }
+    try {
+      const q = new URLSearchParams({ subject, metrics: metrics.join(','), minutes: String(minutes) });
+      setData(await api(`/stats/${serverId}/series?${q}`));
+      setError('');
+    } catch (e) { setError(e.message); }
+  }, [serverId, subject, metrics, minutes]);
+  useEffect(() => { loadSeries(); }, [loadSeries]);
+
+  // Live view refreshes on the collection cadence; long ranges do not need it.
+  useEffect(() => {
+    if (!live || minutes > 360) return;
+    const id = setInterval(loadSeries, 10_000);
+    return () => clearInterval(id);
+  }, [live, minutes, loadSeries]);
+
+  const shown = (subjects || []).filter(s =>
+    !filter || `${s.label} ${s.subject}`.toLowerCase().includes(filter.toLowerCase()));
+  const grouped = GROUP_ORDER
+    .map(g => ({ g, items: shown.filter(s => s.group === g) }))
+    .filter(x => x.items.length);
+
+  const unit = metrics.every(isRate) ? 'bps' : '';
+
+  return (
+    <div>
+      {error && <div className="error-box">{error}</div>}
+      {subjects && subjects.length === 0 && (
+        <div className="hint" style={{ marginBottom: 10 }}>{t('stats.none')}</div>
+      )}
+
+      <div className="row" style={{ gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '0 0 280px' }}>
+          <SearchInput value={filter} onChange={setFilter} placeholder={t('stats.filterSubjects')} />
+          <div className="panel" style={{ marginTop: 6, maxHeight: 420, overflow: 'auto', padding: 6 }}>
+            {grouped.map(({ g, items }) => (
+              <div key={g} style={{ marginBottom: 8 }}>
+                <div className="hint" style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '.5px' }}>{t('stats.group.' + g)}</div>
+                {items.map(s => (
+                  <div key={s.subject}
+                       className={'cselect-opt' + (s.subject === subject ? ' selected' : '')}
+                       style={{ fontSize: 12 }}
+                       onClick={() => setSubject(s.subject)}>
+                    {s.label || s.subject}
+                  </div>
+                ))}
+              </div>
+            ))}
+            {grouped.length === 0 && <div className="hint" style={{ fontSize: 12 }}>—</div>}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 320 }}>
+          <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ minWidth: 150 }}>
+              <Select value={String(minutes)} onChange={v => setMinutes(Number(v))}
+                      options={RANGES.map(m => ({ value: String(m), label: t('stats.range', { m: m < 60 ? `${m}m` : `${Math.round(m / 60)}h` }) }))} />
+            </div>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+              <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} /> {t('stats.live')}
+            </label>
+            <button onClick={() => { loadSubjects(); loadSeries(); }}>{t('action.refresh')}</button>
+            {data?.bucketMs > 0 && (
+              <span className="hint" style={{ marginLeft: 'auto' }}>{t('stats.bucketed', { s: Math.round(data.bucketMs / 1000) })}</span>
+            )}
+          </div>
+
+          <TimeChart points={data?.points || []} series={metrics} unit={unit} emptyText={t('stats.noPoints')} />
+
+          {current && (
+            <div style={{ marginTop: 10 }}>
+              <div className="hint" style={{ marginBottom: 4 }}>{t('stats.metrics')}</div>
+              <div className="row" style={{ flexWrap: 'wrap', gap: 4 }}>
+                {current.metrics.map(m => (
+                  <button key={m}
+                          className={'tagchip' + (metrics.includes(m) ? ' on' : '')}
+                          onClick={() => setMetrics(ms => ms.includes(m) ? ms.filter(x => x !== m) : [...ms, m])}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

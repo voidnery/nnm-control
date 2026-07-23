@@ -18,6 +18,9 @@ const SAMPLE = {
 function pick(u){
   u=String(u);
   if(u.includes('/stream-tags/'))return SAMPLE.tags;
+  if(u.includes('/subjects'))return { subjects:[{ subject:'stream:live/cam1', group:'streams', label:'live/cam1', metrics:['bandwidth'] }] };
+  if(u.includes('/series'))return { subject:'stream:live/cam1', metrics:['bandwidth'], bucketMs:0,
+    points:[{ ts:new Date(Date.now()-60000).toISOString(), v:[4200000] },{ ts:new Date().toISOString(), v:[4400000] }] };
   if(u.includes('/auth/me'))return SAMPLE.me;
   if(u.includes('/settings/public'))return SAMPLE.publicSettings;
   if(/\/streams(\b|$|\?)/.test(u)&&!u.includes('stream-tags'))return SAMPLE.streams;
@@ -42,9 +45,10 @@ import { ConfirmProvider } from '${SRC}/confirm.jsx';
 import { AuthProvider } from '${SRC}/auth.jsx';
 import { ThemeProvider } from '${SRC}/theme.jsx';
 import * as Tabs from '${SRC}/pages/WmsObjectsTabs.jsx';
+import StatsTab from '${SRC}/pages/StatsTab.jsx';
 import RepublishTab from '${SRC}/pages/RepublishTab.jsx';
-const ALL = { ...Tabs, RepublishTab };
-const NAMES = ['UdpTab','OutgoingTab','LivePullTab','MpegtsInTab','HotswapTab','AppsTab','InterfacesTab','WmsStreamsTab','RepublishTab'];
+const ALL = { ...Tabs, RepublishTab, StatsTab };
+const NAMES = ['UdpTab','OutgoingTab','LivePullTab','MpegtsInTab','HotswapTab','AppsTab','InterfacesTab','WmsStreamsTab','RepublishTab','StatsTab'];
 window.__RENDER_ALL = async () => {
   const out = {};
   for (const name of NAMES) {
@@ -57,7 +61,7 @@ window.__RENDER_ALL = async () => {
           React.createElement(AuthProvider,null,
             React.createElement(I18nProvider,null,
               React.createElement(ConfirmProvider,null,
-                React.createElement(Comp,{serverId:'S1', server:{ id:'S1', name:'Src', wmspanelServerId:'w1' }})))))));
+                React.createElement(Comp,{serverId:'S1', server:{ id:'S1', name:'Src', wmspanelServerId:'w1', playbackEndpoints:[{ label:'CDN', host:'cdn.example.com', hlsPort:8081, rtmpPort:1935, ssl:false }] }})))))));
       await new Promise(r=>setTimeout(r,400));
       out[name] = { ok:true, len: el.innerHTML.length, html: el.innerHTML };
     } catch(e){ out[name] = { ok:false, error:String(e&&e.message||e) }; }
@@ -81,6 +85,13 @@ console.log('RENDER SMOKE (with data):');
 let bad=0;
 for (const [n,r] of Object.entries(results)){ if(!r.ok)bad++; console.log(`  ${r.ok?'✓':'✗'} ${n}: ${r.ok?('ok, '+r.len+' chars'):('CRASH: '+r.error)}`); }
 // Invariant: action buttons (Refresh / + New) must render ABOVE the list table.
+// Streams rows must offer the player once the server has playback endpoints.
+const streamsHtml = results.WmsStreamsTab?.html || '';
+const hasWatch = /Watch|Смотреть/.test(streamsHtml);
+console.log('\nPLAYBACK:');
+console.log(`  ${hasWatch ? '✓' : '✗'} Streams rows expose the watch action when endpoints are configured`);
+if (!hasWatch) bad++;
+
 console.log('\nBUTTON PLACEMENT (Refresh must precede <table>):');
 for (const [n,r] of Object.entries(results)) {
   if (!r.ok || !r.html) continue;

@@ -15,6 +15,19 @@ const settingsSchema = new mongoose.Schema({
   controlPlane: { type: String, enum: ['wmspanel', 'native'], default: 'native' },
   // Show the SRT settings helper (latency/maxbw/buffers calculator) on SRT tabs.
   srtHelperEnabled: { type: Boolean, default: true },
+  // Metric collection. Off by default: sampling every server every few seconds
+  // is real storage, so the operator opts in and picks what is worth keeping.
+  stats: {
+    enabled: { type: Boolean, default: false },
+    intervalSec: { type: Number, default: 10 },
+    retentionDays: { type: Number, default: 3 },
+    groups: {
+      streams: { type: Boolean, default: true },     // live streams bandwidth (RTMP/SRT/HLS publishers)
+      republish: { type: Boolean, default: true },   // RTMP Push rules
+      srt: { type: Boolean, default: true },         // SRT sender/receiver socket stats
+      server: { type: Boolean, default: true },      // server-level counters
+    },
+  },
 }, { timestamps: true });
 
 settingsSchema.statics.load = async function () {

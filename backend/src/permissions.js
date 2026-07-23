@@ -13,6 +13,8 @@ export const PERMISSIONS = [
   { key: 'mpegts.view',       label: 'MPEG-TS: view status & settings' },
   { key: 'playlist.view',     label: 'Playout: view server playlist status' },
   { key: 'playlist.manage',   label: 'Playlists: create / edit / delete server playlists' },
+  { key: 'category.view',     label: 'Categories: view cross-server stream groups' },
+  { key: 'category.manage',   label: 'Categories: create / edit / delete groups and run bulk actions' },
   { key: 'control.manage',    label: 'Control: reload config / SSL, sync WMSPanel' },
   { key: 'users.manage',      label: 'Users: manage panel users' },
   { key: 'roles.manage',      label: 'Roles: manage custom roles' },

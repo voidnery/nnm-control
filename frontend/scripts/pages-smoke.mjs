@@ -10,7 +10,7 @@ const PAGES = [
   ['DashboardPage','/'], ['ServersPage','/servers'], ['ServerDetailPage','/servers/S1'],
   ['UsersPage','/users'], ['RolesPage','/roles'], ['AuditPage','/audit'],
   ['SettingsPage','/settings'], ['FunctionsPage','/functions'], ['TranscodersPage','/transcoders'],
-  ['DistributionPage','/distribution'], ['PlaylistsPage','/playlists'], ['ZabbixPage','/zabbix'],
+  ['DistributionPage','/distribution'], ['PlaylistsPage','/playlists'], ['ZabbixPage','/zabbix'], ['CategoriesPage','/categories'],
   ['ProfilePage','/profile'],
 ];
 
@@ -96,6 +96,9 @@ window.fetch = (u) => {
   else if (s.includes('/functions')) body = [{ id:'F1', name:'Fn', description:'', steps:[
       { kind:'patch', label:'step', serverId:'S1', objectKind:'outgoing', targetId:'x', patch:{} }] }];
   else if (s.includes('/playlists')) body = [];
+  else if (/\/categories\/[^/]+\/state/.test(s)) body = { state: { 'S1:udp:O1': { found: true, paused: false, serverName: 'Srv' } } };
+  else if (s.includes('/categories')) body = [{ id:'C1', name:'EU feeds', description:'', color:'',
+      members:[{ serverId:'S1', kind:'udp', objId:'O1', title:'live/cam1', key:'S1:udp:O1' }], updatedAt:new Date().toISOString() }];
   else if (s.includes('/settings')) body = { wmspanel:{ baseUrl:'', clientId:'' }, controlPlane:'wmspanel' };
   else if (s.includes('transcoders')) body = { transcoders: [], licenses: [] };
   else if (s.includes('/zabbix')) body = { items: [] };

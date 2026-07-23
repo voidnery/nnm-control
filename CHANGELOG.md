@@ -1,5 +1,88 @@
 # Changelog
 
+### v0.7.5 (m5) — server agent: config files and media uploads
+- New `agent/` component: a dependency-free (node:http + node:fs) service that
+  runs on a Nimble box and is the only thing in the project allowed to touch its
+  filesystem. It reads/writes files in the config directory, lists/uploads/
+  deletes media, and reports health — nothing else. No shell, no arbitrary path
+- Confinement is enforced, not assumed: a name must be a single filename, so
+  `..`, nested paths, absolute paths and NUL bytes are refused; the resolved
+  path is re-checked against the root afterwards. Token comparison is constant
+  time and the agent refuses to start without a token of at least 24 chars
+- Config writes are atomic (temp + rename) so Nimble never reads a half-written
+  playlist, and the previous version is kept as `<name>.bak`. Uploads stream to
+  a `.part` file, are capped by size and an extension allow-list, and leave
+  nothing behind when refused
+- Panel: per-server agent settings (URL + token, token encrypted at rest) with a
+  health check, managed from Playlists → Server agents, and one-click deploy of
+  a stored playlist into the server's config directory. Uploads stream straight
+  through — the panel never buffers a media file; the global JSON body parser is
+  bypassed for that route
+- Agents are optional: servers without one keep working exactly as before
+- `agent/README.md` ships an install recipe with a hardened systemd unit
+  (ProtectSystem=strict, ReadWritePaths limited to the two directories) and is
+  explicit that plain HTTP must not be exposed publicly
+- 21 agent checks run against a real agent process: auth, five traversal
+  attempts, atomic write, .bak generation, extension and size limits, and that a
+  refused upload leaves no partial file
+
+### v0.7.4 (m4) — metric collection and charts
+- Collector samples every server every 10s (configurable) and keeps 3 days of
+  history, enforced by a Mongo TTL index that is reconciled with the setting
+- Sampling goes through the NATIVE Nimble API by design: WMSPanel allows 15 000
+  calls/day per account and a 10s poll of a single server would spend 8 640 of
+  them. The native API is local to each box and has no such budget
+- RTMP is covered where WMSPanel leaves a gap: RTMP Push rules are sampled from
+  /manage/rtmp/republish/stats (bandwidth plus connection state as a 0/1 series,
+  so drops are visible on the chart), and live streams contribute per app/stream
+  bandwidth
+- SRT counters are harvested generically rather than from a hardcoded field
+  list: the panel flattens whatever numeric fields the server reports, so RTT,
+  loss and buffer counters appear under their real names and nothing silently
+  goes missing when a Nimble build changes them
+- Collection is off by default and per-group; interval, retention and current
+  storage usage are shown in Settings, because this is real disk
+- New Charts tab per server: subjects grouped by kind, counter picker, ranges up
+  to the retention window, live refresh, and server-side bucketing so long
+  ranges stay light. Chart is a hand-written SVG component — no chart library
+- Tests: 16 collector checks covering flattening, per-group collection, readable
+  RTMP Push labels, and that one dead endpoint does not lose the other samples
+
+### v0.7.3 (m3) — playback links and an in-browser player
+- Servers now carry a list of playback endpoints (label, host, HLS port, RTMP
+  port, SSL). A box usually answers on its IP plus one or more domain names and
+  each protocol may sit on its own port, so the operator picks the address —
+  the panel never guesses it from the management address
+- Streams tab: every live stream offers HLS and RTMP links for the chosen
+  endpoint with copy buttons, and plays HLS right in the page. The endpoint can
+  be switched inside the player dialog without leaving the tab
+- The player uses native HLS on Safari and loads hls.js on demand elsewhere, so
+  the library is not pulled into the initial bundle. RTMP is shown as a link
+  with a note that browsers cannot play it — it is meant for VLC/OBS
+- Playback failures surface the hls.js error plus a hint to check reachability
+  of the chosen address, instead of an empty black frame
+- Tests: 8 URL-construction checks (default ports, custom ports, HTTPS, missing
+  endpoint) and a smoke assertion that the watch action appears once endpoints
+  are configured
+
+### v0.7.2 (m2) — cross-server categories
+- New Categories page: group streams of any protocol from any server and drive
+  them together. Membership is label-style — an object can belong to several
+  categories (folders are the special case of using one), which is the cheaper
+  direction to change later
+- Live state per member, batched per (server, kind) so a category costs a few
+  API calls rather than one per stream; members whose object disappeared or
+  whose server lost its WMSPanel mapping are shown as such instead of silently
+  looking healthy
+- Bulk start/stop/restart over the whole category or a selection, reusing the
+  per-kind action rules exported from the Functions engine so the two cannot
+  drift apart. Restart is offered only where the API has an endpoint; kinds that
+  need the composite stop/hold/start are refused here and pointed at Functions,
+  where the run is traceable and reversible
+- Backend: Category model, CRUD, membership replace, /state and /action, all
+  audited; new category.view / category.manage permissions (admins unaffected)
+- Page added to the render smoke; EN/RU
+
 ## iter7 — new epic (in progress)
 ### v0.7.1 (m1) — composite restart for kinds the API can't restart
 - SRT Out, SRT In and Hot swap now support restart too: the panel performs it

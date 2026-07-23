@@ -21,6 +21,9 @@ export default function SettingsPage() {
   const [customUrl, setCustomUrl] = useState(false);
   const [controlPlane, setControlPlane] = useState('native');
   const [srtHelperEnabled, setSrtHelperEnabled] = useState(true);
+  const [stats, setStats] = useState({ enabled: false, intervalSec: 10, retentionDays: 3,
+                                       groups: { streams: true, republish: true, srt: true, server: true } });
+  const [usage, setUsage] = useState(null);
   const [test, setTest] = useState(null);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -33,13 +36,14 @@ export default function SettingsPage() {
     setCustomUrl(!BASE_URLS.includes(s.wmspanel.baseUrl));
     setControlPlane(s.controlPlane);
     setSrtHelperEnabled(s.srtHelperEnabled !== false);
+    if (s.stats) setStats(s.stats);
   };
   useEffect(() => { load().catch(e => setMsg({ ok: false, text: e.message })); }, []);
 
   const save = async () => {
     setBusy(true); setMsg(null);
     try {
-      const body = { controlPlane, srtHelperEnabled, wmspanel: { baseUrl, clientId } };
+      const body = { controlPlane, srtHelperEnabled, stats, wmspanel: { baseUrl, clientId } };
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
       push({ type: 'ok', message: 'Settings saved' });
@@ -127,6 +131,49 @@ export default function SettingsPage() {
           <input type="checkbox" checked={srtHelperEnabled} onChange={e => setSrtHelperEnabled(e.target.checked)} />
           {t('settings.srtHelper.desc')}
         </label>
+      </div>
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>{t('settings.stats')}</h2>
+        <p className="hint">{t('settings.stats.desc')}</p>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="checkbox" checked={Boolean(stats.enabled)}
+                 onChange={e => setStats(v => ({ ...v, enabled: e.target.checked }))} />
+          {t('settings.stats.enabled')}
+        </label>
+        {stats.enabled && (
+          <>
+            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', marginTop: 8 }}>
+              <div>
+                <label>{t('settings.stats.interval')}</label>
+                <input type="number" min="5" max="600" value={stats.intervalSec}
+                       onChange={e => setStats(v => ({ ...v, intervalSec: Number(e.target.value) }))} />
+              </div>
+              <div>
+                <label>{t('settings.stats.retention')}</label>
+                <input type="number" min="1" max="30" value={stats.retentionDays}
+                       onChange={e => setStats(v => ({ ...v, retentionDays: Number(e.target.value) }))} />
+              </div>
+            </div>
+            <label style={{ marginTop: 8 }}>{t('settings.stats.groups')}</label>
+            {['streams', 'republish', 'srt', 'server'].map(g => (
+              <label key={g} style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0' }}>
+                <input type="checkbox" checked={stats.groups?.[g] !== false}
+                       onChange={e => setStats(v => ({ ...v, groups: { ...v.groups, [g]: e.target.checked } }))} />
+                {t('settings.stats.g.' + g)}
+              </label>
+            ))}
+            <div className="row" style={{ marginTop: 8, alignItems: 'center' }}>
+              <button onClick={async () => { try { setUsage(await api('/stats/_usage')); } catch { /* optional */ } }}>
+                {t('action.refresh')}
+              </button>
+              {usage && (
+                <span className="hint">
+                  {t('settings.stats.usage', { docs: usage.docs.toLocaleString(), mb: (usage.storageBytes / 1e6).toFixed(1) })}
+                </span>
+              )}
+            </div>
+          </>
+        )}
       </div>
       <div className="row" style={{ marginTop: 14 }}>
           <button onClick={runTest} disabled={busy || !clientId}>Test connection</button>

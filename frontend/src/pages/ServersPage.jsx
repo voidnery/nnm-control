@@ -7,7 +7,7 @@ import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 
-const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '' };
+const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [] };
 
 function ServerModal({ initial, onClose, onSaved, wms }) {
   const { t } = useI18n();
@@ -35,6 +35,7 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
         useSsl: form.useSsl, notes: form.notes,
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         wmspanelServerId: form.wmspanelServerId || '',
+        playbackEndpoints: (form.playbackEndpoints || []).filter(e => String(e.host || '').trim()),
       };
       // On edit an empty token field means "do not change".
       if (!isEdit || form.token !== '') body.token = form.token;
@@ -78,6 +79,30 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
         )}
         <label>{t('sp.tagsComma')}</label>
         <input value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="edge, moscow" />
+        <label>{t('sp.playback')}</label>
+        <div className="hint" style={{ marginBottom: 6 }}>{t('sp.playbackHint')}</div>
+        {(form.playbackEndpoints || []).map((e, i) => {
+          const upd = (patch) => set('playbackEndpoints', form.playbackEndpoints.map((x, j) => j === i ? { ...x, ...patch } : x));
+          return (
+            <div className="row" key={i} style={{ gap: 6, marginBottom: 4, alignItems: 'center' }}>
+              <input style={{ flex: '0 0 110px' }} placeholder={t('sp.epLabel')} value={e.label || ''}
+                     onChange={ev => upd({ label: ev.target.value })} />
+              <input className="mono" style={{ flex: 1 }} placeholder="cdn.example.com" value={e.host || ''}
+                     onChange={ev => upd({ host: ev.target.value })} />
+              <input type="number" style={{ flex: '0 0 90px' }} title="HLS" value={e.hlsPort ?? 8081}
+                     onChange={ev => upd({ hlsPort: Number(ev.target.value) })} />
+              <input type="number" style={{ flex: '0 0 90px' }} title="RTMP" value={e.rtmpPort ?? 1935}
+                     onChange={ev => upd({ rtmpPort: Number(ev.target.value) })} />
+              <label style={{ display: 'flex', gap: 4, alignItems: 'center', margin: 0, whiteSpace: 'nowrap' }}>
+                <input type="checkbox" checked={Boolean(e.ssl)} onChange={ev => upd({ ssl: ev.target.checked })} /> SSL
+              </label>
+              <button className="danger" onClick={() => set('playbackEndpoints', form.playbackEndpoints.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          );
+        })}
+        <button onClick={() => set('playbackEndpoints', [...(form.playbackEndpoints || []), { label: '', host: form.host, hlsPort: 8081, rtmpPort: 1935, ssl: false }])}>
+          + {t('sp.addEndpoint')}
+        </button>
         <label>{t('sp.notes')}</label>
         <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
         {!wms && (

@@ -24,7 +24,7 @@ const VERIFY_POLL_MS = 5_000;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const KIND_OPS = {
+export const KIND_OPS = {
   republish: { get: 'republishList', put: 'republishUpdate', pickList: d => d.rules || d.republish_rules || [] },
   udp:       { get: 'udpList',       put: 'udpUpdate',       pickList: d => d.settings || [] },
   outgoing:  { get: 'outgoingList',  put: 'outgoingUpdate',  pickList: d => d.streams || d.settings || [] },
@@ -45,7 +45,7 @@ const ACCOUNT_KINDS = new Set(['transcoder', 'abr', 'alias']);
 //   restart             -> client method name, or null when the API has none
 // Kinds absent here reject actions explicitly instead of silently falling
 // through to the outgoing endpoint (which is what used to happen).
-const ACTION_OPS = {
+export const ACTION_OPS = {
   outgoing:  { pauseVia: 'endpoint', endpoint: 'outgoingAction', restart: 'endpoint' },
   republish: { pauseVia: 'patch', restart: 'republishRestart' },
   live_pull: { pauseVia: 'patch', restart: 'livePullRestart' },

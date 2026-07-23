@@ -16,6 +16,26 @@ const serverSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
   // WMSPanel server id (from GET /v1/server) — required for WMSPanel control
   // plane operations on this instance.
+  // Playback endpoints an operator can watch this server's streams through.
+  // A box often answers on its IP plus several domain names, and each protocol
+  // may sit on its own port, so this is a list rather than one address.
+  playbackEndpoints: {
+    type: [new mongoose.Schema({
+      label: { type: String, default: '' },
+      host: { type: String, required: true, trim: true },
+      hlsPort: { type: Number, default: 8081 },
+      rtmpPort: { type: Number, default: 1935 },
+      ssl: { type: Boolean, default: false },
+    }, { _id: false })],
+    default: [],
+  },
+  // Optional file-access agent. Absent for servers where the operator has not
+  // installed it; the panel works fully without it.
+  agent: {
+    enabled: { type: Boolean, default: false },
+    baseUrl: { type: String, default: '' },                                  // http://host:8090
+    token: { type: String, default: '', set: encryptField, get: decryptField },
+  },
   wmspanelServerId: { type: String, default: '' },
   // Auto-sync metadata (WMSPanel control plane pulls the fleet automatically).
   syncedFromWmspanel: { type: Boolean, default: false },

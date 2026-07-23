@@ -8,6 +8,7 @@ import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useI18n } from '../i18n.jsx';
 import ServerEditModal from '../components/ServerEditModal.jsx';
+import StatsTab from './StatsTab.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
 const fmtTs = (ts) => (ts ? new Date(Number(ts) * 1000).toLocaleString() : '—');
@@ -239,6 +240,7 @@ const TABS = [
   { key: 'mpegts',    label: 'MPEG-TS',   perm: 'mpegts.view',    el: MpegtsTab,    plane: 'native',   group: 'srt' },
   { key: 'whot',      label: 'Hotswap',   perm: 'wmsobjects.view', el: HotswapTab,  plane: 'wmspanel', group: 'other' },
   { key: 'playlist',  label: 'Playout',   perm: 'playlist.view',  el: PlaylistTab,  plane: 'native',   group: 'other' },
+  { key: 'stats',     label: 'Charts',    perm: 'streams.view',   el: StatsTab,     plane: 'both',     group: 'system' },
   { key: 'control',   label: 'Control',   perm: 'control.manage', el: ControlTab,   plane: 'native',   group: 'system' },
 ];
 
