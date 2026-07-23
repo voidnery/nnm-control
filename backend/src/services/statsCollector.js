@@ -45,6 +45,9 @@ export async function collectServer(server, groups, ts = new Date()) {
   if (groups.republish) jobs.push(['republish', nimble.republishStats(server)]);
   if (groups.srt) jobs.push(['srt-sender', nimble.srtSenderStats(server)]);
   if (groups.srt) jobs.push(['srt-receiver', nimble.srtReceiverStats(server)]);
+  // SRT In / SRT Out / SRT in Nimble are MPEG-TS objects in this panel, so their
+  // runtime lives here rather than in the srt_*_stats endpoints.
+  if (groups.srt) jobs.push(['mpegts', nimble.mpegtsStatus(server)]);
   if (groups.server) jobs.push(['server', nimble.serverStatus(server)]);
 
   const settled = await Promise.allSettled(jobs.map(j => j[1]));
@@ -76,6 +79,14 @@ export async function collectServer(server, groups, ts = new Date()) {
         const id = so.id ?? so.socket_id ?? so.name ?? so.stream ?? 'unknown';
         add('srt', `${kind}:${id}`, `${kind} ${id}`, flattenNumbers(so));
       }
+    } else if (kind === 'mpegts') {
+      for (const key of ['incoming', 'outgoing', 'streams', 'udp']) {
+        for (const o of asList(d?.[key])) {
+          const id = o.id ?? o.name ?? `${o.application || ''}/${o.stream || ''}`;
+          const label = o.name || `${o.application || ''}/${o.stream || ''}` || String(id);
+          add('srt', `mpegts-${key}:${id}`, label, flattenNumbers(o));
+        }
+      }
     } else if (kind === 'server') {
       add('server', 'server', server.name, flattenNumbers(d));
     }
@@ -93,6 +104,7 @@ const EMPTY_HINT = {
   republish: 'no RTMP Push rules are running on this server',
   'srt-sender': 'no outgoing SRT sockets on this server',
   'srt-receiver': 'no incoming SRT sockets on this server',
+  mpegts: 'no MPEG-TS/SRT inputs or outputs are active on this server',
   server: 'the server status endpoint returned no numeric counters',
 };
 

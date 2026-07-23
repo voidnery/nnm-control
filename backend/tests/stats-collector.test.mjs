@@ -22,6 +22,11 @@ nimble.republishStats = async () => ({ stats: [{ id: 'r1', src_app: 'live', src_
 nimble.srtSenderStats = async () => ({ streams: [{ id: 's1', msRTT: 18.4, pktRetrans: 42, buffer: { msSndBuf: 120 } }] });
 nimble.srtReceiverStats = async () => ({ streams: [{ id: 'r9', msRTT: 21.0, pktLoss: 7 }] });
 nimble.serverStatus = async () => ({ cpu_usage: 12, memory: { free: 900, total: 4096 } });
+// SRT In/Out live here, not in srt_*_stats — this is what was missing entirely.
+nimble.mpegtsStatus = async () => ({
+  incoming: [{ id: 'in1', name: 'FEED-A', bitrate: 8_000_000, lost: 3 }],
+  outgoing: [{ id: 'out1', application: 'cct', stream: 'feed1', bitrate: 6_000_000 }],
+});
 
 const { samples, report } = await collectServer({ _id: 'S1', name: 'srv' }, { streams: true, republish: true, srt: true, server: true });
 const by = (s) => samples.find(x => x.subject === s);
@@ -37,6 +42,9 @@ check('nested SRT block flattened', snd?.metrics['buffer.msSndBuf'] === 120, JSO
 check('receiver sampled separately', by('srt-receiver:r9')?.metrics.pktLoss === 7);
 check('server counters sampled', by('server')?.metrics.cpu_usage === 12);
 check('groups tagged', by('stream:live/cam1')?.group === 'streams' && snd?.group === 'srt');
+check('MPEG-TS incoming sampled (SRT In)', by('mpegts-incoming:in1')?.metrics.bitrate === 8_000_000, JSON.stringify(samples.map(x => x.subject)));
+check('MPEG-TS outgoing sampled (SRT Out)', by('mpegts-outgoing:out1')?.metrics.bitrate === 6_000_000);
+check('MPEG-TS labels are readable', by('mpegts-incoming:in1')?.label === 'FEED-A', by('mpegts-incoming:in1')?.label);
 
 console.log('\nRESILIENCE:');
 nimble.srtSenderStats = async () => { throw new Error('endpoint missing on this build'); };

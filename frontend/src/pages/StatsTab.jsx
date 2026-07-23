@@ -7,8 +7,30 @@ import TimeChart from '../components/TimeChart.jsx';
 
 const RANGES = [15, 60, 360, 1440, 4320];   // minutes; the last matches 3-day retention
 const GROUP_ORDER = ['streams', 'republish', 'srt', 'server'];
-// Counters that are bandwidth-like get byte-rate formatting.
-const isRate = (m) => /bandwidth|bitrate|bps|byte.*rate|rate.*byte/i.test(m);
+// Not every numeric field is a measurement. Identifiers and ports are numbers
+// but charting them is meaningless, and totals like bytes_sent only ever climb —
+// drawn raw they dwarf every other series on a shared axis (a 10 Gb ramp next to
+// a 10 Mbps line). So each counter is classified and handled accordingly.
+const IDENT = /^(owner|id|.*_id|port|.*_port)$/i;
+const CUMULATIVE = /(^bytes_|_bytes$|^packets?_|_packets?$|^pkt|_count$|_total$|_errors?$)/i;
+export const classify = (m) =>
+  IDENT.test(m) ? 'ident' : CUMULATIVE.test(m) ? 'counter' : 'gauge';
+
+const isRate = (m) => /bandwidth|bitrate|bps/i.test(m);
+const unitFor = (m) => (isRate(m) ? 'bps' : classify(m) === 'counter' ? '/s' : '');
+
+// A total is only useful as "how fast is it moving"; convert to per-second and
+// drop the step where a counter resets (restart) instead of drawing a cliff.
+export function toRate(points, idx) {
+  const out = [];
+  for (let i = 1; i < points.length; i++) {
+    const dt = (new Date(points[i].ts) - new Date(points[i - 1].ts)) / 1000;
+    const a = points[i - 1].v[idx], b = points[i].v[idx];
+    const ok = dt > 0 && typeof a === 'number' && typeof b === 'number' && b >= a;
+    out.push({ ts: points[i].ts, v: [ok ? (b - a) / dt : null] });
+  }
+  return out;
+}
 
 export default function StatsTab({ serverId }) {
   const { t } = useI18n();
@@ -48,8 +70,9 @@ export default function StatsTab({ serverId }) {
   // Default to the most useful counters for the subject instead of an empty chart.
   useEffect(() => {
     if (!current) return;
-    const preferred = current.metrics.filter(isRate).slice(0, 2);
-    setMetrics(preferred.length ? preferred : current.metrics.slice(0, 1));
+    const chartable = current.metrics.filter(m => classify(m) !== 'ident');
+    const preferred = chartable.filter(isRate).slice(0, 1);
+    setMetrics(preferred.length ? preferred : chartable.slice(0, 1));
   }, [current]);
 
   const loadSeries = useCallback(async () => {
@@ -75,7 +98,6 @@ export default function StatsTab({ serverId }) {
     .map(g => ({ g, items: shown.filter(s => s.group === g) }))
     .filter(x => x.items.length);
 
-  const unit = metrics.every(isRate) ? 'bps' : '';
 
   return (
     <div>
@@ -154,19 +176,38 @@ export default function StatsTab({ serverId }) {
             )}
           </div>
 
-          <TimeChart points={data?.points || []} series={metrics} unit={unit} emptyText={t('stats.noPoints')} />
+          {metrics.length === 0 && <div className="panel hint">{t('stats.pickCounter')}</div>}
+          {metrics.map((m, i) => {
+            const kind = classify(m);
+            const pts = kind === 'counter' ? toRate(data?.points || [], i)
+              : (data?.points || []).map(p => ({ ts: p.ts, v: [p.v[i]] }));
+            return (
+              <div key={m} style={{ marginBottom: 12 }}>
+                <div className="hint" style={{ fontSize: 12, marginBottom: 2 }}>
+                  {m}{kind === 'counter' ? ` · ${t('stats.asRate')}` : ''}
+                </div>
+                <TimeChart points={pts} series={[m]} unit={unitFor(m)}
+                           height={metrics.length > 2 ? 150 : 220} emptyText={t('stats.noPoints')} />
+              </div>
+            );
+          })}
 
           {current && (
             <div style={{ marginTop: 10 }}>
               <div className="hint" style={{ marginBottom: 4 }}>{t('stats.metrics')}</div>
               <div className="row" style={{ flexWrap: 'wrap', gap: 4 }}>
-                {current.metrics.map(m => (
+                {current.metrics.filter(m => classify(m) !== 'ident').map(m => (
                   <button key={m}
                           className={'tagchip' + (metrics.includes(m) ? ' on' : '')}
                           onClick={() => setMetrics(ms => ms.includes(m) ? ms.filter(x => x !== m) : [...ms, m])}>
-                    {m}
+                    {m}{classify(m) === 'counter' ? ' /s' : ''}
                   </button>
                 ))}
+                {current.metrics.some(m => classify(m) === 'ident') && (
+                  <span className="hint" style={{ fontSize: 11, alignSelf: 'center' }}>
+                    {t('stats.identsHidden', { list: current.metrics.filter(m => classify(m) === 'ident').join(', ') })}
+                  </span>
+                )}
               </div>
             </div>
           )}

@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.7.7 — missing SRT subjects, and charts that made sense of their data
+- SRT In / SRT Out / SRT in Nimble never appeared in the charts because the
+  collector only asked the srt_sender/receiver endpoints. In this panel those
+  tabs are MPEG-TS objects, so their runtime lives in /manage/mpeg2ts_status,
+  which was not polled at all. It is now sampled (incoming and outgoing), which
+  is the bulk of what was "missing"
+- Charts stopped being meaningless for RTMP Push:
+  * identifiers (owner, dest_port, *_id) are numbers but not measurements —
+    they are no longer chartable and are listed as such instead
+  * cumulative totals (bytes_sent, retry_count, packet counters) are converted
+    to per-second rates; drawn raw they climbed to ~10 Gb and flattened every
+    other series to zero. A counter reset now produces a gap, not a cliff
+  * each selected counter gets its own chart and Y axis, so a 0/1 connection
+    state and a 10 Mbps line can be read side by side
+- New `npm run audit:stats`: 17 checks over the classification and the rate
+  conversion, including counter resets and missing samples
+- Collector tests now also cover the MPEG-TS subjects (22 -> 25 checks)
+
 ### v0.7.6 — make metric collection explain itself
 - Collection looked randomly partial because the collector swallowed failures:
   `Promise.allSettled` plus a `.catch(() => [])` per server meant "this box has
