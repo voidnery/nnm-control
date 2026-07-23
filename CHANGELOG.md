@@ -1,6 +1,29 @@
 # Changelog
 
 ## iter6 follow-up
+### v0.6.9 — favicon actually ships; tag management reworked to full CRUD
+- FIX icon: the Dockerfile never copied `public/`, so the container built a
+  dist with no icons and the <link> tags 404'd — the local build I verified
+  last time was not the build that ships. Added `COPY public ./public` and a
+  new audit (`npm run audit:docker`) that rebuilds using ONLY what the
+  Dockerfile copies and asserts every asset referenced by index.html exists;
+  verified it fails when the COPY is removed
+- FIX tag removal: clicking a chip's × never reached the server. The inline
+  editor's outside-click handler fired on mousedown and unmounted the × before
+  the click landed. Reproduced first, then fixed by design
+- Tag management reworked into a single picker popover (the pattern issue
+  trackers use for labels): search, a checklist where clicking a row assigns
+  or unassigns, and a "Create <tag>" row for new values — add and remove now
+  live in one place. Chips also keep a hover × for quick removal, and the
+  popover treats the whole cell as "inside" so chip clicks can't dismiss it
+- Tag vocabulary CRUD: "Manage tags" mode renames a tag across every object of
+  that tab, or deletes it everywhere (confirmed). Backend:
+  POST /stream-tags/:serverId/vocab/:kind/rename and .../delete, both audited
+  (streamtag:rename / streamtag:delete), kept under /vocab/ so a tag name can
+  never collide with an object id
+- Tests: tag add/remove/assign regressions added to `npm run audit:ui`
+
+## iter6 follow-up
 ### v0.6.8 — radio redesign + app icon
 - Radio buttons were collapsing into blobs: a global `input { width: 100% }`
   rule combined with inline `width:auto` hacks overrode their size. Fixed the

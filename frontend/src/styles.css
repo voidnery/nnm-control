@@ -348,3 +348,25 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .tag-pop .cselect-opt { font-size: 12px; }
 .tag-create { color: var(--accent); }
 .tag-create b { color: var(--text); }
+
+
+/* Tag picker popover */
+.tag-pop-search { padding: 4px 4px 6px; position: sticky; top: 0; background: var(--bg-raise); z-index: 1; }
+.tagopt { display: flex; align-items: center; gap: 6px; }
+.tagopt-check { width: 12px; flex: none; color: var(--accent); font-size: 11px; }
+.tagopt.on { color: var(--text); }
+.tag-manage-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; }
+.tag-manage-name {
+  flex: 1; font-size: 12px; padding: 3px 6px; border-radius: 4px;
+  cursor: text; border: 1px dashed transparent;
+}
+.tag-manage-name:hover { border-color: var(--line); background: var(--bg); }
+.tag-manage-row .tag-input { flex: 1; }
+.tag-pop-foot {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 6px 6px 2px; margin-top: 4px; border-top: 1px solid var(--line);
+  position: sticky; bottom: 0; background: var(--bg-raise);
+}
+.tag-btn.active { color: var(--accent); opacity: 1; }
+.tagchip.static .x { opacity: .5; }
+.tagchip.static:hover .x { opacity: 1; }

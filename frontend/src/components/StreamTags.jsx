@@ -4,6 +4,8 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
+import { useConfirm } from '../confirm.jsx';
+import SearchInput from './SearchInput.jsx';
 
 // Panel-side stream tags. Tags are stored per (serverId, kind, objId), so the
 // tag vocabulary is scoped to ONE tab: tags created on RTMP Pull are not
@@ -63,12 +65,25 @@ export function useStreamTags(serverId, kind) {
     return mode === 'and' ? selected.every(t => tset.has(t)) : selected.some(t => tset.has(t));
   }, [selected, mode, getTags]);
 
-  return { kind, map, catalog, selected, mode, setMode, toggleFilter, setSelected, getTags, setTags, matches, reload: load };
+  // Vocabulary-level CRUD: applies to every object of this kind on this server.
+  const renameTag = useCallback(async (from, to) => {
+    await api(`/stream-tags/${serverId}/vocab/${kind}/rename`, { method: 'POST', body: { from, to } });
+    await load();
+  }, [serverId, kind, load]);
+
+  const deleteTagEverywhere = useCallback(async (tag) => {
+    await api(`/stream-tags/${serverId}/vocab/${kind}/delete`, { method: 'POST', body: { tag } });
+    await load();
+  }, [serverId, kind, load]);
+
+  return { kind, map, catalog, selected, mode, setMode, toggleFilter, setSelected,
+           getTags, setTags, matches, reload: load, renameTag, deleteTagEverywhere };
 }
 
 // Shared popover positioning: fixed + portal so no scroll container can clip it.
-function usePopover(open) {
-  const anchor = useRef(null);
+function usePopover(open, anchorRef) {
+  const internal = useRef(null);
+  const anchor = anchorRef || internal;
   const pop = useRef(null);
   const [pos, setPos] = useState(null);
   const measure = useCallback(() => {
@@ -120,103 +135,167 @@ export function TagFilterBar({ st }) {
   );
 }
 
-// Themed tag entry: input + our own dropdown of this tab's existing tags
-// (native <datalist> can't be styled and looked foreign).
-function TagCombo({ st, existing, onAdd, onClose }) {
+// Tag picker popover: one place to add AND remove (checklist toggle), create
+// new values, and manage the tab's vocabulary. Modelled on how issue trackers
+// handle labels — a single popover instead of a transient inline input, which
+// also removes the class of bug where clicking a chip's × dismissed the editor
+// before the click landed.
+function TagPopover({ st, objId, kind, tags, cellRef, onClose }) {
   const { t } = useI18n();
+  const { push } = useToast();
+  const confirm = useConfirm();
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState(true);
-  const { anchor, pop, pos } = usePopover(open);
-
-  const suggestions = useMemo(() => {
-    const avail = st.catalog.filter(c => !existing.includes(c));
-    const needle = q.trim().toLowerCase();
-    return needle ? avail.filter(c => c.toLowerCase().includes(needle)) : avail;
-  }, [st.catalog, existing, q]);
-
-  const value = q.trim();
-  const canCreate = value && !st.catalog.includes(value) && !existing.includes(value);
+  const [manage, setManage] = useState(false);
+  const [renaming, setRenaming] = useState(null);   // { tag, value }
+  const [busy, setBusy] = useState(false);
+  // Anchor to the whole cell: measured synchronously on open, and clicks on
+  // chips (incl. their ×) count as "inside" so they never dismiss it mid-click.
+  const { pop, pos } = usePopover(true, cellRef);
 
   useEffect(() => {
     const onDoc = (e) => {
-      if (anchor.current?.contains(e.target) || pop.current?.contains(e.target)) return;
+      if (cellRef.current?.contains(e.target) || pop.current?.contains(e.target)) return;
       onClose();
     };
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [onClose, anchor, pop]);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose, cellRef, pop]);
 
-  const commit = (tag) => { onAdd(tag); setQ(''); setOpen(true); };
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? st.catalog.filter(c => c.toLowerCase().includes(needle)) : st.catalog;
+  const value = q.trim();
+  const canCreate = value && !st.catalog.some(c => c.toLowerCase() === value.toLowerCase());
 
-  return (
-    <span className="tagcombo" ref={anchor}>
-      <input className="tag-input" autoFocus value={q}
-             placeholder={t('tag.addPlaceholder')}
-             onChange={e => { setQ(e.target.value); setOpen(true); }}
-             onFocus={() => setOpen(true)}
-             onKeyDown={e => {
-               if (e.key === 'Enter' && value) { e.preventDefault(); commit(value); }
-               else if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
-             }} />
-      {open && pos && createPortal(
-        <div ref={pop} className="cselect-pop tag-pop"
-             style={{
-               left: pos.left, width: pos.width, maxHeight: pos.maxHeight,
-               ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
-             }}>
-          {canCreate && (
-            <div className="cselect-opt tag-create" onClick={() => commit(value)}>
-              {t('tag.create')} <b className="mono">{value}</b>
-            </div>
-          )}
-          {suggestions.map(c => (
-            <div key={c} className="cselect-opt" onClick={() => commit(c)}>{c}</div>
-          ))}
-          {!canCreate && suggestions.length === 0 && (
-            <div className="cselect-opt" style={{ color: 'var(--text-dim)' }}>
-              {st.catalog.length ? t('tag.noMatches') : t('tag.noneYet')}
-            </div>
-          )}
-        </div>,
-        document.body
+  const apply = async (next) => {
+    setBusy(true);
+    try { await st.setTags(kind, objId, next); }
+    catch (e) { push({ type: 'error', message: e.message }); }
+    finally { setBusy(false); }
+  };
+  const toggle = (tag) => apply(tags.includes(tag) ? tags.filter(x => x !== tag) : [...tags, tag]);
+  const create = async () => { setQ(''); await apply([...tags, value]); };
+
+  const commitRename = async () => {
+    const { tag, value: to } = renaming;
+    setRenaming(null);
+    if (!to.trim() || to.trim() === tag) return;
+    setBusy(true);
+    try { await st.renameTag(tag, to.trim()); push({ type: 'ok', message: t('tag.renamed') }); }
+    catch (e) { push({ type: 'error', message: e.message }); }
+    finally { setBusy(false); }
+  };
+  const removeEverywhere = async (tag) => {
+    if (!(await confirm({ danger: true, message: t('tag.deleteAllConfirm', { tag }) }))) return;
+    setBusy(true);
+    try { await st.deleteTagEverywhere(tag); push({ type: 'ok', message: t('tag.deleted') }); }
+    catch (e) { push({ type: 'error', message: e.message }); }
+    finally { setBusy(false); }
+  };
+
+  if (!pos) return null;
+  return createPortal(
+    <div ref={pop} className="cselect-pop tag-pop"
+         style={{
+           left: pos.left, width: Math.max(pos.width, 230), maxHeight: pos.maxHeight,
+           ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }),
+         }}>
+      <div className="tag-pop-search">
+        <SearchInput autoFocus value={q} onChange={setQ} placeholder={t('tag.searchOrCreate')} />
+      </div>
+
+      {canCreate && !manage && (
+        <div className="cselect-opt tag-create" onClick={create}>
+          {t('tag.create')} <b className="mono">{value}</b>
+        </div>
       )}
-    </span>
+
+      {shown.map(tag => {
+        const on = tags.includes(tag);
+        if (manage) {
+          return (
+            <div key={tag} className="tag-manage-row">
+              {renaming?.tag === tag ? (
+                <input className="tag-input" autoFocus value={renaming.value}
+                       onChange={e => setRenaming({ tag, value: e.target.value })}
+                       onKeyDown={e => {
+                         if (e.key === 'Enter') commitRename();
+                         if (e.key === 'Escape') setRenaming(null);
+                       }}
+                       onBlur={commitRename} />
+              ) : (
+                <span className="tag-manage-name" onClick={() => setRenaming({ tag, value: tag })}
+                      title={t('tag.renameHint')}>{tag}</span>
+              )}
+              <button className="tag-btn ghost" disabled={busy}
+                      onClick={() => removeEverywhere(tag)} title={t('tag.deleteAll')}>🗑</button>
+            </div>
+          );
+        }
+        return (
+          <div key={tag} className={'cselect-opt tagopt' + (on ? ' on' : '')}
+               onClick={() => toggle(tag)}>
+            <span className="tagopt-check">{on ? '✓' : ''}</span>{tag}
+          </div>
+        );
+      })}
+
+      {!shown.length && !canCreate && (
+        <div className="cselect-opt" style={{ color: 'var(--text-dim)' }}>
+          {st.catalog.length ? t('tag.noMatches') : t('tag.noneYet')}
+        </div>
+      )}
+
+      <div className="tag-pop-foot">
+        <button className="linklike" onClick={() => { setManage(m => !m); setRenaming(null); }}>
+          {manage ? t('tag.doneManaging') : t('tag.manage')}
+        </button>
+        <button className="linklike" onClick={onClose}>{t('action.close')}</button>
+      </div>
+    </div>,
+    document.body
   );
 }
 
-// Inline chips + editor for one object.
+// Inline chips for one object + the picker trigger.
 export function TagChips({ st, kind, objId }) {
   const { can } = useAuth();
   const { t } = useI18n();
   const { push } = useToast();
-  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
+  const cellRef = useRef(null);
   const k = kind || st.kind;
   const tags = st.getTags(k, objId);
   const editable = can('wmsobjects.manage');
 
-  const commit = async (next) => {
-    try { await st.setTags(k, objId, next); }
+  const remove = async (tag) => {
+    try { await st.setTags(k, objId, tags.filter(x => x !== tag)); }
     catch (e) { push({ type: 'error', message: e.message }); }
   };
-  const add = (tag) => { if (tag && !tags.includes(tag)) commit([...tags, tag]); };
-  const remove = (tag) => commit(tags.filter(x => x !== tag));
 
   return (
-    <span className="tagcell">
+    <span className="tagcell" ref={cellRef}>
       {tags.map(tag => (
         <span key={tag} className="tagchip static">
-          {tag}{editing && editable && <button className="x" onClick={() => remove(tag)} title={t('tag.remove')}>×</button>}
+          {tag}
+          {editable && (
+            <button className="x" onClick={() => remove(tag)} title={t('tag.remove')}>×</button>
+          )}
         </span>
       ))}
-      {!tags.length && !editing && <span className="hint" style={{ fontSize: 12 }}>—</span>}
-      {editable && (editing ? (
-        <>
-          <TagCombo st={st} existing={tags} onAdd={add} onClose={() => setEditing(false)} />
-          <button className="tag-btn" onClick={() => setEditing(false)}>{t('action.done')}</button>
-        </>
-      ) : (
-        <button className="tag-btn ghost" onClick={() => setEditing(true)} title={t('tag.edit')}>🏷</button>
-      ))}
+      {!tags.length && <span className="hint" style={{ fontSize: 12 }}>—</span>}
+      {editable && (
+        <button className={'tag-btn ghost' + (open ? ' active' : '')}
+                onClick={() => setOpen(o => !o)} title={t('tag.edit')}>+</button>
+      )}
+      {open && editable && (
+        <TagPopover st={st} objId={objId} kind={k} tags={tags} cellRef={cellRef}
+                    onClose={() => setOpen(false)} />
+      )}
     </span>
   );
 }

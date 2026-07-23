@@ -60,24 +60,57 @@ window.__T.search = async () => {
 };
 
 window.__T.tags = async (kind) => {
-  // Portals stack in <body>; drop leftovers from previous runs so we inspect
-  // only the popup this run creates.
-  document.body.querySelectorAll('.tag-pop').forEach(n => n.remove());
   const host = document.createElement('div'); document.body.appendChild(host);
-  createRoot(host).render(React.createElement(Wrap,null,React.createElement(TagHost,{kind, objId:'newObj'})));
+  const root = createRoot(host); root.render(React.createElement(Wrap,null,React.createElement(TagHost,{kind, objId:'newObj'})));
   await new Promise(r=>setTimeout(r,250));
-  // enter edit mode
   host.querySelector('.tag-btn.ghost')?.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
   await new Promise(r=>setTimeout(r,150));
-  const popInHost = host.querySelector('.tag-pop');
   const pops = document.body.querySelectorAll('.tag-pop');
   const popInBody = pops.length ? pops[pops.length-1] : null;
-  const opts = popInBody ? Array.from(popInBody.querySelectorAll('.cselect-opt')).map(d=>d.textContent.trim()) : [];
-  return {
-    opened: !!popInBody,
-    portaled: !!popInBody && !popInHost,
-    suggestions: opts,
-  };
+  const popInHost = host.querySelector('.tag-pop');
+  const opts = popInBody ? Array.from(popInBody.querySelectorAll('.tagopt')).map(d=>d.textContent.replace('✓','').trim()) : [];
+  const out = { opened: !!popInBody, portaled: !!popInBody && !popInHost, suggestions: opts };
+  root.unmount(); host.remove();
+  return out;
+};
+
+// Regression: removing a chip while the picker is open must reach the server.
+// The old inline editor dismissed itself on mousedown, so the × click never landed.
+window.__T.remove = async () => {
+  window.__PUTS = [];
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const root = createRoot(host); root.render(React.createElement(Wrap,null,React.createElement(TagHost,{kind:'livepull', objId:'p1'})));
+  await new Promise(r=>setTimeout(r,250));
+  host.querySelector('.tag-btn.ghost')?.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,120));
+  const x = host.querySelector('.tagchip.static .x');
+  if (!x) return { error: 'no remove (x) affordance' };
+  x.dispatchEvent(new window.MouseEvent('mousedown',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,20));
+  const survived = !!host.querySelector('.tagchip.static .x');
+  x.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,220));
+  const out = { survived, puts: window.__PUTS, chips: Array.from(host.querySelectorAll('.tagchip.static')).map(n=>n.textContent.replace('×','').trim()) };
+  root.unmount(); host.remove();
+  return out;
+};
+
+// Toggling a row in the picker assigns the tag.
+window.__T.assign = async () => {
+  window.__PUTS = [];
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const root = createRoot(host); root.render(React.createElement(Wrap,null,React.createElement(TagHost,{kind:'livepull', objId:'p9'})));
+  await new Promise(r=>setTimeout(r,250));
+  host.querySelector('.tag-btn.ghost')?.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,120));
+  const pops = document.body.querySelectorAll('.tag-pop');
+  const pop = pops[pops.length-1];
+  const row = pop?.querySelector('.tagopt');
+  row?.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,220));
+  const out = { puts: window.__PUTS };
+  root.unmount(); host.remove();
+  return out;
 };
 `;
 
@@ -85,11 +118,15 @@ const res = await build({ stdin:{contents:entry,resolveDir:SRC,loader:'jsx'}, bu
 
 const dom = new JSDOM('<!doctype html><body></body>',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://localhost/'});
 const { window } = dom;
-window.fetch = (u) => {
+window.__PUTS = [];
+window.fetch = (u, opt = {}) => {
   const s = String(u);
   let body = { status:'Ok' };
-  if (s.includes('/stream-tags/')) body = { map: TAG_MAP };
-  else if (s.includes('/auth/me')) body = { id:'U1', username:'t', permissions:['*'] };
+  if (s.includes('/stream-tags/')) {
+    if ((opt.method || 'GET') === 'PUT') { const b = JSON.parse(opt.body); window.__PUTS.push(b); body = { tags: b.tags }; }
+    else body = { map: TAG_MAP };
+  }
+  if (s.includes('/auth/me')) body = { id:'U1', username:'t', permissions:['*'] };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
   return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve(body), text:()=>Promise.resolve(JSON.stringify(body)) });
 };
@@ -112,4 +149,22 @@ for (const [kind, expected] of [['livepull',['EWC/VALORANT']], ['republish',['yo
   if (!r.opened || !r.portaled || !match) bad++;
   console.log(`  ${r.opened&&r.portaled&&match?'✓':'✗'} ${kind.padEnd(10)} portaled=${r.portaled} suggestions=[${sugg.join(', ')}] (expected [${expected.join(', ')}])`);
 }
+
+const rm = await window.__T.remove();
+console.log('\nTAG REMOVAL (CRUD delete, picker open):');
+if (rm.error) { console.log('  ✗ ' + rm.error); bad++; }
+else {
+  const sentRemoval = (rm.puts || []).some(p => !p.tags.includes('EWC/VALORANT'));
+  console.log(`  ${rm.survived?'✓':'✗'} remove control survives mousedown (was the old bug)`);
+  console.log(`  ${sentRemoval?'✓':'✗'} removal persisted: ${JSON.stringify(rm.puts)}`);
+  console.log(`  ${!rm.chips.includes('EWC/VALORANT')?'✓':'✗'} chip gone from the cell -> ${JSON.stringify(rm.chips)}`);
+  if (!rm.survived || !sentRemoval || rm.chips.includes('EWC/VALORANT')) bad++;
+}
+
+const asg = await window.__T.assign();
+const assigned = (asg.puts || []).some(p => p.tags.includes('EWC/VALORANT'));
+console.log('\nTAG ASSIGN (CRUD create via picker row):');
+console.log(`  ${assigned?'✓':'✗'} assignment persisted: ${JSON.stringify(asg.puts)}`);
+if (!assigned) bad++;
+
 process.exit(bad?1:0);
