@@ -26,6 +26,30 @@ import { ThemeProvider } from '${SRC}/theme.jsx';
 ${PAGES.map(([p]) => `import ${p} from '${SRC}/pages/${p}.jsx';`).join('\n')}
 const PAGES = { ${PAGES.map(([p]) => p).join(', ')} };
 
+// Modals/editors never render on first paint, so a crash inside them (e.g. a
+// step editor) survives a plain page smoke. Open them explicitly.
+window.__EDITOR = async () => {
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const root = createRoot(host);
+  root.render(React.createElement(ThemeProvider,null,
+    React.createElement(ToastProvider,null,
+      React.createElement(AuthProvider,null,
+        React.createElement(I18nProvider,null,
+          React.createElement(ConfirmProvider,null,
+            React.createElement(MemoryRouter,{ initialEntries:['/functions'] },
+              React.createElement(PAGES.FunctionsPage))))))));
+  await new Promise(r=>setTimeout(r,400));
+  const btns = Array.from(host.querySelectorAll('button'));
+  const edit = btns.find(b => /Edit|Изменить/i.test(b.textContent));
+  if (!edit) { root.unmount(); host.remove(); return { error:'no Edit button rendered' }; }
+  edit.dispatchEvent(new window.MouseEvent('click',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,350));
+  const html = document.body.innerHTML;
+  const out = { opened: /modal|Step|шаг/i.test(html), len: host.innerHTML.length };
+  root.unmount(); host.remove();
+  return out;
+};
+
 window.__PAGE = async (name, path) => {
   const host = document.createElement('div'); document.body.appendChild(host);
   const Comp = PAGES[name];
@@ -69,7 +93,8 @@ window.fetch = (u) => {
   else if (s.includes('/roles')) body = [];
   else if (s.includes('/audit')) body = { items: [] };
   else if (s.includes('/functions/runs')) body = [];
-  else if (s.includes('/functions')) body = [];
+  else if (s.includes('/functions')) body = [{ id:'F1', name:'Fn', description:'', steps:[
+      { kind:'patch', label:'step', serverId:'S1', objectKind:'outgoing', targetId:'x', patch:{} }] }];
   else if (s.includes('/playlists')) body = [];
   else if (s.includes('/settings')) body = { wmspanel:{ baseUrl:'', clientId:'' }, controlPlane:'wmspanel' };
   else if (s.includes('transcoders')) body = { transcoders: [], licenses: [] };
@@ -87,6 +112,12 @@ for (const [name, path] of PAGES) {
   else if (r.len < 40) { bad++; console.log(`  ✗ ${name}: rendered empty (${r.len} chars)`); }
   else console.log(`  ✓ ${name}: ${r.len} chars`);
 }
+const ed = await window.__EDITOR();
+console.log('\nEDITOR SURFACES (open a function for editing):');
+if (ed.error) { bad++; console.log('  ✗ ' + ed.error); }
+else if (!ed.opened) { bad++; console.log(`  ✗ builder did not render (${ed.len} chars)`); }
+else console.log(`  ✓ function builder + step editor render (${ed.len} chars)`);
+
 const real = errors.filter(e => /is not defined|Cannot read|is not a function|undefined/.test(e));
 if (real.length) {
   console.log('\nRENDER ERRORS:');

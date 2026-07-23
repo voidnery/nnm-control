@@ -1,5 +1,19 @@
 # Changelog
 
+### v0.6.13 — fix blank screen when editing a Function
+- StepEditor called t() without binding useI18n (missed in the v0.6.11
+  translation pass), so opening a function for editing threw and blanked the
+  page. Bound it
+- Why the audit missed it: the "t is bound as a parameter" rule was matched
+  against the whole component body, so any inner `.map(t => …)` counted as a
+  binding — the opposite of the truth. Parameter binding is now only accepted
+  from the component signature; the rule now flags exactly this case and
+  nothing else across the tree
+- The page smoke only covered first paint, so crashes inside modals/editors
+  survived it. It now also opens a function for editing and asserts the
+  builder and its step editor render. Both gates were verified against the
+  reintroduced bug
+
 ## iter6 follow-up
 ### v0.6.12 — fix blank screen on Servers (and other pages)
 - Root cause: ServersPage binds `const t = testResults[s.id]` inside the server

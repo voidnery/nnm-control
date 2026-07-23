@@ -1,7 +1,7 @@
 import re, glob, sys
 
 CHECKS = [
-  (re.compile(r'(?<![\w.])t\('),      [re.compile(r'\bt\b\s*=\s*useI18n\('), re.compile(r'const\s*\{[^}]*\bt\b[^}]*\}\s*=\s*useI18n\('), re.compile(r'function\s+\w+\s*\([^)]*\bt\b[^)]*\)'), re.compile(r'\(\s*[^)]*\bt\b[^)]*\)\s*=>')], 't'),
+  (re.compile(r'(?<![\w.])t\('),      [re.compile(r'\bt\b\s*=\s*useI18n\('), re.compile(r'const\s*\{[^}]*\bt\b[^}]*\}\s*=\s*useI18n\(')], 't'),
   (re.compile(r'(?<![\w.])can\('),    [re.compile(r'const\s*\{[^}]*\bcan\b[^}]*\}\s*=\s*useAuth\(')], 'can'),
   (re.compile(r'(?<![\w.])push\('),   [re.compile(r'const\s*\{[^}]*\bpush\b[^}]*\}\s*=\s*useToast\(')], 'push'),
   (re.compile(r'(?<![\w.])confirm\('),[re.compile(r'\bconfirm\b\s*=\s*useConfirm\(')], 'confirm'),
@@ -21,7 +21,10 @@ problems=[]
 for f in glob.glob('src/**/*.jsx', recursive=True):
     for header, body in regions(open(f).read()):
         nm = re.search(r'(?:function|const)\s+(\w+)', header); nm = nm.group(1) if nm else '?'
+        header_binds_t = re.search(r'\([^)]*\bt\b[^)]*\)', header) is not None
         for use_re, decl_res, label in CHECKS:
+            if label == 't' and header_binds_t:
+                continue
             if use_re.search(body) and not any(d.search(body) for d in decl_res):
                 problems.append(f"{f} :: {nm} uses {label}()")
 if problems:

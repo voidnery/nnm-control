@@ -102,6 +102,7 @@ const KEY_PAIRS = [
 const defaultPairFor = (kind) => kind === 'republish' ? 'src' : kind === 'hotswap' ? 'sub' : kind === 'udp' ? 'udps' : 'app';
 
 function StepEditor({ step, servers, onChange, onRemove }) {
+  const { t } = useI18n();
   const set = (k, v) => onChange({ ...step, [k]: v });
   const [patchText, setPatchText] = useState(JSON.stringify(step.patch || {}, null, 0));
   const [patchErr, setPatchErr] = useState('');
