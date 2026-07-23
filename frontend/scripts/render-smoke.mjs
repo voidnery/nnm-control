@@ -18,6 +18,7 @@ const SAMPLE = {
 function pick(u){
   u=String(u);
   if(u.includes('/stream-tags/'))return SAMPLE.tags;
+  if(u.includes('/stats/_health'))return { servers:[{ serverId:'S1', name:'Src', at:new Date().toISOString(), ok:true, samples:1, report:{ streams:{status:'ok',count:1}, 'srt-sender':{status:'empty',hint:'no outgoing SRT sockets'} } }] };
   if(u.includes('/subjects'))return { subjects:[{ subject:'stream:live/cam1', group:'streams', label:'live/cam1', metrics:['bandwidth'] }] };
   if(u.includes('/series'))return { subject:'stream:live/cam1', metrics:['bandwidth'], bucketMs:0,
     points:[{ ts:new Date(Date.now()-60000).toISOString(), v:[4200000] },{ ts:new Date().toISOString(), v:[4400000] }] };

@@ -30,6 +30,10 @@ const asList = (d, ...keys) => {
 // Build the samples for one server. Exported for tests.
 export async function collectServer(server, groups, ts = new Date()) {
   const samples = [];
+  // Per-endpoint outcome. "empty" (the server genuinely has nothing of that
+  // kind) must be distinguishable from "error" (we could not ask) — conflating
+  // them is what made collection look randomly partial.
+  const report = {};
   const add = (group, subject, label, metrics) => {
     if (metrics && Object.keys(metrics).length) {
       samples.push({ serverId: String(server._id), subject, group, label, ts, metrics });
@@ -46,8 +50,12 @@ export async function collectServer(server, groups, ts = new Date()) {
   const settled = await Promise.allSettled(jobs.map(j => j[1]));
 
   settled.forEach((res, i) => {
-    if (res.status !== 'fulfilled') return;   // one dead endpoint must not lose the rest
     const kind = jobs[i][0];
+    if (res.status !== 'fulfilled') {         // one dead endpoint must not lose the rest
+      report[kind] = { status: 'error', error: String(res.reason?.message || res.reason).slice(0, 200) };
+      return;
+    }
+    const before = samples.length;
     const d = res.value;
 
     if (kind === 'streams') {
@@ -71,13 +79,30 @@ export async function collectServer(server, groups, ts = new Date()) {
     } else if (kind === 'server') {
       add('server', 'server', server.name, flattenNumbers(d));
     }
+    const produced = samples.length - before;
+    report[kind] = produced > 0
+      ? { status: 'ok', count: produced }
+      : { status: 'empty', hint: EMPTY_HINT[kind] || 'the server reported nothing of this kind' };
   });
 
-  return samples;
+  return { samples, report };
 }
+
+const EMPTY_HINT = {
+  streams: 'no live streams are being published to this server right now',
+  republish: 'no RTMP Push rules are running on this server',
+  'srt-sender': 'no outgoing SRT sockets on this server',
+  'srt-receiver': 'no incoming SRT sockets on this server',
+  server: 'the server status endpoint returned no numeric counters',
+};
 
 let timer = null;
 let running = false;
+const lastRun = new Map();   // serverId -> { at, name, ok, samples, report, error }
+
+export function getCollectionHealth() {
+  return [...lastRun.entries()].map(([serverId, v]) => ({ serverId, ...v }));
+}
 
 async function tick() {
   if (running) return;                 // a slow round must not overlap the next
@@ -88,9 +113,26 @@ async function tick() {
     const servers = await NimbleServer.find();
     const ts = new Date();
     const batches = await Promise.allSettled(
-      servers.map(sv => collectServer(sv, s.stats.groups || {}, ts).catch(() => []))
+      servers.map(sv => collectServer(sv, s.stats.groups || {}, ts))
     );
-    const docs = batches.flatMap(b => (b.status === 'fulfilled' ? b.value : []));
+    const docs = [];
+    batches.forEach((b, i) => {
+      const sv = servers[i];
+      if (b.status === 'fulfilled') {
+        docs.push(...b.value.samples);
+        lastRun.set(String(sv._id), {
+          at: ts, name: sv.name, ok: true,
+          samples: b.value.samples.length, report: b.value.report,
+        });
+      } else {
+        // Whole-server failure: usually an unreachable management address or a
+        // missing/invalid management token, which used to vanish silently.
+        lastRun.set(String(sv._id), {
+          at: ts, name: sv.name, ok: false, samples: 0, report: {},
+          error: String(b.reason?.message || b.reason).slice(0, 300),
+        });
+      }
+    });
     if (docs.length) await StatSample.insertMany(docs, { ordered: false });
   } catch (e) {
     console.error('[stats] collection failed:', e.message);

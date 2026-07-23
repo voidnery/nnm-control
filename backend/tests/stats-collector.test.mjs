@@ -23,7 +23,7 @@ nimble.srtSenderStats = async () => ({ streams: [{ id: 's1', msRTT: 18.4, pktRet
 nimble.srtReceiverStats = async () => ({ streams: [{ id: 'r9', msRTT: 21.0, pktLoss: 7 }] });
 nimble.serverStatus = async () => ({ cpu_usage: 12, memory: { free: 900, total: 4096 } });
 
-const samples = await collectServer({ _id: 'S1', name: 'srv' }, { streams: true, republish: true, srt: true, server: true });
+const { samples, report } = await collectServer({ _id: 'S1', name: 'srv' }, { streams: true, republish: true, srt: true, server: true });
 const by = (s) => samples.find(x => x.subject === s);
 
 check('stream subject + bandwidth', by('stream:live/cam1')?.metrics.bandwidth === 4_200_000, JSON.stringify(samples.map(s => s.subject)));
@@ -40,12 +40,23 @@ check('groups tagged', by('stream:live/cam1')?.group === 'streams' && snd?.group
 
 console.log('\nRESILIENCE:');
 nimble.srtSenderStats = async () => { throw new Error('endpoint missing on this build'); };
-const partial = await collectServer({ _id: 'S1', name: 'srv' }, { streams: true, republish: false, srt: true, server: false });
+const { samples: partial, report: partialReport } = await collectServer({ _id: 'S1', name: 'srv' }, { streams: true, republish: false, srt: true, server: false });
 check('one failing endpoint does not lose the others', partial.some(s => s.subject === 'stream:live/cam1') && partial.some(s => s.subject === 'srt-receiver:r9'),
       JSON.stringify(partial.map(s => s.subject)));
 
-const off = await collectServer({ _id: 'S1', name: 'srv' }, { streams: false, republish: false, srt: false, server: false });
+const { samples: off } = await collectServer({ _id: 'S1', name: 'srv' }, { streams: false, republish: false, srt: false, server: false });
 check('disabled groups collect nothing', off.length === 0, JSON.stringify(off));
+
+console.log('\nDIAGNOSTICS (why a server shows no data):');
+check('successful endpoint reported as ok with a count', report.streams?.status === 'ok' && report.streams.count === 1, JSON.stringify(report.streams));
+check('failing endpoint reported as error, not silence', partialReport['srt-sender']?.status === 'error', JSON.stringify(partialReport['srt-sender']));
+check('error message is carried through', /endpoint missing/.test(partialReport['srt-sender']?.error || ''), partialReport['srt-sender']?.error);
+check('other endpoints still ok in the same run', partialReport['srt-receiver']?.status === 'ok', JSON.stringify(partialReport['srt-receiver']));
+
+nimble.liveStreams = async () => ({ streams: [] });
+const { report: emptyReport } = await collectServer({ _id: 'S1', name: 'srv' }, { streams: true });
+check('nothing to collect is "empty", not "error"', emptyReport.streams?.status === 'empty', JSON.stringify(emptyReport.streams));
+check('empty carries an explanation', /no live streams/.test(emptyReport.streams?.hint || ''), emptyReport.streams?.hint);
 
 console.log(bad ? `\n${bad} failure(s)` : '\nall collector checks passed');
 process.exit(bad ? 1 : 0);

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { StatSample } from '../models/StatSample.js';
+import { getCollectionHealth } from '../services/statsCollector.js';
 
 export const statsRouter = Router();
 statsRouter.use(requireAuth);
@@ -56,6 +57,13 @@ statsRouter.get('/:serverId/series', requirePerm('streams.view'), async (req, re
   }
 
   res.json({ subject, metrics, bucketMs, points });
+});
+
+// Why a server has little or no data: per-endpoint outcome of the last run.
+// "empty" means the server genuinely has nothing of that kind; "error" means we
+// could not ask — without this the two look identical in the charts.
+statsRouter.get('/_health', requirePerm('streams.view'), (_req, res) => {
+  res.json({ servers: getCollectionHealth() });
 });
 
 // Rough storage cost, so enabling collection is an informed decision.

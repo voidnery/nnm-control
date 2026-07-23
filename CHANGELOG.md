@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.7.6 — make metric collection explain itself
+- Collection looked randomly partial because the collector swallowed failures:
+  `Promise.allSettled` plus a `.catch(() => [])` per server meant "this box has
+  no incoming SRT right now" and "the panel could not reach this box at all"
+  produced exactly the same result — nothing
+- Each endpoint now reports its outcome: ok (with a subject count), empty (with
+  a plain-language reason, e.g. no live streams are being published) or error
+  (with the message). A whole-server failure — normally an unreachable
+  management address or a missing token — is recorded instead of vanishing
+- New "Why is data missing?" panel on the Charts tab, opened automatically when
+  a server has no subjects, showing the last run per endpoint
+- Collector tests grew to 22 checks covering the ok / empty / error distinction
+  and that an error message survives to the report
+- Note on the WMSPanel alternative: its streams API is per-server and needs Deep
+  stats, so at 13 servers the 15 000 calls/day budget allows roughly one sample
+  every 2 minutes (5 minutes if half the budget is kept for interactive work) —
+  against 10s on the native API. Diagnosing the native path first is the cheaper
+  and far more useful route
+
 ### v0.7.5 (m5) — server agent: config files and media uploads
 - New `agent/` component: a dependency-free (node:http + node:fs) service that
   runs on a Nimble box and is the only thing in the project allowed to touch its

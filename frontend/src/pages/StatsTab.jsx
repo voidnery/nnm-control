@@ -20,6 +20,8 @@ export default function StatsTab({ serverId }) {
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
   const [live, setLive] = useState(true);
+  const [health, setHealth] = useState(null);
+  const [showHealth, setShowHealth] = useState(false);
 
   const loadSubjects = useCallback(async () => {
     try {
@@ -29,6 +31,17 @@ export default function StatsTab({ serverId }) {
     } catch (e) { setError(e.message); }
   }, [serverId]);
   useEffect(() => { loadSubjects(); }, [loadSubjects]);
+
+  // Why this server has little or nothing: fetched alongside the subjects so an
+  // empty tab can explain itself instead of just looking broken.
+  const loadHealth = useCallback(async () => {
+    try {
+      const d = await api('/stats/_health');
+      setHealth((d.servers || []).find(x => x.serverId === String(serverId)) || null);
+    } catch { setHealth(null); }
+  }, [serverId]);
+  useEffect(() => { loadHealth(); }, [loadHealth]);
+  useEffect(() => { if (subjects && subjects.length === 0) setShowHealth(true); }, [subjects]);
 
   const current = useMemo(() => (subjects || []).find(s => s.subject === subject) || null, [subjects, subject]);
 
@@ -67,8 +80,42 @@ export default function StatsTab({ serverId }) {
   return (
     <div>
       {error && <div className="error-box">{error}</div>}
-      {subjects && subjects.length === 0 && (
-        <div className="hint" style={{ marginBottom: 10 }}>{t('stats.none')}</div>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        {subjects && subjects.length === 0
+          ? <span className="hint">{t('stats.none')}</span>
+          : <span />}
+        <button className="linklike" onClick={() => { setShowHealth(v => !v); loadHealth(); }}>
+          {showHealth ? t('stats.hideHealth') : t('stats.showHealth')}
+        </button>
+      </div>
+
+      {showHealth && (
+        <div className="panel" style={{ marginBottom: 10 }}>
+          <b>{t('stats.healthTitle')}</b>
+          {!health ? (
+            <div className="hint" style={{ marginTop: 6 }}>{t('stats.healthNone')}</div>
+          ) : (
+            <>
+              <div className="hint" style={{ marginTop: 4 }}>
+                {t('stats.healthAt', { at: new Date(health.at).toLocaleTimeString(), n: health.samples })}
+              </div>
+              {health.error && <div className="error-box" style={{ marginTop: 6 }}>{health.error}</div>}
+              <div className="kv-grid" style={{ marginTop: 6 }}>
+                {Object.entries(health.report || {}).map(([ep, r]) => (
+                  <>
+                    <div className="kv-k" key={ep + 'k'}>{ep}</div>
+                    <div className="kv-v" key={ep + 'v'}>
+                      {r.status === 'ok' && <span><span className="lamp on" />{t('stats.hOk', { n: r.count })}</span>}
+                      {r.status === 'empty' && <span className="hint">— {r.hint}</span>}
+                      {r.status === 'error' && <span><span className="lamp off" />{r.error}</span>}
+                    </div>
+                  </>
+                ))}
+              </div>
+              <div className="hint" style={{ marginTop: 6 }}>{t('stats.healthHint')}</div>
+            </>
+          )}
+        </div>
       )}
 
       <div className="row" style={{ gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
