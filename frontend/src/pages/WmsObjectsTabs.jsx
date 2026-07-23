@@ -197,19 +197,25 @@ export function UdpTab({ serverId }) {
         <div className="modal-back" {...backdropClose(() => setEdit(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Source of {edit.name}</h3>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="radio" style={{ width: 'auto' }} checked={edit.mode === 'incoming'}
+            <label className={'radio-card' + (edit.mode === 'incoming' ? ' on' : '')} style={{ marginTop: 4 }}>
+              <input type="radio" name="udpSourceMode" checked={edit.mode === 'incoming'}
                      onChange={() => setEdit(m => ({ ...m, mode: 'incoming' }))} />
-              MPEGTS incoming stream (raw passthrough)
+              <span className="radio-card-body">
+                <span className="radio-card-title">MPEGTS incoming stream</span>
+                <span className="radio-card-desc">Raw passthrough of an existing incoming stream.</span>
+              </span>
             </label>
             {edit.mode === 'incoming' && (
               <Select value={edit.source_id} onChange={v => setEdit(m => ({ ...m, source_id: v }))} searchable
                       options={[{ value: '', label: '— select incoming stream —' }, ...incoming.map(x => ({ value: x.id, label: `${x.name} (${x.protocol}, ${x.status})` }))]} />
             )}
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-              <input type="radio" style={{ width: 'auto' }} checked={edit.mode === 'streams'}
+            <label className={'radio-card' + (edit.mode === 'streams' ? ' on' : '')} style={{ marginTop: 8 }}>
+              <input type="radio" name="udpSourceMode" checked={edit.mode === 'streams'}
                      onChange={() => setEdit(m => ({ ...m, mode: 'streams' }))} />
-              Application/stream entries (remux)
+              <span className="radio-card-body">
+                <span className="radio-card-title">Application/stream entries</span>
+                <span className="radio-card-desc">Remux from app/stream sources on this server.</span>
+              </span>
             </label>
             {edit.mode === 'streams' && (
               <>

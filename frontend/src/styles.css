@@ -218,14 +218,41 @@ input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
 /* radio too, for consistency */
 input[type="radio"] {
   appearance: none; -webkit-appearance: none;
-  width: 17px; height: 17px; min-width: 17px; border: 1px solid var(--line);
-  border-radius: 50%; background: var(--bg); cursor: pointer; position: relative; vertical-align: middle;
+  /* !important: a global `input { width: 100% }` rule (and old inline
+     width:auto hacks) used to collapse these into blobs. */
+  width: 16px !important; height: 16px; min-width: 16px; flex: none;
+  border: 1.5px solid var(--line); border-radius: 50%;
+  background: var(--bg); cursor: pointer; position: relative; vertical-align: middle;
+  padding: 0; margin: 0; box-sizing: border-box;
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
-input[type="radio"]:checked { border-color: var(--accent); }
+input[type="radio"]:hover:not(:disabled) { border-color: var(--accent-dim); }
+input[type="radio"]:checked {
+  border-color: var(--accent); box-shadow: 0 0 0 3px rgba(63, 182, 168, .13);
+}
 input[type="radio"]:checked::after {
-  content: ''; position: absolute; left: 4px; top: 4px; width: 7px; height: 7px;
-  border-radius: 50%; background: var(--accent);
+  content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px;
+  transform: translate(-50%, -50%); border-radius: 50%; background: var(--accent);
 }
+input[type="radio"]:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 2px; }
+input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Mode selection presented as selectable cards (title + description). Keep
+   interactive controls OUTSIDE the <label>: a click inside a label would
+   re-trigger the radio. */
+.radio-cards { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.radio-card {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0;
+  padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); cursor: pointer; color: var(--text); font-size: 13px;
+  transition: border-color .12s ease, background .12s ease;
+}
+.radio-card:hover { border-color: var(--accent-dim); }
+.radio-card.on { border-color: var(--accent); background: rgba(63, 182, 168, .07); }
+.radio-card input[type="radio"] { margin-top: 1px; }
+.radio-card-body { display: block; }
+.radio-card-title { display: block; font-weight: 600; color: var(--text); }
+.radio-card-desc { display: block; margin-top: 3px; font-size: 12px; color: var(--text-dim); line-height: 1.45; }
 
 /* ---- iter4 m1: toast notifications ---- */
 .toast-wrap {

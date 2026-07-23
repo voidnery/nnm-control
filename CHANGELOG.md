@@ -1,6 +1,23 @@
 # Changelog
 
 ## iter6 follow-up
+### v0.6.8 — radio redesign + app icon
+- Radio buttons were collapsing into blobs: a global `input { width: 100% }`
+  rule combined with inline `width:auto` hacks overrode their size. Fixed the
+  base style (crisp 16px ring, accent fill + focus ring, hover and disabled
+  states) and removed the inline hacks
+- Mode selectors are now selectable cards with a title and per-option
+  description: Settings → Control plane (WMSPanel / Native, each with its own
+  explanation instead of one dense paragraph) and SRT Out → source mode.
+  Interactive controls stay outside the <label> so clicking them can't
+  re-trigger the radio
+- Added the app icon set: favicon.svg (primary, scalable), multi-size
+  favicon.ico, 16/32 PNGs, apple-touch-icon (180) and 192/512 icons with a
+  site.webmanifest. Teal (#3fb6a8) rounded badge with the NNM "N" monogram,
+  matching the panel's palette; verified they land in dist/ and are served
+  ahead of the SPA fallback
+
+## iter6 follow-up
 ### v0.6.7 — per-tab tag vocabulary, search clear, themed tag dropdown
 - Tags are now scoped per tab: the filter chips and the entry dropdown only
   offer tags actually used by that tab's objects on that server (RTMP Push and

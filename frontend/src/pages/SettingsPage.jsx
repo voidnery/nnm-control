@@ -72,18 +72,30 @@ export default function SettingsPage() {
         <h2 style={{ marginTop: 0 }}>Control plane</h2>
         <p className="hint">
           How the panel applies persistent changes (republish rules, stream sources).
-          <b> WMSPanel API</b> — primary mode, changes are persistent and visible in WMSPanel.{' '}
-          <b>Native API</b> — backup mode for WMSPanel outages: rules created this way are
-          ephemeral (reset on Nimble reload) and cannot modify WMSPanel-created rules.
         </p>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="radio" style={{ width: 'auto' }} checked={controlPlane === 'wmspanel'}
-                 onChange={() => setControlPlane('wmspanel')} /> WMSPanel API (primary)
-        </label>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="radio" style={{ width: 'auto' }} checked={controlPlane === 'native'}
-                 onChange={() => setControlPlane('native')} /> Native Nimble API (backup mode)
-        </label>
+        <div className="radio-cards">
+          <label className={'radio-card' + (controlPlane === 'wmspanel' ? ' on' : '')}>
+            <input type="radio" name="controlPlane" checked={controlPlane === 'wmspanel'}
+                   onChange={() => setControlPlane('wmspanel')} />
+            <span className="radio-card-body">
+              <span className="radio-card-title">WMSPanel API <span className="badge">primary</span></span>
+              <span className="radio-card-desc">
+                Changes are persistent and visible in WMSPanel. Recommended for normal operation.
+              </span>
+            </span>
+          </label>
+          <label className={'radio-card' + (controlPlane === 'native' ? ' on' : '')}>
+            <input type="radio" name="controlPlane" checked={controlPlane === 'native'}
+                   onChange={() => setControlPlane('native')} />
+            <span className="radio-card-body">
+              <span className="radio-card-title">Native Nimble API <span className="badge">backup</span></span>
+              <span className="radio-card-desc">
+                For WMSPanel outages. Rules created this way are ephemeral (reset on Nimble reload)
+                and cannot modify WMSPanel-created rules.
+              </span>
+            </span>
+          </label>
+        </div>
       </div>
 
       <div className="panel">
