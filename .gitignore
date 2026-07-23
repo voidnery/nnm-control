@@ -3,4 +3,5 @@ dist/
 .env
 *.log
 dist/
-public/
+# generated APT repo output (published to gh-pages); frontend/public/ is committed
+/public/

@@ -20,6 +20,28 @@ for (const line of dockerfile.split('\n')) {
   parts.slice(0, -1).forEach(p => copied.push(p));
 }
 
+// CI builds from a git checkout, not from the working tree: a path that exists
+// locally but is untracked (e.g. caught by .gitignore) makes `COPY` fail with
+// "not found" in CI while everything looks fine here.
+let untracked = 0;
+for (const src of copied) {
+  let tracked = 0;
+  try {
+    const out = execSync(`git ls-files -- ${JSON.stringify(src)}`, { cwd: FRONTEND, stdio: ['pipe','pipe','pipe'] }).toString().trim();
+    tracked = out ? out.split('\n').length : 0;
+  } catch { tracked = 0; }
+  if (!tracked) {
+    untracked++;
+    console.error(`✗ Dockerfile COPYs "${src}" but git tracks no files there — CI checkout will not have it`);
+  } else {
+    console.log(`  ✓ tracked in git: ${src} (${tracked} file${tracked > 1 ? 's' : ''})`);
+  }
+}
+if (untracked) {
+  console.error(`\n${untracked} COPY source(s) missing from git — commit them (check .gitignore).`);
+  process.exit(1);
+}
+
 const ctx = mkdtempSync(path.join(tmpdir(), 'nnmctx-'));
 try {
   for (const src of copied) {

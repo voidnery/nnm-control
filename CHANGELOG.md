@@ -1,6 +1,20 @@
 # Changelog
 
 ## iter6 follow-up
+### v0.6.10 — fix CI image build (icons were never committed)
+- The web image build failed with `"/public": not found`: .gitignore carried a
+  bare `public/` rule (added back when the APT repo started publishing the
+  repo-root ./public to gh-pages), so frontend/public/ was silently skipped by
+  `git add` and never reached the CI checkout, even though `COPY public` was
+  correct and the local build was green
+- Anchored the rule to `/public/` so the generated APT output stays ignored
+  while frontend/public/ is committed; added the 10 icon files
+- Hardened `npm run audit:docker`: it now also verifies that every Dockerfile
+  COPY source is tracked by git, which is the difference between the working
+  tree and a CI checkout. Confirmed it reproduces the exact CI failure before
+  the fix and passes after
+
+## iter6 follow-up
 ### v0.6.9 — favicon actually ships; tag management reworked to full CRUD
 - FIX icon: the Dockerfile never copied `public/`, so the container built a
   dist with no icons and the <link> tags 404'd — the local build I verified
