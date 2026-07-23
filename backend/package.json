@@ -1,9 +1,12 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.6.14",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node src/index.js" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test:functions": "node tests/function-actions.test.mjs"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",

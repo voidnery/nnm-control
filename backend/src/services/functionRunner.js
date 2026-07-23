@@ -30,6 +30,7 @@ const KIND_OPS = {
   outgoing:  { get: 'outgoingList',  put: 'outgoingUpdate',  pickList: d => d.streams || d.settings || [] },
   hotswap:   { get: 'hotswapList',   put: 'hotswapUpdate',   pickList: d => d.settings || [] },
   live_pull: { get: 'livePullList',  put: 'livePullUpdate',  pickList: d => d.settings || [] },
+  incoming:  { get: 'incomingList',  put: 'incomingUpdate',  pickList: d => d.streams || d.settings || [] },
   // account-level kinds: sid is ignored by the client methods
   transcoder: { get: 'transcoderList', put: 'transcoderUpdate', pickList: d => d.transcoders || [] },
   abr:        { get: 'abrList',        put: 'abrUpdate',        pickList: d => d.settings || [] },
@@ -37,6 +38,25 @@ const KIND_OPS = {
 };
 
 const ACCOUNT_KINDS = new Set(['transcoder', 'abr', 'alias']);
+
+// How start/stop/restart is performed per object kind.
+//   pauseVia 'endpoint' -> dedicated action endpoint (MPEGTS outgoing only)
+//   pauseVia 'patch'    -> PUT { paused } through KIND_OPS
+//   restart             -> client method name, or null when the API has none
+// Kinds absent here reject actions explicitly instead of silently falling
+// through to the outgoing endpoint (which is what used to happen).
+const ACTION_OPS = {
+  outgoing:  { pauseVia: 'endpoint', endpoint: 'outgoingAction', restart: 'endpoint' },
+  republish: { pauseVia: 'patch', restart: 'republishRestart' },
+  live_pull: { pauseVia: 'patch', restart: 'livePullRestart' },
+  udp:       { pauseVia: 'patch', restart: null },
+  hotswap:   { pauseVia: 'patch', restart: null },
+  incoming:  { pauseVia: 'patch', restart: null },
+};
+
+// Steps saved before actions were per-kind carry no objectKind and always
+// meant MPEGTS outgoing — keep them working.
+const actionKind = (step) => step.objectKind || 'outgoing';
 
 async function getObject(cfg, kind, sid, targetId) {
   // List-then-find: single-object GET shapes vary; list shapes are confirmed.
@@ -105,7 +125,8 @@ async function persistStep(run, idx, fields) {
   await run.save();
 }
 
-async function applyStep(cfg, run, idx, step) {
+// exported for the action-routing regression test (see tests/)
+export async function applyStep(cfg, run, idx, step) {
   if (step.type === 'delay') {
     await persistStep(run, idx, { status: 'applying', detail: `Waiting ${step.waitSec}s` });
     await sleep((step.waitSec || 0) * 1000);
@@ -148,27 +169,35 @@ async function applyStep(cfg, run, idx, step) {
   const sid = server.wmspanelServerId;
 
   if (step.type === 'action') {
-    // live_pull supports restart only (no synced field -> no verify, no rollback)
-    if (step.objectKind === 'live_pull') {
-      if (step.action !== 'restart') throw new Error('live_pull actions: only restart is supported');
-      await persistStep(run, idx, { status: 'applying', detail: `restart live_pull ${step.targetId}` });
-      await wmspanel.livePullRestart(cfg, sid, step.targetId);
+    const kind = actionKind(step);
+    const ops = ACTION_OPS[kind];
+    if (!ops) throw new Error(`Actions are not supported for object kind: ${kind}`);
+
+    // restart is a one-shot: nothing to snapshot, nothing to verify, no rollback
+    if (step.action === 'restart') {
+      if (!ops.restart) throw new Error(`${kind}: restart is not supported by the WMSPanel API`);
+      await persistStep(run, idx, { status: 'applying', detail: `restart ${kind} ${step.targetId}` });
+      if (ops.restart === 'endpoint') await wmspanel[ops.endpoint](cfg, sid, step.targetId, 'restart');
+      else await wmspanel[ops.restart](cfg, sid, step.targetId);
       await persistStep(run, idx, { status: 'done', applied: true, detail: '' });
       return;
     }
-    await persistStep(run, idx, { status: 'applying', detail: `${step.action} on outgoing ${step.targetId}` });
-    // snapshot paused-state for pause/resume rollback
-    let snapshot = null;
-    if (step.action === 'pause' || step.action === 'resume') {
-      const before = await getObject(cfg, 'outgoing', sid, step.targetId);
-      snapshot = { sid, targetId: step.targetId, action: step.action, wasPaused: Boolean(before.paused) };
+
+    if (step.action !== 'pause' && step.action !== 'resume') {
+      throw new Error(`Unsupported action "${step.action}" for ${kind}`);
     }
-    await wmspanel.outgoingAction(cfg, sid, step.targetId, step.action);
+
+    const wantPaused = step.action === 'pause';
+    await persistStep(run, idx, { status: 'applying', detail: `${step.action} on ${kind} ${step.targetId}` });
+    const before = await getObject(cfg, kind, sid, step.targetId);
+    const snapshot = { sid, kind, targetId: step.targetId, action: step.action, wasPaused: Boolean(before.paused) };
+
+    if (ops.pauseVia === 'endpoint') await wmspanel[ops.endpoint](cfg, sid, step.targetId, step.action);
+    else await wmspanel[KIND_OPS[kind].put](cfg, sid, step.targetId, { paused: wantPaused });
+
     await persistStep(run, idx, { status: 'verifying', snapshot, applied: true,
       detail: 'Applied; verifying (WMSPanel delivers to Nimble on its ~30s sync cycle; window 180s)' });
-    if (step.action === 'pause' || step.action === 'resume') {
-      await verifyPatched(cfg, 'outgoing', sid, step.targetId, { paused: step.action === 'pause' });
-    }
+    await verifyPatched(cfg, kind, sid, step.targetId, { paused: wantPaused });
     await persistStep(run, idx, { status: 'done', detail: '' });
     return;
   }
@@ -192,7 +221,7 @@ async function applyStep(cfg, run, idx, step) {
   await persistStep(run, idx, { status: 'done', detail: '' });
 }
 
-async function rollbackStep(cfg, run, idx, step) {
+export async function rollbackStep(cfg, run, idx, step) {
   const snap = run.steps[idx].snapshot;
   const prevDetail = run.steps[idx].detail;
   await persistStep(run, idx, { status: 'rolling_back' });
@@ -202,8 +231,13 @@ async function rollbackStep(cfg, run, idx, step) {
     } else if (step.type === 'action' && snap?.kind === 'transcoder') {
       await (snap.wasPaused ? wmspanel.transcoderPause : wmspanel.transcoderResume)(cfg, snap.targetId);
     } else if (step.type === 'action' && snap && (step.action === 'pause' || step.action === 'resume')) {
-      const inverse = snap.wasPaused ? 'pause' : 'resume';
-      await wmspanel.outgoingAction(cfg, snap.sid, snap.targetId, inverse);
+      const kind = snap.kind || 'outgoing';   // legacy snapshots predate per-kind actions
+      const ops = ACTION_OPS[kind];
+      if (ops?.pauseVia === 'endpoint') {
+        await wmspanel[ops.endpoint](cfg, snap.sid, snap.targetId, snap.wasPaused ? 'pause' : 'resume');
+      } else if (ops) {
+        await wmspanel[KIND_OPS[kind].put](cfg, snap.sid, snap.targetId, { paused: Boolean(snap.wasPaused) });
+      }
     }
     // delay / restart: nothing to roll back
     await persistStep(run, idx, { status: 'rolled_back', detail: prevDetail });

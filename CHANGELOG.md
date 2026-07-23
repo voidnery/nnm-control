@@ -1,5 +1,28 @@
 # Changelog
 
+## iter7 — new epic (in progress)
+### v0.7.0 (m1) — Functions: start/stop/restart for more object kinds
+- Actions are now declared per object kind (ACTION_OPS) instead of the action
+  branch being hardcoded to MPEGTS outgoing. Added: RTMP Push (republish)
+  start/stop/restart, RTMP Pull start/stop (restart already worked), SRT Out
+  and Hot swap start/stop, SRT In start/stop; SRT In also became a patchable
+  kind. Transcoder pause/resume unchanged
+- Start/stop is expressed the way each API actually supports it: a dedicated
+  endpoint for MPEGTS outgoing, PUT { paused } for the rest; restart only where
+  the API has an endpoint for it
+- FIXED a latent defect: an action step with any other objectKind silently fell
+  through to the outgoing endpoint, i.e. it would have called the wrong URL with
+  a foreign object id. Unsupported combinations (e.g. udp restart) now fail with
+  a clear message instead
+- Backward compatibility is explicit: steps saved before this change carry no
+  objectKind and always meant outgoing — that default is preserved, including
+  for rollback snapshots that have no kind recorded
+- New regression test (`npm run test:functions` in backend): 13 checks over the
+  real runner with a stateful fake of the WMSPanel API, covering legacy steps,
+  every new kind, rollback inversion and the rejection of unsupported actions
+- UI: action kind picker lists what each kind supports, an explicit action
+  selector, and presets for RTMP Push/Pull, SRT Out and SRT In (EN/RU)
+
 ### v0.6.14 — fix Russian strings silently overridden by English duplicates
 - Playlists rendered in English under the Russian locale. Root cause was wider
   than one page: an English block had been pasted a second time INSIDE the ru

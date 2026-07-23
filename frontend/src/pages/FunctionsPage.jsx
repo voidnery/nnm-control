@@ -16,7 +16,29 @@ const KINDS = [
   { value: 'udp',       label: 'UDP/SRT output (UDP streaming)' },
   { value: 'outgoing',  label: 'MPEGTS outgoing stream' },
   { value: 'hotswap',   label: 'Hot swap setting (Transcoder)' },
+  { value: 'incoming',  label: 'SRT In / MPEGTS incoming stream' },
 ];
+
+// Kinds that support start/stop/restart, and exactly which of those the
+// WMSPanel API offers for each (mirrors ACTION_OPS in the runner).
+const ACTION_KINDS = [
+  { value: 'outgoing',   label: 'SRT in Nimble / MPEGTS outgoing' },
+  { value: 'republish',  label: 'RTMP Push (republish rule)' },
+  { value: 'live_pull',  label: 'RTMP Pull (live pull)' },
+  { value: 'udp',        label: 'SRT Out (UDP/SRT output)' },
+  { value: 'hotswap',    label: 'Hot swap setting' },
+  { value: 'incoming',   label: 'SRT In (MPEGTS incoming)' },
+  { value: 'transcoder', label: 'Transcoder (no server needed)' },
+];
+const ACTION_SUPPORT = {
+  outgoing:   ['pause', 'resume', 'restart'],
+  republish:  ['pause', 'resume', 'restart'],
+  live_pull:  ['pause', 'resume', 'restart'],
+  udp:        ['pause', 'resume'],
+  hotswap:    ['pause', 'resume'],
+  incoming:   ['pause', 'resume'],
+  transcoder: ['pause', 'resume'],
+};
 
 const PRESETS = [
   // Canonical WMSPanel field names (pinned from live account dump 2026-07-21)
@@ -32,6 +54,15 @@ const PRESETS = [
   { label: 'Restart live pull', step: { type: 'action', objectKind: 'live_pull', action: 'restart', label: 'Restart pull' } },
   { label: 'Подмена: pause transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'pause', label: 'Pause transcoder' } },
   { label: 'Подмена: resume transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'resume', label: 'Resume transcoder' } },
+  { label: 'RTMP Push: start', step: { type: 'action', objectKind: 'republish', action: 'resume', label: 'Start RTMP Push' } },
+  { label: 'RTMP Push: stop', step: { type: 'action', objectKind: 'republish', action: 'pause', label: 'Stop RTMP Push' } },
+  { label: 'RTMP Push: restart', step: { type: 'action', objectKind: 'republish', action: 'restart', label: 'Restart RTMP Push' } },
+  { label: 'RTMP Pull: start', step: { type: 'action', objectKind: 'live_pull', action: 'resume', label: 'Start RTMP Pull' } },
+  { label: 'RTMP Pull: stop', step: { type: 'action', objectKind: 'live_pull', action: 'pause', label: 'Stop RTMP Pull' } },
+  { label: 'SRT Out: start', step: { type: 'action', objectKind: 'udp', action: 'resume', label: 'Start SRT Out' } },
+  { label: 'SRT Out: stop', step: { type: 'action', objectKind: 'udp', action: 'pause', label: 'Stop SRT Out' } },
+  { label: 'SRT In: start', step: { type: 'action', objectKind: 'incoming', action: 'resume', label: 'Start SRT In' } },
+  { label: 'SRT In: stop', step: { type: 'action', objectKind: 'incoming', action: 'pause', label: 'Stop SRT In' } },
   { label: 'Delay (seconds)', step: { type: 'delay', waitSec: 10, label: 'Delay' } },
 ];
 
@@ -152,11 +183,11 @@ function StepEditor({ step, servers, onChange, onRemove }) {
         <>
           <label>{t('fn.actionTargetKind')}</label>
           <Select value={step.objectKind || 'outgoing'} onChange={v => set('objectKind', v === 'outgoing' ? '' : v)}
-                  options={[
-                    { value: 'outgoing', label: 'MPEGTS outgoing (pause/resume/restart)' },
-                    { value: 'live_pull', label: 'RTMP live pull (restart only)' },
-                    { value: 'transcoder', label: 'Transcoder (pause/resume; no server needed)' },
-                  ]} />
+                  options={ACTION_KINDS} />
+          <label>{t('fn.action')}</label>
+          <Select value={step.action || 'pause'} onChange={v => set('action', v)}
+                  options={(ACTION_SUPPORT[step.objectKind || 'outgoing'] || ['pause', 'resume'])
+                    .map(a => ({ value: a, label: t('fn.action.' + a) }))} />
         </>
       )}
       {step.type !== 'delay' && (
