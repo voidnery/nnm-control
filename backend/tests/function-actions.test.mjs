@@ -78,8 +78,27 @@ check('RTMP Pull stop -> livePullUpdate {paused:true}', c.some(x => x.name === '
 c = await roll({ type: 'action', action: 'pause' }, { sid: 'w1', kind: 'republish', targetId: 'OBJ1', action: 'pause', wasPaused: false });
 check('RTMP Push rollback -> republishUpdate {paused:false}', c.some(x => x.name === 'republishUpdate' && x.args[2]?.paused === false), JSON.stringify(c));
 
+console.log('\nCOMPOSITE RESTART (kinds the API has no restart endpoint for):');
+// dwell set to 0 so the test does not actually wait out the sync cycle
+c = await run({ type: 'action', objectKind: 'udp', action: 'restart', restartDwellSec: 0 });
+const puts = c.filter(x => x.name === 'udpUpdate').map(x => x.args[2]?.paused);
+check('SRT Out restart -> stop then start, in that order',
+      puts.length === 2 && puts[0] === true && puts[1] === false, JSON.stringify(puts));
+c = await run({ type: 'action', objectKind: 'incoming', action: 'restart', restartDwellSec: 0 });
+const iputs = c.filter(x => x.name === 'incomingUpdate').map(x => x.args[2]?.paused);
+check('SRT In restart -> stop then start', iputs.length === 2 && iputs[0] === true && iputs[1] === false, JSON.stringify(iputs));
+
+let stoppedErr = null;
+try { await run({ type: 'action', objectKind: 'udp', action: 'restart', restartDwellSec: 0 }, true); }
+catch (e) { stoppedErr = e.message; }
+check('restart on an already stopped object is refused', /already stopped/.test(stoppedErr || ''), stoppedErr || '(no error)');
+
+c = await roll({ type: 'action', action: 'restart' },
+               { sid: 'w1', kind: 'udp', targetId: 'OBJ1', action: 'restart', wasPaused: false, composite: true });
+check('composite rollback -> restores running', c.some(x => x.name === 'udpUpdate' && x.args[2]?.paused === false), JSON.stringify(c));
+
 console.log('\nUNSUPPORTED COMBINATIONS FAIL LOUDLY (used to hit the wrong endpoint):');
-for (const [kind, action] of [['udp','restart'], ['hotswap','restart'], ['abr','pause']]) {
+for (const [kind, action] of [['abr','pause'], ['alias','restart']]) {
   let threw = null;
   try { await run({ type: 'action', objectKind: kind, action }); } catch (e) { threw = e.message; }
   check(`${kind} ${action} rejected`, Boolean(threw), threw || '(no error thrown)');

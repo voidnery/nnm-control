@@ -34,11 +34,13 @@ const ACTION_SUPPORT = {
   outgoing:   ['pause', 'resume', 'restart'],
   republish:  ['pause', 'resume', 'restart'],
   live_pull:  ['pause', 'resume', 'restart'],
-  udp:        ['pause', 'resume'],
-  hotswap:    ['pause', 'resume'],
-  incoming:   ['pause', 'resume'],
+  udp:        ['pause', 'resume', 'restart'],
+  hotswap:    ['pause', 'resume', 'restart'],
+  incoming:   ['pause', 'resume', 'restart'],
   transcoder: ['pause', 'resume'],
 };
+// The API has no restart endpoint for these — the panel cycles stop -> start.
+const COMPOSITE_RESTART = new Set(['udp', 'hotswap', 'incoming']);
 
 const PRESETS = [
   // Canonical WMSPanel field names (pinned from live account dump 2026-07-21)
@@ -63,6 +65,8 @@ const PRESETS = [
   { label: 'SRT Out: stop', step: { type: 'action', objectKind: 'udp', action: 'pause', label: 'Stop SRT Out' } },
   { label: 'SRT In: start', step: { type: 'action', objectKind: 'incoming', action: 'resume', label: 'Start SRT In' } },
   { label: 'SRT In: stop', step: { type: 'action', objectKind: 'incoming', action: 'pause', label: 'Stop SRT In' } },
+  { label: 'SRT Out: restart (stop+start)', step: { type: 'action', objectKind: 'udp', action: 'restart', restartDwellSec: 40, label: 'Restart SRT Out' } },
+  { label: 'SRT In: restart (stop+start)', step: { type: 'action', objectKind: 'incoming', action: 'restart', restartDwellSec: 40, label: 'Restart SRT In' } },
   { label: 'Delay (seconds)', step: { type: 'delay', waitSec: 10, label: 'Delay' } },
 ];
 
@@ -188,6 +192,14 @@ function StepEditor({ step, servers, onChange, onRemove }) {
           <Select value={step.action || 'pause'} onChange={v => set('action', v)}
                   options={(ACTION_SUPPORT[step.objectKind || 'outgoing'] || ['pause', 'resume'])
                     .map(a => ({ value: a, label: t('fn.action.' + a) }))} />
+          {step.action === 'restart' && COMPOSITE_RESTART.has(step.objectKind || 'outgoing') && (
+            <>
+              <label>{t('fn.dwell')}</label>
+              <input type="number" min="0" value={step.restartDwellSec ?? 40}
+                     onChange={e => set('restartDwellSec', e.target.value === '' ? undefined : Number(e.target.value))} />
+              <div className="hint">{t('fn.dwellHint')}</div>
+            </>
+          )}
         </>
       )}
       {step.type !== 'delay' && (

@@ -1,6 +1,20 @@
 # Changelog
 
 ## iter7 — new epic (in progress)
+### v0.7.1 (m1) — composite restart for kinds the API can't restart
+- SRT Out, SRT In and Hot swap now support restart too: the panel performs it
+  as stop -> hold -> start, since WMSPanel exposes no restart endpoint for them
+- The hold is the point, not padding: WMSPanel delivers changes to Nimble on a
+  ~30s sync cycle, so a stop immediately followed by a start would be batched
+  into a no-op and the stream would never go down. Default hold is 40s and is
+  editable per step; the UI explains why when the field appears
+- Restart on an already stopped object is refused with a clear message instead
+  of silently turning into a start
+- Rollback covers a composite that failed between stop and start — the object
+  is put back to its pre-run state rather than left stopped
+- Regression test grew to 17 checks, including stop/start ordering, the refusal
+  case and composite rollback (dwell forced to 0 so tests stay fast)
+
 ### v0.7.0 (m1) — Functions: start/stop/restart for more object kinds
 - Actions are now declared per object kind (ACTION_OPS) instead of the action
   branch being hardcoded to MPEGTS outgoing. Added: RTMP Push (republish)

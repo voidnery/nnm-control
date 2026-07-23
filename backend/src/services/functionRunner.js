@@ -49,10 +49,16 @@ const ACTION_OPS = {
   outgoing:  { pauseVia: 'endpoint', endpoint: 'outgoingAction', restart: 'endpoint' },
   republish: { pauseVia: 'patch', restart: 'republishRestart' },
   live_pull: { pauseVia: 'patch', restart: 'livePullRestart' },
-  udp:       { pauseVia: 'patch', restart: null },
-  hotswap:   { pauseVia: 'patch', restart: null },
-  incoming:  { pauseVia: 'patch', restart: null },
+  udp:       { pauseVia: 'patch', restart: 'composite' },
+  hotswap:   { pauseVia: 'patch', restart: 'composite' },
+  incoming:  { pauseVia: 'patch', restart: 'composite' },
 };
+
+// WMSPanel hands changes to Nimble on a ~30s sync cycle. A stop immediately
+// followed by a start would be delivered as one batch and the stream would
+// never actually go down, so a composite restart has to dwell longer than the
+// cycle. Overridable per step via restartDwellSec.
+const DEFAULT_RESTART_DWELL_SEC = 40;
 
 // Steps saved before actions were per-kind carry no objectKind and always
 // meant MPEGTS outgoing — keep them working.
@@ -176,6 +182,34 @@ export async function applyStep(cfg, run, idx, step) {
     // restart is a one-shot: nothing to snapshot, nothing to verify, no rollback
     if (step.action === 'restart') {
       if (!ops.restart) throw new Error(`${kind}: restart is not supported by the WMSPanel API`);
+
+      // Kinds the API has no restart endpoint for are cycled stop -> start.
+      if (ops.restart === 'composite') {
+        const dwellSec = Number.isFinite(step.restartDwellSec) && step.restartDwellSec >= 0
+          ? step.restartDwellSec : DEFAULT_RESTART_DWELL_SEC;
+        const before = await getObject(cfg, kind, sid, step.targetId);
+        if (before.paused) {
+          throw new Error(`${kind} ${step.targetId} is already stopped — use start (resume) instead of restart`);
+        }
+        const snapshot = { sid, kind, targetId: step.targetId, action: 'restart', wasPaused: false, composite: true };
+        await persistStep(run, idx, { status: 'applying', snapshot,
+          detail: `restart ${kind} ${step.targetId}: stopping` });
+        await wmspanel[KIND_OPS[kind].put](cfg, sid, step.targetId, { paused: true });
+        await persistStep(run, idx, { applied: true, status: 'verifying', detail: 'Stop applied; verifying' });
+        await verifyPatched(cfg, kind, sid, step.targetId, { paused: true });
+
+        await persistStep(run, idx, { status: 'applying',
+          detail: `Stopped; holding ${dwellSec}s so Nimble receives it before starting again` });
+        await sleep(dwellSec * 1000);
+
+        await persistStep(run, idx, { status: 'applying', detail: `restart ${kind} ${step.targetId}: starting` });
+        await wmspanel[KIND_OPS[kind].put](cfg, sid, step.targetId, { paused: false });
+        await persistStep(run, idx, { status: 'verifying', detail: 'Start applied; verifying' });
+        await verifyPatched(cfg, kind, sid, step.targetId, { paused: false });
+        await persistStep(run, idx, { status: 'done', detail: '' });
+        return;
+      }
+
       await persistStep(run, idx, { status: 'applying', detail: `restart ${kind} ${step.targetId}` });
       if (ops.restart === 'endpoint') await wmspanel[ops.endpoint](cfg, sid, step.targetId, 'restart');
       else await wmspanel[ops.restart](cfg, sid, step.targetId);
@@ -230,6 +264,9 @@ export async function rollbackStep(cfg, run, idx, step) {
       await wmspanel[KIND_OPS[snap.kind].put](cfg, snap.sid, snap.targetId, snap.values);
     } else if (step.type === 'action' && snap?.kind === 'transcoder') {
       await (snap.wasPaused ? wmspanel.transcoderPause : wmspanel.transcoderResume)(cfg, snap.targetId);
+    } else if (step.type === 'action' && snap?.composite) {
+      // may have stopped but not started again — restore the pre-run state
+      await wmspanel[KIND_OPS[snap.kind].put](cfg, snap.sid, snap.targetId, { paused: Boolean(snap.wasPaused) });
     } else if (step.type === 'action' && snap && (step.action === 'pause' || step.action === 'resume')) {
       const kind = snap.kind || 'outgoing';   // legacy snapshots predate per-kind actions
       const ops = ACTION_OPS[kind];
