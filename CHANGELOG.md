@@ -1,6 +1,21 @@
 # Changelog
 
 ## iter6 follow-up
+### v0.6.12 — fix blank screen on Servers (and other pages)
+- Root cause: ServersPage binds `const t = testResults[s.id]` inside the server
+  row map, shadowing the i18n `t`. The v0.6.11 translation pass put
+  {t('action.edit')} into that block, so the test-result object was invoked as
+  a function -> the whole page threw. Renamed the local to `tr`
+- The tab-level render smoke never mounted top-level pages, so it passed while
+  Servers crashed. Added `npm run audit:pages`: mounts all 13 pages with
+  providers, router and sample data, and fails on a crash or an empty render
+- The shadowed-`t` static check added in v0.6.11 was ineffective (it only
+  matched `.map(t =>`, and an earlier version was never actually installed).
+  Rewrote it to scan the block owning any `const/let/var t = <value>`
+  declaration; verified both ways — clean on the current tree, and it flags
+  the exact ServersPage regression when reintroduced
+
+## iter6 follow-up
 ### v0.6.11 — create forms as modals + translation pass
 - RTMP Push and Hotswap opened their create form as a panel below the list;
   both are modals now, consistent with every other tab

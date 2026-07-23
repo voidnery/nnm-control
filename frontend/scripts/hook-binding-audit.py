@@ -28,4 +28,36 @@ if problems:
     print("REAL HOOK-BINDING PROBLEMS:")
     for p in problems: print("  ✗", p)
     sys.exit(1)
+
+# `t` is a popular local name (t = test result, t = transcoder). If a block binds
+# `t` to a non-function and still calls t('key'), the value is invoked as a
+# function -> blank screen (this shipped once). Scan only the block that owns the
+# declaration: start at the declaring line and stop when its block closes.
+DECL_T = re.compile(r"(?:const|let|var)\s+t\s*=\s*(.*)$")
+USE_T = re.compile(r"(?<![\w.$])t\(\s*['\"]")
+
+shadow = []
+for f in sorted(glob.glob('src/**/*.jsx', recursive=True)):
+    lines = open(f).read().split('\n')
+    for i, l in enumerate(lines):
+        m = DECL_T.search(l)
+        if not m:
+            continue
+        rhs = m.group(1).lstrip()
+        # `t` bound to a function (i18n handle or a fallback arrow) is fine.
+        if rhs.startswith('useI18n') or rhs.startswith('(') or '=>' in rhs.split(';')[0]:
+            continue
+        depth = 0
+        for j in range(i, len(lines)):
+            if j > i and USE_T.search(lines[j]):
+                shadow.append(f"{f}:{j+1}: t('...') called where line {i+1} binds `t` to a value")
+            depth += lines[j].count('{') - lines[j].count('}')
+            if depth < 0:
+                break
+
+if shadow:
+    print("SHADOWED t() USAGE:")
+    for x in shadow: print("  ✗", x)
+    sys.exit(1)
+
 print("hook-binding audit: OK")

@@ -161,7 +161,7 @@ export default function ServersPage() {
           </thead>
           <tbody>
             {servers.map(s => {
-              const t = testResults[s.id];
+              const tr = testResults[s.id];   // test result — must not shadow i18n `t`
               return (
                 <tr key={s.id}>
                   <td>
@@ -177,9 +177,9 @@ export default function ServersPage() {
                   <td>{s.tags.map(tag => <span key={tag} className="badge" style={{ marginRight: 4 }}>{tag}</span>)}</td>
                   {!wms && <td>{s.hasToken ? <span className="badge">token</span> : <span className="badge">open</span>}</td>}
                   {!wms && <td>
-                    <button onClick={() => test(s.id)} disabled={t?.busy}>{t?.busy ? '…' : 'Test'}</button>{' '}
-                    {t && !t.busy && (
-                      <span className={'lamp ' + (t.ok ? 'on' : 'off')} title={t.ok ? 'OK' : t.error} />
+                    <button onClick={() => test(s.id)} disabled={tr?.busy}>{tr?.busy ? '…' : 'Test'}</button>{' '}
+                    {tr && !tr.busy && (
+                      <span className={'lamp ' + (tr.ok ? 'on' : 'off')} title={tr.ok ? 'OK' : tr.error} />
                     )}
                   </td>}
                   <td style={{ textAlign: 'right' }}>
