@@ -300,3 +300,24 @@ input[type="radio"]:checked::after {
   color: var(--accent); font-weight: 600; flex: none;
 }
 .picked-val { color: var(--text); font-size: 12.5px; word-break: break-all; }
+
+
+/* Search / filter field with a clear affordance */
+.searchbox { position: relative; display: inline-flex; align-items: center; width: 100%; }
+.searchbox input { width: 100%; padding-right: 26px; }
+.searchbox-clear {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; padding: 0; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--text-dim);
+  font-size: 15px; border-radius: 4px; cursor: pointer;
+}
+.searchbox-clear:hover { color: var(--text); background: var(--bg-raise); }
+
+
+/* Tag entry combobox (themed replacement for native datalist) */
+.tagcombo { position: relative; display: inline-flex; }
+.tag-pop { z-index: 210; }
+.tag-pop .cselect-opt { font-size: 12px; }
+.tag-create { color: var(--accent); }
+.tag-create b { color: var(--text); }

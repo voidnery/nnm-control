@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import SearchInput from './SearchInput.jsx';
 
 // Custom themed select. Drop-in-ish: value + onChange(value) + options
 // [{value,label}] or children via `options`. Supports optional search.
@@ -70,7 +71,7 @@ export default function Select({ value, onChange, options = [], placeholder = 'â
          }}>
       {searchable && (
         <div className="cselect-search">
-          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Filterâ€¦" />
+          <SearchInput autoFocus value={q} onChange={setQ} />
         </div>
       )}
       {shown.map(o => (

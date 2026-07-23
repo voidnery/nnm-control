@@ -8,6 +8,7 @@ import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 import { useStreamCopy, CopyCheckbox, CopySelectionBar, CopyModal } from '../components/StreamCopy.jsx';
+import SearchInput from '../components/SearchInput.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
 // - UDP/SRT outputs: source_streams[{application, stream, pmt/video/audio pid}]
@@ -36,7 +37,7 @@ const SyncNote = () => (
 
 // ---------------------------------------------------------------- UDP / SRT
 export function UdpTab({ serverId }) {
-  const st = useStreamTags(serverId);
+  const st = useStreamTags(serverId, 'udp');
   const cp = useStreamCopy(serverId, 'udp');
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -246,7 +247,7 @@ export function UdpTab({ serverId }) {
 
 // ----------------------------------------------------------------- Outgoing
 export function OutgoingTab({ serverId }) {
-  const st = useStreamTags(serverId);
+  const st = useStreamTags(serverId, 'outgoing');
   const cp = useStreamCopy(serverId, 'outgoing');
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -382,7 +383,7 @@ export function OutgoingTab({ serverId }) {
 
 // ------------------------------------------------------------------ Hotswap
 export function HotswapTab({ serverId }) {
-  const tg = useStreamTags(serverId);
+  const tg = useStreamTags(serverId, 'hotswap');
   const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
@@ -529,7 +530,7 @@ const fmtUptime = (ts) => {
 };
 
 export function WmsStreamsTab({ serverId }) {
-  const tg = useStreamTags(serverId);
+  const tg = useStreamTags(serverId, 'streams');
   const confirm = useConfirm();
   const { can } = useAuth();
   const { t } = useI18n();
@@ -583,7 +584,7 @@ export function WmsStreamsTab({ serverId }) {
   return (
     <div>
       <div className="row" style={{ marginBottom: 10, alignItems: 'center' }}>
-        <input style={{ maxWidth: 280 }} placeholder="Filter app/stream/tag…" value={filter} onChange={e => setFilter(e.target.value)} />
+        <SearchInput style={{ maxWidth: 280 }} placeholder="Filter app/stream/tag…" value={filter} onChange={setFilter} />
         <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
           <input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} />
@@ -645,7 +646,7 @@ const codecsOf = (o) => {
 };
 
 export function MpegtsInTab({ serverId }) {
-  const st = useStreamTags(serverId);
+  const st = useStreamTags(serverId, 'incoming');
   const cp = useStreamCopy(serverId, 'incoming');
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -689,7 +690,7 @@ export function MpegtsInTab({ serverId }) {
       {sys?.srtHelperEnabled && <SrtHelper />}
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
-        <input style={{ maxWidth: 260 }} placeholder="Filter name/description…" value={filter} onChange={e => setFilter(e.target.value)} />
+        <SearchInput style={{ maxWidth: 260 }} placeholder="Filter name/description…" value={filter} onChange={setFilter} />
         <button onClick={load} disabled={busy}>Refresh</button>
         {can('wmsobjects.manage') && (
           <button className="primary" disabled={busy}
@@ -776,7 +777,7 @@ export function MpegtsInTab({ serverId }) {
 // ------------------------------------------------------------- Live Pull
 // RTMP pull feeds with fallback_urls — the built-in feed reserve mechanism.
 export function LivePullTab({ serverId }) {
-  const st = useStreamTags(serverId);
+  const st = useStreamTags(serverId, 'livepull');
   const cp = useStreamCopy(serverId, 'livepull');
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -887,7 +888,7 @@ export function LivePullTab({ serverId }) {
 // ------------------------------------------------------------- Applications
 // live/app settings incl. push credentials (masked with reveal toggle).
 export function AppsTab({ serverId }) {
-  const tg = useStreamTags(serverId);
+  const tg = useStreamTags(serverId, 'apps');
   const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
@@ -999,7 +1000,7 @@ export function AppsTab({ serverId }) {
 
 // ------------------------------------------------------------- Interfaces
 export function InterfacesTab({ serverId }) {
-  const tg = useStreamTags(serverId);
+  const tg = useStreamTags(serverId, 'interfaces');
   const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();

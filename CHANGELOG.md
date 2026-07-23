@@ -1,6 +1,23 @@
 # Changelog
 
 ## iter6 follow-up
+### v0.6.7 — per-tab tag vocabulary, search clear, themed tag dropdown
+- Tags are now scoped per tab: the filter chips and the entry dropdown only
+  offer tags actually used by that tab's objects on that server (RTMP Push and
+  RTMP Pull keep separate vocabularies). The catalog is derived from the tag
+  map filtered by kind, so it stays correct as tags are added/removed; filter
+  chips that no longer exist in the tab are dropped automatically
+- Every search/filter field is now a shared SearchInput with a clear (×)
+  button (Streams, SRT In, Transcoders, Functions object picker, and the
+  search inside Select). Escape also clears; focus returns to the field
+- Tag entry replaced the unstylable native <datalist> with our own dropdown:
+  themed, filtered as you type, shows a "Create <tag>" row for new values, and
+  renders through a portal so it is never clipped by a scroll container
+- Tag writes now roll back the optimistic update if the request fails
+- Tests: per-kind catalog unit test; new `npm run audit:ui` covering the clear
+  button and per-tab tag suggestions in a real DOM
+
+## iter6 follow-up
 ### v0.6.6 — UI bug fixes
 - Select dropdowns no longer break modal forms: the popup now renders in a
   portal with fixed positioning (modals are overflow:auto scroll containers,

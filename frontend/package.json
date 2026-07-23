@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-frontend",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "build": "vite build",
     "audit:hooks": "python3 scripts/hook-binding-audit.py",
     "audit:render": "node scripts/render-smoke.mjs",
-    "audit:select": "node scripts/select-portal-test.mjs"
+    "audit:select": "node scripts/select-portal-test.mjs",
+    "audit:ui": "node scripts/ui-components-test.mjs"
   },
   "dependencies": {
     "qrcode": "^1.5.4",

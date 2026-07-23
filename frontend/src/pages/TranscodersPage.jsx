@@ -7,6 +7,7 @@ import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 import Modal from '../components/Modal.jsx';
 import PipelineEditor from '../components/PipelineEditor.jsx';
+import SearchInput from '../components/SearchInput.jsx';
 
 // Transcoders are account-level in WMSPanel; server_id is an attribute.
 // Scope here: list + pause/resume/clone + raw details; licenses with expiry
@@ -73,7 +74,7 @@ export default function TranscodersPage() {
       <div className="sub">{t('page.transcoders.sub')}</div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
-        <input style={{ maxWidth: 260 }} placeholder="Filter name/tag…" value={filter} onChange={e => setFilter(e.target.value)} />
+        <SearchInput style={{ maxWidth: 260 }} placeholder="Filter name/tag…" value={filter} onChange={setFilter} />
         <div style={{ maxWidth: 240 }}>
           <Select value={serverFilter} onChange={setServerFilter}
                   options={[{ value: '', label: 'all servers' }, ...usedServerIds.map(id => ({ value: id, label: serverName(id) }))]} />

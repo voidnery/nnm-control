@@ -5,6 +5,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import SearchInput from '../components/SearchInput.jsx';
 
 const KINDS = [
   { value: 'republish', label: 'Republish rule' },
@@ -68,7 +69,7 @@ function ObjectPicker({ servers, step, onPick }) {
       {error && <div className="error-box">{error}</div>}
       {objects && (
         <div className="panel" style={{ marginTop: 6, padding: 8 }}>
-          <input autoFocus placeholder="Filter…" value={q} onChange={e => setQ(e.target.value)} style={{ marginBottom: 6 }} />
+          <SearchInput autoFocus value={q} onChange={setQ} style={{ marginBottom: 6 }} />
           <div style={{ maxHeight: 180, overflow: 'auto' }}>
             {objects.filter(o => !q || describe(o).toLowerCase().includes(q.toLowerCase())).map(o => (
               <div key={o.id} className="mono" style={{ cursor: 'pointer', padding: '3px 6px', borderRadius: 4 }}

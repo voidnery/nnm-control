@@ -16,7 +16,7 @@ const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps
 // on a live account is immediately visible and fixable.
 // ---------------------------------------------------------------------------
 function WmspanelRules({ serverId }) {
-  const tg = useStreamTags(serverId);
+  const tg = useStreamTags(serverId, 'republish');
   const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
@@ -200,7 +200,7 @@ function WmspanelRules({ serverId }) {
 // Native mode (backup): ephemeral rules via Nimble native API. Kept from iter1.
 // ---------------------------------------------------------------------------
 function NativeRules({ serverId }) {
-  const tg = useStreamTags(serverId);
+  const tg = useStreamTags(serverId, 'republish');
   const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
