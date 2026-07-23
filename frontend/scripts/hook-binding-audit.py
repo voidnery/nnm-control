@@ -18,7 +18,7 @@ def regions(src):
         yield lines[starts[k]], '\n'.join(lines[starts[k]:starts[k+1]])
 
 problems=[]
-for f in glob.glob('pages/*.jsx')+glob.glob('components/*.jsx')+glob.glob('*.jsx'):
+for f in glob.glob('src/**/*.jsx', recursive=True):
     for header, body in regions(open(f).read()):
         nm = re.search(r'(?:function|const)\s+(\w+)', header); nm = nm.group(1) if nm else '?'
         for use_re, decl_res, label in CHECKS:

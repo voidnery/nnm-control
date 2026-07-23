@@ -46,17 +46,17 @@ export default function AuditPage() {
       <div className="sub">Who changed what and when. Mutating actions, logins and function runs; secrets are masked; retention 90 days.</div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
-        <input style={{ maxWidth: 160 }} placeholder="User" value={username} onChange={e => setUsername(e.target.value)} />
-        <input style={{ maxWidth: 260 }} placeholder="Action contains…" value={action} onChange={e => setAction(e.target.value)} />
+        <input style={{ maxWidth: 160 }} placeholder={t('ad.user')} value={username} onChange={e => setUsername(e.target.value)} />
+        <input style={{ maxWidth: 260 }} placeholder={t('ad.actionContains')} value={action} onChange={e => setAction(e.target.value)} />
         <div style={{ maxWidth: 130 }}>
           <Select value={outcome} onChange={setOutcome}
                   options={[{ value: '', label: 'any outcome' }, { value: 'ok', label: 'ok' }, { value: 'error', label: 'error' }]} />
         </div>
-        <button className="primary" disabled={busy} onClick={load}>Apply</button>
+        <button className="primary" disabled={busy} onClick={load}>{t('action.apply')}</button>
       </div>
       <div className="panel">
         <table>
-          <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Result</th><th></th></tr></thead>
+          <thead><tr><th>{t('ad.time')}</th><th>{t('ad.user')}</th><th>{t('ad.action')}</th><th>{t('ad.target')}</th><th>{t('ad.result')}</th><th></th></tr></thead>
           <tbody>
             {items.map(it => (
               <tr key={it._id}>
@@ -79,12 +79,12 @@ export default function AuditPage() {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && <tr><td colSpan={6} className="hint">No audit entries match.</td></tr>}
+            {items.length === 0 && <tr><td colSpan={6} className="hint">{t('ad.empty')}</td></tr>}
           </tbody>
         </table>
         {items.length >= 200 && (
           <div className="row" style={{ marginTop: 8 }}>
-            <button disabled={busy} onClick={loadOlder}>Load older</button>
+            <button disabled={busy} onClick={loadOlder}>{t('ad.loadOlder')}</button>
           </div>
         )}
       </div>

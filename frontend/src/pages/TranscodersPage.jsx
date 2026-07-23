@@ -46,7 +46,7 @@ export default function TranscodersPage() {
   const serverName = (wsid) => servers.find(s => s.wmspanelServerId === wsid)?.name || String(wsid || '').slice(-6);
 
   const act = async (t, action) => {
-    if (action === 'clone' && !(await confirm(`Clone transcoder "${t.name}"? A copy will be created (paused).`))) return;
+    if (action === 'clone' && !(await confirm(tt('tcp.confirmClone', { name: t.name })))) return;
     setBusy(true); setError('');
     try { await api(`/wmspanel/transcoders/${t.id}/${action}`, { method: 'POST' }); await load(); }
     catch (e) { setError(e.message); }
@@ -61,7 +61,7 @@ export default function TranscodersPage() {
 
   const daysLeft = (expire) => Math.floor((new Date(expire) - Date.now()) / 86400000);
 
-  if (!transcoders) return <div className="hint">Loading…</div>;
+  if (!transcoders) return <div className="hint">{t('tcp.loading')}</div>;
   const q = filter.trim().toLowerCase();
   const list = transcoders.filter(t =>
     (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.tags || []).join(' ')).toLowerCase().includes(q)) &&
@@ -74,17 +74,17 @@ export default function TranscodersPage() {
       <div className="sub">{t('page.transcoders.sub')}</div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
-        <SearchInput style={{ maxWidth: 260 }} placeholder="Filter name/tag…" value={filter} onChange={setFilter} />
+        <SearchInput style={{ maxWidth: 260 }} placeholder={t('tcp.filter')} value={filter} onChange={setFilter} />
         <div style={{ maxWidth: 240 }}>
           <Select value={serverFilter} onChange={setServerFilter}
-                  options={[{ value: '', label: 'all servers' }, ...usedServerIds.map(id => ({ value: id, label: serverName(id) }))]} />
+                  options={[{ value: '', label: t('tcp.allServers') }, ...usedServerIds.map(id => ({ value: id, label: serverName(id) }))]} />
         </div>
-        <button onClick={load} disabled={busy}>Refresh</button>
+        <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
         <span className="hint">{list.length} of {transcoders.length}</span>
       </div>
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Server</th><th>Tags</th><th>State</th><th></th></tr></thead>
+          <thead><tr><th>{t('tcp.name')}</th><th>{t('tcp.server')}</th><th>{t('tcp.tags')}</th><th>{t('tcp.state')}</th><th></th></tr></thead>
           <tbody>
             {list.map(t => (
               <tr key={t.id}>
@@ -93,34 +93,34 @@ export default function TranscodersPage() {
                 <td>{(t.tags || []).map(x => <span key={x} className="badge" style={{ marginRight: 3 }}>{x}</span>)}</td>
                 <td><span className={'lamp ' + (t.paused ? 'off' : 'on')} />{t.paused ? 'paused' : 'running'}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <button onClick={() => openDetail(t)}>Details</button>{' '}
+                  <button onClick={() => openDetail(t)}>{tt('action.details')}</button>{' '}
                     <button onClick={() => setPipeModal({ id: t.id, name: t.name })}>{tt('tc.pipelines')}</button>{' '}
                   {can('wmsobjects.manage') && <>
                     {t.paused
-                      ? <button className="primary" disabled={busy} onClick={() => act(t, 'resume')}>Resume</button>
-                      : <button disabled={busy} onClick={() => act(t, 'pause')}>Pause</button>}{' '}
-                    <button disabled={busy} onClick={() => act(t, 'clone')}>Clone</button>{' '}
-                    <button disabled={busy} onClick={() => setEditModal({ id: t.id, name: t.name, description: t.description || '', tags: (t.tags || []).join(',') })}>Edit</button>{' '}
+                      ? <button className="primary" disabled={busy} onClick={() => act(t, 'resume')}>{tt('action.resume')}</button>
+                      : <button disabled={busy} onClick={() => act(t, 'pause')}>{tt('action.pause')}</button>}{' '}
+                    <button disabled={busy} onClick={() => act(t, 'clone')}>{tt('action.clone')}</button>{' '}
+                    <button disabled={busy} onClick={() => setEditModal({ id: t.id, name: t.name, description: t.description || '', tags: (t.tags || []).join(',') })}>{tt('action.edit')}</button>{' '}
                     <button className="danger" disabled={busy} onClick={async () => {
-                      if (!(await confirm(`DELETE transcoder "${t.name}"? Its pipelines are removed permanently.`))) return;
+                      if (!(await confirm(tt('tcp.confirmDelete', { name: t.name })))) return;
                       setBusy(true); setError('');
                       try { await api(`/wmspanel/transcoders/${t.id}`, { method: 'DELETE' }); await load(); }
                       catch (e) { setError(e.message); }
                       finally { setBusy(false); }
-                    }}>Delete</button>
+                    }}>{tt('action.delete')}</button>
                   </>}
                 </td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={5} className="hint">No transcoders match.</td></tr>}
+            {list.length === 0 && <tr><td colSpan={5} className="hint">{t('tcp.noMatch')}</td></tr>}
           </tbody>
         </table>
       </div>
 
       <div className="panel">
-        <h2 style={{ marginTop: 0 }}>Transcoder licenses</h2>
+        <h2 style={{ marginTop: 0 }}>{t('tcp.licenses')}</h2>
         <table>
-          <thead><tr><th>Server</th><th>Status</th><th>Started</th><th>Expires</th><th></th></tr></thead>
+          <thead><tr><th>{t('tcp.server')}</th><th>{t('tcp.status')}</th><th>{t('tcp.started')}</th><th>{t('tcp.expires')}</th><th></th></tr></thead>
           <tbody>
             {licenses.map((l, i) => {
               const dl = daysLeft(l.expire);
@@ -131,11 +131,11 @@ export default function TranscodersPage() {
                   <td className="hint">{l.started}</td>
                   <td className="mono">{l.expire}</td>
                   <td>{dl <= 30 && dl >= 0 && <span className="badge" style={{ background: '#5c4a2a', color: '#e8d5a8' }}>expires in {dl}d</span>}
-                      {dl < 0 && <span className="badge" style={{ background: '#4a2020', color: '#e8a8a8' }}>expired</span>}</td>
+                      {dl < 0 && <span className="badge" style={{ background: '#4a2020', color: '#e8a8a8' }}>{t('tcp.expired')}</span>}</td>
                 </tr>
               );
             })}
-            {licenses.length === 0 && <tr><td colSpan={5} className="hint">No transcoder licenses visible.</td></tr>}
+            {licenses.length === 0 && <tr><td colSpan={5} className="hint">{t('tcp.noLicenses')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -143,15 +143,15 @@ export default function TranscodersPage() {
       {editModal && (
         <div className="modal-back" {...backdropClose(() => setEditModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Edit transcoder</h3>
-            <label>Name</label>
+            <h3>{t('tcp.editTranscoder')}</h3>
+            <label>{t('tcp.name')}</label>
             <input value={editModal.name} onChange={e => setEditModal(m => ({ ...m, name: e.target.value }))} />
-            <label>Description</label>
+            <label>{t('tcp.description')}</label>
             <input value={editModal.description} onChange={e => setEditModal(m => ({ ...m, description: e.target.value }))} />
-            <label>Tags (comma separated)</label>
+            <label>{t('tcp.tagsComma')}</label>
             <input value={editModal.tags} onChange={e => setEditModal(m => ({ ...m, tags: e.target.value }))} />
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setEditModal(null)}>Cancel</button>
+              <button onClick={() => setEditModal(null)}>{t('action.cancel')}</button>
               <button className="primary" disabled={busy || !editModal.name} onClick={async () => {
                 setBusy(true); setError('');
                 try {
@@ -162,7 +162,7 @@ export default function TranscodersPage() {
                   setEditModal(null); await load();
                 } catch (e) { setError(e.message); }
                 finally { setBusy(false); }
-              }}>Apply</button>
+              }}>{t('action.apply')}</button>
             </div>
           </div>
         </div>
@@ -171,7 +171,7 @@ export default function TranscodersPage() {
         <div className="modal-back" {...backdropClose(() => setDetail(null))}>
           <div className="modal" style={{ width: 700 }} onClick={e => e.stopPropagation()}>
             <h3>{detail.name}</h3>
-            {detail.loading && <div className="hint">Loading…</div>}
+            {detail.loading && <div className="hint">{t('tcp.loading')}</div>}
             {detail.error && <div className="error-box">{detail.error}</div>}
             {detail.data && (() => {
               const tr = detail.data.transcoder || detail.data;
@@ -179,11 +179,11 @@ export default function TranscodersPage() {
               return (
                 <div>
                   <div className="kv-grid">
-                    <div className="kv-k">Name</div><div className="kv-v mono">{tr.name || '—'}</div>
-                    <div className="kv-k">Description</div><div className="kv-v">{tr.description || <span className="hint">—</span>}</div>
-                    <div className="kv-k">Server</div><div className="kv-v mono">{serverName(tr.server_id)}</div>
-                    <div className="kv-k">State</div><div className="kv-v"><span className={'lamp ' + (tr.paused ? 'off' : 'on')} />{tr.paused ? 'paused' : 'running'}</div>
-                    <div className="kv-k">Tags</div><div className="kv-v">{(tr.tags || []).map(x => <span key={x} className="badge" style={{ marginRight: 3 }}>{x}</span>) || '—'}</div>
+                    <div className="kv-k">{tt('tcp.name')}</div><div className="kv-v mono">{tr.name || '—'}</div>
+                    <div className="kv-k">{tt('tcp.description')}</div><div className="kv-v">{tr.description || <span className="hint">—</span>}</div>
+                    <div className="kv-k">{tt('tcp.server')}</div><div className="kv-v mono">{serverName(tr.server_id)}</div>
+                    <div className="kv-k">{tt('tcp.state')}</div><div className="kv-v"><span className={'lamp ' + (tr.paused ? 'off' : 'on')} />{tr.paused ? 'paused' : 'running'}</div>
+                    <div className="kv-k">{tt('tcp.tags')}</div><div className="kv-v">{(tr.tags || []).map(x => <span key={x} className="badge" style={{ marginRight: 3 }}>{x}</span>) || '—'}</div>
                     {tr.id && <><div className="kv-k">ID</div><div className="kv-v mono hint">{tr.id}</div></>}
                   </div>
                   {Array.isArray(pipelines) && pipelines.length > 0 && (
@@ -207,7 +207,7 @@ export default function TranscodersPage() {
               );
             })()}
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setDetail(null)}>Close</button>
+              <button onClick={() => setDetail(null)}>{t('action.close')}</button>
             </div>
           </div>
         </div>

@@ -13,6 +13,7 @@ const fmtBytes = (b) => {
 const fmtBps = (b) => (b == null ? '—' : (b / 1e6).toFixed(1) + ' Mbps');
 
 function ServerCard({ server }) {
+  const { t } = useI18n();
   const [state, setState] = useState({ loading: true });
 
   useEffect(() => {
@@ -47,10 +48,10 @@ function ServerCard({ server }) {
       </div>
       {state.ok && sys && (
         <div className="metrics" style={{ marginTop: 10 }}>
-          <div className="metric"><div className="k">CPU load</div><div className="v">{sys.scl}%</div></div>
-          <div className="metric"><div className="k">RAM free</div><div className="v">{fmtBytes(sys.fpms)}</div></div>
-          <div className="metric"><div className="k">RAM total</div><div className="v">{fmtBytes(sys.tpms)}</div></div>
-          <div className="metric"><div className="k">Cores</div><div className="v">{sys.ap}</div></div>
+          <div className="metric"><div className="k">{t('db.cpuLoad')}</div><div className="v">{sys.scl}%</div></div>
+          <div className="metric"><div className="k">{t('db.ramFree')}</div><div className="v">{fmtBytes(sys.fpms)}</div></div>
+          <div className="metric"><div className="k">{t('db.ramTotal')}</div><div className="v">{fmtBytes(sys.tpms)}</div></div>
+          <div className="metric"><div className="k">{t('db.cores')}</div><div className="v">{sys.ap}</div></div>
         </div>
       )}
       {!state.loading && !state.ok && <div className="error-box">{state.error}</div>}
@@ -105,7 +106,7 @@ export default function DashboardPage() {
       </div>
       {error && <div className="error-box">{error}</div>}
       {servers && servers.length === 0 && (
-        <div className="panel">No servers yet. Add the first one on the <Link to="/servers">Servers</Link> page.</div>
+        <div className="panel">{t('db.noServers')} <Link to="/servers">{t('db.servers')}</Link> page.</div>
       )}
       {servers && servers.map(s => wms ? <WmspanelCard key={s.id} server={s} /> : <ServerCard key={s.id} server={s} />)}
     </div>

@@ -7,6 +7,7 @@ import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 
 function UserModal({ initial, roles, onClose, onSaved }) {
+  const { t } = useI18n();
   const { user: me } = useAuth();
   const isEdit = Boolean(initial.id);
   const [form, setForm] = useState({
@@ -45,21 +46,21 @@ function UserModal({ initial, roles, onClose, onSaved }) {
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? `Edit user: ${initial.username}` : 'New user'}</h3>
         {!isEdit && <>
-          <label>Username</label>
+          <label>{t('us.username')}</label>
           <input value={form.username} onChange={e => set('username', e.target.value)} />
         </>}
         <label>{isEdit ? 'New password (empty = keep)' : 'Password'}</label>
         <input type="password" value={form.password} onChange={e => set('password', e.target.value)} />
         {!isSuperTarget && <>
-          <label>Role</label>
+          <label>{t('us.role')}</label>
           <Select value={form.roleType} onChange={v => set('roleType', v)}
                   options={[{ value: 'admin', label: 'Administrator (full access)' }, { value: 'custom', label: 'Custom role' }]} />
           {form.roleType === 'custom' && (
             <>
-              <label>Custom role</label>
+              <label>{t('us.customRole')}</label>
               <Select value={form.roleId} onChange={v => set('roleId', v)}
                   options={[{ value: '', label: '— select role —' }, ...roles.map(r => ({ value: r._id, label: r.name }))]} />
-              {roles.length === 0 && <div className="hint">No custom roles yet — create one on the Roles page.</div>}
+              {roles.length === 0 && <div className="hint">{t('us.noRoles')}</div>}
             </>
           )}
           {isEdit && (
@@ -71,10 +72,10 @@ function UserModal({ initial, roles, onClose, onSaved }) {
         </>}
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-          <button onClick={onClose}>Cancel</button>
+          <button onClick={onClose}>{t('action.cancel')}</button>
           <button className="primary" onClick={save}
                   disabled={(!isEdit && (!form.username || !form.password)) ||
-                            (form.roleType === 'custom' && !form.roleId && !isSuperTarget)}>Save</button>
+                            (form.roleType === 'custom' && !form.roleId && !isSuperTarget)}>{t('action.save')}</button>
         </div>
       </div>
     </div>
@@ -104,7 +105,7 @@ export default function UsersPage() {
   };
 
   const remove = async (u) => {
-    if (!(await confirm(`Delete user "${u.username}"?`))) return;
+    if (!(await confirm(t('us.confirmDelete', { name: u.username })))) return;
     try { await api(`/users/${u.id}`, { method: 'DELETE' }); load(); }
     catch (e) { setError(e.message); }
   };
@@ -117,7 +118,7 @@ export default function UsersPage() {
       <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ New user</button>
       <div className="panel">
         <table>
-          <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <thead><tr><th>{t('us.username')}</th><th>{t('us.role')}</th><th>{t('us.status')}</th><th>{t('us.created')}</th><th></th></tr></thead>
           <tbody>
             {users.map(u => (
               <tr key={u.id}>
@@ -126,18 +127,18 @@ export default function UsersPage() {
                 <td><span className={'lamp ' + (u.active ? 'on' : 'off')} />{u.active ? 'active' : 'disabled'}</td>
                 <td className="hint">{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <button onClick={() => setModal(u)}>Edit</button>{' '}
+                  <button onClick={() => setModal(u)}>{t('action.edit')}</button>{' '}
                   {u.twoFactorEnabled && (
                     <>
-                      <button title="Reset this user's 2FA" onClick={async () => {
+                      <button title={t('us.reset2faTitle')} onClick={async () => {
                         if (!(await confirm(`Reset 2FA for ${u.username}? They will sign in with password only until they set it up again.`))) return;
                         try { await api(`/users/${u.id}/reset-2fa`, { method: 'POST' }); await load(); }
                         catch (e) { setError(e.message); }
-                      }}>Reset 2FA</button>{' '}
+                      }}>{t('us.reset2fa')}</button>{' '}
                     </>
                   )}
                   {u.roleType !== 'superadmin' &&
-                    <button className="danger" onClick={() => remove(u)}>Delete</button>}
+                    <button className="danger" onClick={() => remove(u)}>{t('action.delete')}</button>}
                 </td>
               </tr>
             ))}

@@ -10,6 +10,7 @@ import { useConfirm } from '../confirm.jsx';
 // as names, never as raw WMSPanel ids.
 
 function ServerPicker({ servers, value, onChange }) {
+  const { t } = useI18n();
   const toggle = (wsid) => {
     const next = new Set(value);
     if (next.has(wsid)) next.delete(wsid); else next.add(wsid);
@@ -24,7 +25,7 @@ function ServerPicker({ servers, value, onChange }) {
           <span>{s.name}</span>
         </label>
       ))}
-      {mapped.length === 0 && <span className="hint">No mapped servers.</span>}
+      {mapped.length === 0 && <span className="hint">{t('ds.noServers')}</span>}
     </div>
   );
 }
@@ -106,7 +107,7 @@ export default function DistributionPage() {
     setOriginModal(null);
   });
 
-  if (abr === null) return <div className="hint">Loading…</div>;
+  if (abr === null) return <div className="hint">{t('ds.loading')}</div>;
   return (
     <div>
       <h1>{t('page.distribution.title')}</h1>
@@ -123,7 +124,7 @@ export default function DistributionPage() {
           )}
         </h2>
         <table>
-          <thead><tr><th>ABR output</th><th>Renditions</th><th>Servers</th><th></th></tr></thead>
+          <thead><tr><th>{t('ds.abrOutput')}</th><th>{t('ds.renditions')}</th><th>{t('ds.servers')}</th><th></th></tr></thead>
           <tbody>
             {abr.map(o => (
               <tr key={o.id}>
@@ -136,16 +137,16 @@ export default function DistributionPage() {
                       id: o.id, application: o.application, stream: o.stream,
                       server_ids: o.server_ids || [],
                       sources: (o.source_streams || []).map(ss => ({ ...ss })),
-                    })}>Edit</button>{' '}
+                    })}>{t('action.edit')}</button>{' '}
                     <button className="danger" disabled={busy} onClick={async () => {
-                      if (await confirm(`Delete ABR ${o.application}/${o.stream}?`))
+                      if (await confirm(t('ds.confirmDeleteAbr', { s: `${o.application}/${o.stream}` })))
                         act(() => api(`/wmspanel/abr/${o.id}`, { method: 'DELETE' }));
-                    }}>Delete</button>
+                    }}>{t('action.delete')}</button>
                   </>}
                 </td>
               </tr>
             ))}
-            {abr.length === 0 && <tr><td colSpan={4} className="hint">No ABR settings.</td></tr>}
+            {abr.length === 0 && <tr><td colSpan={4} className="hint">{t('ds.noAbr')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -160,7 +161,7 @@ export default function DistributionPage() {
           )}
         </h2>
         <table>
-          <thead><tr><th>Application</th><th>Aliases</th><th>Protocols</th><th>Servers</th><th>State</th><th></th></tr></thead>
+          <thead><tr><th>{t('ds.application')}</th><th>{t('ds.aliases')}</th><th>{t('ds.protocols')}</th><th>{t('ds.servers')}</th><th>{t('ds.state')}</th><th></th></tr></thead>
           <tbody>
             {aliases.map(o => (
               <tr key={o.id}>
@@ -179,16 +180,16 @@ export default function DistributionPage() {
                       aliases: (o.aliases || []).map(a => a.application).join('\n'),
                       protocols: (o.protocols || []).join(','),
                       server_ids: o.server_ids || [], description: o.description || '',
-                    })}>Edit</button>{' '}
+                    })}>{t('action.edit')}</button>{' '}
                     <button className="danger" disabled={busy} onClick={async () => {
-                      if (await confirm(`Delete alias set for ${o.application}?`))
+                      if (await confirm(t('ds.confirmDeleteAlias', { s: o.application })))
                         act(() => api(`/wmspanel/aliases/${o.id}`, { method: 'DELETE' }));
-                    }}>Delete</button>
+                    }}>{t('action.delete')}</button>
                   </>}
                 </td>
               </tr>
             ))}
-            {aliases.length === 0 && <tr><td colSpan={6} className="hint">No aliases.</td></tr>}
+            {aliases.length === 0 && <tr><td colSpan={6} className="hint">{t('ds.noAliases')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -203,7 +204,7 @@ export default function DistributionPage() {
           )}
         </h2>
         <table>
-          <thead><tr><th>Application</th><th>Servers</th><th></th></tr></thead>
+          <thead><tr><th>{t('ds.application')}</th><th>{t('ds.servers')}</th><th></th></tr></thead>
           <tbody>
             {origins.map(o => (
               <tr key={o.id}>
@@ -211,16 +212,16 @@ export default function DistributionPage() {
                 <td>{serverNames(o.server_ids)}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
-                    <button disabled={busy} onClick={() => setOriginModal({ id: o.id, application: o.application, server_ids: o.server_ids || [] })}>Edit</button>{' '}
+                    <button disabled={busy} onClick={() => setOriginModal({ id: o.id, application: o.application, server_ids: o.server_ids || [] })}>{t('action.edit')}</button>{' '}
                     <button className="danger" disabled={busy} onClick={async () => {
-                      if (await confirm(`Delete origin app ${o.application}?`))
+                      if (await confirm(t('ds.confirmDeleteOrigin', { s: o.application })))
                         act(() => api(`/wmspanel/originapps/${o.id}`, { method: 'DELETE' }));
-                    }}>Delete</button>
+                    }}>{t('action.delete')}</button>
                   </>}
                 </td>
               </tr>
             ))}
-            {origins.length === 0 && <tr><td colSpan={3} className="hint">No origin apps.</td></tr>}
+            {origins.length === 0 && <tr><td colSpan={3} className="hint">{t('ds.noOrigin')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -230,8 +231,8 @@ export default function DistributionPage() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{abrModal.id ? `Edit ABR ${abrModal.application}/${abrModal.stream}` : 'New ABR'}</h3>
             <div className="field-inline">
-              <div><label>Output application</label><input value={abrModal.application} onChange={e => setAbrModal(m => ({ ...m, application: e.target.value }))} /></div>
-              <div><label>Output stream</label><input value={abrModal.stream} onChange={e => setAbrModal(m => ({ ...m, stream: e.target.value }))} /></div>
+              <div><label>{t('ds.outputApplication')}</label><input value={abrModal.application} onChange={e => setAbrModal(m => ({ ...m, application: e.target.value }))} /></div>
+              <div><label>{t('ds.outputStream')}</label><input value={abrModal.stream} onChange={e => setAbrModal(m => ({ ...m, stream: e.target.value }))} /></div>
             </div>
             <label>Renditions (top = highest quality)</label>
             {abrModal.sources.map((src, i) => (
@@ -241,7 +242,7 @@ export default function DistributionPage() {
                        onChange={e => setAbrModal(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, application: e.target.value } : x) }))} />
                 <input style={{ flex: 1 }} placeholder="stream" value={src.stream}
                        onChange={e => setAbrModal(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, stream: e.target.value } : x) }))} />
-                <button title="Remove rendition" style={{ flexShrink: 0 }}
+                <button title={t('ds.removeRendition')} style={{ flexShrink: 0 }}
                         onClick={() => setAbrModal(m => ({ ...m, sources: m.sources.filter((_, j) => j !== i) }))}>✕</button>
               </div>
             ))}
@@ -249,7 +250,7 @@ export default function DistributionPage() {
             <label style={{ marginTop: 10 }}>Servers (none = all)</label>
             <ServerPicker servers={servers} value={abrModal.server_ids} onChange={v => setAbrModal(m => ({ ...m, server_ids: v }))} />
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setAbrModal(null)}>Cancel</button>
+              <button onClick={() => setAbrModal(null)}>{t('action.cancel')}</button>
               <button className="primary" disabled={busy || !abrModal.application || !abrModal.stream} onClick={saveAbr}>
                 {abrModal.id ? 'Apply' : 'Create'}
               </button>
@@ -262,18 +263,18 @@ export default function DistributionPage() {
         <div className="modal-back" {...backdropClose(() => setAliasModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{aliasModal.id ? `Edit aliases of ${aliasModal.application}` : 'New alias set'}</h3>
-            <label>Application</label>
+            <label>{t('ds.application')}</label>
             <input value={aliasModal.application} onChange={e => setAliasModal(m => ({ ...m, application: e.target.value }))} />
-            <label>Aliases (one per line, e.g. bbtennis.tv)</label>
+            <label>{t('ds.aliasesHint')}</label>
             <textarea className="mono" rows={3} value={aliasModal.aliases} onChange={e => setAliasModal(m => ({ ...m, aliases: e.target.value }))} />
-            <label>Protocols (comma separated)</label>
+            <label>{t('ds.protocolsComma')}</label>
             <input value={aliasModal.protocols} onChange={e => setAliasModal(m => ({ ...m, protocols: e.target.value }))} />
-            <label>Description</label>
+            <label>{t('ds.description')}</label>
             <input value={aliasModal.description} onChange={e => setAliasModal(m => ({ ...m, description: e.target.value }))} />
             <label>Servers (none = all)</label>
             <ServerPicker servers={servers} value={aliasModal.server_ids} onChange={v => setAliasModal(m => ({ ...m, server_ids: v }))} />
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setAliasModal(null)}>Cancel</button>
+              <button onClick={() => setAliasModal(null)}>{t('action.cancel')}</button>
               <button className="primary" disabled={busy || !aliasModal.application} onClick={saveAlias}>
                 {aliasModal.id ? 'Apply' : 'Create'}
               </button>
@@ -286,12 +287,12 @@ export default function DistributionPage() {
         <div className="modal-back" {...backdropClose(() => setOriginModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{originModal.id ? `Edit origin app ${originModal.application}` : 'New origin app'}</h3>
-            <label>Application</label>
+            <label>{t('ds.application')}</label>
             <input value={originModal.application} onChange={e => setOriginModal(m => ({ ...m, application: e.target.value }))} />
             <label>Servers (none = all)</label>
             <ServerPicker servers={servers} value={originModal.server_ids} onChange={v => setOriginModal(m => ({ ...m, server_ids: v }))} />
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setOriginModal(null)}>Cancel</button>
+              <button onClick={() => setOriginModal(null)}>{t('action.cancel')}</button>
               <button className="primary" disabled={busy || !originModal.application} onClick={saveOrigin}>
                 {originModal.id ? 'Apply' : 'Create'}
               </button>

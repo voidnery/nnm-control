@@ -34,9 +34,9 @@ export default function LoginPage() {
         <div className="brand">NNM<b>CONTROL</b></div>
         {!ticket ? (
           <>
-            <label>Username</label>
+            <label>{t('lg.username')}</label>
             <input value={username} onChange={e => setUsername(e.target.value)} autoFocus />
-            <label>Password</label>
+            <label>{t('lg.password')}</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                    onKeyDown={e => e.key === 'Enter' && submit()} />
             {error && <div className="error-box">{error}</div>}

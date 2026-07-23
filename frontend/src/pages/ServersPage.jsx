@@ -10,6 +10,7 @@ import { useConfirm } from '../confirm.jsx';
 const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '' };
 
 function ServerModal({ initial, onClose, onSaved, wms }) {
+  const { t } = useI18n();
   const isEdit = Boolean(initial.id);
   const [wpServers, setWpServers] = useState(null); // null = loading/unavailable
   const [form, setForm] = useState({
@@ -48,16 +49,16 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
     <div className="modal-back" {...backdropClose(onClose)}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Edit server' : 'Add server'}</h3>
-        <label>Name</label>
+        <label>{t('sp.name')}</label>
         <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="edge-01" />
         <div className="field-inline">
           <div>
-            <label>Host (IP or DNS)</label>
+            <label>{t('sp.host')}</label>
             <input value={form.host} onChange={e => set('host', e.target.value)} placeholder="10.77.0.10" />
           </div>
           {!wms && (
             <div>
-              <label>Management port</label>
+              <label>{t('sp.mgmtPort')}</label>
               <input type="number" value={form.port} onChange={e => set('port', e.target.value)} />
             </div>
           )}
@@ -67,27 +68,27 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
           <input type="password" value={form.token} onChange={e => set('token', e.target.value)}
                  placeholder={initial.hasToken ? '••••••• (set)' : 'empty = no auth on server'} />
         </>}
-        <label>WMSPanel server (for persistent control via WMSPanel API)</label>
+        <label>{t('sp.wmspanelServer')}</label>
         {wpServers ? (
           <Select value={form.wmspanelServerId} onChange={v => set('wmspanelServerId', v)}
                   options={[{ value: '', label: '— not mapped —' }, ...wpServers.map(ws => ({ value: ws.id, label: `${ws.name} (${ws.status})` }))]} />
         ) : (
           <input value={form.wmspanelServerId} onChange={e => set('wmspanelServerId', e.target.value)}
-                 placeholder="WMSPanel server id (auto-list needs API creds in Settings)" className="mono" />
+                 placeholder={t('sp.wmspanelIdHint')} className="mono" />
         )}
-        <label>Tags (comma separated)</label>
+        <label>{t('sp.tagsComma')}</label>
         <input value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="edge, moscow" />
-        <label>Notes</label>
+        <label>{t('sp.notes')}</label>
         <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
         {!wms && (
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="checkbox" style={{ width: 'auto' }} checked={form.useSsl}
-                   onChange={e => set('useSsl', e.target.checked)} /> Use HTTPS to reach management API
+                   onChange={e => set('useSsl', e.target.checked)} /> {t('sp.useHttps')}
           </label>
         )}
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-          <button onClick={onClose}>Cancel</button>
+          <button onClick={onClose}>{t('action.cancel')}</button>
           <button className="primary" disabled={busy || !form.name || !form.host} onClick={save}>
             {busy ? 'Saving…' : 'Save'}
           </button>
@@ -130,7 +131,7 @@ export default function ServersPage() {
   };
 
   const remove = async (s) => {
-    if (!(await confirm(`Delete server "${s.name}"? This only removes it from the panel.`))) return;
+    if (!(await confirm(t('sp.confirmDelete', { name: s.name })))) return;
     await api(`/servers/${s.id}`, { method: 'DELETE' });
     load();
   };
@@ -156,7 +157,7 @@ export default function ServersPage() {
       <div className="panel">
         <table>
           <thead>
-            <tr><th>Name</th><th>{wms ? 'Host' : 'Endpoint'}</th><th>Tags</th>{!wms && <th>Auth</th>}{!wms && <th>Check</th>}<th></th></tr>
+            <tr><th>{t('sp.name')}</th><th>{wms ? 'Host' : 'Endpoint'}</th><th>{t('sp.tags')}</th>{!wms && <th>{t('sp.auth')}</th>}{!wms && <th>{t('sp.check')}</th>}<th></th></tr>
           </thead>
           <tbody>
             {servers.map(s => {
@@ -183,14 +184,14 @@ export default function ServersPage() {
                   </td>}
                   <td style={{ textAlign: 'right' }}>
                     {can('servers.manage') && <>
-                      <button onClick={() => setModal(s)}>Edit</button>{' '}
-                      <button className="danger" onClick={() => remove(s)}>Delete</button>
+                      <button onClick={() => setModal(s)}>{t('action.edit')}</button>{' '}
+                      <button className="danger" onClick={() => remove(s)}>{t('action.delete')}</button>
                     </>}
                   </td>
                 </tr>
               );
             })}
-            {servers.length === 0 && <tr><td colSpan={wms ? 4 : 6} className="hint">No servers added yet.</td></tr>}
+            {servers.length === 0 && <tr><td colSpan={wms ? 4 : 6} className="hint">{t('sp.noServers')}</td></tr>}
           </tbody>
         </table>
       </div>

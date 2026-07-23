@@ -71,7 +71,7 @@ function WmspanelRules({ serverId }) {
   const restart = (rule) =>
     act(() => api(`/wmspanel/server/${serverId}/republish/${rule.id}/restart`, { method: 'POST' }));
 
-  if (rules === null) return <div className="hint">Loading WMSPanel rules…</div>;
+  if (rules === null) return <div className="hint">{t('rp.loadingWms')}</div>;
   return (
     <div>
       <div className="hint" style={{ marginBottom: 10 }}>
@@ -80,13 +80,13 @@ function WmspanelRules({ serverId }) {
       </div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
-        <button onClick={load} disabled={busy}>Refresh</button>
-        {can('republish.manage') && <button className="primary" onClick={() => setCreating(v => !v)}>{creating ? 'Close form' : '+ New rule'}</button>}
+        <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
+        {can('republish.manage') && <button className="primary" onClick={() => setCreating(true)}>+ {t('republish.newRule')}</button>}
       </div>
       <TagFilterBar st={tg} />
       <div className="panel">
         <table>
-          <thead><tr><th>ID</th><th>Source app/stream</th><th>Destination</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          <thead><tr><th>{t('rp.id')}</th><th>{t('rp.sourceAppStream')}</th><th>{t('rp.destination')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {rules.filter(rule => tg.matches('republish', rule.id)).map(rule => (
               <tr key={rule.id}>
@@ -107,8 +107,8 @@ function WmspanelRules({ serverId }) {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('republish.manage') && (edit?.ruleId === rule.id ? (
                     <>
-                      <button className="primary" disabled={busy} onClick={saveEdit}>Apply</button>{' '}
-                      <button onClick={() => setEdit(null)}>Cancel</button>
+                      <button className="primary" disabled={busy} onClick={saveEdit}>{t('action.apply')}</button>{' '}
+                      <button onClick={() => setEdit(null)}>{t('action.cancel')}</button>
                     </>
                   ) : (
                     <>
@@ -129,27 +129,34 @@ function WmspanelRules({ serverId }) {
                 </td>
               </tr>
             ))}
-            {rules.length === 0 && <tr><td colSpan={5} className="hint">No republish rules on the mapped WMSPanel server.</td></tr>}
+            {rules.length === 0 && <tr><td colSpan={5} className="hint">{t('rp.emptyWms')}</td></tr>}
           </tbody>
         </table>
       </div>
       {creating && (
-        <div className="panel">
-          <h2 style={{ marginTop: 0 }}>New persistent rule (WMSPanel)</h2>
-          <div className="field-inline">
-            <div><label>Source app</label><input value={form.src_app} onChange={e => set('src_app', e.target.value)} /></div>
-            <div><label>Source stream (empty = all)</label><input value={form.src_strm} onChange={e => set('src_strm', e.target.value)} /></div>
+        <div className="modal-back" {...backdropClose(() => setCreating(false))}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>{t('republish.newRuleTitle')}</h3>
+            <div className="field-inline">
+              <div><label>{t('republish.srcApp')}</label><input value={form.src_app} onChange={e => set('src_app', e.target.value)} /></div>
+              <div><label>{t('republish.srcStreamAll')}</label><input value={form.src_strm} onChange={e => set('src_strm', e.target.value)} /></div>
+            </div>
+            <div className="field-inline">
+              <div><label>{t('republish.destAddr')}</label><input value={form.dest_addr} onChange={e => set('dest_addr', e.target.value)} /></div>
+              <div><label>{t('republish.destPort')}</label><input type="number" value={form.dest_port} onChange={e => set('dest_port', e.target.value)} /></div>
+            </div>
+            <div className="field-inline">
+              <div><label>{t('republish.destApp')}</label><input value={form.dest_app} onChange={e => set('dest_app', e.target.value)} /></div>
+              <div><label>{t('republish.destStream')}</label><input value={form.dest_strm} onChange={e => set('dest_strm', e.target.value)} /></div>
+            </div>
+            <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setCreating(false)}>{t('action.cancel')}</button>
+              <button className="primary" disabled={busy || !form.src_app || !form.dest_addr || !form.dest_app}
+                      onClick={async () => { await create(); setCreating(false); }}>
+                {busy ? '…' : t('republish.createRule')}
+              </button>
+            </div>
           </div>
-          <div className="field-inline">
-            <div><label>Dest address</label><input value={form.dest_addr} onChange={e => set('dest_addr', e.target.value)} /></div>
-            <div><label>Dest port</label><input type="number" value={form.dest_port} onChange={e => set('dest_port', e.target.value)} /></div>
-          </div>
-          <div className="field-inline">
-            <div><label>Dest app</label><input value={form.dest_app} onChange={e => set('dest_app', e.target.value)} /></div>
-            <div><label>Dest stream</label><input value={form.dest_strm} onChange={e => set('dest_strm', e.target.value)} /></div>
-          </div>
-          <button className="primary" style={{ marginTop: 12 }} disabled={busy || !form.src_app || !form.dest_addr || !form.dest_app}
-                  onClick={create}>{busy ? '…' : t('republish.createRule')}</button>
         </div>
       )}
       {showRaw && (
@@ -161,33 +168,33 @@ function WmspanelRules({ serverId }) {
       {full && (
         <div className="modal-back" {...backdropClose(() => setFull(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Edit rule</h3>
+            <h3>{t('rp.editRule')}</h3>
             <div className="field-inline">
-              <div><label>Source app</label><input value={full.src_app} onChange={e => setFull(m => ({ ...m, src_app: e.target.value }))} /></div>
-              <div><label>Source stream</label><input value={full.src_strm} onChange={e => setFull(m => ({ ...m, src_strm: e.target.value }))} /></div>
+              <div><label>{t('republish.srcApp')}</label><input value={full.src_app} onChange={e => setFull(m => ({ ...m, src_app: e.target.value }))} /></div>
+              <div><label>{t('rp.sourceStream')}</label><input value={full.src_strm} onChange={e => setFull(m => ({ ...m, src_strm: e.target.value }))} /></div>
             </div>
             <div className="field-inline">
-              <div><label>Dest address</label><input value={full.dest_addr} onChange={e => setFull(m => ({ ...m, dest_addr: e.target.value }))} /></div>
-              <div><label>Dest port</label><input type="number" value={full.dest_port} onChange={e => setFull(m => ({ ...m, dest_port: e.target.value }))} /></div>
+              <div><label>{t('republish.destAddr')}</label><input value={full.dest_addr} onChange={e => setFull(m => ({ ...m, dest_addr: e.target.value }))} /></div>
+              <div><label>{t('republish.destPort')}</label><input type="number" value={full.dest_port} onChange={e => setFull(m => ({ ...m, dest_port: e.target.value }))} /></div>
             </div>
             <div className="field-inline">
-              <div><label>Dest app</label><input value={full.dest_app} onChange={e => setFull(m => ({ ...m, dest_app: e.target.value }))} /></div>
-              <div><label>Dest stream</label><input value={full.dest_strm} onChange={e => setFull(m => ({ ...m, dest_strm: e.target.value }))} /></div>
+              <div><label>{t('republish.destApp')}</label><input value={full.dest_app} onChange={e => setFull(m => ({ ...m, dest_app: e.target.value }))} /></div>
+              <div><label>{t('republish.destStream')}</label><input value={full.dest_strm} onChange={e => setFull(m => ({ ...m, dest_strm: e.target.value }))} /></div>
             </div>
-            <label>Description</label>
+            <label>{t('rp.description')}</label>
             <input value={full.description} onChange={e => setFull(m => ({ ...m, description: e.target.value }))} />
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input type="checkbox" style={{ width: 'auto' }} checked={full.paused}
                      onChange={e => setFull(m => ({ ...m, paused: e.target.checked }))} /> Paused
             </label>
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-              <button onClick={() => setFull(null)}>Cancel</button>
+              <button onClick={() => setFull(null)}>{t('action.cancel')}</button>
               <button className="primary" disabled={busy} onClick={() => act(async () => {
                 const { ruleId, ...body } = full;
                 body.dest_port = Number(body.dest_port);
                 await api(`/wmspanel/server/${serverId}/republish/${ruleId}`, { method: 'PUT', body });
                 setFull(null);
-              })}>Apply</button>
+              })}>{t('action.apply')}</button>
             </div>
           </div>
         </div>
@@ -235,7 +242,7 @@ function NativeRules({ serverId }) {
   };
 
   const remove = async (id) => {
-    if (!(await confirm(`Delete republish rule #${id}?`))) return;
+    if (!(await confirm(t('rp.confirmDelete', { id })))) return;
     await api(`/nimble/${serverId}/republish/${id}`, { method: 'DELETE' });
     load();
   };
@@ -245,18 +252,18 @@ function NativeRules({ serverId }) {
   return (
     <div>
       <div className="error-box" style={{ background: '#2a2214', borderColor: '#5c4a2a', color: '#e8d5a8' }}>
-        Backup control plane (native API): rules below are <b>not persistent</b> — they reset on Nimble reload
+        {t('rp.nativeNote')} <b>{t('rp.notPersistent')}</b> — they reset on Nimble reload
         and cannot modify WMSPanel-created rules. If a WMSPanel rule for the same destination comes back
         online, two publishers may collide — remove backup rules manually after recovery.
       </div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
-        <button onClick={load}>Refresh</button>
+        <button onClick={load}>{t('action.refresh')}</button>
       </div>
       <TagFilterBar st={tg} />
       <div className="panel">
         <table>
-          <thead><tr><th>ID</th><th>Source</th><th>Destination</th><th>State</th><th>Bandwidth</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          <thead><tr><th>{t('rp.id')}</th><th>{t('rp.source')}</th><th>{t('rp.destination')}</th><th>{t('rp.state')}</th><th>{t('rp.bandwidth')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {(rules || []).filter(rule => tg.matches('republish', rule.id)).map(rule => {
               const st = statFor(rule.id);
@@ -274,24 +281,24 @@ function NativeRules({ serverId }) {
                 </tr>
               );
             })}
-            {rules && rules.length === 0 && <tr><td colSpan={7} className="hint">No API-created republish rules.</td></tr>}
+            {rules && rules.length === 0 && <tr><td colSpan={7} className="hint">{t('rp.emptyNative')}</td></tr>}
           </tbody>
         </table>
       </div>
       {can('republish.manage') && (
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>New ephemeral rule (native)</h2>
+          <h2 style={{ marginTop: 0 }}>{t('rp.newEphemeral')}</h2>
           <div className="field-inline">
-            <div><label>Source app</label><input value={form.src_app} onChange={e => set('src_app', e.target.value)} /></div>
+            <div><label>{t('republish.srcApp')}</label><input value={form.src_app} onChange={e => set('src_app', e.target.value)} /></div>
             <div><label>Source stream (empty = all)</label><input value={form.src_stream} onChange={e => set('src_stream', e.target.value)} /></div>
           </div>
           <div className="field-inline">
-            <div><label>Dest address</label><input value={form.dest_addr} onChange={e => set('dest_addr', e.target.value)} /></div>
-            <div><label>Dest port</label><input type="number" value={form.dest_port} onChange={e => set('dest_port', e.target.value)} /></div>
+            <div><label>{t('republish.destAddr')}</label><input value={form.dest_addr} onChange={e => set('dest_addr', e.target.value)} /></div>
+            <div><label>{t('republish.destPort')}</label><input type="number" value={form.dest_port} onChange={e => set('dest_port', e.target.value)} /></div>
           </div>
           <div className="field-inline">
-            <div><label>Dest app</label><input value={form.dest_app} onChange={e => set('dest_app', e.target.value)} /></div>
-            <div><label>Dest stream</label><input value={form.dest_stream} onChange={e => set('dest_stream', e.target.value)} /></div>
+            <div><label>{t('republish.destApp')}</label><input value={form.dest_app} onChange={e => set('dest_app', e.target.value)} /></div>
+            <div><label>{t('republish.destStream')}</label><input value={form.dest_stream} onChange={e => set('dest_stream', e.target.value)} /></div>
           </div>
           <button className="primary" style={{ marginTop: 12 }} disabled={busy || !form.src_app || !form.dest_addr || !form.dest_app}
                   onClick={create}>{busy ? 'Creating…' : 'Create rule'}</button>
@@ -302,8 +309,9 @@ function NativeRules({ serverId }) {
 }
 
 export default function RepublishTab({ serverId, server }) {
+  const { t } = useI18n();
   const { sys } = useAuth();
-  if (!sys) return <div className="hint">Loading…</div>;
+  if (!sys) return <div className="hint">{t('rp.loading')}</div>;
 
   const wantWmspanel = sys.controlPlane === 'wmspanel';
   if (wantWmspanel && !server?.wmspanelServerId) {

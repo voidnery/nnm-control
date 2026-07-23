@@ -1,6 +1,25 @@
 # Changelog
 
 ## iter6 follow-up
+### v0.6.11 — create forms as modals + translation pass
+- RTMP Push and Hotswap opened their create form as a panel below the list;
+  both are modals now, consistent with every other tab
+- Translation pass: ~240 hardcoded strings moved into the dictionaries
+  (EN/RU) — table headers, form labels, empty states, confirmations, hints and
+  buttons across servers, streams, transcoders, distribution, functions,
+  users, roles, audit, dashboard, setup and login. Left in English on purpose:
+  tab names, the NNM CONTROL wordmark, Settings page fields, and protocol
+  identifiers (SSL, TTL, RTT, JSONPath, X-Zabbix-Token, GMT, date formats)
+- Two new gates, both of which caught real defects while writing this:
+  - `npm run audit:i18n` — every t('key') must exist in BOTH dictionaries,
+    otherwise the raw key leaks to the UI (caught a missing wo.port)
+  - hook audit now also flags `t()` used where `t` is shadowed by a map
+    variable (t = transcoder), which would call an object as a function
+- FIX: the hook audit had been silently checking zero files since it moved to
+  scripts/ (relative globs). After fixing the paths it flagged 20 components
+  calling t() without binding useI18n — all latent blank screens, all bound
+
+## iter6 follow-up
 ### v0.6.10 — fix CI image build (icons were never committed)
 - The web image build failed with `"/public": not found`: .gitignore carried a
   bare `public/` rule (added back when the APT repo started publishing the

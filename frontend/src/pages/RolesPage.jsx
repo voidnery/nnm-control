@@ -5,6 +5,7 @@ import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 
 function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
+  const { t } = useI18n();
   const isEdit = Boolean(initial._id);
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
@@ -37,11 +38,11 @@ function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
     <div className="modal-back" {...backdropClose(onClose)}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Edit role' : 'New custom role'}</h3>
-        <label>Name</label>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Stream operator" />
-        <label>Description</label>
+        <label>{t('rl.name')}</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder={t('rl.streamOperator')} />
+        <label>{t('rl.description')}</label>
         <input value={description} onChange={e => setDescription(e.target.value)} />
-        <label>Permissions</label>
+        <label>{t('rl.permissions')}</label>
         <div className="perm-grid">
           {catalog.map(p => (
             <label key={p.key}>
@@ -52,7 +53,7 @@ function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
         </div>
         {perms.has('functions.execute') && (
           <>
-            <label>Allowed functions (for functions.execute)</label>
+            <label>{t('rl.allowedFunctions')}</label>
             <div className="perm-grid">
               {functions.map(f => (
                 <label key={f._id}>
@@ -60,14 +61,14 @@ function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
                   <span>{f.name}</span>
                 </label>
               ))}
-              {functions.length === 0 && <span className="hint">No functions defined yet.</span>}
+              {functions.length === 0 && <span className="hint">{t('rl.noFunctions')}</span>}
             </div>
           </>
         )}
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-          <button onClick={onClose}>Cancel</button>
-          <button className="primary" disabled={!name} onClick={save}>Save</button>
+          <button onClick={onClose}>{t('action.cancel')}</button>
+          <button className="primary" disabled={!name} onClick={save}>{t('action.save')}</button>
         </div>
       </div>
     </div>
@@ -93,7 +94,7 @@ export default function RolesPage() {
   useEffect(() => { load(); }, []);
 
   const remove = async (r) => {
-    if (!(await confirm(`Delete role "${r.name}"?`))) return;
+    if (!(await confirm(t('rl.confirmDelete', { name: r.name })))) return;
     try { await api(`/roles/${r._id}`, { method: 'DELETE' }); load(); }
     catch (e) { setError(e.message); }
   };
@@ -106,7 +107,7 @@ export default function RolesPage() {
       <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ New role</button>
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Description</th><th>Permissions</th><th></th></tr></thead>
+          <thead><tr><th>{t('rl.name')}</th><th>{t('rl.description')}</th><th>{t('rl.permissions')}</th><th></th></tr></thead>
           <tbody>
             {roles.map(r => (
               <tr key={r._id}>
@@ -114,12 +115,12 @@ export default function RolesPage() {
                 <td className="hint">{r.description}</td>
                 <td>{r.permissions.map(p => <span key={p} className="badge" style={{ margin: '1px 3px 1px 0' }}>{p}</span>)}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <button onClick={() => setModal(r)}>Edit</button>{' '}
-                  <button className="danger" onClick={() => remove(r)}>Delete</button>
+                  <button onClick={() => setModal(r)}>{t('action.edit')}</button>{' '}
+                  <button className="danger" onClick={() => remove(r)}>{t('action.delete')}</button>
                 </td>
               </tr>
             ))}
-            {roles.length === 0 && <tr><td colSpan={4} className="hint">No custom roles yet.</td></tr>}
+            {roles.length === 0 && <tr><td colSpan={4} className="hint">{t('rl.noRoles')}</td></tr>}
           </tbody>
         </table>
       </div>

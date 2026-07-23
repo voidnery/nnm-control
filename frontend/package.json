@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-frontend",
-  "version": "0.6.10",
+  "version": "0.6.11",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,9 @@
     "audit:render": "node scripts/render-smoke.mjs",
     "audit:select": "node scripts/select-portal-test.mjs",
     "audit:ui": "node scripts/ui-components-test.mjs",
-    "audit:docker": "node scripts/docker-build-context-test.mjs"
+    "audit:docker": "node scripts/docker-build-context-test.mjs",
+    "audit:i18n": "python3 scripts/i18n-keys-audit.py",
+    "audit": "npm run audit:hooks && npm run audit:i18n && npm run audit:select && npm run audit:ui && npm run audit:render && npm run audit:docker"
   },
   "dependencies": {
     "qrcode": "^1.5.4",

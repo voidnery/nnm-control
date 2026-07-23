@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { useI18n } from '../i18n.jsx';
 
 // Text search field with a clear (×) affordance. Used for every filter/search
 // box in the app so they behave identically: Escape clears too, and focus
@@ -7,6 +8,7 @@ export default function SearchInput({
   value, onChange, placeholder = 'Filter…', autoFocus = false,
   style, className = '', title,
 }) {
+  const { t } = useI18n();
   const ref = useRef(null);
   const clear = () => { onChange(''); ref.current?.focus(); };
   return (
@@ -22,7 +24,7 @@ export default function SearchInput({
       />
       {value && (
         <button type="button" className="searchbox-clear" onClick={clear}
-                title="Clear" aria-label="Clear">×</button>
+                title={t('cm.clear')} aria-label={t('cm.clear')}>×</button>
       )}
     </div>
   );

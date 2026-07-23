@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import SearchInput from './SearchInput.jsx';
+import { useI18n } from '../i18n.jsx';
 
 // Custom themed select. Drop-in-ish: value + onChange(value) + options
 // [{value,label}] or children via `options`. Supports optional search.
@@ -10,6 +11,7 @@ import SearchInput from './SearchInput.jsx';
 // and break the form layout. Fixed + portal keeps it above everything and
 // leaves the modal's own layout untouched.
 export default function Select({ value, onChange, options = [], placeholder = '— select —', searchable = false, disabled = false }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState(null); // { left, top, width, maxHeight, dropUp }
@@ -81,7 +83,7 @@ export default function Select({ value, onChange, options = [], placeholder = '�
           {o.label}
         </div>
       ))}
-      {shown.length === 0 && <div className="cselect-opt" style={{ color: 'var(--text-dim)' }}>No matches</div>}
+      {shown.length === 0 && <div className="cselect-opt" style={{ color: 'var(--text-dim)' }}>{t('cm.noMatches')}</div>}
     </div>,
     document.body
   );

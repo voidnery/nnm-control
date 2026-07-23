@@ -1,4 +1,5 @@
 // Renders arbitrary JSON-ish data as readable key/value fields instead of a
+import { useI18n } from '../i18n.jsx';
 // raw dump. Objects become labelled rows; arrays become numbered blocks;
 // primitives render inline. A "Copy JSON" affordance keeps the raw available.
 function Value({ v }) {
@@ -31,7 +32,8 @@ export default function DataView({ data, nested = false }) {
 }
 
 export function CopyJsonButton({ data }) {
+  const { t } = useI18n();
   return (
-    <button onClick={() => navigator.clipboard?.writeText(JSON.stringify(data, null, 2))}>Copy JSON</button>
+    <button onClick={() => navigator.clipboard?.writeText(JSON.stringify(data, null, 2))}>{t('cm.copyJson')}</button>
   );
 }

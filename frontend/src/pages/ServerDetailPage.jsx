@@ -35,19 +35,21 @@ function useNimble(serverId, path, { poll = 0, enabled = true } = {}) {
 }
 
 function Err({ state }) {
-  if (state.status === 403) return <div className="error-box">You do not have permission for this section.</div>;
+  const { t } = useI18n();
+  if (state.status === 403) return <div className="error-box">{t('sd.noPermission')}</div>;
   return <div className="error-box">{state.error}</div>;
 }
 
 function StreamsTab({ serverId }) {
+  const { t } = useI18n();
   const [state] = useNimble(serverId, 'streams', { poll: 10000 });
-  if (state.loading) return <div className="hint">Loading…</div>;
+  if (state.loading) return <div className="hint">{t('sd.loading')}</div>;
   if (!state.ok) return <Err state={state} />;
   const apps = Array.isArray(state.data) ? state.data : [];
   return (
     <div className="panel">
       <table>
-        <thead><tr><th>App</th><th>Stream</th><th>Proto</th><th>Resolution</th><th>Bandwidth</th><th>Codecs</th><th>Publisher</th></tr></thead>
+        <thead><tr><th>{t('sd.app')}</th><th>{t('sd.stream')}</th><th>{t('sd.proto')}</th><th>{t('sd.resolution')}</th><th>{t('sd.bandwidth')}</th><th>{t('sd.codecs')}</th><th>{t('sd.publisher')}</th></tr></thead>
         <tbody>
           {apps.flatMap(app => (app.streams || []).map(st => (
             <tr key={app.app + '/' + st.strm} className="tally">
@@ -60,7 +62,7 @@ function StreamsTab({ serverId }) {
               <td className="mono">{st.publisher_ip ? `${st.publisher_ip}:${st.publisher_port || ''}` : (st.source_url || '—')}</td>
             </tr>
           )))}
-          {apps.length === 0 && <tr><td colSpan={7} className="hint">No live outgoing streams.</td></tr>}
+          {apps.length === 0 && <tr><td colSpan={7} className="hint">{t('sd.noOutgoing')}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -68,18 +70,19 @@ function StreamsTab({ serverId }) {
 }
 
 function SessionsTab({ serverId }) {
+  const { t } = useI18n();
   const confirm = useConfirm();
   const { can } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [state] = useNimble(serverId, `sessions?k=${refreshKey}`, { poll: 15000 });
   const [selected, setSelected] = useState({});
-  if (state.loading) return <div className="hint">Loading…</div>;
+  if (state.loading) return <div className="hint">{t('sd.loading')}</div>;
   if (!state.ok) return <Err state={state} />;
   const sessions = Array.isArray(state.data) ? state.data : [];
   const ids = Object.keys(selected).filter(k => selected[k]).map(Number);
 
   const disconnect = async () => {
-    if (!(await confirm(`Disconnect ${ids.length} session(s)?`))) return;
+    if (!(await confirm(t('sd.confirmDisconnect', { n: ids.length })))) return;
     await api(`/nimble/${serverId}/sessions/delete`, { method: 'POST', body: { ids } });
     setSelected({});
     setRefreshKey(k => k + 1);
@@ -95,7 +98,7 @@ function SessionsTab({ serverId }) {
         </div>
       )}
       <table>
-        <thead><tr><th></th><th>ID</th><th>App/Stream</th><th>Type</th><th>Client IP</th><th>Started</th><th>User agent</th></tr></thead>
+        <thead><tr><th></th><th>{t('sd.id')}</th><th>{t('sd.appStream')}</th><th>{t('sd.type')}</th><th>{t('sd.clientIp')}</th><th>{t('sd.started')}</th><th>{t('sd.userAgent')}</th></tr></thead>
         <tbody>
           {sessions.map(s => (
             <tr key={s.id}>
@@ -111,7 +114,7 @@ function SessionsTab({ serverId }) {
               <td className="hint" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.user_agent}</td>
             </tr>
           ))}
-          {sessions.length === 0 && <tr><td colSpan={7} className="hint">No active viewer sessions.</td></tr>}
+          {sessions.length === 0 && <tr><td colSpan={7} className="hint">{t('sd.noSessions')}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -131,8 +134,9 @@ function JsonPanel({ title, data }) {
 }
 
 function SrtTab({ serverId }) {
+  const { t } = useI18n();
   const [state] = useNimble(serverId, 'srt', { poll: 10000 });
-  if (state.loading) return <div className="hint">Loading…</div>;
+  if (state.loading) return <div className="hint">{t('sd.loading')}</div>;
   if (!state.ok) return <Err state={state} />;
   return (
     <div>
@@ -140,33 +144,35 @@ function SrtTab({ serverId }) {
         Raw SRT protocol stats from Nimble (sender & receiver). Structured SRT category with editable
         settings arrives in a later iteration (persistent SRT config is not exposed by the native API).
       </div>
-      <JsonPanel title="Sender stats" data={state.data.sender} />
-      <JsonPanel title="Receiver stats" data={state.data.receiver} />
+      <JsonPanel title={t('sd.senderStats')} data={state.data.sender} />
+      <JsonPanel title={t('sd.receiverStats')} data={state.data.receiver} />
     </div>
   );
 }
 
 function MpegtsTab({ serverId }) {
+  const { t } = useI18n();
   const [status] = useNimble(serverId, 'mpegts/status');
   const [settings] = useNimble(serverId, 'mpegts/settings');
-  if (status.loading || settings.loading) return <div className="hint">Loading…</div>;
+  if (status.loading || settings.loading) return <div className="hint">{t('sd.loading')}</div>;
   return (
     <div>
-      {status.ok ? <JsonPanel title="Incoming streams status" data={status.data} /> : <Err state={status} />}
-      {settings.ok ? <JsonPanel title="MPEG-TS In settings (read-only)" data={settings.data} /> : <Err state={settings} />}
+      {status.ok ? <JsonPanel title={t('sd.incomingStatus')} data={status.data} /> : <Err state={status} />}
+      {settings.ok ? <JsonPanel title={t('sd.mpegtsReadonly')} data={settings.data} /> : <Err state={settings} />}
     </div>
   );
 }
 
 function PlaylistTab({ serverId }) {
+  const { t } = useI18n();
   const [state] = useNimble(serverId, 'playlist', { poll: 10000 });
-  if (state.loading) return <div className="hint">Loading…</div>;
+  if (state.loading) return <div className="hint">{t('sd.loading')}</div>;
   if (!state.ok) return <Err state={state} />;
   const items = Array.isArray(state.data) ? state.data : [];
   return (
     <div className="panel">
       <table>
-        <thead><tr><th>Output stream</th><th>Block</th><th>Now playing</th><th>Type</th><th>Fallback</th></tr></thead>
+        <thead><tr><th>{t('sd.outputStream')}</th><th>{t('sd.block')}</th><th>{t('sd.nowPlaying')}</th><th>{t('sd.type')}</th><th>{t('sd.fallback')}</th></tr></thead>
         <tbody>
           {items.map(p => (
             <tr key={p.stream} className="tally">
@@ -177,7 +183,7 @@ function PlaylistTab({ serverId }) {
               <td className="mono">{p.default_stream || '—'}</td>
             </tr>
           ))}
-          {items.length === 0 && <tr><td colSpan={5} className="hint">Server playout is not active.</td></tr>}
+          {items.length === 0 && <tr><td colSpan={5} className="hint">{t('sd.playoutInactive')}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -185,10 +191,11 @@ function PlaylistTab({ serverId }) {
 }
 
 function ControlTab({ serverId }) {
+  const { t } = useI18n();
   const confirm = useConfirm();
   const [log, setLog] = useState([]);
   const run = async (label, path) => {
-    if (!(await confirm(`Execute "${label}" on this server?`))) return;
+    if (!(await confirm(t('sd.confirmExecute', { label })))) return;
     try {
       const data = await api(`/nimble/${serverId}/control/${path}`, { method: 'POST' });
       setLog(l => [{ t: new Date().toLocaleTimeString(), label, ok: true, msg: JSON.stringify(data) }, ...l]);
@@ -199,9 +206,9 @@ function ControlTab({ serverId }) {
   return (
     <div className="panel">
       <div className="row">
-        <button onClick={() => run('Reload config (rules.conf)', 'reload-config')}>Reload config</button>
-        <button onClick={() => run('Reload SSL certificates', 'reload-ssl')}>Reload SSL</button>
-        <button onClick={() => run('Re-sync with WMSPanel', 'sync-panel')}>Sync WMSPanel</button>
+        <button onClick={() => run('Reload config (rules.conf)', 'reload-config')}>{t('sd.reloadConfig')}</button>
+        <button onClick={() => run('Reload SSL certificates', 'reload-ssl')}>{t('sd.reloadSsl')}</button>
+        <button onClick={() => run('Re-sync with WMSPanel', 'sync-panel')}>{t('sd.syncWmspanel')}</button>
       </div>
       <div style={{ marginTop: 12 }}>
         {log.map((e, i) => (

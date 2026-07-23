@@ -36,6 +36,7 @@ const PRESETS = [
 ];
 
 function ObjectPicker({ servers, step, onPick }) {
+  const { t } = useI18n();
   const [objects, setObjects] = useState(null);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
@@ -80,10 +81,10 @@ function ObjectPicker({ servers, step, onPick }) {
                 {describe(o)}
               </div>
             ))}
-            {objects.length === 0 && <span className="hint">No objects of this kind on the server.</span>}
+            {objects.length === 0 && <span className="hint">{t('fn.noObjects')}</span>}
           </div>
           <div className="row" style={{ marginTop: 6, justifyContent: 'flex-end' }}>
-            <button onClick={() => setObjects(null)}>Close</button>
+            <button onClick={() => setObjects(null)}>{t('action.close')}</button>
           </div>
         </div>
       )}
@@ -141,14 +142,14 @@ function StepEditor({ step, servers, onChange, onRemove }) {
   return (
     <div className="panel" style={{ padding: 12 }}>
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <input style={{ maxWidth: 260 }} value={step.label} placeholder="Step label"
+        <input style={{ maxWidth: 260 }} value={step.label} placeholder={t('fn.stepLabel')}
                onChange={e => set('label', e.target.value)} />
         <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
-        <button className="danger" onClick={onRemove}>Remove</button>
+        <button className="danger" onClick={onRemove}>{t('fn.remove')}</button>
       </div>
       {step.type === 'action' && (
         <>
-          <label>Action target kind</label>
+          <label>{t('fn.actionTargetKind')}</label>
           <Select value={step.objectKind || 'outgoing'} onChange={v => set('objectKind', v === 'outgoing' ? '' : v)}
                   options={[
                     { value: 'outgoing', label: 'MPEGTS outgoing (pause/resume/restart)' },
@@ -159,44 +160,44 @@ function StepEditor({ step, servers, onChange, onRemove }) {
       )}
       {step.type !== 'delay' && (
         <>
-          <label>Server</label>
+          <label>{t('fn.server')}</label>
           <Select value={step.serverId || ''} onChange={v => set('serverId', v)} searchable
                   options={[{ value: '', label: '— select —' }, ...servers.map(s => ({ value: s.id, label: s.name }))]} />
           {step.type === 'patch' && (
             <>
-              <label>Object kind</label>
+              <label>{t('fn.objectKind')}</label>
               <Select value={step.objectKind} onChange={v => set('objectKind', v)}
                       options={KINDS.map(k => ({ value: k.value, label: k.label }))} />
             </>
           )}
-          <label>Target object id</label>
+          <label>{t('fn.targetId')}</label>
           <input className="mono" value={step.targetId || ''} onChange={e => set('targetId', e.target.value)} />
           <ObjectPicker servers={servers} step={step} onPick={(o, label) => { set('targetId', String(o.id)); set('targetLabel', label); }} />
           {step.targetLabel && (
             <div className="picked-row">
-              <span className="picked-tag">Selected</span>
+              <span className="picked-tag">{t('fn.selected')}</span>
               <b className="mono picked-val">{step.targetLabel}</b>
             </div>
           )}
           {step.type === 'patch' && (
             <>
-              <label>Source picker (apps/streams on the selected server)</label>
+              <label>{t('fn.sourcePicker')}</label>
               <div className="row">
-                <button disabled={!step.serverId} onClick={loadLive}>Load streams</button>
+                <button disabled={!step.serverId} onClick={loadLive}>{t('fn.loadStreams')}</button>
                 {live && <span className="hint">{live.streams.length} found ({live.source === 'wmspanel-streams' ? 'active streams' : 'from configured objects'})</span>}
               </div>
               {liveErr && <div className="error-box">{liveErr}</div>}
               {live && (
                 <div className="row" style={{ marginTop: 6 }}>
                   <div style={{ flex: 2 }}>
-                    <Select value={pick} onChange={setPick} searchable placeholder="app/stream…"
+                    <Select value={pick} onChange={setPick} searchable placeholder={t('fn.appStream')}
                             options={live.streams.map(st => ({ value: `${st.app}/${st.stream}`, label: `${st.app}/${st.stream}` }))} />
                   </div>
                   <div style={{ flex: 3 }}>
                     <Select value={pairKind} onChange={setPairKind}
                             options={KEY_PAIRS.map(k => ({ value: k.value, label: k.label }))} />
                   </div>
-                  <button disabled={!pick.includes('/')} onClick={insertPick}>Insert</button>
+                  <button disabled={!pick.includes('/')} onClick={insertPick}>{t('fn.insert')}</button>
                 </div>
               )}
               <label>Patch (JSON: fields to change; snapshot/rollback is automatic)</label>
@@ -208,7 +209,7 @@ function StepEditor({ step, servers, onChange, onRemove }) {
       )}
       {step.type === 'delay' && (
         <>
-          <label>Wait (seconds)</label>
+          <label>{t('fn.waitSeconds')}</label>
           <input type="number" value={step.waitSec || 0} onChange={e => set('waitSec', Number(e.target.value))} />
         </>
       )}
@@ -217,6 +218,7 @@ function StepEditor({ step, servers, onChange, onRemove }) {
 }
 
 function Builder({ initial, servers, onClose, onSaved }) {
+  const { t } = useI18n();
   const { user } = useAuth();
   const backDown = useRef(false);
   const w = user?.preferences?.functionModalWidth || 'default';
@@ -243,9 +245,9 @@ function Builder({ initial, servers, onClose, onSaved }) {
          onMouseUp={e => { if (backDown.current && e.target === e.currentTarget) onClose(); backDown.current = false; }}>
       <div className={'modal ' + widthClass} onMouseDown={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Edit function' : 'New function'}</h3>
-        <label>Name</label>
+        <label>{t('fn.name')}</label>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Подмена потоков картинкой" />
-        <label>Description</label>
+        <label>{t('fn.description')}</label>
         <input value={description} onChange={e => setDescription(e.target.value)} />
         <label>Steps (executed in order; on failure everything rolls back in reverse)</label>
         {steps.map((st, i) => (
@@ -258,8 +260,8 @@ function Builder({ initial, servers, onClose, onSaved }) {
         </div>
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
-          <button onClick={onClose}>Cancel</button>
-          <button className="primary" disabled={!name || steps.length === 0} onClick={save}>Save</button>
+          <button onClick={onClose}>{t('action.cancel')}</button>
+          <button className="primary" disabled={!name || steps.length === 0} onClick={save}>{t('action.save')}</button>
         </div>
       </div>
     </div>
@@ -272,6 +274,7 @@ const STEP_ICON = {
 };
 
 function RunView({ runId, onClose }) {
+  const { t } = useI18n();
   const [run, setRun] = useState(null);
   const timer = useRef(null);
   useEffect(() => {
@@ -305,7 +308,7 @@ function RunView({ runId, onClose }) {
         {run.cancelReason && <div className="error-box">Cancelled: {run.cancelReason}</div>}
         {run.status !== 'running' && (
           <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-            <button onClick={onClose}>Close</button>
+            <button onClick={onClose}>{t('action.close')}</button>
           </div>
         )}
       </div>
@@ -342,7 +345,7 @@ export default function FunctionsPage() {
   };
 
   const remove = async (fn) => {
-    if (!(await confirm(`Delete function "${fn.name}"?`))) return;
+    if (!(await confirm(t('fn.confirmDelete', { name: fn.name })))) return;
     await api(`/functions/${fn._id}`, { method: 'DELETE' });
     load();
   };
@@ -357,7 +360,7 @@ export default function FunctionsPage() {
       )}
       <div className="panel">
         <table>
-          <thead><tr><th>Name</th><th>Description</th><th>Steps</th><th></th></tr></thead>
+          <thead><tr><th>{t('fn.name')}</th><th>{t('fn.description')}</th><th>{t('fn.steps')}</th><th></th></tr></thead>
           <tbody>
             {fns.map(fn => (
               <tr key={fn._id}>
@@ -365,21 +368,21 @@ export default function FunctionsPage() {
                 <td className="hint">{fn.description}</td>
                 <td>{fn.steps.map((s, i) => <span key={i} className="badge" style={{ margin: '1px 3px 1px 0' }}>{s.label || s.type}</span>)}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {can('functions.execute') && <button className="primary" onClick={() => run(fn)}>Run</button>}{' '}
-                  {can('functions.manage') && <><button onClick={() => setBuilder(fn)}>Edit</button>{' '}
-                  <button className="danger" onClick={() => remove(fn)}>Delete</button></>}
+                  {can('functions.execute') && <button className="primary" onClick={() => run(fn)}>{t('fn.run')}</button>}{' '}
+                  {can('functions.manage') && <><button onClick={() => setBuilder(fn)}>{t('action.edit')}</button>{' '}
+                  <button className="danger" onClick={() => remove(fn)}>{t('action.delete')}</button></>}
                 </td>
               </tr>
             ))}
-            {fns.length === 0 && <tr><td colSpan={4} className="hint">No functions yet.</td></tr>}
+            {fns.length === 0 && <tr><td colSpan={4} className="hint">{t('fn.noFunctions')}</td></tr>}
           </tbody>
         </table>
       </div>
       {can('functions.execute') && runs.length > 0 && (
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>Run history</h2>
+          <h2 style={{ marginTop: 0 }}>{t('fn.runHistory')}</h2>
           <table>
-            <thead><tr><th>Function</th><th>By</th><th>Started</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>{t('fn.function')}</th><th>{t('fn.by')}</th><th>{t('fn.started')}</th><th>{t('fn.status')}</th><th></th></tr></thead>
             <tbody>
               {runs.map(r => (
                 <tr key={r._id}>
@@ -387,7 +390,7 @@ export default function FunctionsPage() {
                   <td className="mono">{r.startedBy}</td>
                   <td className="hint">{new Date(r.startedAt).toLocaleString()}</td>
                   <td><span className={'lamp ' + (r.status === 'success' ? 'on' : r.status === 'running' ? 'warn' : 'off')} />{r.status}</td>
-                  <td style={{ textAlign: 'right' }}><button onClick={() => setActiveRun(r._id)}>Trace</button></td>
+                  <td style={{ textAlign: 'right' }}><button onClick={() => setActiveRun(r._id)}>{t('fn.trace')}</button></td>
                 </tr>
               ))}
             </tbody>
