@@ -1,5 +1,21 @@
 # Changelog
 
+### v0.6.14 — fix Russian strings silently overridden by English duplicates
+- Playlists rendered in English under the Russian locale. Root cause was wider
+  than one page: an English block had been pasted a second time INSIDE the ru
+  dictionary, and since a JS object literal keeps the LAST value for a repeated
+  key, 113 Russian strings were silently overwritten (Playlists, the SRT helper
+  and the transcoder pipeline editor among them). Removed the 70 duplicated
+  lines; verified every key in them already had a Russian value earlier, so
+  nothing was lost
+- Verified by rendering the page under lang=ru: only legitimate latin text is
+  left (Nimble Playout, JSON, SyncInterval)
+- `npm run audit:i18n` now fails on duplicate keys within a dictionary — the
+  exact defect above produced no error before — and reports keys whose EN and
+  RU text is identical (likely untranslated). Validated by reintroducing a
+  duplicate. Translated one leftover it found (sd.userAgent); Icecast field
+  names and "Control plane:" stay as product terms
+
 ### v0.6.13 — fix blank screen when editing a Function
 - StepEditor called t() without binding useI18n (missed in the v0.6.11
   translation pass), so opening a function for editing threw and blanked the
