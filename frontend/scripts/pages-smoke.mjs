@@ -100,7 +100,15 @@ window.fetch = (u) => {
   else if (s.includes('/categories')) body = [{ id:'C1', name:'EU feeds', description:'', color:'',
       members:[{ serverId:'S1', kind:'udp', objId:'O1', title:'live/cam1', key:'S1:udp:O1' }], updatedAt:new Date().toISOString() }];
   else if (s.includes('/settings')) body = { wmspanel:{ baseUrl:'', clientId:'' }, controlPlane:'wmspanel' };
-  else if (s.includes('transcoders')) body = { transcoders: [], licenses: [] };
+  else if (s.includes('/wmspanel/fleet')) body = { items:[{ id:'T1', name:'TC', paused:false, tags:[], wmspanelServerId:'w1',
+      serverName:'Srv', panelServerId:'S1', videoCount:1, audioCount:1, outputs:['live/out'], health:'ok', flowing:1, total:1 }], licenses:[] };
+  else if (/transcoders\/[^/]+\/graph/.test(s)) body = { transcoder:{ id:'T1', name:'TC', paused:false, serverId:'w1', tags:[] },
+      panelServerId:'S1', panelServerName:'Srv', liveAvailable:true,
+      video:[{ id:'p1', inputs:[{ id:'i', app:'live', stream:'src', main:true }],
+               filters:[{ type:'custom', name:'format', params:'yuv420p' }, { type:'split' }, { type:'custom', name:'fps', params:'25' }],
+               outputs:[{ id:'o', app:'live', stream:'out', codec:'h264', encoder:'libx264', params:[{ name:'b', value:'4M' }] }] }],
+      audio:[], live:{ 'live/src': { ts:new Date().toISOString(), bandwidth: 8000000 }, 'live/out': { ts:new Date().toISOString(), bandwidth: 4000000 } } };
+  else if (s.includes('transcoders')) body = { transcoders: [{ id:'T1', name:'TC', paused:false, server_id:'w1', tags:[] }], licenses: [] };
   else if (s.includes('/zabbix')) body = { items: [] };
   return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve(body), text:()=>Promise.resolve(JSON.stringify(body)) });
 };

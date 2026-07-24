@@ -5,8 +5,11 @@ import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import { useToast } from '../toast.jsx';
 import Modal from '../components/Modal.jsx';
-import PipelineEditor from '../components/PipelineEditor.jsx';
+import TranscoderGraph from '../components/TranscoderGraph.jsx';
+import TemplateWizard from '../components/TemplateWizard.jsx';
+import ScenarioEditor from '../components/ScenarioEditor.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 
 // Transcoders are account-level in WMSPanel; server_id is an attribute.
@@ -14,6 +17,7 @@ import SearchInput from '../components/SearchInput.jsx';
 // warnings. Pipeline editing is a later step (schemas land from live use).
 export default function TranscodersPage() {
   const confirm = useConfirm();
+  const { push } = useToast();
   const { t } = useI18n();
   const tt = t; // i18n alias usable inside the `t`(transcoder) map scope
   const { can } = useAuth();
@@ -25,6 +29,11 @@ export default function TranscodersPage() {
   const [detail, setDetail] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [pipeModal, setPipeModal] = useState(null);
+  const [pipeView, setPipeView] = useState('graph');
+  const [wizard, setWizard] = useState(null);
+  const [fleet, setFleet] = useState(null);       // health + cached scenario shape
+  const [selected, setSelected] = useState([]);
+  const [fleetBusy, setFleetBusy] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -42,6 +51,33 @@ export default function TranscodersPage() {
     } catch (e) { setError(e.message); setTranscoders([]); }
   };
   useEffect(() => { load(); }, []);
+
+  const loadFleet = async () => {
+    try { setFleet(await api('/wmspanel/fleet')); } catch { setFleet(null); }
+  };
+  useEffect(() => { loadFleet(); }, []);
+
+  const refreshDetails = async (ids) => {
+    setFleetBusy(true);
+    try {
+      const r = await api('/wmspanel/fleet/refresh', { method: 'POST', body: { ids: ids || [] } });
+      push({ type: 'ok', message: tt('fleet.refreshed', { n: r.results.filter(x => x.ok).length, calls: r.apiCalls }) });
+      await loadFleet();
+    } catch (e) { setError(e.message); }
+    finally { setFleetBusy(false); }
+  };
+
+  const bulk = async (action) => {
+    if (!(await confirm({ danger: action === 'pause',
+      message: tt('fleet.confirm', { action: tt('fn.action.' + action), n: selected.length }) }))) return;
+    setFleetBusy(true);
+    try {
+      const r = await api('/wmspanel/fleet/action', { method: 'POST', body: { action, ids: selected } });
+      push({ type: r.okCount === r.total ? 'ok' : 'error', message: tt('cat.actionDone', { ok: r.okCount, total: r.total }) });
+      await load(); await loadFleet();
+    } catch (e) { setError(e.message); }
+    finally { setFleetBusy(false); }
+  };
 
   const serverName = (wsid) => servers.find(s => s.wmspanelServerId === wsid)?.name || String(wsid || '').slice(-6);
 
@@ -82,13 +118,42 @@ export default function TranscodersPage() {
         <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
         <span className="hint">{list.length} of {transcoders.length}</span>
       </div>
+      <div className="row" style={{ marginBottom: 10, alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button disabled={fleetBusy} onClick={() => refreshDetails(selected)}>
+          {tt('fleet.refreshDetails')}
+        </button>
+        <span className="hint">{tt('fleet.refreshCost', { n: selected.length || list.length })}</span>
+        {selected.length > 0 && (
+          <span className="row copybar" style={{ gap: 8, alignItems: 'center' }}>
+            <b>{tt('copy.selected', { n: selected.length })}</b>
+            <button disabled={fleetBusy} onClick={() => bulk('resume')}>{tt('fn.action.resume')}</button>
+            <button disabled={fleetBusy} onClick={() => bulk('pause')}>{tt('fn.action.pause')}</button>
+            <button className="linklike" onClick={() => setSelected([])}>{tt('copy.clear')}</button>
+          </span>
+        )}
+        <span className="hint" style={{ marginLeft: 'auto' }}>{tt('fleet.noBulkRestart')}</span>
+      </div>
       <div className="panel">
         <table>
-          <thead><tr><th>{t('tcp.name')}</th><th>{t('tcp.server')}</th><th>{t('tcp.tags')}</th><th>{t('tcp.state')}</th><th></th></tr></thead>
+          <thead><tr><th></th><th>{t('tcp.name')}</th><th>{t('fleet.health')}</th><th>{t('tcp.server')}</th><th>{t('tcp.tags')}</th><th>{t('tcp.state')}</th><th></th></tr></thead>
           <tbody>
             {list.map(t => (
               <tr key={t.id}>
+                <td>
+                  <input type="checkbox" checked={selected.includes(t.id)}
+                         onChange={() => setSelected(v => v.includes(t.id) ? v.filter(x => x !== t.id) : [...v, t.id])} />
+                </td>
                 <td><b>{t.name}</b>{t.description && <div className="hint">{t.description}</div>}</td>
+                <td>{(() => {
+                  const f = (fleet?.items || []).find(x => x.id === t.id);
+                  if (!f) return <span className="hint">—</span>;
+                  const cls = { ok: 'on', partial: 'warn', silent: 'off', paused: 'warn', unknown: '' }[f.health] || '';
+                  return (
+                    <span title={f.total ? tt('fleet.flowing', { a: f.flowing, b: f.total }) : ''}>
+                      {cls && <span className={'lamp ' + cls} />}{tt('fleet.h.' + f.health)}
+                    </span>
+                  );
+                })()}</td>
                 <td className="mono">{serverName(t.server_id)}</td>
                 <td>{(t.tags || []).map(x => <span key={x} className="badge" style={{ marginRight: 3 }}>{x}</span>)}</td>
                 <td><span className={'lamp ' + (t.paused ? 'off' : 'on')} />{t.paused ? 'paused' : 'running'}</td>
@@ -100,6 +165,7 @@ export default function TranscodersPage() {
                       ? <button className="primary" disabled={busy} onClick={() => act(t, 'resume')}>{tt('action.resume')}</button>
                       : <button disabled={busy} onClick={() => act(t, 'pause')}>{tt('action.pause')}</button>}{' '}
                     <button disabled={busy} onClick={() => act(t, 'clone')}>{tt('action.clone')}</button>{' '}
+                    <button disabled={busy} onClick={() => setWizard(t)}>{tt('tw.button')}</button>{' '}
                     <button disabled={busy} onClick={() => setEditModal({ id: t.id, name: t.name, description: t.description || '', tags: (t.tags || []).join(',') })}>{tt('action.edit')}</button>{' '}
                     <button className="danger" disabled={busy} onClick={async () => {
                       if (!(await confirm(tt('tcp.confirmDelete', { name: t.name })))) return;
@@ -112,7 +178,7 @@ export default function TranscodersPage() {
                 </td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={5} className="hint">{t('tcp.noMatch')}</td></tr>}
+            {list.length === 0 && <tr><td colSpan={7} className="hint">{t('tcp.noMatch')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -135,7 +201,7 @@ export default function TranscodersPage() {
                 </tr>
               );
             })}
-            {licenses.length === 0 && <tr><td colSpan={5} className="hint">{t('tcp.noLicenses')}</td></tr>}
+            {licenses.length === 0 && <tr><td colSpan={7} className="hint">{t('tcp.noLicenses')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -216,10 +282,18 @@ export default function TranscodersPage() {
         <Modal onClose={() => setPipeModal(null)} size="xwide">
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <h3 style={{ margin: 0 }}>{tt('tc.pipelines')} — {pipeModal.name}</h3>
-            <button onClick={() => setPipeModal(null)}>{tt('action.close')}</button>
+            <div className="row">
+              <span className="tag-modeswitch">
+                <button className={pipeView === 'graph' ? 'on' : ''} onClick={() => setPipeView('graph')}>{tt('tg.title')}</button>
+                <button className={pipeView === 'edit' ? 'on' : ''} onClick={() => setPipeView('edit')}>{tt('action.edit')}</button>
+              </span>
+              <button onClick={() => setPipeModal(null)}>{tt('action.close')}</button>
+            </div>
           </div>
           <div style={{ maxHeight: '78vh', overflow: 'auto', marginTop: 10 }}>
-            <PipelineEditor transcoderId={pipeModal.id} onClose={() => setPipeModal(null)} />
+            {pipeView === 'graph'
+              ? <TranscoderGraph transcoderId={pipeModal.id} />
+              : <ScenarioEditor transcoderId={pipeModal.id} />}
           </div>
         </Modal>
       )}

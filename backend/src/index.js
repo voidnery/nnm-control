@@ -15,6 +15,10 @@ import { copyStreamsRouter } from './routes/copyStreams.js';
 import { categoriesRouter } from './routes/categories.js';
 import { statsRouter } from './routes/stats.js';
 import { agentRouter } from './routes/agentProxy.js';
+import { transcoderGraphRouter } from './routes/transcoderGraph.js';
+import { transcoderTemplateRouter } from './routes/transcoderTemplate.js';
+import { transcoderFleetRouter } from './routes/transcoderFleet.js';
+import { transcoderEditRouter } from './routes/transcoderEdit.js';
 import { startStatsCollector } from './services/statsCollector.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
@@ -47,6 +51,10 @@ app.use('/api/wmspanel', copyStreamsRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/servers', agentRouter);
+app.use('/api/wmspanel', transcoderGraphRouter);
+app.use('/api/wmspanel', transcoderTemplateRouter);
+app.use('/api/wmspanel', transcoderFleetRouter);
+app.use('/api/wmspanel', transcoderEditRouter);
 app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {

@@ -1,13 +1,15 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.7.8",
+  "version": "0.8.3",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "test:functions": "node tests/function-actions.test.mjs",
     "test:stats": "node tests/stats-collector.test.mjs",
-    "test": "npm run test:functions && npm run test:stats"
+    "test": "npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet",
+    "test:template": "node tests/transcoder-template.test.mjs",
+    "test:fleet": "node tests/transcoder-fleet.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

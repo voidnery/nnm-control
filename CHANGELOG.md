@@ -1,5 +1,83 @@
 # Changelog
 
+### v0.8.3 (m4) — guarded scenario editing
+- The Edit tab is now a guarded editor: decoder and encoder application/stream
+  and existing filter parameters are editable — the two areas Softvelum
+  documents as changeable. Codecs, encoders, forwarding flags and keyframe
+  alignment are shown for reference only; the API refuses them unless a caller
+  explicitly opts in, because offering an undocumented field as supported invites
+  trusting a change that silently does nothing
+- Nothing is applied blind: a diff lists every field with its before and after
+  value, and the operator confirms it
+- Each change is snapshot -> write -> read back -> verify, and the snapshot is
+  restored if the API stored something else. A failure stops the batch rather
+  than leaving a scenario half-applied, and the report says exactly which step
+  stopped it and whether it was rolled back
+- The write path is proven on the scenario itself before the first change, using
+  the same no-op preflight the template wizard introduced — so this works
+  whether or not the live verdict has come back yet
+- 7 more backend checks pin the documented/undocumented classification
+
+### v0.8.2 (m3) — transcoder fleet
+- The transcoders page became a fleet console: every scenario across every
+  server with its state, server, tags and a health column
+- Health answers the question the state field cannot: are the encoder outputs
+  actually carrying data? Derived from the panel's own metrics — flowing /
+  partial / no output / paused. When the panel genuinely cannot know (metrics
+  off, scenario shape not cached, server unmapped) it says "unknown" rather than
+  dressing ignorance up as health
+- Quota-aware by design: the transcoder list is one API call, but each scenario's
+  pipelines are one call each, so scenario shape is cached and refreshed on
+  demand. The button states the cost in API calls before it is pressed, and the
+  result reports how many were spent
+- Bulk pause/resume over selected scenarios, audited. Bulk restart is
+  deliberately not offered: transcoders have no restart endpoint, so it would be
+  pause + hold + resume — minutes of dead air en masse with no per-step trace.
+  Functions already do that with stepping and rollback
+- New backend test (`npm run test:fleet`): 8 checks over health classification,
+  half of them asserting that unknowable cases stay "unknown"
+
+### v0.8.1 (m2) — build a scenario from a template
+- New "From template" wizard: clone an existing scenario, retarget each decoder
+  and encoder to different app/stream, name it, and optionally push it to more
+  servers via servers_to_apply. The copy is created paused
+- The wizard proves the write path before using it. Element writes had never
+  been exercised against the live API, so right after cloning it reads one
+  element, writes it back unchanged, reads it again and compares — a no-op on a
+  fresh paused copy. It distinguishes accepted / rejected / silently altered
+  (drift) / element lost, and aborts before any real change if it is not clean
+- Every step is reported (clone, verify, each retarget, apply, final read-back),
+  so a run that stops halfway is inspectable instead of guessed at. A failed run
+  deliberately leaves the paused clone in place rather than deleting the evidence
+- Only elements the operator actually edited are sent; the preview lists exactly
+  which streams will be retargeted and how many servers are affected
+- The wizard states plainly that creating new pipelines is not possible through
+  the API and stays in WMSPanel, instead of offering controls that cannot persist
+- New backend test (`npm run test:template`): 8 checks over the preflight,
+  including silent drift and a vanishing element
+
+## iter8 — transcoders as an operator console
+### v0.8.0 (m1) — scenario graph with live state
+- New read-only scenario view: per pipeline, source -> processing -> encoders,
+  video and audio separated, matching how the scenario is actually operated
+- Live figures on the graph: measured bitrate on both the decoder input and each
+  encoder output, taken from the panel's own collector and marked stale after a
+  minute. This is the part WMSPanel's scenario view has no equivalent of; when
+  collection is off or the server is unmapped the graph says so instead of
+  showing an all-grey diagram that looks like an outage
+- Encoder nodes also show the configured bitrate from the element's params next
+  to the measured one, so drift is visible at a glance
+- Honest about what the data does not contain: the API exposes no edges between
+  elements, and after a split it does not say which filter belongs to which
+  branch (a real scenario has three filters feeding two encoders). Those are
+  grouped with an explicit note rather than distributed by guesswork
+- Backend joins the account-level transcoder to a panel server via its WMSPanel
+  server id so metrics can be matched at all
+- The Pipelines dialog now has Scenario / Edit modes; the existing editor is
+  untouched
+- New `npm run audit:graph`: 17 checks against the shape captured from the real
+  account dump, including the ambiguous split case and missing-field labels
+
 ### v0.7.8 — server ordering, remaining translations, filter dropdown fix
 - Servers can be arranged in the operator's own order (move up/down on the
   Servers page); the order is stored per server and used everywhere the list is

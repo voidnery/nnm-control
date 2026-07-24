@@ -375,3 +375,31 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .reorder { display: inline-flex; flex-direction: column; gap: 1px; }
 .reorder button { padding: 0 4px; line-height: 1.1; font-size: 10px; }
 .reorder button:disabled { opacity: .25; cursor: default; }
+
+
+/* Transcoder scenario graph */
+.gsection { font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--text-dim); margin: 14px 0 6px; }
+.gpipe { display: flex; align-items: flex-start; gap: 8px; padding: 10px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg-panel); overflow-x: auto; }
+.gcol { display: flex; flex-direction: column; gap: 6px; min-width: 190px; }
+.gcol.wide { min-width: 230px; }
+.gcol-h { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+.garrow { color: var(--text-dim); align-self: center; font-size: 18px; flex: none; }
+.gnode { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: var(--bg);
+  position: relative; }
+.gnode.in { border-left: 3px solid var(--accent); }
+.gnode.out { border-left: 3px solid var(--ok); }
+.gnode.out.audio { border-left-color: var(--warn); }
+.gnode.split { border-style: dashed; }
+.gnode-title { font-size: 12px; color: var(--text); word-break: break-all; }
+.gnode-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.gnode-sub.dim { opacity: .75; }
+.gnode-live { position: absolute; top: 6px; right: 8px; font-size: 11px; }
+.gnode-live.on { color: var(--ok); }
+.gnode-live.stale { color: var(--warn); }
+.gnode-live.off { color: var(--text-dim); }
+.gbranchbox { border: 1px dashed var(--line); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.gbranch-h { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+.gbranch-note { font-size: 10px; line-height: 1.3; }
+.badge.ok { border-color: var(--ok); color: var(--ok); }
+.badge.warn { border-color: var(--warn); color: var(--warn); }
