@@ -182,13 +182,23 @@ export default function ServersPage() {
       <div className="panel">
         <table>
           <thead>
-            <tr><th>{t('sp.name')}</th><th>{wms ? 'Host' : 'Endpoint'}</th><th>{t('sp.tags')}</th>{!wms && <th>{t('sp.auth')}</th>}{!wms && <th>{t('sp.check')}</th>}<th></th></tr>
+            <tr><th></th><th>{t('sp.name')}</th><th>{wms ? 'Host' : 'Endpoint'}</th><th>{t('sp.tags')}</th>{!wms && <th>{t('sp.auth')}</th>}{!wms && <th>{t('sp.check')}</th>}<th></th></tr>
           </thead>
           <tbody>
-            {servers.map(s => {
+            {servers.map((s, i) => {
               const tr = testResults[s.id];   // test result — must not shadow i18n `t`
               return (
                 <tr key={s.id}>
+                  <td style={{ width: 1, whiteSpace: 'nowrap', paddingRight: 0 }}>
+                    {can('servers.manage') && (
+                      <span className="reorder">
+                        <button className="tag-btn ghost" disabled={i === 0}
+                                title={t('sp.moveUp')} onClick={() => move(i, -1)}>▲</button>
+                        <button className="tag-btn ghost" disabled={i === servers.length - 1}
+                                title={t('sp.moveDown')} onClick={() => move(i, 1)}>▼</button>
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <Link to={`/servers/${s.id}`}><b>{s.name}</b></Link>
                     {s.syncedFromWmspanel && (

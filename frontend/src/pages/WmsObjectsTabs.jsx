@@ -124,7 +124,7 @@ export function UdpTab({ serverId }) {
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
         <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
-        {can('wmsobjects.manage') && <button className="primary" disabled={busy} onClick={() => openCfg(null)}>+ New output</button>}
+        {can('wmsobjects.manage') && <button className="primary" disabled={busy} onClick={() => openCfg(null)}>+ {t('new.output')}</button>}
       </div>
       <TagFilterBar st={st} />
       <CopySelectionBar cp={cp} visibleIds={settings.filter(o => st.matches('udp', o.id)).map(o => o.id)} />
@@ -315,7 +315,7 @@ export function OutgoingTab({ serverId }) {
         {can('wmsobjects.manage') && (
           <button className="primary" disabled={busy}
                   onClick={() => setModal({ application: '', stream: '', description: '', video_source: '', audio_source: '' })}>
-            + New outgoing
+            + {t('new.outgoing')}
           </button>
         )}
       </div>
@@ -723,7 +723,7 @@ export function MpegtsInTab({ serverId }) {
         {can('wmsobjects.manage') && (
           <button className="primary" disabled={busy}
                   onClick={() => setModal({ name: '', description: '', protocol: 'srt', ip: '0.0.0.0', port: 10000, receive_mode: 'listen', parameters: '' })}>
-            + New incoming
+            + {t('new.incoming')}
           </button>
         )}
         <span className="hint">{streams.length} of {(data?.streams || []).length}</span>
@@ -843,7 +843,7 @@ export function LivePullTab({ serverId }) {
         {can('wmsobjects.manage') && (
           <button className="primary" disabled={busy}
                   onClick={() => setModal({ url: '', fallback_urls: '', application: '', stream: '', description: '' })}>
-            + New pull
+            + {t('new.pull')}
           </button>
         )}
       </div>
@@ -954,7 +954,7 @@ export function AppsTab({ serverId }) {
         {can('wmsobjects.manage') && (
           <button className="primary" disabled={busy}
                   onClick={() => setModal({ application: '', chunk_duration: 6, chunk_count: 4, protocols: 'HLS,RTMP', push_login: '', push_password: '' })}>
-            + New application
+            + {t('new.application')}
           </button>
         )}
       </div>
@@ -1063,7 +1063,7 @@ export function InterfacesTab({ serverId }) {
       <div className="row" style={{ marginBottom: 10 }}>
         <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
         {can('wmsobjects.manage') && (
-          <button className="primary" disabled={busy} onClick={() => setModal({ ip: '0.0.0.0', port: 1935, ssl: false })}>+ New interface</button>
+          <button className="primary" disabled={busy} onClick={() => setModal({ ip: '0.0.0.0', port: 1935, ssl: false })}>+ {t('new.interface')}</button>
         )}
       </div>
       <TagFilterBar st={tg} />

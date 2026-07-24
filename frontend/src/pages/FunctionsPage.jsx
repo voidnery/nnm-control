@@ -44,30 +44,30 @@ const COMPOSITE_RESTART = new Set(['udp', 'hotswap', 'incoming']);
 
 const PRESETS = [
   // Canonical WMSPanel field names (pinned from live account dump 2026-07-21)
-  { label: 'Switch republish source', step: { type: 'patch', objectKind: 'republish', patch: { src_app: 'zagl_app', src_strm: 'zagl_stream' }, label: 'Switch republish source' } },
-  { label: 'Switch SRT/UDP output source', step: { type: 'patch', objectKind: 'udp', patch: { source_streams: [{ application: 'zagl_app', stream: 'zagl_stream' }] }, label: 'Switch SRT/UDP source' } },
-  { label: 'Patch outgoing stream',   step: { type: 'patch', objectKind: 'outgoing', patch: {}, label: 'Patch outgoing stream' } },
-  { label: 'Подмена картинкой ON (hotswap)', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: true }, label: 'Substitute ON' } },
-  { label: 'Подмена картинкой OFF (hotswap)', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: false }, label: 'Substitute OFF' } },
-  { label: 'Pause outgoing',  step: { type: 'action', action: 'pause', label: 'Pause outgoing' } },
-  { label: 'Resume outgoing', step: { type: 'action', action: 'resume', label: 'Resume outgoing' } },
-  { label: 'Restart outgoing',step: { type: 'action', action: 'restart', label: 'Restart outgoing' } },
-  { label: 'Live pull: switch source URL', step: { type: 'patch', objectKind: 'live_pull', patch: { url: 'rtmp://backup-host:1935/app/stream' }, label: 'Switch pull URL' } },
-  { label: 'Restart live pull', step: { type: 'action', objectKind: 'live_pull', action: 'restart', label: 'Restart pull' } },
-  { label: 'Подмена: pause transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'pause', label: 'Pause transcoder' } },
-  { label: 'Подмена: resume transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'resume', label: 'Resume transcoder' } },
-  { label: 'RTMP Push: start', step: { type: 'action', objectKind: 'republish', action: 'resume', label: 'Start RTMP Push' } },
-  { label: 'RTMP Push: stop', step: { type: 'action', objectKind: 'republish', action: 'pause', label: 'Stop RTMP Push' } },
-  { label: 'RTMP Push: restart', step: { type: 'action', objectKind: 'republish', action: 'restart', label: 'Restart RTMP Push' } },
-  { label: 'RTMP Pull: start', step: { type: 'action', objectKind: 'live_pull', action: 'resume', label: 'Start RTMP Pull' } },
-  { label: 'RTMP Pull: stop', step: { type: 'action', objectKind: 'live_pull', action: 'pause', label: 'Stop RTMP Pull' } },
-  { label: 'SRT Out: start', step: { type: 'action', objectKind: 'udp', action: 'resume', label: 'Start SRT Out' } },
-  { label: 'SRT Out: stop', step: { type: 'action', objectKind: 'udp', action: 'pause', label: 'Stop SRT Out' } },
-  { label: 'SRT In: start', step: { type: 'action', objectKind: 'incoming', action: 'resume', label: 'Start SRT In' } },
-  { label: 'SRT In: stop', step: { type: 'action', objectKind: 'incoming', action: 'pause', label: 'Stop SRT In' } },
-  { label: 'SRT Out: restart (stop+start)', step: { type: 'action', objectKind: 'udp', action: 'restart', restartDwellSec: 40, label: 'Restart SRT Out' } },
-  { label: 'SRT In: restart (stop+start)', step: { type: 'action', objectKind: 'incoming', action: 'restart', restartDwellSec: 40, label: 'Restart SRT In' } },
-  { label: 'Delay (seconds)', step: { type: 'delay', waitSec: 10, label: 'Delay' } },
+  { key: 'fn.p.switchRepublish', label: 'Switch republish source', step: { type: 'patch', objectKind: 'republish', patch: { src_app: 'zagl_app', src_strm: 'zagl_stream' }, label: 'Switch republish source' } },
+  { key: 'fn.p.switchUdp', label: 'Switch SRT/UDP output source', step: { type: 'patch', objectKind: 'udp', patch: { source_streams: [{ application: 'zagl_app', stream: 'zagl_stream' }] }, label: 'Switch SRT/UDP source' } },
+  { key: 'fn.p.patchOutgoing', label: 'Patch outgoing stream',   step: { type: 'patch', objectKind: 'outgoing', patch: {}, label: 'Patch outgoing stream' } },
+  { key: 'fn.p.hotswapOn', label: 'Подмена картинкой ON (hotswap)', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: true }, label: 'Substitute ON' } },
+  { key: 'fn.p.hotswapOff', label: 'Подмена картинкой OFF (hotswap)', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: false }, label: 'Substitute OFF' } },
+  { key: 'fn.p.pauseOutgoing', label: 'Pause outgoing',  step: { type: 'action', action: 'pause', label: 'Pause outgoing' } },
+  { key: 'fn.p.resumeOutgoing', label: 'Resume outgoing', step: { type: 'action', action: 'resume', label: 'Resume outgoing' } },
+  { key: 'fn.p.restartOutgoing', label: 'Restart outgoing',step: { type: 'action', action: 'restart', label: 'Restart outgoing' } },
+  { key: 'fn.p.pullSwitch', label: 'Live pull: switch source URL', step: { type: 'patch', objectKind: 'live_pull', patch: { url: 'rtmp://backup-host:1935/app/stream' }, label: 'Switch pull URL' } },
+  { key: 'fn.p.pullRestart', label: 'Restart live pull', step: { type: 'action', objectKind: 'live_pull', action: 'restart', label: 'Restart pull' } },
+  { key: 'fn.p.tcPause', label: 'Подмена: pause transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'pause', label: 'Pause transcoder' } },
+  { key: 'fn.p.tcResume', label: 'Подмена: resume transcoder', step: { type: 'action', objectKind: 'transcoder', action: 'resume', label: 'Resume transcoder' } },
+  { key: 'fn.p.pushStart', label: 'RTMP Push: start', step: { type: 'action', objectKind: 'republish', action: 'resume', label: 'Start RTMP Push' } },
+  { key: 'fn.p.pushStop', label: 'RTMP Push: stop', step: { type: 'action', objectKind: 'republish', action: 'pause', label: 'Stop RTMP Push' } },
+  { key: 'fn.p.pushRestart', label: 'RTMP Push: restart', step: { type: 'action', objectKind: 'republish', action: 'restart', label: 'Restart RTMP Push' } },
+  { key: 'fn.p.pullStart', label: 'RTMP Pull: start', step: { type: 'action', objectKind: 'live_pull', action: 'resume', label: 'Start RTMP Pull' } },
+  { key: 'fn.p.pullStop', label: 'RTMP Pull: stop', step: { type: 'action', objectKind: 'live_pull', action: 'pause', label: 'Stop RTMP Pull' } },
+  { key: 'fn.p.udpStart', label: 'SRT Out: start', step: { type: 'action', objectKind: 'udp', action: 'resume', label: 'Start SRT Out' } },
+  { key: 'fn.p.udpStop', label: 'SRT Out: stop', step: { type: 'action', objectKind: 'udp', action: 'pause', label: 'Stop SRT Out' } },
+  { key: 'fn.p.inStart', label: 'SRT In: start', step: { type: 'action', objectKind: 'incoming', action: 'resume', label: 'Start SRT In' } },
+  { key: 'fn.p.inStop', label: 'SRT In: stop', step: { type: 'action', objectKind: 'incoming', action: 'pause', label: 'Stop SRT In' } },
+  { key: 'fn.p.udpRestart', label: 'SRT Out: restart (stop+start)', step: { type: 'action', objectKind: 'udp', action: 'restart', restartDwellSec: 40, label: 'Restart SRT Out' } },
+  { key: 'fn.p.inRestart', label: 'SRT In: restart (stop+start)', step: { type: 'action', objectKind: 'incoming', action: 'restart', restartDwellSec: 40, label: 'Restart SRT In' } },
+  { key: 'fn.p.delay', label: 'Delay (seconds)', step: { type: 'delay', waitSec: 10, label: 'Delay' } },
 ];
 
 function ObjectPicker({ servers, step, onPick }) {
@@ -293,14 +293,14 @@ function Builder({ initial, servers, onClose, onSaved }) {
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Подмена потоков картинкой" />
         <label>{t('fn.description')}</label>
         <input value={description} onChange={e => setDescription(e.target.value)} />
-        <label>Steps (executed in order; on failure everything rolls back in reverse)</label>
+        <label>{t('fn.stepsHint')}</label>
         {steps.map((st, i) => (
           <StepEditor key={i} step={st} servers={servers}
                       onChange={next => setSteps(all => all.map((s, j) => j === i ? next : s))}
                       onRemove={() => setSteps(all => all.filter((_, j) => j !== i))} />
         ))}
         <div className="row" style={{ flexWrap: 'wrap' }}>
-          {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.label}</button>)}
+          {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>)}
         </div>
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
@@ -400,7 +400,7 @@ export default function FunctionsPage() {
       <div className="sub">Engineering macros: ordered transactional steps over WMSPanel-managed streams, with verification and automatic rollback.</div>
       {error && <div className="error-box">{error}</div>}
       {can('functions.manage') && (
-        <button className="primary" style={{ marginBottom: 14 }} onClick={() => setBuilder({})}>+ New function</button>
+        <button className="primary" style={{ marginBottom: 14 }} onClick={() => setBuilder({})}>+ {t('new.function')}</button>
       )}
       <div className="panel">
         <table>

@@ -30,7 +30,8 @@ export default function Select({ value, onChange, options = [], placeholder = 'â
     setPos({
       left: r.left,
       top: dropUp ? r.top - gap : r.bottom + gap,
-      width: r.width,
+      // A narrow trigger must not produce an unreadable dropdown.
+      width: Math.max(r.width, 180),
       maxHeight,
       dropUp,
     });

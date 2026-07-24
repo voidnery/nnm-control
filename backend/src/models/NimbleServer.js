@@ -36,6 +36,8 @@ const serverSchema = new mongoose.Schema({
     baseUrl: { type: String, default: '' },                                  // http://host:8090
     token: { type: String, default: '', set: encryptField, get: decryptField },
   },
+  // Operator-defined position in the servers list.
+  order: { type: Number, default: 0 },
   wmspanelServerId: { type: String, default: '' },
   // Auto-sync metadata (WMSPanel control plane pulls the fleet automatically).
   syncedFromWmspanel: { type: Boolean, default: false },

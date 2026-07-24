@@ -115,7 +115,7 @@ export default function UsersPage() {
       <h1>{t('page.users.title')}</h1>
       <div className="sub">{t('page.users.sub')}</div>
       {error && <div className="error-box">{error}</div>}
-      <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ New user</button>
+      <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ {t('new.user')}</button>
       <div className="panel">
         <table>
           <thead><tr><th>{t('us.username')}</th><th>{t('us.role')}</th><th>{t('us.status')}</th><th>{t('us.created')}</th><th></th></tr></thead>

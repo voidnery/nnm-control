@@ -119,7 +119,7 @@ export default function DistributionPage() {
           {can('wmsobjects.manage') && (
             <button className="primary" style={{ marginLeft: 12 }} disabled={busy}
                     onClick={() => setAbrModal({ application: '', stream: '', server_ids: [], sources: [{ application: '', stream: '' }] })}>
-              + New ABR
+              + {t('new.abr')}
             </button>
           )}
         </h2>
@@ -156,7 +156,7 @@ export default function DistributionPage() {
           {can('wmsobjects.manage') && (
             <button className="primary" style={{ marginLeft: 12 }} disabled={busy}
                     onClick={() => setAliasModal({ application: '', aliases: '', protocols: 'HTTP,RTMP,RTSP,SRT', server_ids: [], description: '' })}>
-              + New alias
+              + {t('new.alias')}
             </button>
           )}
         </h2>
@@ -199,7 +199,7 @@ export default function DistributionPage() {
           {can('wmsobjects.manage') && (
             <button className="primary" style={{ marginLeft: 12 }} disabled={busy}
                     onClick={() => setOriginModal({ application: '', server_ids: [] })}>
-              + New origin app
+              + {t('new.originApp')}
             </button>
           )}
         </h2>

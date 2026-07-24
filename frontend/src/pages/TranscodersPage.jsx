@@ -75,7 +75,7 @@ export default function TranscodersPage() {
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
         <SearchInput style={{ maxWidth: 260 }} placeholder={t('tcp.filter')} value={filter} onChange={setFilter} />
-        <div style={{ maxWidth: 240 }}>
+        <div style={{ flex: "0 0 240px", maxWidth: 240 }}>
           <Select value={serverFilter} onChange={setServerFilter}
                   options={[{ value: '', label: t('tcp.allServers') }, ...usedServerIds.map(id => ({ value: id, label: serverName(id) }))]} />
         </div>

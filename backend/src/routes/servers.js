@@ -3,6 +3,7 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
+import { logEvent } from '../services/audit.js';
 
 export const serversRouter = Router();
 
@@ -23,12 +24,13 @@ serversRouter.use(requireAuth);
 const pub = (s) => ({
   id: s.id, name: s.name, host: s.host, port: s.port, useSsl: s.useSsl,
   tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '',
+  order: s.order ?? 0,
   playbackEndpoints: (s.playbackEndpoints || []).map(e => ({ label: e.label || '', host: e.host, hlsPort: e.hlsPort, rtmpPort: e.rtmpPort, ssl: Boolean(e.ssl) })),
   syncedFromWmspanel: Boolean(s.syncedFromWmspanel), wmspanelStatus: s.wmspanelStatus || '', lastSyncAt: s.lastSyncAt, createdAt: s.createdAt,
 });
 
 serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
-  const servers = await NimbleServer.find().sort({ name: 1 });
+  const servers = await NimbleServer.find().sort({ order: 1, name: 1 });
   res.json(servers.map(pub));
 });
 
@@ -37,6 +39,18 @@ serversRouter.post('/', requirePerm('servers.manage'), async (req, res) => {
   if (!name || !host) return res.status(400).json({ error: 'name and host required' });
   const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints: cleanEndpoints(playbackEndpoints) });
   res.status(201).json(pub(server));
+});
+
+// Persist the operator's ordering. Declared before '/:id' so "order" can never
+// be parsed as a server id.
+serversRouter.put('/order', requirePerm('servers.manage'), async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  if (!ids.length) return res.status(400).json({ error: 'ids required' });
+  await NimbleServer.bulkWrite(ids.map((id, i) => ({
+    updateOne: { filter: { _id: id }, update: { $set: { order: i } } },
+  })));
+  logEvent({ req, action: 'servers:reorder', target: `${ids.length} server(s)`, outcome: 'ok', status: 200 });
+  res.json({ ok: true });
 });
 
 serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {

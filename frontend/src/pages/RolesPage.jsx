@@ -104,7 +104,7 @@ export default function RolesPage() {
       <h1>{t('page.roles.title')}</h1>
       <div className="sub">{t('page.roles.sub')}</div>
       {error && <div className="error-box">{error}</div>}
-      <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ New role</button>
+      <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ {t('new.role')}</button>
       <div className="panel">
         <table>
           <thead><tr><th>{t('rl.name')}</th><th>{t('rl.description')}</th><th>{t('rl.permissions')}</th><th></th></tr></thead>

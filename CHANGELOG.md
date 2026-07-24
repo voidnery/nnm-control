@@ -1,5 +1,22 @@
 # Changelog
 
+### v0.7.8 — server ordering, remaining translations, filter dropdown fix
+- Servers can be arranged in the operator's own order (move up/down on the
+  Servers page); the order is stored per server and used everywhere the list is
+  shown. Chose buttons over drag-and-drop: no dependency, works from the
+  keyboard, and the boundary cases are obvious
+- Transcoders "all servers" dropdown was collapsing to a sliver: its wrapper was
+  a flex item with no width basis around a width:100% control, so it shrank to
+  min-content and the portalled popup inherited that width. The wrapper now has
+  a basis, and a dropdown never renders narrower than 180px regardless of its
+  trigger
+- Finished the translation pass where it had been missed: every "+ New …" button
+  (interfaces, outputs, incoming, pull, applications, ABR, aliases, origin apps,
+  functions, roles, users), the Functions steps hint, and all 24 Functions step
+  presets — those were module-level constants with hardcoded (and partly mixed
+  Russian/English) labels, so they now carry i18n keys with the English label as
+  fallback
+
 ### v0.7.7 — missing SRT subjects, and charts that made sense of their data
 - SRT In / SRT Out / SRT in Nimble never appeared in the charts because the
   collector only asked the srt_sender/receiver endpoints. In this panel those
