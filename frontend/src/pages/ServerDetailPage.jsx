@@ -8,6 +8,7 @@ import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useI18n } from '../i18n.jsx';
 import ServerEditModal from '../components/ServerEditModal.jsx';
+import { PlaybackModal, usePlaybackEndpoints } from '../components/StreamPlayback.jsx';
 import StatsTab from './StatsTab.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
@@ -44,13 +45,21 @@ function Err({ state }) {
 function StreamsTab({ serverId }) {
   const { t } = useI18n();
   const [state] = useNimble(serverId, 'streams', { poll: 10000 });
+  // iter9 m2 - this tab listed streams but offered no way to watch or share
+  // them; playback links existed only on the WMSPanel-plane twin.
+  const pb = usePlaybackEndpoints(serverId);
+  const [watch, setWatch] = useState(null);
   if (state.loading) return <div className="hint">{t('sd.loading')}</div>;
   if (!state.ok) return <Err state={state} />;
   const apps = Array.isArray(state.data) ? state.data : [];
+  const endpoints = pb.endpoints;
   return (
     <div className="panel">
+      {!pb.loading && endpoints.length === 0 && (
+        <div className="hint" style={{ marginBottom: 8 }}>{t('play.setupHint')}</div>
+      )}
       <table>
-        <thead><tr><th>{t('sd.app')}</th><th>{t('sd.stream')}</th><th>{t('sd.proto')}</th><th>{t('sd.resolution')}</th><th>{t('sd.bandwidth')}</th><th>{t('sd.codecs')}</th><th>{t('sd.publisher')}</th></tr></thead>
+        <thead><tr><th>{t('sd.app')}</th><th>{t('sd.stream')}</th><th>{t('sd.proto')}</th><th>{t('sd.resolution')}</th><th>{t('sd.bandwidth')}</th><th>{t('sd.codecs')}</th><th>{t('sd.publisher')}</th><th></th></tr></thead>
         <tbody>
           {apps.flatMap(app => (app.streams || []).map(st => (
             <tr key={app.app + '/' + st.strm} className="tally">
@@ -61,11 +70,20 @@ function StreamsTab({ serverId }) {
               <td className="mono">{fmtBps(st.bandwidth)}</td>
               <td className="mono">{[st.vcodec, st.acodec].filter(Boolean).join(' / ')}</td>
               <td className="mono">{st.publisher_ip ? `${st.publisher_ip}:${st.publisher_port || ''}` : (st.source_url || '—')}</td>
+              <td style={{ textAlign: 'right' }}>
+                {endpoints.length > 0 && (
+                  <button onClick={() => setWatch({ app: app.app, stream: st.strm })}>▶ {t('play.watch')}</button>
+                )}
+              </td>
             </tr>
           )))}
-          {apps.length === 0 && <tr><td colSpan={7} className="hint">{t('sd.noOutgoing')}</td></tr>}
+          {apps.length === 0 && <tr><td colSpan={8} className="hint">{t('sd.noOutgoing')}</td></tr>}
         </tbody>
       </table>
+      {watch && (
+        <PlaybackModal endpoints={endpoints} initialEndpoint={endpoints[0]}
+                       app={watch.app} stream={watch.stream} onClose={() => setWatch(null)} />
+      )}
     </div>
   );
 }

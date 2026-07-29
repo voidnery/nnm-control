@@ -4,6 +4,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
 import { logEvent } from '../services/audit.js';
+import { resolvePlaybackEndpoints, invalidatePlaybackCache } from '../services/playbackEndpoints.js';
 
 export const serversRouter = Router();
 
@@ -24,7 +25,7 @@ serversRouter.use(requireAuth);
 const pub = (s) => ({
   id: s.id, name: s.name, host: s.host, port: s.port, useSsl: s.useSsl,
   tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '',
-  order: s.order ?? 0,
+  order: s.order ?? 0, httpPort: s.httpPort || 0,
   playbackEndpoints: (s.playbackEndpoints || []).map(e => ({ label: e.label || '', host: e.host, hlsPort: e.hlsPort, rtmpPort: e.rtmpPort, ssl: Boolean(e.ssl) })),
   syncedFromWmspanel: Boolean(s.syncedFromWmspanel), wmspanelStatus: s.wmspanelStatus || '', lastSyncAt: s.lastSyncAt, createdAt: s.createdAt,
 });
@@ -35,9 +36,9 @@ serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
 });
 
 serversRouter.post('/', requirePerm('servers.manage'), async (req, res) => {
-  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [] } = req.body || {};
+  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [], httpPort = 0 } = req.body || {};
   if (!name || !host) return res.status(400).json({ error: 'name and host required' });
-  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints: cleanEndpoints(playbackEndpoints) });
+  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, httpPort: Number(httpPort) > 0 ? Number(httpPort) : 0, playbackEndpoints: cleanEndpoints(playbackEndpoints) });
   res.status(201).json(pub(server));
 });
 
@@ -56,7 +57,7 @@ serversRouter.put('/order', requirePerm('servers.manage'), async (req, res) => {
 serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Not found' });
-  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints } = req.body || {};
+  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints, httpPort } = req.body || {};
   if (name !== undefined) server.name = name;
   if (host !== undefined) server.host = host;
   if (port !== undefined) server.port = port;
@@ -67,8 +68,27 @@ serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   if (notes !== undefined) server.notes = notes;
   if (wmspanelServerId !== undefined) server.wmspanelServerId = String(wmspanelServerId).trim();
   if (playbackEndpoints !== undefined) server.playbackEndpoints = cleanEndpoints(playbackEndpoints);
+  if (httpPort !== undefined) server.httpPort = Number(httpPort) > 0 ? Number(httpPort) : 0;
   await server.save();
+  // Any of host / mapping / ports invalidates a resolved playback answer.
+  invalidatePlaybackCache(server.id);
   res.json(pub(server));
+});
+
+// iter9 m2 — resolved playback endpoints. Answers "where can this server's
+// streams be watched", deriving hosts and the RTMP port from WMSPanel rather
+// than requiring an operator to type them in for every box. Costs up to 2
+// upstream calls, cached for 10 minutes; ?fresh=1 forces a re-read.
+serversRouter.get('/:id/playback', requirePerm('streams.view'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'Not found' });
+  const s = await Settings.load();
+  const cfg = s.controlPlane === 'wmspanel' && s.wmspanel?.clientId ? s.wmspanel : null;
+  try {
+    res.json(await resolvePlaybackEndpoints(server, cfg, { fresh: req.query.fresh === '1' }));
+  } catch (e) {
+    res.status(502).json({ error: e.message, endpoints: [], source: 'none', notes: ['resolveFailed'] });
+  }
 });
 
 serversRouter.delete('/:id', requirePerm('servers.manage'), async (req, res) => {

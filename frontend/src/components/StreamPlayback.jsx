@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import Modal from './Modal.jsx';
@@ -8,12 +9,71 @@ import Select from './Select.jsx';
 // operator decision — a box usually answers on its IP plus one or more domain
 // names, and protocols sit on their own ports — so the endpoint is chosen from
 // the list configured on the server, never guessed from the management address.
+// iter9 m2 — every playback URL Nimble documents for a live stream, in the
+// same shapes Softvelum publishes them:
+//   HLS   http(s)://host:httpPort/app/stream/playlist.m3u8
+//   DASH  http(s)://host:httpPort/app/stream/manifest.mpd
+//   SLDP  sldp(s)://host:httpPort/app/stream
+//   WHEP  http(s)://host:httpPort/app/stream/whep.stream
+//   Ice   http(s)://host:httpPort/app/stream/icecast.stream
+//   RTMP  rtmp://host:rtmpPort/app/stream
+// RTSP is deliberately absent: Softvelum's own examples use a non-default
+// port that depends on the instance's settings, and no endpoint we have
+// reports it — a guessed RTSP port would be a URL that silently never plays.
+export const PROTOCOLS = ['hls', 'dash', 'sldp', 'whep', 'icecast', 'rtmp'];
+
 export function playbackUrls(endpoint, app, stream) {
   if (!endpoint || !app || !stream) return null;
-  const scheme = endpoint.ssl ? 'https' : 'http';
-  const hls = `${scheme}://${endpoint.host}:${endpoint.hlsPort || 8081}/${app}/${stream}/playlist.m3u8`;
-  const rtmp = `rtmp://${endpoint.host}:${endpoint.rtmpPort || 1935}/${app}/${stream}`;
-  return { hls, rtmp };
+  const ssl = Boolean(endpoint.ssl);
+  const scheme = ssl ? 'https' : 'http';
+  // Accept both the resolved shape (httpPort) and a hand-entered endpoint
+  // saved before iter9, which called the same number hlsPort.
+  const httpPort = Number(endpoint.httpPort || endpoint.hlsPort) || 8081;
+  const rtmpPort = Number(endpoint.rtmpPort) || 1935;
+  const base = `${scheme}://${endpoint.host}:${httpPort}/${app}/${stream}`;
+  return {
+    hls: `${base}/playlist.m3u8`,
+    dash: `${base}/manifest.mpd`,
+    sldp: `${ssl ? 'sldps' : 'sldp'}://${endpoint.host}:${httpPort}/${app}/${stream}`,
+    whep: `${base}/whep.stream`,
+    icecast: `${base}/icecast.stream`,
+    rtmp: `rtmp://${endpoint.host}:${rtmpPort}/${app}/${stream}`,
+  };
+}
+
+export const PROTOCOL_LABEL = {
+  hls: 'HLS', dash: 'MPEG-DASH', sldp: 'SLDP', whep: 'WebRTC WHEP', icecast: 'Icecast', rtmp: 'RTMP',
+};
+
+// Minimal embeddable page, mirroring the snippet WMSPanel offers next to its
+// stream URLs. Kept dependency-light on purpose: one <video> plus hls.js from
+// a CDN, so it can be pasted into any page without a build step.
+export function embedSnippet(urls) {
+  if (!urls) return '';
+  return `<video id="p" controls muted playsinline style="width:100%"></video>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"><\/script>
+<script>
+  var v = document.getElementById('p'), u = '${urls.hls}';
+  if (v.canPlayType('application/vnd.apple.mpegurl')) { v.src = u; }
+  else if (window.Hls && Hls.isSupported()) { var h = new Hls(); h.loadSource(u); h.attachMedia(v); }
+<\/script>`;
+}
+
+// iter9 m2 - endpoints are resolved server-side (WMSPanel hosts + real RTMP
+// port) instead of being read straight off the server record, which was empty
+// on every auto-synced box and made the whole playback UI invisible.
+export function usePlaybackEndpoints(serverId) {
+  const [state, setState] = useState({ loading: true, endpoints: [], source: 'none', notes: [] });
+  useEffect(() => {
+    if (!serverId) return;
+    let dead = false;
+    setState(s => ({ ...s, loading: true }));
+    api(`/servers/${serverId}/playback`)
+      .then(d => { if (!dead) setState({ loading: false, endpoints: [], source: 'none', notes: [], ...d }); })
+      .catch(e => { if (!dead) setState({ loading: false, endpoints: [], source: 'none', notes: ['resolveFailed'], error: e.message }); });
+    return () => { dead = true; };
+  }, [serverId]);
+  return state;
 }
 
 export function endpointLabel(e) {
@@ -74,7 +134,8 @@ export function PlaybackModal({ endpoints, initialEndpoint, app, stream, onClose
   const { push } = useToast();
   const [idx, setIdx] = useState(() => Math.max(0, endpoints.findIndex(e => e.host === initialEndpoint?.host)));
   const [playing, setPlaying] = useState(false);
-  const endpoint = endpoints[idx];
+  const [embed, setEmbed] = useState(false);
+  const endpoint = endpoints[idx] || null;
   const urls = useMemo(() => playbackUrls(endpoint, app, stream), [endpoint, app, stream]);
 
   const copy = (text) => { navigator.clipboard?.writeText(text); push({ type: 'ok', message: t('play.copied') }); };
@@ -93,27 +154,44 @@ export function PlaybackModal({ endpoints, initialEndpoint, app, stream, onClose
       {!urls ? <div className="hint">{t('play.noEndpoint')}</div> : (
         <>
           <div className="kv-grid">
-            <div className="kv-k">HLS</div>
-            <div className="kv-v">
-              <div className="row" style={{ gap: 6 }}>
-                <span className="mono" style={{ flex: 1, wordBreak: 'break-all', fontSize: 12 }}>{urls.hls}</span>
-                <button onClick={() => copy(urls.hls)}>{t('srt.copy')}</button>
-              </div>
-            </div>
-            <div className="kv-k">RTMP</div>
-            <div className="kv-v">
-              <div className="row" style={{ gap: 6 }}>
-                <span className="mono" style={{ flex: 1, wordBreak: 'break-all', fontSize: 12 }}>{urls.rtmp}</span>
-                <button onClick={() => copy(urls.rtmp)}>{t('srt.copy')}</button>
-              </div>
-            </div>
+            {PROTOCOLS.map(proto => (
+              <Fragment key={proto}>
+                <div className="kv-k">{PROTOCOL_LABEL[proto]}</div>
+                <div className="kv-v">
+                  <div className="row" style={{ gap: 6 }}>
+                    <span className="mono" style={{ flex: 1, wordBreak: 'break-all', fontSize: 12 }}>{urls[proto]}</span>
+                    <button onClick={() => copy(urls[proto])}>{t('srt.copy')}</button>
+                  </div>
+                </div>
+              </Fragment>
+            ))}
           </div>
+          {/* iter9 m2 - a port the panel could not read is labelled as such.
+              The operator can then either trust it or go set it, instead of
+              copying a URL that quietly resolves to nothing. */}
+          {endpoint.httpPortOrigin === 'default' && (
+            <div className="hint" style={{ marginTop: 6 }}>{t('play.httpPortAssumed', { port: endpoint.httpPort || endpoint.hlsPort })}</div>
+          )}
+          {endpoint.rtmpPortOrigin === 'default' && (
+            <div className="hint">{t('play.rtmpPortAssumed', { port: endpoint.rtmpPort })}</div>
+          )}
           <div className="hint" style={{ marginTop: 6 }}>{t('play.rtmpNote')}</div>
 
           <div style={{ marginTop: 12 }}>
             {playing
               ? <HlsPlayer url={urls.hls} />
               : <button className="primary" onClick={() => setPlaying(true)}>▶ {t('play.watch')}</button>}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <button onClick={() => setEmbed(v => !v)}>{embed ? t('play.hideEmbed') : t('play.showEmbed')}</button>
+            {embed && (
+              <div style={{ marginTop: 8 }}>
+                <textarea readOnly rows={8} className="mono" style={{ width: '100%', fontSize: 11 }}
+                          value={embedSnippet(urls)} onFocus={e => e.target.select()} />
+                <button onClick={() => copy(embedSnippet(urls))}>{t('srt.copy')}</button>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -7,7 +7,7 @@ import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 
-const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [] };
+const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [], httpPort: 0 };
 
 function ServerModal({ initial, onClose, onSaved, wms }) {
   const { t } = useI18n();
@@ -35,6 +35,7 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
         useSsl: form.useSsl, notes: form.notes,
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         wmspanelServerId: form.wmspanelServerId || '',
+        httpPort: Number(form.httpPort) > 0 ? Number(form.httpPort) : 0,
         playbackEndpoints: (form.playbackEndpoints || []).filter(e => String(e.host || '').trim()),
       };
       // On edit an empty token field means "do not change".
@@ -81,6 +82,15 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
         <input value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="edge, moscow" />
         <label>{t('sp.playback')}</label>
         <div className="hint" style={{ marginBottom: 6 }}>{t('sp.playbackHint')}</div>
+        {/* iter9 m2 - the RTMP port and the hostnames are read from WMSPanel,
+            but the HTTP port lives in nimble.conf and no API reports it, so it
+            is the one number that has to be told to the panel. Blank means
+            "use Nimble's default", and the playback dialog says when it did. */}
+        <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 8 }}>
+          <span className="hint" style={{ flex: 1 }}>{t('sp.httpPortHint')}</span>
+          <input type="number" style={{ flex: '0 0 110px' }} placeholder="8081"
+                 value={form.httpPort || ''} onChange={e => set('httpPort', e.target.value)} />
+        </div>
         {(form.playbackEndpoints || []).map((e, i) => {
           const upd = (patch) => set('playbackEndpoints', form.playbackEndpoints.map((x, j) => j === i ? { ...x, ...patch } : x));
           return (
@@ -159,6 +169,25 @@ export default function ServersPage() {
     if (!(await confirm(t('sp.confirmDelete', { name: s.name })))) return;
     await api(`/servers/${s.id}`, { method: 'DELETE' });
     load();
+  };
+
+  // Reorder: swap locally first so the row moves under the cursor without a
+  // round-trip, then persist the whole order. On failure the server wins —
+  // reload rather than leave the operator looking at an order that was never
+  // stored.
+  const move = async (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= servers.length) return;
+    const next = servers.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    setServers(next);
+    setError('');
+    try {
+      await api('/servers/order', { method: 'PUT', body: { ids: next.map(s => s.id) } });
+    } catch (e) {
+      setError(e.message);
+      load();
+    }
   };
 
   return (

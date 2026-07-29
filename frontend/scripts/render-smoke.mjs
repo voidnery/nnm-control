@@ -22,6 +22,11 @@ function pick(u){
   if(u.includes('/subjects'))return { subjects:[{ subject:'stream:live/cam1', group:'streams', label:'live/cam1', metrics:['bandwidth'] }] };
   if(u.includes('/series'))return { subject:'stream:live/cam1', metrics:['bandwidth'], bucketMs:0,
     points:[{ ts:new Date(Date.now()-60000).toISOString(), v:[4200000] },{ ts:new Date().toISOString(), v:[4400000] }] };
+  // iter9 m2 - the Streams tab resolves endpoints from the backend now
+  // instead of reading them off the server prop.
+  if(/\/servers\/[^/]+\/playback/.test(u))return { endpoints:[{ label:'CDN', host:'cdn.example.com', httpPort:8081,
+    rtmpPort:1935, ssl:false, origin:'wmspanel', httpPortOrigin:'default', rtmpPortOrigin:'api' }],
+    source:'wmspanel', apiCalls:2, notes:['httpPortAssumed'] };
   if(u.includes('/auth/me'))return SAMPLE.me;
   if(u.includes('/settings/public'))return SAMPLE.publicSettings;
   if(/\/streams(\b|$|\?)/.test(u)&&!u.includes('stream-tags'))return SAMPLE.streams;

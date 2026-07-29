@@ -8,7 +8,7 @@ import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 import { useStreamCopy, CopyCheckbox, CopySelectionBar, CopyModal } from '../components/StreamCopy.jsx';
-import { PlaybackModal } from '../components/StreamPlayback.jsx';
+import { PlaybackModal, usePlaybackEndpoints } from '../components/StreamPlayback.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 
 // WMSPanel stream-object tabs (canonical schemas pinned from the live dump):
@@ -543,7 +543,10 @@ const fmtUptime = (ts) => {
 
 export function WmsStreamsTab({ serverId, server }) {
   const tg = useStreamTags(serverId, 'streams');
-  const endpoints = server?.playbackEndpoints || [];
+  // iter9 m2 - resolved from WMSPanel (hosts + real RTMP port) rather than
+  // read off the panel record, which nothing ever populated.
+  const pb = usePlaybackEndpoints(serverId);
+  const endpoints = pb.endpoints;
   const [watch, setWatch] = useState(null);   // { app, stream }
   const confirm = useConfirm();
   const { can } = useAuth();
@@ -615,8 +618,11 @@ export function WmsStreamsTab({ serverId, server }) {
         </span>
       </div>
       {error && <div className="error-box">{error}</div>}
-      {endpoints.length === 0 && (
+      {!pb.loading && endpoints.length === 0 && (
         <div className="hint" style={{ marginBottom: 8 }}>{t('play.setupHint')}</div>
+      )}
+      {pb.source === 'panel' && (
+        <div className="hint" style={{ marginBottom: 8 }}>{t('play.derivedFromRecord')}</div>
       )}
       <TagFilterBar st={tg} />
       {Object.entries(byApp).sort(([a], [b]) => a.localeCompare(b)).map(([app, streams]) => (

@@ -1,5 +1,45 @@
 # Changelog
 
+## iter9 — playback links and fleet ordering
+### v0.8.5 (m2) — playback links the panel works out for itself
+- The Streams tab offered no links on an auto-synced fleet, because it read
+  addresses off `playbackEndpoints` and nothing ever filled that in — `host`
+  was set on sync, endpoints never were. On 13 synced servers the watch button
+  simply never rendered
+- Addresses are now resolved from data instead of typed in: hostnames come from
+  the WMSPanel server record (operator-declared `custom_ips` first, detected
+  `ip[]` after, IPv4 before IPv6), and the RTMP port from the server's real
+  listening interfaces (`GET /server/{sid}/rtmp/interface`)
+- The one number nothing reports is the HTTP port serving HLS/DASH/SLDP/
+  Icecast/WHEP — it lives in nimble.conf. It is a per-server field, and when it
+  is left blank the playback dialog says the port is Nimble's default rather
+  than presenting 8081 as fact. Same for an RTMP port that had to be defaulted
+- Hand-entered endpoints still win outright and cost no API call
+- Full protocol set, matching what WMSPanel offers next to a stream: HLS,
+  MPEG-DASH, SLDP, WebRTC WHEP, Icecast, RTMP — plus a copyable embed snippet.
+  RTSP is deliberately absent: Softvelum's own examples use a port that depends
+  on instance settings and no endpoint reports it, so it could only be guessed
+- The native-plane Streams tab had no playback UI at all; it now has the same
+  one, degrading to the panel's own server record when WMSPanel is unavailable
+- Quota-aware: 2 upstream calls per server, cached 10 minutes, `?fresh=1` to
+  re-read. A failure of either call degrades that half only
+- New `npm run test:playback`: 18 backend checks, most of them asserting that a
+  defaulted value is reported as defaulted. Frontend URL audit grew by 13
+
+### v0.8.4 (m1) — server reordering actually reorders
+- The move up/down buttons on the Servers page threw `move is not defined` on
+  every click: v0.7.8 shipped the buttons, the i18n keys, the CSS and the
+  `PUT /servers/order` endpoint, but not the handler
+- Reordering is optimistic so the row follows the cursor, and reloads from the
+  server if the write fails rather than showing an order that was never stored
+- `audit:pages` now clicks every enabled button on every page and fails on any
+  `is not defined` / `is not a function`. Rendering a page never exercised its
+  handlers, which is why this shipped. Verified against the bug: with the
+  handler removed the gate reports `4 unbound handler(s)` and exits 1
+- The smoke fixture returned a single server, which left both reorder buttons
+  disabled and invisible to that gate; it returns two now
+
+
 ### v0.8.3 (m4) — guarded scenario editing
 - The Edit tab is now a guarded editor: decoder and encoder application/stream
   and existing filter parameters are editable — the two areas Softvelum

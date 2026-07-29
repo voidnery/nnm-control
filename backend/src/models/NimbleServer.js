@@ -29,6 +29,12 @@ const serverSchema = new mongoose.Schema({
     }, { _id: false })],
     default: [],
   },
+  // iter9 m2 — HTTP port Nimble serves its HTTP-based playback protocols on
+  // (HLS, MPEG-DASH, SLDP, Icecast, WebRTC WHEP). It lives in nimble.conf and
+  // is not exposed by any WMSPanel endpoint we have, so it cannot be derived
+  // like the RTMP port can. 0 = not set by the operator, in which case the
+  // resolver falls back to Nimble's documented default and says so.
+  httpPort: { type: Number, default: 0 },
   // Optional file-access agent. Absent for servers where the operator has not
   // installed it; the panel works fully without it.
   agent: {

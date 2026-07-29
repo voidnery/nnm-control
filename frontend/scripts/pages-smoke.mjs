@@ -50,6 +50,48 @@ window.__EDITOR = async () => {
   return out;
 };
 
+// Rendering a page proves the render path only. A handler that references an
+// identifier which was never declared (onClick={() => move(...)} with no move)
+// is invisible to esbuild and to a render smoke — it only fails on click. So
+// every button on every page gets clicked, and any ReferenceError-class fault
+// is reported. Handlers are harmless here: fetch is mocked and nothing leaves
+// the jsdom sandbox.
+window.__CLICKS = async (name, path) => {
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const Comp = PAGES[name];
+  const root = createRoot(host);
+  const faults = [];
+  const onErr = (ev) => {
+    const m = String((ev && ev.error && ev.error.message) || (ev && ev.message) || ev);
+    if (/is not defined|is not a function/.test(m)) faults.push(m);
+  };
+  window.addEventListener('error', onErr);
+  try {
+    root.render(React.createElement(ThemeProvider,null,
+      React.createElement(ToastProvider,null,
+        React.createElement(AuthProvider,null,
+          React.createElement(I18nProvider,null,
+            React.createElement(ConfirmProvider,null,
+              React.createElement(MemoryRouter,{ initialEntries:[path] },
+                React.createElement(Routes,null,
+                  React.createElement(Route,{ path: path.includes('S1') ? '/servers/:id' : path, element: React.createElement(Comp) })))))))));
+    await new Promise(r=>setTimeout(r,400));
+    const btns = Array.from(host.querySelectorAll('button')).filter(b => !b.disabled);
+    for (const b of btns) {
+      try { b.dispatchEvent(new window.MouseEvent('click',{bubbles:true})); }
+      catch (e) { onErr(e); }
+      await new Promise(r=>setTimeout(r,5));
+    }
+    return { ok:true, clicked: btns.length, faults };
+  } catch (e) {
+    return { ok:false, clicked:0, faults:[String(e && e.message || e)] };
+  } finally {
+    window.removeEventListener('error', onErr);
+    try { root.unmount(); } catch {}
+    host.remove();
+  }
+};
+
 window.__PAGE = async (name, path) => {
   const host = document.createElement('div'); document.body.appendChild(host);
   const Comp = PAGES[name];
@@ -84,10 +126,20 @@ window.console.error = (...a) => errors.push(a.map(String).join(' '));
 window.fetch = (u) => {
   const s = String(u);
   let body = { status:'Ok' };
+  // iter9 m2 - resolved playback endpoints; without this the Streams tabs
+  // render with no addresses and the watch buttons never appear.
+  if (/\/servers\/[^/]+\/playback/.test(s)) return Promise.resolve({ ok:true, status:200,
+    json:()=>Promise.resolve({ endpoints:[{ label:'', host:'edge1.example.com', httpPort:8081, rtmpPort:1935, ssl:false,
+      origin:'wmspanel', httpPortOrigin:'default', rtmpPortOrigin:'api' }], source:'wmspanel', apiCalls:2, notes:['httpPortAssumed'] }),
+    text:()=>Promise.resolve('{}') });
   if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'] };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
   else if (s.includes('/stream-tags/')) body = { map:{} };
-  else if (s.endsWith('/servers')) body = [{ id:'S1', name:'Srv', host:'h', port:8082, wmspanelServerId:'w1', tags:[], online:true }];
+  // Two rows on purpose: with a single server both reorder buttons render
+  // disabled and the handler-binding gate would never exercise them.
+  else if (s.endsWith('/servers')) body = [
+    { id:'S1', name:'Srv', host:'h', port:8082, wmspanelServerId:'w1', tags:[], online:true, order:0 },
+    { id:'S2', name:'Srv2', host:'h2', port:8082, wmspanelServerId:'w2', tags:[], online:true, order:1 }];
   else if (s.includes('/servers/S1')) body = { id:'S1', name:'Srv', host:'h', port:8082, wmspanelServerId:'w1', tags:[] };
   else if (s.includes('/users')) body = [{ id:'U1', username:'admin', role:'superadmin', active:true, createdAt:new Date().toISOString() }];
   else if (s.includes('/roles')) body = [];
@@ -128,6 +180,18 @@ console.log('\nEDITOR SURFACES (open a function for editing):');
 if (ed.error) { bad++; console.log('  ✗ ' + ed.error); }
 else if (!ed.opened) { bad++; console.log(`  ✗ builder did not render (${ed.len} chars)`); }
 else console.log(`  ✓ function builder + step editor render (${ed.len} chars)`);
+
+console.log('\nHANDLER BINDING (every button on every page is clicked):');
+let clicks = 0;
+for (const [name, path] of PAGES) {
+  const r = await window.__CLICKS(name, path);
+  clicks += r.clicked;
+  if (r.faults.length) {
+    bad += r.faults.length;
+    console.log(`  ✗ ${name}: ${r.faults.length} unbound handler(s) — ${r.faults[0].slice(0,120)}`);
+  }
+}
+if (!bad) console.log(`  ✓ ${clicks} buttons clicked, every handler bound`);
 
 const real = errors.filter(e => /is not defined|Cannot read|is not a function|undefined/.test(e));
 if (real.length) {
