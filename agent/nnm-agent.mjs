@@ -7,8 +7,9 @@
 // It can do exactly three things, inside two fixed directories:
 //   * read/write playlist & config files under CONF_DIR
 //   * list/upload/delete media under MEDIA_DIR
+//   * read (never write) log files under LOG_DIR          [iter10 m1]
 //   * report its own health
-// There is no shell, no arbitrary path, no directory listing outside those two.
+// There is no shell, no arbitrary path, no directory listing outside those.
 import http from 'node:http';
 import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -21,6 +22,16 @@ const BIND = process.env.NNM_AGENT_BIND || '0.0.0.0';
 const TOKEN = process.env.NNM_AGENT_TOKEN || '';
 const CONF_DIR = path.resolve(process.env.NNM_AGENT_CONF_DIR || '/srv/nimble/conf');
 const MEDIA_DIR = path.resolve(process.env.NNM_AGENT_MEDIA_DIR || '/srv/nimble/media/gallery');
+// iter10 m1 — logs are read-only and live in their own root. Nimble's default
+// on Linux is /var/log/nimble. This directory is never written to, and it is
+// mounted read-only in the systemd unit, so a bug here cannot damage a log.
+const LOG_DIR = path.resolve(process.env.NNM_AGENT_LOG_DIR || '/var/log/nimble');
+const LOG_ENABLED = String(process.env.NNM_AGENT_LOGS || '1') !== '0';
+// A single read is capped so one poll can never pull a whole rotated file into
+// memory. At the measured ~13 KB/s per server a 1 MB window covers ~80s of
+// output, so a 5s poll has ~16x headroom for bursts.
+const MAX_LOG_CHUNK = Number(process.env.NNM_AGENT_LOG_CHUNK_KB || 1024) * 1024;
+const LOG_EXT = (process.env.NNM_AGENT_LOG_EXT || 'log,txt').split(',').map(s => s.trim().toLowerCase());
 const MAX_UPLOAD = Number(process.env.NNM_AGENT_MAX_UPLOAD_MB || 2048) * 1024 * 1024;
 const MAX_CONFIG = 8 * 1024 * 1024;
 const ALLOWED_MEDIA = (process.env.NNM_AGENT_MEDIA_EXT ||
@@ -84,7 +95,13 @@ const routes = {
       try { await fs.access(dir); disk[`${k}Exists`] = true; }
       catch { disk[`${k}Exists`] = false; }
     }
-    return { ok: true, agent: 'nnm-agent', version: 1, maxUploadBytes: MAX_UPLOAD, ...disk };
+    if (LOG_ENABLED) {
+      disk.logDir = LOG_DIR;
+      try { await fs.access(LOG_DIR); disk.logExists = true; }
+      catch { disk.logExists = false; }
+    }
+    return { ok: true, agent: 'nnm-agent', version: 2, logs: LOG_ENABLED,
+             maxLogChunk: MAX_LOG_CHUNK, maxUploadBytes: MAX_UPLOAD, ...disk };
   },
 
   async 'GET /config'(req, url) {
@@ -107,6 +124,83 @@ const routes = {
     await writeAtomic(full, body);
     const stat = await fs.stat(full);
     return { name: path.basename(full), size: stat.size, mtime: stat.mtime };
+  },
+
+  // ---- iter10 m1: logs (read-only) ------------------------------------
+  //
+  // Nimble writes ~13 KB/s at debug level and rotates by size, so the panel
+  // cannot poll whole files. These two routes give it exactly what a tailer
+  // needs and nothing else: what files exist with their identity, and a byte
+  // range from one of them.
+
+  async 'GET /logs'() {
+    if (!LOG_ENABLED) throw Object.assign(new Error('logs are disabled on this agent'), { code: 404 });
+    let names;
+    try { names = await fs.readdir(LOG_DIR); }
+    catch (e) { if (e.code === 'ENOENT') return { dir: LOG_DIR, exists: false, files: [] }; throw e; }
+    const files = [];
+    for (const n of names) {
+      if (!LOG_EXT.includes(path.extname(n).slice(1).toLowerCase())) continue;
+      try {
+        const st = await fs.stat(path.join(LOG_DIR, n));
+        if (!st.isFile()) continue;
+        // inode + birth/change time is how the collector detects rotation:
+        // a same-named file with a different inode is a different file.
+        files.push({ name: n, size: st.size, mtime: st.mtime, ino: String(st.ino), dev: String(st.dev) });
+      } catch { /* vanished between readdir and stat — rotation in flight */ }
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    return { dir: LOG_DIR, exists: true, files };
+  },
+
+  async 'GET /logs/read'(req, url) {
+    if (!LOG_ENABLED) throw Object.assign(new Error('logs are disabled on this agent'), { code: 404 });
+    const full = safeJoin(LOG_DIR, url.searchParams.get('name'));
+    if (!LOG_EXT.includes(path.extname(full).slice(1).toLowerCase())) {
+      throw Object.assign(new Error('not a log file'), { code: 400 });
+    }
+    const offset = Math.max(0, Number(url.searchParams.get('offset') || 0) | 0);
+    const want = Math.min(MAX_LOG_CHUNK, Math.max(1, Number(url.searchParams.get('limit') || MAX_LOG_CHUNK) | 0));
+
+    const st = await fs.stat(full);
+    const ino = String(st.ino);
+
+    // Truncation: the file is now shorter than where we left off. Either it
+    // was rotated in place (copytruncate) or replaced. Say so rather than
+    // returning nonsense from the middle of a new file.
+    if (offset > st.size) {
+      return { name: path.basename(full), ino, size: st.size, offset, nextOffset: 0,
+               truncated: true, eof: true, data: '' };
+    }
+
+    const fh = await fs.open(full, 'r');
+    try {
+      const len = Math.min(want, st.size - offset);
+      const buf = Buffer.alloc(len);
+      const { bytesRead } = await fh.read(buf, 0, len, offset);
+      let slice = buf.subarray(0, bytesRead);
+      // Never hand back a partial line: the panel frames multi-line records
+      // and a split in the middle of one would corrupt the framing. Trim to
+      // the last newline and let the next poll resume from there.
+      const lastNl = slice.lastIndexOf(0x0a);
+      let consumed = bytesRead;
+      if (lastNl === -1) {
+        // A single line longer than the whole window. Refusing forever would
+        // wedge the cursor, so the line is handed over as-is and marked.
+        if (bytesRead >= want) return { name: path.basename(full), ino, size: st.size, offset,
+          nextOffset: offset + bytesRead, eof: false, partialLine: true, data: slice.toString('utf8') };
+        consumed = 0; slice = slice.subarray(0, 0);
+      } else {
+        consumed = lastNl + 1;
+        slice = slice.subarray(0, consumed);
+      }
+      return {
+        name: path.basename(full), ino, size: st.size, offset,
+        nextOffset: offset + consumed,
+        eof: offset + consumed >= st.size,
+        data: slice.toString('utf8'),
+      };
+    } finally { await fh.close(); }
   },
 
   async 'GET /media'() {
@@ -178,4 +272,5 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, BIND, () => {
   console.log(`[nnm-agent] listening on ${BIND}:${PORT}`);
   console.log(`[nnm-agent] conf=${CONF_DIR} media=${MEDIA_DIR} maxUpload=${(MAX_UPLOAD / 1e6).toFixed(0)}MB`);
+  console.log(`[nnm-agent] logs=${LOG_ENABLED ? `${LOG_DIR} (read-only, chunk ${(MAX_LOG_CHUNK / 1024).toFixed(0)}KB)` : 'disabled'}`);
 });

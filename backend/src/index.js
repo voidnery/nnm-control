@@ -14,12 +14,14 @@ import { streamTagsRouter } from './routes/streamTags.js';
 import { copyStreamsRouter } from './routes/copyStreams.js';
 import { categoriesRouter } from './routes/categories.js';
 import { statsRouter } from './routes/stats.js';
+import { logsRouter } from './routes/logs.js';
 import { agentRouter } from './routes/agentProxy.js';
 import { transcoderGraphRouter } from './routes/transcoderGraph.js';
 import { transcoderTemplateRouter } from './routes/transcoderTemplate.js';
 import { transcoderFleetRouter } from './routes/transcoderFleet.js';
 import { transcoderEditRouter } from './routes/transcoderEdit.js';
 import { startStatsCollector } from './services/statsCollector.js';
+import { startLogCollector } from './services/logCollector.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
 import { auditRouter } from './routes/audit.js';
@@ -50,6 +52,7 @@ app.use('/api/stream-tags', streamTagsRouter);
 app.use('/api/wmspanel', copyStreamsRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/logs', logsRouter);
 app.use('/api/servers', agentRouter);
 app.use('/api/wmspanel', transcoderGraphRouter);
 app.use('/api/wmspanel', transcoderTemplateRouter);
@@ -66,6 +69,7 @@ const start = async () => {
   await connectDb();
   startPeriodicSync();
   await startStatsCollector();
+  await startLogCollector();
   if (!config.setupToken) {
     console.warn('[setup] SETUP_TOKEN is empty — first-run setup via web UI is disabled until it is set.');
   }

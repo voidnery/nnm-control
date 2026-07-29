@@ -42,6 +42,10 @@ const serverSchema = new mongoose.Schema({
     baseUrl: { type: String, default: '' },                                  // http://host:8090
     token: { type: String, default: '', set: encryptField, get: decryptField },
   },
+  // iter10 m1 — Nimble stamps log lines with local time and no zone marker.
+  // Minutes east of UTC for this box, so a fleet spanning zones stays
+  // comparable. 0 means "treat the stamps as UTC".
+  logTzOffsetMinutes: { type: Number, default: 0 },
   // Operator-defined position in the servers list.
   order: { type: Number, default: 0 },
   wmspanelServerId: { type: String, default: '' },

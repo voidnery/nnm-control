@@ -35,4 +35,8 @@ export const agent = {
   mediaList:    (s) => call(s, 'GET', 'media'),
   mediaDelete:  (s, name) => call(s, 'DELETE', 'media', { query: { name } }),
   mediaPut:     (s, name, stream) => call(s, 'PUT', 'media', { query: { name }, body: stream, raw: true }),
+  // iter10 m1 — read-only log access. logsRead returns a byte range that is
+  // always trimmed to a whole number of lines by the agent.
+  logsList:     (s) => call(s, 'GET', 'logs'),
+  logsRead:     (s, name, offset, limit) => call(s, 'GET', 'logs/read', { query: { name, offset, limit } }),
 };

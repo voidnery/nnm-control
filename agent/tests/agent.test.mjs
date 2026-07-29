@@ -9,11 +9,13 @@ const TOKEN = 'test-token-that-is-long-enough-123456';
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nnm-agent-'));
 const CONF = path.join(root, 'conf');
 const MEDIA = path.join(root, 'media');
+const LOGS = path.join(root, 'logs');
 const PORT = 18099;
 
 const proc = spawn(process.execPath, [new URL('../nnm-agent.mjs', import.meta.url).pathname], {
   env: { ...process.env, NNM_AGENT_PORT: String(PORT), NNM_AGENT_TOKEN: TOKEN,
-         NNM_AGENT_CONF_DIR: CONF, NNM_AGENT_MEDIA_DIR: MEDIA, NNM_AGENT_MAX_UPLOAD_MB: '1' },
+         NNM_AGENT_CONF_DIR: CONF, NNM_AGENT_MEDIA_DIR: MEDIA, NNM_AGENT_MAX_UPLOAD_MB: '1',
+         NNM_AGENT_LOG_DIR: LOGS, NNM_AGENT_LOG_CHUNK_KB: '1' },
   stdio: 'ignore',
 });
 const base = `http://127.0.0.1:${PORT}`;
@@ -95,6 +97,61 @@ await check('listing shows uploaded files only', async () => {
 await check('delete removes the file', async () => {
   await call('DELETE', '/media?name=clip.mp4');
   return !(await fs.readdir(MEDIA)).includes('clip.mp4');
+});
+
+// iter10 m1 — log access. Real lines from srv-mediaserver2, because the
+// framing this feeds depends on the exact shape of the file.
+console.log('\nLOGS (read-only):');
+const LINE1 = '[2026-07-29 19:14:49 P433506-T433515] [srtpull0] E: connection closed for [192.168.200.23:14331] socket=605423079 errno=2002\n';
+const LINE2 = "[2026-07-29 19:14:49 P433506-T433516] [srtlisten0] D: add HLS chunk app='cct_feeds' stream='feed1' duration=6.0\n";
+await fs.mkdir(LOGS, { recursive: true });
+await fs.writeFile(path.join(LOGS, 'nimble.log'), LINE1 + LINE2);
+await fs.writeFile(path.join(LOGS, 'secrets.key'), 'PRIVATE KEY MATERIAL');
+
+await check('health advertises the log root', async () => {
+  const d = await (await call('GET', '/health')).json();
+  return d.logs === true && d.logDir === LOGS && d.logExists === true && d.version === 2;
+});
+await check('listing shows log files with inode and size', async () => {
+  const d = await (await call('GET', '/logs')).json();
+  const f = d.files.find(x => x.name === 'nimble.log');
+  return Boolean(f) && f.size === Buffer.byteLength(LINE1 + LINE2) && typeof f.ino === 'string' && f.ino.length > 0;
+});
+await check('non-log extensions are not listed', async () =>
+  !(await (await call('GET', '/logs')).json()).files.some(f => f.name === 'secrets.key'));
+await check('a non-log file cannot be read even by exact name', async () =>
+  (await call('GET', '/logs/read?name=secrets.key')).status >= 400);
+await check('path traversal out of the log root is refused', async () =>
+  (await call('GET', '/logs/read?name=../conf/playlist.json')).status >= 400);
+await check('logs require the token like everything else', async () =>
+  (await call('GET', '/logs', { token: '' })).status === 401);
+await check('reading from zero returns the whole file and reports eof', async () => {
+  const d = await (await call('GET', '/logs/read?name=nimble.log&offset=0')).json();
+  return d.data === LINE1 + LINE2 && d.eof === true && d.nextOffset === Buffer.byteLength(LINE1 + LINE2);
+});
+await check('reading resumes exactly at the cursor', async () => {
+  const d = await (await call('GET', `/logs/read?name=nimble.log&offset=${Buffer.byteLength(LINE1)}`)).json();
+  return d.data === LINE2;
+});
+await check('a read is trimmed to whole lines, never split mid-record', async () => {
+  const cut = Buffer.byteLength(LINE1) + 20;   // lands inside line 2
+  const d = await (await call('GET', `/logs/read?name=nimble.log&offset=0&limit=${cut}`)).json();
+  return d.data === LINE1 && d.data.endsWith('\n') && d.nextOffset === Buffer.byteLength(LINE1);
+});
+await check('an offset past the end reports truncation, not junk', async () => {
+  const d = await (await call('GET', '/logs/read?name=nimble.log&offset=999999')).json();
+  return d.truncated === true && d.nextOffset === 0 && d.data === '';
+});
+await check('appended lines are picked up from the old cursor', async () => {
+  const at = Buffer.byteLength(LINE1 + LINE2);
+  await fs.appendFile(path.join(LOGS, 'nimble.log'), LINE1);
+  const d = await (await call('GET', `/logs/read?name=nimble.log&offset=${at}`)).json();
+  return d.data === LINE1 && d.eof === true;
+});
+await check('the agent will not write to the log directory', async () => {
+  const r = await call('PUT', '/logs/read?name=nimble.log', { body: 'tampered' });
+  const still = await fs.readFile(path.join(LOGS, 'nimble.log'), 'utf8');
+  return r.status === 404 && !still.includes('tampered');
 });
 
 console.log('\nSURFACE:');

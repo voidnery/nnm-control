@@ -1,5 +1,37 @@
 # Changelog
 
+## iter10 — Nimble log system
+### v0.9.0 (m1) — transport: agent reads logs, panel tails them
+- Agent gains a third root, read-only: `GET /logs` and `GET /logs/read`. No
+  write route exists, only `.log`/`.txt` are served, and the systemd unit adds
+  `ReadOnlyPaths=/var/log/nimble` so a bug in the agent still cannot damage a
+  log. Agent protocol version 2
+- A read is always trimmed to a whole number of lines, because Nimble writes
+  multi-line records and a range split mid-line would corrupt framing
+- `ino` identifies the file generation; an offset past the end reports
+  `truncated` instead of returning data from the middle of a fresh file
+- Panel-side collector with a per-server, per-file cursor: rotation detected by
+  inode change, in-place truncation by size below the cursor, and the bytes a
+  rotation outran are counted in `bytesMissed` rather than quietly skipped
+- Framing built from a real 184,481-line dump, not from documentation
+  (Softvelum publishes no format spec). Verified against the whole file:
+  163,628 records, 1,066 HTTP dumps totalling 20,853 lines absorbed into their
+  parent record, zero orphans, and chunked reads at 64 KB and 1 MB produce
+  results identical to parsing the file in one piece
+- Records are ordered by byte offset, never by timestamp: the stamp has
+  one-second resolution and the server emits 98 lines/s
+- Subsystem tags are normalised (`srtpull0` → `srtpull`), collapsing 15 raw
+  tags to 13 real subsystems
+- Storage is a **capped** collection (`NNM_LOG_CAP_MB`, 512 MB default). The
+  fleet produces ~14.3 GB/day, so m1 takes a hard disk bound rather than a
+  retention job that could fall behind. Tiering is m2
+- Ingestion is **off by default** and starts at the end of the file on first
+  contact — m1 is a tail, not a historical import
+- New `npm run test:logs`: 21 checks against verbatim lines from the dump.
+  Agent suite grew by 12, covering traversal, extension confinement, line
+  trimming, truncation reporting and the absence of any write path
+
+
 ## iter9 — playback links and fleet ordering
 ### v0.8.5 (m2) — playback links the panel works out for itself
 - The Streams tab offered no links on an auto-synced fleet, because it read

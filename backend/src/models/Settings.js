@@ -28,6 +28,17 @@ const settingsSchema = new mongoose.Schema({
       server: { type: Boolean, default: true },      // server-level counters
     },
   },
+  // iter10 m1 — Nimble log ingestion. Off by default: it needs the agent
+  // installed, and on a fleet at debug level it moves ~14 GB/day, which is
+  // not something to switch itself on after an upgrade.
+  logs: {
+    enabled: { type: Boolean, default: false },
+    intervalSec: { type: Number, default: 5 },
+    // Which files in the agent's log directory to follow. Rotated copies
+    // (nimble.log.1 ...) are deliberately absent — the agent only serves
+    // .log/.txt, so the panel follows the live file and reports any gap.
+    files: { type: [String], default: ['nimble.log'] },
+  },
 }, { timestamps: true });
 
 settingsSchema.statics.load = async function () {
