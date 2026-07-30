@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import SearchInput from '../components/SearchInput.jsx';
+import AgentInstallModal from '../components/AgentInstallModal.jsx';
 
 // Server agents used to live in a modal behind a button on the Playlists page,
 // because deploying a playlist was the first thing an agent was needed for.
@@ -20,6 +21,7 @@ export default function ServerAgentsPage() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
+  const [install, setInstall] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -93,6 +95,10 @@ export default function ServerAgentsPage() {
                 <input type="checkbox" checked={Boolean(r.enabled)} onChange={e => set(s.id, { enabled: e.target.checked })} />
                 {t('agent.enabled')}
               </label>
+              {/* iter11 m1 - installing is a different act from configuring an
+                  already-installed agent, so it is its own action rather than
+                  a mode of the form below. */}
+              <button onClick={() => setInstall(s)}>{r.enabled ? t('inst.reinstall') : t('inst.install')}</button>
             </div>
             {r.enabled && (
               <div className="grid" style={{ gridTemplateColumns: '2fr 2fr auto', gap: 8, alignItems: 'end', marginTop: 8 }}>
@@ -132,6 +138,9 @@ export default function ServerAgentsPage() {
         );
       })}
       {shown.length === 0 && <div className="panel hint">{t('agent.noServers')}</div>}
+      {install && (
+        <AgentInstallModal server={install} onClose={() => setInstall(null)} onEnrolled={load} />
+      )}
     </div>
   );
 }

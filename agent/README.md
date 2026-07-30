@@ -40,6 +40,16 @@ caused rather than pretending the tail is continuous.
 
 ## Install
 
+The panel installs this for you: **Agents → Install agent** issues a one-time
+ticket and gives you a single command to run on the server. The agent's token is
+generated on that machine and reported back; the panel never sends a credential
+to a server and never holds an SSH key. Read the generated script first — the
+dialog links to it — since you are being asked to run it as root.
+
+The manual procedure below remains valid and is what the generated script does.
+
+### Manual
+
     install -m 0755 nnm-agent.mjs /usr/local/bin/nnm-agent
     install -d -o nimble -g nimble /srv/nimble/conf /srv/nimble/media/gallery
 

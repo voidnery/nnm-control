@@ -1,0 +1,17 @@
+# The api image builds from the repository root (it needs agent/nnm-agent.mjs
+# to serve to servers being enrolled), so the context is no longer just the
+# backend directory. Without this, every build would ship node_modules, the
+# git history and the frontend build output into the layer cache.
+.git
+.github
+node_modules
+**/node_modules
+frontend/dist
+frontend/node_modules
+backend/node_modules
+docs
+packaging
+*.tar.gz
+*.log
+.env
+.env.*

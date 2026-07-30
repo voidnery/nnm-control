@@ -1,5 +1,40 @@
 # Changelog
 
+## iter11 — agent installation
+### v0.10.0 (m1) — install by one-time ticket
+- **Finding first:** `agentClient` only ever calls panel → agent. An install
+  link fixes installation behind NAT and nothing else — once installed, the
+  panel still has to open a connection to the agent. Real NAT support needs the
+  agent to dial out, which is a transport change, not an installer. Scoped out
+  and written up in `docs/iter11-agent-install.md`
+- **Agents → Install agent** issues a ticket bound to one server: 32 random
+  bytes, single-use, 30-minute expiry, stored only as a SHA-256
+- The operator runs one command. The installer is plain POSIX sh, generated per
+  ticket, and linked in the dialog so it can be read before it is run as root
+- **The agent's token is generated on the server**, written to a mode-600 env
+  file, and reported back. The panel never sends a credential to a machine and
+  never holds an SSH key, so the two unauthenticated routes have nothing to
+  leak
+- The installer refuses without root / curl / Node 18+, never touches Nimble,
+  keeps an existing token unless `NNM_FORCE=1`, installs a unit with
+  `ProtectSystem=strict`, `NoNewPrivileges` and read-only logs, and verifies the
+  agent on loopback before reporting success
+- **Two directions reported separately:** enrollment proves the server reached
+  the panel; `POST /servers/:id/agent/verify` proves the panel reached the
+  agent. When the second fails on a private address the dialog explains that no
+  installer can fix it
+- Warns when the panel is on plain HTTP — the agent's token crosses the wire
+  during enrollment — and when the panel's own address is private
+- **Packaging defect fixed:** the api image copied only `backend/src`, so
+  `agent/nnm-agent.mjs` was absent and the install route would have returned
+  500 in production while working in the repo. The api build context is the
+  repository root now, with a root `.dockerignore`
+- New `npm run test:enroll`: 18 checks covering ticket properties, RFC1918
+  classification (including the 172.16/12 boundary), POSIX validity, absence of
+  any panel secret in the script, token never passed through argv, and shell
+  metacharacters in operator input failing to break out of the quoting
+
+
 ## iter10 — Nimble log system
 ### v0.9.1 — version display and a home for server agents
 - **The panel kept reporting v0.8.3 after two releases had shipped.** The
