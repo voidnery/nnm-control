@@ -7,7 +7,7 @@ import { useConfirm } from '../confirm.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import * as E from '../lib/playlistEngine.js';
-import { AgentServersModal, DeployPlaylistModal } from '../components/AgentPanel.jsx';
+import { DeployPlaylistModal } from '../components/AgentPanel.jsx';
 
 // ---- small field helpers ----
 function Field({ label, children }) {
@@ -278,7 +278,6 @@ export default function PlaylistsPage() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // playlist object or {} for new
   const [servers, setServers] = useState([]);
-  const [agentOpen, setAgentOpen] = useState(false);
   const [deploying, setDeploying] = useState(null);
 
   const load = () => api('/playlists').then(setItems).catch(e => setError(e.message));
@@ -302,9 +301,6 @@ export default function PlaylistsPage() {
       <div className="row" style={{ marginBottom: 12 }}>
         {can('playlist.manage') && (
           <button className="primary" onClick={() => setEditing({})}>+ {t('pl.newTitle')}</button>
-        )}
-        {can('playlist.manage') && (
-          <button onClick={() => setAgentOpen(true)}>{t('agent.menu')}</button>
         )}
       </div>
 
@@ -336,7 +332,6 @@ export default function PlaylistsPage() {
       {editing && (
         <Builder initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
       )}
-      {agentOpen && <AgentServersModal servers={servers} onClose={() => setAgentOpen(false)} />}
       {deploying && <DeployPlaylistModal playlist={deploying} servers={servers} onClose={() => setDeploying(null)} />}
     </div>
   );

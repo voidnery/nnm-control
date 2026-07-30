@@ -4,7 +4,10 @@ import { useAuth } from './auth.jsx';
 import { useTheme } from './theme.jsx';
 import { useI18n } from './i18n.jsx';
 
-export const APP_VERSION = '0.8.3'; // keep in sync with package.json
+// Injected by Vite from package.json — never edit by hand. The fallback only
+// applies to the audit harnesses, which bundle these files with esbuild rather
+// than Vite and so have no define step.
+export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 import { api } from './api.js';
 import SetupPage from './pages/SetupPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
@@ -19,6 +22,7 @@ import FunctionsPage from './pages/FunctionsPage.jsx';
 import AuditPage from './pages/AuditPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import PlaylistsPage from './pages/PlaylistsPage.jsx';
+import ServerAgentsPage from './pages/ServerAgentsPage.jsx';
 import CategoriesPage from './pages/CategoriesPage.jsx';
 import TranscodersPage from './pages/TranscodersPage.jsx';
 import DistributionPage from './pages/DistributionPage.jsx';
@@ -39,6 +43,7 @@ function Layout({ children }) {
           {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/transcoders">{t('nav.transcoders')}</NavLink>}
           {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/distribution">{t('nav.distribution')}</NavLink>}
           {can('playlist.view') && <NavLink to="/playlists">{t('nav.playlists')}</NavLink>}
+          {can('servers.manage') && <NavLink to="/agents">{t('nav.agents')}</NavLink>}
           {can('category.view') && <NavLink to="/categories">{t('nav.categories')}</NavLink>}
           {can('users.manage') && <NavLink to="/users">{t('nav.users')}</NavLink>}
           {can('roles.manage') && <NavLink to="/roles">{t('nav.roles')}</NavLink>}
@@ -93,6 +98,7 @@ export default function App() {
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/playlists" element={<PlaylistsPage />} />
+        <Route path="/agents" element={<ServerAgentsPage />} />
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/transcoders" element={<TranscodersPage />} />
         <Route path="/distribution" element={<DistributionPage />} />

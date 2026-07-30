@@ -1,6 +1,30 @@
 # Changelog
 
 ## iter10 — Nimble log system
+### v0.9.1 — version display and a home for server agents
+- **The panel kept reporting v0.8.3 after two releases had shipped.** The
+  number in the footer was a second copy of the one in package.json, kept in
+  step by a comment reading "keep in sync with package.json". It wasn't. The
+  backend never had this problem — it reads its own package.json — so only the
+  UI drifted, which is why the features arrived and the number did not
+- Fixed at the class level rather than the value: Vite now injects the version
+  from package.json at build time, and there is exactly one source of truth
+- New `npm run audit:version` refuses a hardcoded literal on the APP_VERSION
+  line, checks both packages agree, and confirms the built bundle carries the
+  current number with no placeholder left over. Verified against the real
+  defect: restoring the old hardcoded line makes it exit 1
+- **Server agents moved out of Playlists into their own section.** An agent is
+  server infrastructure — a per-server token, config writes, media uploads,
+  and since m1 the log source the collector tails — so living behind a button
+  on the Playlists page was backwards. Deploying a playlist through an agent
+  stayed on the Playlists page, since that genuinely is a playlist action
+- The new page also reports whether an agent can serve logs at all, so an
+  agent installed before m1, or one started with `NNM_AGENT_LOGS=0`, is
+  visible as such instead of leaving the log collector mysteriously idle
+- **Permission change:** the section is gated on `servers.manage` rather than
+  `playlist.manage`. A custom role that managed agents purely through the
+  playlist permission needs `servers.manage` added
+
 ### v0.9.0 (m1) — transport: agent reads logs, panel tails them
 - Agent gains a third root, read-only: `GET /logs` and `GET /logs/read`. No
   write route exists, only `.log`/`.txt` are served, and the systemd unit adds

@@ -11,7 +11,7 @@ const PAGES = [
   ['UsersPage','/users'], ['RolesPage','/roles'], ['AuditPage','/audit'],
   ['SettingsPage','/settings'], ['FunctionsPage','/functions'], ['TranscodersPage','/transcoders'],
   ['DistributionPage','/distribution'], ['PlaylistsPage','/playlists'], ['ZabbixPage','/zabbix'], ['CategoriesPage','/categories'],
-  ['ProfilePage','/profile'],
+  ['ProfilePage','/profile'], ['ServerAgentsPage','/agents'],
 ];
 
 const entry = `
@@ -132,6 +132,11 @@ window.fetch = (u) => {
     json:()=>Promise.resolve({ endpoints:[{ label:'', host:'edge1.example.com', httpPort:8081, rtmpPort:1935, ssl:false,
       origin:'wmspanel', httpPortOrigin:'default', rtmpPortOrigin:'api' }], source:'wmspanel', apiCalls:2, notes:['httpPortAssumed'] }),
     text:()=>Promise.resolve('{}') });
+  if (/\/servers\/[^/]+\/agent$/.test(s)) return Promise.resolve({ ok:true, status:200,
+    json:()=>Promise.resolve({ enabled:true, baseUrl:'http://10.0.0.5:8090', hasToken:true }), text:()=>Promise.resolve('{}') });
+  if (/\/servers\/[^/]+\/agent\/health$/.test(s)) return Promise.resolve({ ok:true, status:200,
+    json:()=>Promise.resolve({ ok:true, version:2, logs:true, confDir:'/srv/nimble/conf', mediaDir:'/srv/nimble/media/gallery',
+      logDir:'/var/log/nimble', logExists:true, confExists:true }), text:()=>Promise.resolve('{}') });
   if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'] };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
   else if (s.includes('/stream-tags/')) body = { map:{} };
