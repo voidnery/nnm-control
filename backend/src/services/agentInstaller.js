@@ -17,12 +17,15 @@ const sh = (s) => String(s).replace(/'/g, `'\\''`);
  * @param {object} o
  * @param {string} o.panelUrl   how the SERVER reaches the panel
  * @param {string} o.ticket     one-time enrollment ticket
- * @param {string} o.baseUrl    how the PANEL will reach the agent
  */
 export function installScript(o) {
   const {
-    panelUrl, ticket, baseUrl = '',
-    agentPort = 8090, bind = '0.0.0.0',
+    panelUrl, ticket,
+    // iter12 m5 — loopback by default. Nothing connects to the agent any
+    // more, so a listening socket on the network would be attack surface with
+    // no purpose. What remains is a local diagnostic surface: this installer
+    // uses it to check the agent came up, and so can an operator with a shell.
+    agentPort = 8090, bind = '127.0.0.1',
     logDir = '/var/log/nimble',
     confDir = '/srv/nimble/conf',
     mediaDir = '/srv/nimble/media/gallery',
@@ -38,7 +41,6 @@ set -eu
 
 PANEL='${sh(panelUrl)}'
 TICKET='${sh(ticket)}'
-BASE_URL='${sh(baseUrl)}'
 PORT='${sh(agentPort)}'
 BIND='${sh(bind)}'
 LOG_DIR='${sh(logDir)}'
@@ -90,6 +92,7 @@ NNM_AGENT_PORT=$PORT
 NNM_AGENT_CONF_DIR=$CONF_DIR
 NNM_AGENT_MEDIA_DIR=$MEDIA_DIR
 NNM_AGENT_LOG_DIR=$LOG_DIR
+NNM_AGENT_PANEL_URL=$PANEL
 EOF
   chmod 600 "$ENV_FILE"
   echo "==> wrote $ENV_FILE"
@@ -109,6 +112,10 @@ After=network.target
 [Service]
 User=$RUN_USER
 EnvironmentFile=$ENV_FILE
+# iter12 m2 - the agent keeps its own log cursor here, so a restart resumes
+# where it left off instead of at the end of the file. systemd creates it with
+# the right ownership and exports STATE_DIRECTORY.
+StateDirectory=nnm-agent
 ExecStart=$(command -v node) $BIN
 Restart=on-failure
 ReadWritePaths=$CONF_DIR $MEDIA_DIR
@@ -140,26 +147,50 @@ HEALTH=$(curl -4fsS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/he
 VERSION=$(echo "$HEALTH" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version||0)}catch{console.log(0)}})')
 
 # --- report back ------------------------------------------------------------
-if [ -z "$BASE_URL" ]; then
-  BASE_URL="http://$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT"
-fi
-echo "==> enrolling with the panel as $BASE_URL"
+# No address is sent. The panel does not need one: from here the agent calls
+# in, which is what makes this work behind NAT with no port forwarding.
+echo "==> enrolling with the panel"
 
 # The token goes through the environment, never through argv — arguments are
 # visible in the process list to every user on the box.
 BODY=$(TOKEN="$TOKEN" node -e '
-  const [t,b,h,v]=process.argv.slice(1);
-  process.stdout.write(JSON.stringify({ticket:t,agentToken:process.env.TOKEN,baseUrl:b,hostname:h,agentVersion:Number(v)}));
-' "$TICKET" "$BASE_URL" "$(hostname)" "$VERSION")
+  const [t,h,v]=process.argv.slice(1);
+  process.stdout.write(JSON.stringify({ticket:t,agentToken:process.env.TOKEN,hostname:h,agentVersion:Number(v)}));
+' "$TICKET" "$(hostname)" "$VERSION")
 
-curl -4fsS -X POST "$PANEL/api/agents/enroll" \\
-  -H 'Content-Type: application/json' --data-binary "$BODY" \\
+ENROLL=$(curl -4fsS -X POST "$PANEL/api/agents/enroll" \\
+  -H 'Content-Type: application/json' --data-binary "$BODY") \\
   || die "enrollment call failed — the agent is installed and running, but the panel did not accept it. Add it by hand in Agents, or issue a new ticket."
+
+# The panel replies with this server's id. Without it the agent has no way to
+# say who it is when it calls in, so it is written to the env file and the
+# service restarted to pick it up. From here on the agent connects OUT to the
+# panel and never needs an address of its own.
+SERVER_ID=$(echo "$ENROLL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).serverId||""))}catch{}})')
+[ -n "$SERVER_ID" ] || die "the panel accepted the agent but returned no server id"
+
+if grep -q '^NNM_AGENT_SERVER_ID=' "$ENV_FILE"; then
+  sed -i "s|^NNM_AGENT_SERVER_ID=.*|NNM_AGENT_SERVER_ID=$SERVER_ID|" "$ENV_FILE"
+else
+  echo "NNM_AGENT_SERVER_ID=$SERVER_ID" >> "$ENV_FILE"
+fi
+systemctl restart nnm-agent
+
+echo "==> waiting for the agent to reach the panel"
+i=0
+while [ $i -lt 20 ]; do
+  journalctl -u nnm-agent -n 20 --no-pager 2>/dev/null | grep -q 'panel=' && break
+  i=$((i+1)); sleep 0.5
+done
 
 echo
 echo "==> done. The agent is installed, enabled and enrolled."
 echo "    service : systemctl status nnm-agent"
 echo "    logs    : journalctl -u nnm-agent -f"
 echo "    token   : $ENV_FILE (root only, never leaves this machine except to the panel at enrollment)"
+echo
+echo "    This agent connects OUT to $PANEL. Nothing needs to reach it:"
+echo "    no port forward, no public address, no firewall hole."
+echo "    It listens on $BIND:$PORT for local diagnostics only." 
 `;
 }

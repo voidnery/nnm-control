@@ -19,9 +19,15 @@ services:
       - JWT_TTL=${JWT_TTL:-12h}
       - SETUP_TOKEN=${SETUP_TOKEN}
       - ZABBIX_TOKEN=${ZABBIX_TOKEN}
+      - MEDIA_SPOOL_DIR=/var/lib/nnm-control/media-spool
       - HOST_FS=/host
     volumes:
       - /:/host:ro
+      # iter12 m3 — media waiting for an agent to collect it. Its own volume on
+      # purpose: a 2 GB upload landing on the same filesystem as the database
+      # is how a panel takes its own Mongo down, and this is the one place an
+      # operator can look at, measure and cap.
+      - media_spool:/var/lib/nnm-control/media-spool
     depends_on:
       - mongo
 
@@ -37,3 +43,4 @@ services:
 
 volumes:
   mongo_data:
+  media_spool:

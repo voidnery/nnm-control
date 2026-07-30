@@ -1,5 +1,339 @@
 # Changelog
 
+## iter13 — functions: sources and execution variants
+### v0.16.0 — the original epic's remaining half
+- **2a: switching the sources of an "SRT in Nimble" stream.** Three presets for
+  video, audio, or both. The source is **picked, not typed** — it is a nested
+  reference to an `incoming` object, and an id typed wrong switches the stream
+  to nothing while still verifying as applied
+- **Verification defect fixed, and it would have broken 2a outright.** The
+  runner compared patched values by stringifying whole objects. A patch sends
+  `video_source: { id: 'X' }`; WMSPanel answers with
+  `{ id: 'X', application: '…', stream: '…' }`. Byte equality could never hold,
+  so a correctly applied source switch would have failed verification and
+  rolled itself back. Objects are now compared as a **subset** of the wanted
+  keys, recursively; arrays and scalars keep exact comparison, because there an
+  extra element really does mean the patch did not take
+- **2b: execution variants.** One skeleton of steps, several sets of values —
+  the same streams switched to different inputs, without a copy of the whole
+  function per input that then drifts. `overrides` is keyed by step index and
+  merged over that step's own patch, so a variant names only what it differs in
+  and adding a stream adds it to every variant at once
+- A function with no variants runs exactly as before. The empty list is the
+  implicit single variant: no migration, nothing existing changes shape
+- **A function that HAS variants refuses to run without one being chosen** —
+  in the backend, not just the UI. Silently falling back to the base steps
+  would switch streams to inputs nobody picked, which is the failure the
+  feature exists to prevent
+- The run picker previews what will actually be sent, resolved by the **same**
+  function the executor uses. A preview computed a second way would eventually
+  disagree with the run, and the operator would be reading a reassurance rather
+  than a fact
+- `FunctionRun` records which variant ran: "the function ran" is not the
+  interesting fact when the same function can switch to four different inputs
+- Stored variants are clamped on the way in — ids deduplicated (two variants
+  sharing an id would run the wrong one), overrides keyed only by step index,
+  non-object values discarded
+- New `npm run test:variants`: 18 checks. The resolver is pure and covered
+  exhaustively, including that it does not mutate the stored definition — a
+  resolver that wrote through would make the second run inherit the first one's
+  variant
+
+
+## iter10 — Nimble log system
+### v0.15.0 (m5) — dashboards and links. The epic is complete
+- Any number of dashboards, each an arrangement of log windows: category,
+  server, levels, range, search, size and column span, all saved. Full CRUD,
+  reorder, and a live preview that is the real window rather than a mockup
+- **Links that open without a panel login**, for a wall display or a second
+  screen. Off until someone turns it on, optional expiry, revocable, and
+  reissued rather than recovered — only the hash is stored
+- **The security property that shapes the whole feature: a link cannot be
+  edited into a query for something else.** The public route reads every
+  filter from the stored window and ignores the query string entirely. A test
+  asserts there is no `req.query` anywhere in the public half
+- Stream keys are masked on the public path, including raw rows, which are not
+  masked inside the panel because an operator needs the exact line. The warning
+  beside the button says plainly what is *not* masked — addresses, stream names
+  and error text
+- **New `logs.manage` permission.** Issuing a link makes production logs
+  readable without a password, which is a different act from being allowed to
+  read them inside the panel, and it should not ride on the same key
+- Stored windows are clamped on the way in — bounded height and span, an
+  allow-list for ranges, validated level letters, a cap on window count —
+  because what can be stored is what the public route will later trust
+- The shared page is answered before the login gate and uses its own fetch, not
+  the shared `api()` helper: that one clears the token and redirects to /login,
+  which is the wrong thing to do to someone with no account watching a display
+- **Two defects the click gate found in this milestone's own code:**
+  `window.prompt` for the dashboard name, and a page that crashed when a
+  response arrived without a `windows` array. The gate now also fails on
+  "Cannot read properties of undefined" — it watched that crash happen and
+  stayed green, which was too narrow a definition of a broken click
+- 18 new checks
+
+
+## iter10 — Nimble log system
+### v0.14.1 (m4) — one window per part of Nimble
+- Eight functional windows — transcoder, SRT, RTMP, playback/HTTP, pull ingest,
+  DVR, core, other — each with its own level filter, time range, search and
+  grouped/chronological toggle
+- **The mapping was checked against the real dump before it was written into
+  code**: these categories cover 100% of 163,628 records with nothing left
+  over. A test re-runs that check and fails if anything falls through
+- **`other` is defined by exclusion, not by a list.** The sample has no WebRTC,
+  no DVR variants and one transcoder mode, so a subsystem the list has never
+  met still has to appear somewhere — a log that belongs to no window is a log
+  nobody ever reads
+- An overview strip leads, with per-window totals and error counts. With SRT at
+  74% of everything and every error in the sample living in two windows, "which
+  part of Nimble is unhappy" is answerable before a line is read
+- Clicking a window's name focuses it full height; empty windows collapse into
+  a line that still names them, so a missing transcoder window is never a
+  mystery
+- **`LogWindow` is a self-contained component** that owns its filters, polling
+  and state and takes only a scope and a size. That is deliberate: m5 is
+  "place any number of these where you choose", and it will not have to teach
+  this component anything about dashboards
+- 9 new checks, including that no subsystem belongs to two windows and that an
+  explicit subsystem choice inside a window is not widened back to the whole
+  category
+
+
+## iter10 — Nimble log system
+### v0.14.0 (m3) — the general log view
+- **Grouped by default, and that is the design.** In the measured sample one
+  message is 93% of a server's output — 15,237 identical SRT errors in 31
+  minutes — so a chronological list is one line repeated eight times a second.
+  Grouped, the same 163,628 records are 142 rows
+- **How a message becomes a template was measured, not guessed.** Collapsing
+  every bracketed span gave 2 error templates on the real file; collapsing only
+  spans that contain a digit gave 4 — and the extra two are the difference
+  between "SRT closed 15,237 connections" and knowing it was `Connection does
+  not exist` (8,661), `Invalid socket ID` (5,432) and `Connection was broken`
+  (1,144). Addresses and socket numbers are noise; the reason in the same
+  brackets is the diagnosis. Digits collapse, words survive
+- Filters on server, level, subsystem, time range, and free text over both the
+  message and its attached HTTP dump. Everything but the text lands on an
+  index; search metacharacters are escaped, so a stream path cannot become a
+  regex by accident
+- Facet counts by level and subsystem sit above the results, because with one
+  template accounting for most of a box's output, "what is the mix" is a better
+  first question than "what is newest"
+- A group expands to the records behind it, copyable as text
+- **Stream keys are masked in the group view.** Nimble logs publish URLs and a
+  publish URL carries the key. The warehouse still stores what the server
+  wrote — rewriting that would be lying about the log — but a summary shown
+  wide is not where keys belong
+- Scans are capped at 200,000 records and the answer says when it was capped: a
+  truncated count that admits it beats an exact one arriving after the incident
+- New `npm run test:logquery`: 18 checks, the last of which runs the templating
+  over the full 184,481-line file and fails if compression drops below 500×
+  or the result exceeds 400 templates
+
+
+## iter11 — agent installation
+### v0.13.0 (m2) — install over SSH
+- The panel can now connect over SSH and run the install itself. It is the same
+  enrollment as the copy-and-paste path — same ticket, same checksum-verified
+  command — with the panel doing the typing
+- **The cost, stated rather than hidden:** installing requires root, so a panel
+  that can do this can become root on every server it is given credentials for.
+  Three things keep that bounded, and all three are enforced in code
+- **Nothing is stored.** The credential lives in one closure for the length of
+  one install: not in the database, not on disk, not in the audit log, and the
+  form is cleared the moment the request is away. A stolen panel database still
+  yields no way into a server
+- **The host key is checked, and a mismatch aborts before the credential is
+  offered.** The fingerprint is read during the handshake without
+  authenticating, shown to the operator, and required on the install call. If
+  the key later differs, ssh2 stops the handshake — so a password is never sent
+  to whoever happened to answer on that port
+- **The command is fixed.** This is not a remote shell: the only thing that can
+  run is the installer for one freshly issued ticket, built by the panel, in
+  its checksum-verified form. `sudo -n` so a password prompt fails fast instead
+  of hanging, and the command is quoted, not concatenated
+- Output streams back into the dialog and the exit code is reported, so a
+  failed install says so instead of looking like a silent success
+- **Security defect found before the feature existed:** the audit middleware
+  persists request bodies and its secret mask covered `password` but not
+  `privateKey`, `private_key`, `passphrase` or `credential`. Adding this route
+  would have written operators' private keys into the audit log in clear text.
+  The mask now covers them, verified by a check that also asserts non-secrets
+  stay readable
+- New `npm run test:ssh`: 15 checks against a **real ssh2 server in-process**,
+  not a mock — the ordering being tested is precisely the one a mock would have
+  to assume. Includes that a mismatched fingerprint produces zero
+  authentication attempts, and that a quote in the command cannot break out of
+  the sudo wrapper
+- First native-capable dependency in the project: `ssh2`
+
+
+## iter12 — inverted transport: the agent calls the panel
+### v0.12.0 (m5) — the pull path is gone
+- `agentClient.js` deleted. It had no callers left after m3; every operation
+  now travels the other way
+- **`agent.baseUrl` removed from the server record.** The panel does not need
+  an address for a machine it never dials, and storing one was an invitation to
+  start dialling again
+- The reachability probe, the RFC1918 classifier and the "this address is
+  private, no installer can fix that" warning are all gone — they existed to
+  describe a direction that no longer exists
+- The install dialog asks for one address instead of two: how the **server**
+  reaches the panel. How the panel would reach the server is no longer a
+  question anyone has to answer
+- **The agent binds to loopback by default.** Nothing connects to it, so a
+  socket on the network was attack surface on a broadcast server with no
+  purpose. What is left is a local diagnostic surface — the installer uses it
+  to check the agent came up, and so can an operator with a shell
+- The installer no longer guesses the server's own address with `hostname -I`,
+  and no longer sends one at enrollment
+- Five gates against the old direction returning: no client for dialling
+  agents, no address field on the server record, nothing in the backend
+  reaching for one, the agent bound to loopback, and an installer that carries
+  no address. Verified against a reintroduced field
+- Agent protocol version 6
+
+
+## iter12 — inverted transport: the agent calls the panel
+### v0.11.3 (m4) — telling apart the ways an agent can fail
+- "The agent isn't working" covered six situations with six different fixes.
+  They are now distinguished the way NET-Control's were: by comparing when the
+  agent last called in against when the task was created
+- Codes: `not-configured`, `no-contact`, `stopped-polling`, `restart-loop`,
+  `claimed-no-answer`, `polling-not-claimed`, `healthy`. Each carries the
+  evidence it was decided on and a hint naming the command to run next
+- **`polling-not-claimed` is the one that was invisible before.** A task still
+  queued although the agent polled *after* it was created cannot be the agent's
+  fault — every poll claims the oldest live task — so it is the panel that
+  failed to hand it over. That case used to be reported as a broken agent
+- `restart-loop`: an agent that keeps dying still polls, so it looked healthy.
+  Identity changes are counted in a rolling ten-minute window, which separates
+  an ordinary restart from a loop and stops one bad hour marking a server for
+  ever
+- Precedence is decided, not incidental: an absent agent outranks any stuck
+  task, because sending an operator to investigate a claim bug while the agent
+  is not running is sending them to the wrong place
+- The classifier is a **pure function** over facts — no database, no clock of
+  its own, no network — because an inverted comparison here would tell someone
+  to restart a healthy agent. 23 checks cover every state, both directions of
+  every timestamp comparison, and every precedence pair
+- **Defect found while building it:** `runTask` expires its own task on
+  timeout, but `enqueueTask` has nobody waiting, so a media transfer whose
+  agent never appeared stayed `queued` for ever — and the classifier would have
+  read that as a panel-side claim bug. A reaper now marks anything past its
+  deadline, and the diagnosis endpoint runs it first. A diagnosis is only worth
+  having if the states it reads are true
+- The Agents page loads the diagnosis with the list rather than on demand: an
+  operator opening it is usually there because something is wrong, and making
+  them click to find out which kind of wrong is the problem it exists to solve
+- Timeout messages now point at where to look instead of just saying "timed out"
+
+
+## iter12 — inverted transport: the agent calls the panel
+### v0.11.2 (m3) — media is collected, not pushed
+- Media was the last operation still running panel → agent: the browser's bytes
+  were streamed straight through to the server, so the server had to be
+  reachable. On a machine behind NAT everything worked except this one button
+- The operator hands the file to the panel; the agent collects it on its next
+  poll, verifies it, writes it, and reports. Nothing needs to reach the server
+- The upload response returns as soon as the file is safely on the panel's
+  disk and does **not** wait for the agent. A 2 GB file over a slow link would
+  otherwise hold an HTTP request open for minutes and fail outright if the
+  server happened to be offline — precisely the case this design exists for
+- **Integrity end to end.** The panel hashes the upload as it streams to disk;
+  the agent hashes what it downloads, checks the digest and the byte count, and
+  only then renames the file into place. A transfer cut short is refused and
+  leaves nothing behind — not under the final name, not under the temporary one
+- **The panel's copy is dropped on confirmation, not on download.** Deleting
+  when the transfer finished would throw away the only copy while the write on
+  the far side could still fail. A failed write keeps the file, so a retry
+  costs nothing instead of another upload of gigabytes
+- Retention: three days for a file nobody collected, immediate deletion once
+  the agent confirms it is on disk. A sweeper reaps both directions — expired
+  records lose their file, and files with no record lose themselves, with an
+  hour's grace so an upload still streaming is not deleted mid-flight
+- The spool gets its own docker volume. A 2 GB upload landing on the same
+  filesystem as the database is how a panel takes its own Mongo down, and a
+  separate volume is the one place an operator can look, measure and cap
+- Media list and delete moved onto the task bus at the same time; `agentClient`
+  now has no callers left outside the log path, and goes in m5
+- New `npm run test:media`: 9 checks, including a real collect-verify-commit
+  round trip over HTTP with a deliberately corrupted digest
+- Agent protocol version 5
+
+
+## iter12 — inverted transport: the agent calls the panel
+### v0.11.1 (m2) — logs are pushed; the cursor and rotation move to the agent
+- The agent follows `nimble.log` itself and pushes batches. The panel no longer
+  walks 13 servers on a timer asking each what is new — at the measured
+  ~13 KB/s per server that walk was the whole reason log collection needed the
+  fleet to be reachable
+- **The cursor lives on the agent**, in `$STATE_DIRECTORY/logcursor.json`, and
+  survives a restart. Where that directory is not writable the agent still
+  ships and says so once, resuming at the end of the file instead of pretending
+  it knows where it was
+- **The cursor only advances after a batch is accepted.** A panel that is down
+  costs nothing: the log file is the buffer, and the agent re-reads rather than
+  buffering in memory
+- **Rotation is detected on the agent** — inode change, or the file shrinking
+  below the cursor — which is far more reliable than the panel inferring it
+  from what it could see between two polls
+- Framing stayed on the panel deliberately. 11.3% of Nimble's lines are
+  continuation text with no header, and `frameRecords` was verified byte-exact
+  against a real 184,481-line file; reimplementing that inside a
+  dependency-free agent would have been the wrong kind of duplication. The
+  agent ships raw bytes, the parser stays in one place
+- A replayed batch is dropped rather than stored twice, and a gap — bytes lost
+  to a rotation the agent could not drain, or a restart with no persisted
+  cursor — is counted in `bytesMissed` rather than smoothed over
+- Whether to ship and which files ride on the poll response, so there is
+  nothing to configure on the server and no second channel to keep alive
+- 7 new checks, the central one being that a stream of pushed batches
+  reconstructs byte-for-byte the records that parsing the whole file produces,
+  across four batch sizes
+- Agent protocol version 4
+
+
+## iter12 — inverted transport: the agent calls the panel
+### v0.11.0 (m1) — task queue, long-poll, claim
+- **The direction is reversed.** The panel used to open a connection to every
+  agent, which meant every agent needed a routable address — impossible for a
+  machine on a local network behind NAT, and the reason the install dialog
+  spent most of its space asking the operator to describe their network. The
+  panel now writes a task and waits; the agent, which only ever makes outbound
+  connections, picks it up and reports back. Nothing has to be reachable except
+  the panel
+- Modelled on what NET-Control's agent already does in production: outbound
+  poll, authenticate, claim a task bound to one server, report a result — the
+  shape its `stopped-polling` / `polling-not-claimed` diagnosis was built
+  around
+- **A task names the agent's own route key** (`GET /health`, `PUT /config`).
+  The agent already dispatches on that string, so a task cannot ask for
+  anything the agent could not already do and there is no second surface to
+  keep in step
+- Long-poll: the agent parks for up to 25s and is released the instant work
+  appears for it. A panel request still answers in its own response — it
+  enqueues and awaits — so the round trip is one hop each way, not one poll
+  interval
+- Every poll is a heartbeat. `lastContactAt` is written before the park begins,
+  so a long wait is not mistaken for silence, and `instanceId` changes on
+  restart, which is what separates a crash-looping agent from a wedged one
+- Claiming uses `findOneAndUpdate`, so two agents for one server — what happens
+  when an operator installs on a cloned VM — cannot both take the same task
+- A timeout distinguishes *nobody claimed it* from *claimed and never answered*
+  and says which, rather than flattening both into "agent unreachable"
+- Enrollment now returns the server id and the installer writes it plus the
+  panel URL, then restarts the service: from that point the agent connects out
+  and needs no address of its own
+- `health` and config read/write moved onto the bus. Media, playlist deploy and
+  log tailing still use the old path and move in m2–m3; it is deleted in m5
+- New `npm run test:transport`: 10 checks, including a real outbound poller
+  against a real gateway over real HTTP with **no listening socket on the agent
+  side at all** — the property the whole change exists for
+- Agent protocol version 3
+
+
 ## iter11 — agent installation
 ### v0.10.2 — the install link could not actually be used
 - **The panel did not know it was behind TLS.** `trust proxy` was never set, so

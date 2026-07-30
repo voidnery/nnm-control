@@ -5,6 +5,7 @@
 // specification, so a test written against an imagined format would certify
 // the wrong thing.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { frameRecords, baseSubsystem, levelRank, toDate, LOG_HEADER } from '../src/services/logParser.js';
 
 let pass = 0, fail = 0;
@@ -225,6 +226,122 @@ await acheck('polling a growing file yields each record exactly once', async () 
   assert.equal(seen.length, 4, `expected 4 records, got ${seen.length}`);
   assert.equal(new Set(seen.map(r => r.offset)).size, 4, 'no record may be stored twice');
   assert.equal(seen[3].contLines, 4, 'the dump appended last must be complete');
+});
+
+// iter12 m2 — the tail moved to the agent, which ships batches instead of
+// answering byte-range reads. Framing stayed on the panel, so the property to
+// pin is that a stream of pushed batches reconstructs exactly the records the
+// whole file would have produced.
+console.log('\nPUSH BATCHES (agent ships, panel frames):');
+
+// Stand-in for the agent's tailer: same rules as the real one — batches end on
+// a line boundary, the cursor only advances after a successful ship.
+function tailer(text, batchBytes) {
+  const buf = Buffer.from(text, 'utf8');
+  let offset = 0;
+  return {
+    get offset() { return offset; },
+    next() {
+      if (offset >= buf.length) return null;
+      const full = offset + batchBytes <= buf.length;
+      let end = Math.min(offset + batchBytes, buf.length);
+      const nl = buf.lastIndexOf(0x0a, end - 1);
+      if (nl >= offset) end = nl + 1;
+      else if (!full) return null;      // unterminated tail still being written
+      // else: a single line longer than a whole batch. The agent ships it
+      // rather than wedging the tail forever; framing degrades for that one
+      // record, which is the better of two bad outcomes and only reachable if
+      // the batch size is set below the length of a log line.
+      return { offset, data: buf.subarray(offset, end).toString('utf8') };
+    },
+    commit(batch) { offset = batch.offset + Buffer.byteLength(batch.data, 'utf8'); },
+  };
+}
+
+// Panel side: exactly what ingestBatch does with framing and the pending carry.
+function receiver() {
+  const records = [];
+  let pending = null;
+  let at = 0;
+  let missed = 0;
+  return {
+    records, get missed() { return missed; },
+    take({ offset, data }) {
+      if (at && offset > at) { missed += offset - at; pending = null; }
+      if (offset < at) return 'duplicate';
+      const f = frameRecords(data, offset, pending, { flush: false });
+      pending = f.pending;
+      records.push(...f.records);
+      at = offset + Buffer.byteLength(data, 'utf8');
+      return 'stored';
+    },
+  };
+}
+
+const STREAM = L(SRT_ERR) + HTTP_BLOCK + L(TC_DBG) + L(WORK_V) + HTTP_BLOCK + L(HLS_DBG);
+const WHOLE = frameRecords(STREAM, 0, null, { flush: true }).records;
+
+check('a pushed stream reconstructs exactly what parsing the file would give', () => {
+  for (const size of [200, 512, 4096, 100000]) {
+    const t = tailer(STREAM, size);
+    const r = receiver();
+    for (;;) { const b = t.next(); if (!b) break; r.take(b); t.commit(b); }
+    // The last record stays open until the next header or EOF, which is
+    // correct: its continuation lines may still be arriving.
+    assert.equal(r.records.length, WHOLE.length - 1, `batch size ${size}`);
+    for (let i = 0; i < r.records.length; i++) {
+      assert.equal(r.records[i].offset, WHOLE[i].offset, `offset mismatch at ${i}, batch ${size}`);
+      assert.equal(r.records[i].msg, WHOLE[i].msg, `msg mismatch at ${i}, batch ${size}`);
+      assert.equal(r.records[i].cont || '', WHOLE[i].cont || '', `dump mismatch at ${i}, batch ${size}`);
+    }
+  }
+});
+
+check('an HTTP dump split across two batches is stored once, whole', () => {
+  const t = tailer(STREAM, 240);
+  const r = receiver();
+  for (;;) { const b = t.next(); if (!b) break; r.take(b); t.commit(b); }
+  const withDump = r.records.filter(x => x.contLines);
+  assert.ok(withDump.length >= 1);
+  for (const rec of withDump) assert.equal(rec.contLines, 4, 'every dump must arrive complete');
+});
+
+check('a failed ship does not advance the cursor, and the retry is not a duplicate', () => {
+  const t = tailer(STREAM, 200);
+  const r = receiver();
+  const first = t.next();
+  // shipping "fails": no commit
+  const retry = t.next();
+  assert.equal(retry.offset, first.offset, 'the retry must re-read the same bytes');
+  assert.equal(r.take(retry), 'stored');
+  t.commit(retry);
+  assert.equal(r.take(retry), 'duplicate', 'a genuine replay must be dropped, not stored twice');
+});
+
+check('a gap is counted, not smoothed over', () => {
+  const t = tailer(STREAM, 200);
+  const r = receiver();
+  const b1 = t.next(); r.take(b1); t.commit(b1);
+  const b2 = t.next(); t.commit(b2);          // this batch is lost in flight
+  const b3 = t.next(); r.take(b3);
+  assert.ok(r.missed > 0, 'lost bytes must be reported');
+  assert.equal(r.missed, b3.offset - (b1.offset + Buffer.byteLength(b1.data, 'utf8')));
+});
+
+console.log('\nAGENT TAILER SHAPE:');
+
+check('the cursor and rotation detection live on the agent now', () => {
+  const src = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+  assert.ok(src.includes('logcursor.json'), 'the cursor must survive a restart');
+  assert.ok(src.includes('prev.ino !== ino'), 'rotation is detected by inode, on the agent');
+  assert.ok(src.includes('st.size < offset'), 'in-place truncation is detected too');
+  assert.ok(src.includes("panelFetch('/logs'"), 'batches are pushed, not served');
+});
+
+check('the panel no longer reads byte ranges out of agents', () => {
+  const collector = readFileSync(new URL('../src/services/logCollector.js', import.meta.url), 'utf8');
+  assert.ok(!collector.includes('logsRead'), 'the pull path must be gone from the collector');
+  assert.ok(collector.includes('ingestBatch'));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall log-transport checks passed');

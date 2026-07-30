@@ -106,3 +106,91 @@ Whatever that is, it is either a real fault worth fixing or a permanent noise
 floor. Either way the "errors" view must collapse repeats by template, or it
 will be fifteen thousand identical rows during the exact incident someone needs
 it for. That requirement came out of the data, not out of a wireframe.
+
+
+## m3 — how the warehouse is read (v0.14.0)
+
+The finding from m1 — that 99.3% of errors are one repeated line — turned out
+to define the whole view, not just a caveat about it.
+
+**Templating, chosen by measurement.** Two strategies were run over the real
+file:
+
+| strategy | templates | error templates |
+|---|---:|---:|
+| collapse every `[...]` span | 140 | 2 |
+| collapse `[...]` only when it contains a digit | 142 | **4** |
+
+The second wins for a reason that only shows up in the data: the first merges
+`srterror=[Connection does not exist]`, `[Operation not supported: Invalid
+socket ID]` and `[Connection was broken]` into one row. Three different faults,
+one line. Addresses and socket ids in brackets are noise; a sentence in
+brackets is the diagnosis.
+
+Result on the real file: **163,628 records → 142 templates**, a 1,150×
+reduction with nothing diagnostic lost.
+
+**What is not done here.** Free text is a regex scan over `msg` and `cont`,
+bounded by whatever the indexed filters already narrowed. A text index cannot
+answer "contains this substring", which is what an operator chasing a stream
+name actually types, so the trade is deliberate — but it does mean a wide time
+range with a text query is the slow path, and the scan cap exists to stop it
+being an unbounded one.
+
+
+## m4 — the functional windows (v0.14.1)
+
+Which subsystem belongs to which window, checked against the real dump before
+being written into code:
+
+| window | subsystems | records | % | errors |
+|---|---|---:|---:|---:|
+| SRT | srtpull, srtlisten, m2ts_srt_sender, m2ts_srt_srv | 121,018 | 74.0 | 15,237 |
+| core | util, sync, list | 16,261 | 9.9 | 0 |
+| playback / HTTP | work | 9,849 | 6.0 | 0 |
+| transcoder | remtranmgmt | 9,447 | 5.8 | 0 |
+| pull ingest | livepull | 5,733 | 3.5 | 104 |
+| RTMP | rtmp, rtmp_sender | 1,209 | 0.7 | 0 |
+| DVR | dvrmain | 111 | 0.1 | 0 |
+| other | — everything else — | 0 | 0.0 | 0 |
+
+Coverage: **100.00%**, nothing uncategorised.
+
+Two things follow from the numbers rather than from taste. Every error in this
+window lives in two categories, so the overview strip showing per-window error
+counts answers "which part is unhappy" before anything is read. And `other`
+holds nothing here but must exist and must be defined by **exclusion**: this
+sample has no WebRTC, no DVR variants and one transcoder mode, so an `$in`
+list could never match a subsystem the mapping has not met.
+
+`LogWindow` was built self-contained — it owns its filters, its polling and its
+state, and takes only a scope and a size — because m5 is "place any number of
+these where you choose", and that should not require the component to learn
+anything about dashboards.
+
+
+## m5 — dashboards and links (v0.15.0)
+
+The link is the part that needed care. It is read access to production logs
+without a password, on data that contains publish URLs with stream keys in
+them.
+
+**What the token grants is bounded by construction.** The public route looks up
+the dashboard by the token's hash, finds the requested window *in the
+database*, and builds the query from that window's stored fields. The query
+string is not consulted at all — there is a test asserting no `req.query`
+appears anywhere in the public half of the router. So a link to a transcoder
+window is a link to that window, and cannot be turned into a query for the
+warehouse by editing the URL.
+
+**What it still exposes, stated rather than hidden.** Stream keys are masked,
+including in raw rows, which are *not* masked inside the panel because an
+operator needs the exact line. IP addresses, stream names and error text are
+not masked, and the warning next to the button says so.
+
+**Issuing is its own permission and its own act.** `logs.manage` is separate
+from `streams.view`: being allowed to read logs in the panel and being allowed
+to make them readable without a password are different decisions. Issuing is
+audited, sharing is off by default, the token is stored only as a hash, and
+revocation takes effect even for someone holding the old URL because
+`shareEnabled` is checked as well.

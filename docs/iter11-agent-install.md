@@ -63,7 +63,26 @@ working perfectly in the repo. The api build context is the repository root
 now, with a root `.dockerignore` so the wider context does not drag
 `node_modules` and the git history into every layer.
 
-## Why SSH is m2, and what it will cost
+## SSH install (m2, shipped in v0.13.0)
+
+Built as described below, with the mitigation held to. Three properties are
+enforced in code and covered by checks against a real ssh2 server:
+
+1. **Nothing is stored.** The credential lives in one closure for one install.
+   Not in the database, not on disk, not in the audit log — and finding that
+   last one required fixing the audit mask first, which covered `password` but
+   not `privateKey` or `passphrase`.
+2. **The host key is verified before the credential is offered.** The
+   fingerprint is read during the handshake without authenticating, confirmed
+   by the operator, and required on the install call. A mismatch stops the
+   handshake, so nothing is sent to whoever answered.
+3. **The command is fixed.** Not a remote shell: one freshly issued ticket's
+   installer, in its checksum-verified form, built by the panel.
+
+What follows is the reasoning that led there, kept because the cost has not
+changed.
+
+## Why SSH was m2, and what it costs
 
 SSH install is a thin wrapper once this exists: connect, run the same
 one-liner, done. Worth stating the trade before building it.

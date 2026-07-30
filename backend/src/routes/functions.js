@@ -5,8 +5,31 @@ import { Role } from '../models/Role.js';
 import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm, hasPerm } from '../middleware/auth.js';
-import { executeFunction } from '../services/functionRunner.js';
+import { executeFunction, resolveVariant } from '../services/functionRunner.js';
 import { wmspanel } from '../services/wmspanelClient.js';
+
+// iter11 2b — variants are stored data that decides what gets sent to a live
+// broadcast server, so what can be stored is bounded here rather than trusted.
+function cleanVariants(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  return list.slice(0, 40).map((v, i) => {
+    let id = String(v?.id || `v${i}`).slice(0, 40).replace(/[^a-zA-Z0-9_-]/g, '') || `v${i}`;
+    while (seen.has(id)) id = `${id}_`;      // two variants sharing an id would run the wrong one
+    seen.add(id);
+    const overrides = {};
+    for (const [k, val] of Object.entries(v?.overrides || {})) {
+      if (!/^\d+$/.test(k)) continue;        // keyed by step index, nothing else
+      if (val && typeof val === 'object' && !Array.isArray(val)) overrides[k] = val;
+    }
+    return {
+      id,
+      name: String(v?.name || `Variant ${i + 1}`).slice(0, 80),
+      description: String(v?.description || '').slice(0, 200),
+      overrides,
+    };
+  });
+}
 
 export const functionsRouter = Router();
 functionsRouter.use(requireAuth);
@@ -20,19 +43,20 @@ functionsRouter.get('/', async (req, res) => {
 });
 
 functionsRouter.post('/', requirePerm('functions.manage'), async (req, res) => {
-  const { name, description = '', steps = [] } = req.body || {};
+  const { name, description = '', steps = [], variants = [] } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name required' });
-  const fn = await FunctionDef.create({ name, description, steps, createdBy: req.user.username });
+  const fn = await FunctionDef.create({ name, description, steps, variants: cleanVariants(variants), createdBy: req.user.username });
   res.status(201).json(fn);
 });
 
 functionsRouter.put('/:id', requirePerm('functions.manage'), async (req, res) => {
   const fn = await FunctionDef.findById(req.params.id);
   if (!fn) return res.status(404).json({ error: 'Not found' });
-  const { name, description, steps } = req.body || {};
+  const { name, description, steps, variants } = req.body || {};
   if (name !== undefined) fn.name = name;
   if (description !== undefined) fn.description = description;
   if (steps !== undefined) fn.steps = steps;
+  if (variants !== undefined) fn.variants = cleanVariants(variants);
   await fn.save();
   res.json(fn);
 });
@@ -54,10 +78,37 @@ functionsRouter.post('/:id/run', requirePerm('functions.execute'), async (req, r
     if (!allowed) return res.status(403).json({ error: 'This function is not assigned to your role' });
   }
   try {
-    const run = await executeFunction(fn, req.user.username);
+    const run = await executeFunction(fn, req.user.username, String(req.body?.variantId || ''));
     res.status(201).json({ runId: run.id });
   } catch (e) {
     res.status(409).json({ error: e.message });
+  }
+});
+
+// What will actually be sent, resolved by the SAME function the executor uses.
+// A preview computed a second way would eventually disagree with the run, and
+// the operator would be reading a reassurance rather than a fact.
+functionsRouter.get('/:id/preview', requirePerm('functions.execute'), async (req, res) => {
+  const fn = await FunctionDef.findById(req.params.id);
+  if (!fn) return res.status(404).json({ error: 'Not found' });
+  try {
+    const { steps, variant } = resolveVariant(fn, String(req.query.variantId || ''));
+    res.json({
+      variant,
+      steps: steps.map((st, i) => ({
+        index: i,
+        label: st.label || '',
+        type: st.type,
+        objectKind: st.objectKind || '',
+        targetLabel: st.targetLabel || '',
+        patch: st.patch || {},
+        overridden: Object.keys(
+          (fn.variants.find(v => v.id === req.query.variantId)?.overrides || {})[String(i)] || {},
+        ),
+      })),
+    });
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
   }
 });
 

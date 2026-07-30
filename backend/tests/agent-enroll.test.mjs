@@ -13,7 +13,6 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { hashTicket, newTicket } from '../src/models/AgentEnrollment.js';
 import { installScript } from '../src/services/agentInstaller.js';
-import { isPrivateAddress } from '../src/routes/agentEnroll.js';
 
 let pass = 0, fail = 0;
 const check = (name, fn) => {
@@ -39,29 +38,6 @@ check('only the hash is ever stored', () => {
 
 check('a different ticket does not collide', () => {
   assert.notEqual(hashTicket(newTicket()), hashTicket(newTicket()));
-});
-
-console.log('\nADDRESS CLASSIFICATION (used to warn, never to block):');
-
-check('RFC1918 ranges are recognised', () => {
-  for (const h of ['10.0.0.5', '192.168.1.7', '172.16.0.1', '172.31.255.254', '127.0.0.1', 'localhost'])
-    assert.equal(isPrivateAddress(h), true, h);
-});
-
-check('172.32 is public — the /12 boundary is not the whole second octet', () => {
-  assert.equal(isPrivateAddress('172.32.0.1'), false);
-  assert.equal(isPrivateAddress('172.15.0.1'), false);
-});
-
-check('routable addresses and hostnames are not flagged', () => {
-  for (const h of ['185.1.2.3', 'edge1.bbesport.com', '8.8.8.8'])
-    assert.equal(isPrivateAddress(h), false, h);
-});
-
-check('IPv6 loopback and ULA are recognised', () => {
-  assert.equal(isPrivateAddress('::1'), true);
-  assert.equal(isPrivateAddress('[fd00::1]'), true);
-  assert.equal(isPrivateAddress('2001:db8::1'), false);
 });
 
 console.log('\nINSTALLER:');

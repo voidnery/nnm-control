@@ -18,7 +18,9 @@ import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 
 const PORT = Number(process.env.NNM_AGENT_PORT || 8090);
-const BIND = process.env.NNM_AGENT_BIND || '0.0.0.0';
+// iter12 m5 — loopback by default. Nothing connects to the agent any more;
+// this socket exists so an operator with a shell can ask it how it is.
+const BIND = process.env.NNM_AGENT_BIND || '127.0.0.1';
 const TOKEN = process.env.NNM_AGENT_TOKEN || '';
 const CONF_DIR = path.resolve(process.env.NNM_AGENT_CONF_DIR || '/srv/nimble/conf');
 const MEDIA_DIR = path.resolve(process.env.NNM_AGENT_MEDIA_DIR || '/srv/nimble/media/gallery');
@@ -33,6 +35,34 @@ const LOG_ENABLED = String(process.env.NNM_AGENT_LOGS || '1') !== '0';
 const MAX_LOG_CHUNK = Number(process.env.NNM_AGENT_LOG_CHUNK_KB || 1024) * 1024;
 const LOG_EXT = (process.env.NNM_AGENT_LOG_EXT || 'log,txt').split(',').map(s => s.trim().toLowerCase());
 const MAX_UPLOAD = Number(process.env.NNM_AGENT_MAX_UPLOAD_MB || 2048) * 1024 * 1024;
+
+// iter12 m1 — the agent connects to the panel; the panel never connects here.
+// That is what lets it run on a machine behind NAT with no port forwarding,
+// no public address and no firewall hole. When these are set the agent parks
+// on a long-poll and executes whatever the panel has queued for it.
+const PANEL_URL = String(process.env.NNM_AGENT_PANEL_URL || '').replace(/\/+$/, '');
+const SERVER_ID = String(process.env.NNM_AGENT_SERVER_ID || '');
+const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
+// Survives for the life of the process. A new value tells the panel the agent
+// restarted, which distinguishes "crash-looping" from "quietly wedged" —
+// exactly the pair that was indistinguishable in NET-Control until the agent
+// started reporting it.
+const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const AGENT_VERSION = 6;
+
+// iter12 m2 — log shipping.
+//
+// The panel used to pull byte ranges out of this agent, which meant it held
+// the cursor, guessed at rotation from whatever it could see between two
+// polls, and had to walk all 13 servers on a timer. Now the tail lives here:
+// the agent follows the file, keeps its own cursor, and pushes.
+//
+// The cursor survives a restart in this file. If the directory is not
+// writable the agent still works — it just resumes at the end of the file
+// after a restart rather than where it left off, and says so once.
+const STATE_DIR = String(process.env.STATE_DIRECTORY || process.env.NNM_AGENT_STATE_DIR || '/var/lib/nnm-agent');
+const LOG_BATCH_BYTES = Number(process.env.NNM_AGENT_LOG_BATCH_KB || 256) * 1024;
+const LOG_BATCH_MS = Number(process.env.NNM_AGENT_LOG_BATCH_MS || 2000);
 const MAX_CONFIG = 8 * 1024 * 1024;
 const ALLOWED_MEDIA = (process.env.NNM_AGENT_MEDIA_EXT ||
   'mp4,mov,mkv,ts,mpg,mpeg,m4v,mp3,aac,wav,jpg,jpeg,png').split(',').map(s => s.trim().toLowerCase());
@@ -217,6 +247,62 @@ const routes = {
   },
 
   // Raw-body upload keyed by name: no multipart parser to get wrong.
+  // iter12 m3 — collect a file the panel is holding.
+  //
+  // The panel used to push media into this agent, which is the last thing that
+  // required the server to be reachable. Now the panel says "there is a file",
+  // and the agent comes and gets it.
+  //
+  // Downloaded to a .part file, hashed while it streams, and only renamed into
+  // place once the digest matches what the panel said. A 2 GB transfer cut
+  // short must never become a media file Nimble will play half of.
+  async 'POST /media/fetch'(req, url, task) {
+    const { transferId, name, sha256: expected, size } = task || {};
+    if (!transferId || !name) throw new Error('transferId and name are required');
+    const full = safeJoin(MEDIA_DIR, name);
+    const ext = path.extname(full).slice(1).toLowerCase();
+    if (!ALLOWED_MEDIA.includes(ext)) {
+      throw Object.assign(new Error(`extension .${ext || '?'} is not allowed`), { code: 415 });
+    }
+    if (Number(size) > MAX_UPLOAD) {
+      throw Object.assign(new Error(`file is larger than the ${(MAX_UPLOAD / 1e6).toFixed(0)}MB limit`), { code: 413 });
+    }
+    await ensureDir(MEDIA_DIR);
+
+    const res = await fetch(`${PANEL_URL}/api/agent-gw/media/${transferId}/content`, {
+      headers: { authorization: `Bearer ${TOKEN}`, 'x-nnm-server': SERVER_ID },
+    });
+    if (!res.ok) throw new Error(`panel returned ${res.status} for the file`);
+
+    const tmp = `${full}.part-${process.pid}`;
+    const hash = crypto.createHash('sha256');
+    let got = 0;
+    try {
+      const meter = new (await import('node:stream')).Transform({
+        transform(chunk, _e, cb) {
+          got += chunk.length;
+          if (got > MAX_UPLOAD) return cb(Object.assign(new Error('payload too large'), { code: 413 }));
+          hash.update(chunk);
+          cb(null, chunk);
+        },
+      });
+      await pipeline(res.body, meter, createWriteStream(tmp));
+      const digest = hash.digest('hex');
+      if (expected && digest !== expected) {
+        throw new Error(`checksum mismatch: got ${digest.slice(0, 12)}…, expected ${String(expected).slice(0, 12)}…`);
+      }
+      if (size && got !== Number(size)) {
+        throw new Error(`size mismatch: got ${got} bytes, expected ${size}`);
+      }
+      // Atomic: Nimble must never see a half-written file under its real name.
+      await fs.rename(tmp, full);
+    } catch (e) {
+      await fs.rm(tmp, { force: true });
+      throw e;
+    }
+    return { name: path.basename(full), size: got, written: true };
+  },
+
   async 'PUT /media'(req, url) {
     const name = url.searchParams.get('name');
     const full = safeJoin(MEDIA_DIR, name);
@@ -269,8 +355,190 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// ---- iter12 m2: log tailer ------------------------------------------------
+
+let logState = {};                 // file -> { offset, ino }
+let logCfg = { enabled: false, files: [] };
+const statePath = () => path.join(STATE_DIR, 'logcursor.json');
+let stateWritable = true;
+
+async function loadLogState() {
+  try { logState = JSON.parse(await fs.readFile(statePath(), 'utf8')); }
+  catch { logState = {}; }
+}
+
+async function saveLogState() {
+  if (!stateWritable) return;
+  try {
+    await fs.mkdir(STATE_DIR, { recursive: true });
+    await writeAtomic(statePath(), JSON.stringify(logState));
+  } catch (e) {
+    stateWritable = false;
+    console.error(`[nnm-agent] cannot persist the log cursor in ${STATE_DIR} (${e.message}); ` +
+                  'after a restart the tail will resume at the end of the file');
+  }
+}
+
+/**
+ * Read what is new in one file and hand it to `ship`.
+ *
+ * The cursor only advances once `ship` has succeeded, so a panel that is down
+ * costs nothing: the file itself is the buffer, and the agent re-reads from
+ * where it was rather than holding anything in memory.
+ */
+async function tailOnce(file, ship) {
+  const full = safeJoin(LOG_DIR, file);
+  let st;
+  try { st = await fs.stat(full); }
+  catch { return; }                       // not there yet — nothing to say
+  const ino = String(st.ino);
+
+  const prev = logState[file] || { offset: 0, ino: '' };
+  let { offset } = prev;
+  let rotated = false;
+
+  if (prev.ino && prev.ino !== ino) { rotated = true; offset = 0; }
+  else if (st.size < offset) { rotated = true; offset = 0; }   // truncated in place
+  // First sight of a file: start at the end. This is a tail, not an importer,
+  // and a 128 MB backlog is not what an operator asked for by enabling it.
+  else if (!prev.ino && st.size > LOG_BATCH_BYTES) offset = st.size;
+
+  const fh = await fs.open(full, 'r');
+  try {
+    for (;;) {
+      const stat = await fh.stat();
+      if (offset >= stat.size) break;
+      const len = Math.min(LOG_BATCH_BYTES, stat.size - offset);
+      const buf = Buffer.alloc(len);
+      const { bytesRead } = await fh.read(buf, 0, len, offset);
+      if (!bytesRead) break;
+      let slice = buf.subarray(0, bytesRead);
+      // Never ship a partial line: the panel frames multi-line records and a
+      // split inside one would corrupt the framing.
+      const nl = slice.lastIndexOf(0x0a);
+      if (nl === -1) {
+        if (bytesRead < len) break;       // incomplete line still being written
+        // A single line longer than a whole batch. Ship it rather than wedge.
+      } else {
+        slice = slice.subarray(0, nl + 1);
+      }
+      await ship({ file, ino, gen: rotated ? 1 : 0, offset, data: slice.toString('utf8') });
+      offset += slice.length;
+      logState[file] = { offset, ino };
+      await saveLogState();
+      rotated = false;                    // only the first batch carries the flag
+    }
+  } finally { await fh.close(); }
+
+  logState[file] = { offset, ino };
+  await saveLogState();
+}
+
+async function logLoop() {
+  await loadLogState();
+  for (;;) {
+    try {
+      if (logCfg.enabled && LOG_ENABLED && logCfg.files.length) {
+        for (const f of logCfg.files) {
+          await tailOnce(f, async (batch) => {
+            await panelFetch('/logs', batch, { timeoutMs: 30_000 });
+          });
+        }
+      }
+    } catch (e) {
+      // Shipping failed, so the cursor did not move. The next pass re-reads
+      // the same bytes; nothing is lost unless the file rotates first, and
+      // that gap is reported by the panel rather than hidden.
+      console.error(`[nnm-agent] log shipping failed: ${e && e.message || e}`);
+    }
+    await new Promise(r => setTimeout(r, LOG_BATCH_MS));
+  }
+}
+
+// ---- iter12 m1: outbound poll loop -----------------------------------------
+//
+// Tasks are dispatched through the SAME route table the local HTTP server
+// uses. A task names a route key ('GET /health'), so the agent cannot be asked
+// to do anything it could not already do, and there is no second dispatch
+// surface to keep in step with the first.
+async function panelFetch(pathname, body, { timeoutMs = 35_000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${PANEL_URL}/api/agent-gw${pathname}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': `Bearer ${TOKEN}`,
+        'x-nnm-server': SERVER_ID,
+      },
+      body: JSON.stringify({ serverId: SERVER_ID, ...body }),
+      signal: ctl.signal,
+    });
+    if (!r.ok) throw new Error(`panel returned ${r.status}`);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+async function runTask(task) {
+  const handler = routes[task.route];
+  if (!handler) throw new Error(`no handler for ${task.route}`);
+  // The handlers were written against a node request and a URL. Tasks arrive
+  // as plain data, so they are given the same two shapes rather than the
+  // handlers being rewritten to take a third.
+  const url = new URL(`http://agent${task.route.split(' ')[1]}`);
+  for (const [k, v] of Object.entries(task.query || {})) url.searchParams.set(k, String(v));
+  const payload = task.body === null || task.body === undefined ? null : Buffer.from(JSON.stringify(task.body));
+  const req = {
+    method: task.route.split(' ')[0],
+    headers: {},
+    async *[Symbol.asyncIterator]() { if (payload) yield payload; },
+  };
+  // Handlers that take structured input get it as a third argument rather
+  // than having to re-parse a synthesised request body.
+  return await handler(req, url, task.body ?? null);
+}
+
+async function pollLoop() {
+  let backoff = 1000;
+  for (;;) {
+    try {
+      const health = await routes['GET /health']().catch(() => null);
+      const { task, config } = await panelFetch('/poll', { instanceId: INSTANCE_ID, version: AGENT_VERSION, health });
+      // The panel owns whether logs are shipped and which files. Carrying it on
+      // the poll response means there is nothing to configure on the box and
+      // no second channel to keep alive.
+      if (config?.logs) logCfg = { enabled: Boolean(config.logs.enabled), files: config.logs.files || [] };
+      backoff = 1000;
+      if (!task) continue;
+      try {
+        const result = await runTask(task);
+        await panelFetch(`/task/${task.id}/result`, { ok: true, result }, { timeoutMs: 15_000 });
+      } catch (e) {
+        await panelFetch(`/task/${task.id}/result`, { ok: false, error: String(e && e.message || e) }, { timeoutMs: 15_000 })
+          .catch(() => {});
+      }
+    } catch (e) {
+      // The panel being unreachable is normal — it is restarting, or the link
+      // is down. Back off, keep trying, and never exit: a stopped agent needs
+      // someone with shell access on a machine that by design has no inbound
+      // route.
+      console.error(`[nnm-agent] poll failed: ${e && e.message || e} (retry in ${backoff}ms)`);
+      await new Promise(r => setTimeout(r, backoff));
+      backoff = Math.min(backoff * 2, 60_000);
+    }
+  }
+}
+
 server.listen(PORT, BIND, () => {
   console.log(`[nnm-agent] listening on ${BIND}:${PORT}`);
   console.log(`[nnm-agent] conf=${CONF_DIR} media=${MEDIA_DIR} maxUpload=${(MAX_UPLOAD / 1e6).toFixed(0)}MB`);
   console.log(`[nnm-agent] logs=${LOG_ENABLED ? `${LOG_DIR} (read-only, chunk ${(MAX_LOG_CHUNK / 1024).toFixed(0)}KB)` : 'disabled'}`);
+  if (PANEL_ENABLED) {
+    console.log(`[nnm-agent] panel=${PANEL_URL} server=${SERVER_ID} instance=${INSTANCE_ID}`);
+    pollLoop();
+    if (LOG_ENABLED) logLoop();
+  } else {
+    console.log('[nnm-agent] panel polling disabled (NNM_AGENT_PANEL_URL / NNM_AGENT_SERVER_ID not set)');
+  }
 });

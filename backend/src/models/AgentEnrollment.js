@@ -22,10 +22,6 @@ import crypto from 'node:crypto';
 const enrollmentSchema = new mongoose.Schema({
   serverId: { type: mongoose.Schema.Types.ObjectId, ref: 'NimbleServer', required: true, index: true },
   tokenHash: { type: String, required: true, unique: true },
-  // Where the panel expects to reach the agent afterwards. The operator sets
-  // it, because only they know how their network is arranged; the enrol
-  // callback may override it with what the box actually reports.
-  baseUrlHint: { type: String, default: '' },
   // How the SERVER reaches the PANEL. Resolved once, when the ticket is
   // issued, and stored — the installer is regenerated on every fetch and its
   // SHA-256 is published to the operator, so it must not depend on anything

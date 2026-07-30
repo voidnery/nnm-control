@@ -11,7 +11,7 @@ const PAGES = [
   ['UsersPage','/users'], ['RolesPage','/roles'], ['AuditPage','/audit'],
   ['SettingsPage','/settings'], ['FunctionsPage','/functions'], ['TranscodersPage','/transcoders'],
   ['DistributionPage','/distribution'], ['PlaylistsPage','/playlists'], ['ZabbixPage','/zabbix'], ['CategoriesPage','/categories'],
-  ['ProfilePage','/profile'], ['ServerAgentsPage','/agents'],
+  ['ProfilePage','/profile'], ['ServerAgentsPage','/agents'], ['LogsPage','/logs'], ['LogCategoriesPage','/logs/categories'], ['LogDashboardsPage','/logs/dashboards'],
 ];
 
 const entry = `
@@ -63,7 +63,10 @@ window.__CLICKS = async (name, path) => {
   const faults = [];
   const onErr = (ev) => {
     const m = String((ev && ev.error && ev.error.message) || (ev && ev.message) || ev);
-    if (/is not defined|is not a function/.test(m)) faults.push(m);
+    // "Cannot read properties of undefined" is the same class of defect as an
+    // unbound handler: a click that takes the page down. Added after the gate
+    // watched one happen and stayed green.
+    if (/is not defined|is not a function|Cannot read properties/.test(m)) faults.push(m);
   };
   window.addEventListener('error', onErr);
   try {
@@ -134,9 +137,36 @@ window.fetch = (u) => {
     text:()=>Promise.resolve('{}') });
   if (/\/servers\/[^/]+\/agent$/.test(s)) return Promise.resolve({ ok:true, status:200,
     json:()=>Promise.resolve({ enabled:true, baseUrl:'http://10.0.0.5:8090', hasToken:true }), text:()=>Promise.resolve('{}') });
+  if (/\/servers\/[^/]+\/agent\/diagnosis$/.test(s)) return Promise.resolve({ ok:true, status:200,
+    json:()=>Promise.resolve({ code:'stopped-polling', severity:'error', lastContactAt:new Date().toISOString(),
+      sinceContactMs:120000, evidence:'last contact was 120s ago; the agent parks for at most 25s, so it is not polling',
+      hint:'agent.hint.stoppedPolling', agentVersion:5, instanceId:'x', recent:[] }), text:()=>Promise.resolve('{}') });
   if (/\/servers\/[^/]+\/agent\/health$/.test(s)) return Promise.resolve({ ok:true, status:200,
     json:()=>Promise.resolve({ ok:true, version:2, logs:true, confDir:'/srv/nimble/conf', mediaDir:'/srv/nimble/media/gallery',
       logDir:'/var/log/nimble', logExists:true, confExists:true }), text:()=>Promise.resolve('{}') });
+  if (/\/log-dashboards$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve([
+    { id:'D1', name:'Ночной мониторинг', description:'', windows:3, columns:2, refreshSec:30,
+      shareEnabled:true, shareExpiresAt:null, shareHits:12, shareLastAt:null, createdBy:'op', updatedAt:new Date().toISOString() }]),
+    text:()=>Promise.resolve('{}') });
+  if (s.includes('/logs/categories')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    definitions:[], counts:[
+      { key:'srt', total:121018, errors:15237, subs:['srtpull','srtlisten'], last:new Date().toISOString() },
+      { key:'transcoder', total:9447, errors:0, subs:['remtranmgmt'], last:new Date().toISOString() },
+      { key:'rtmp', total:1209, errors:0, subs:['rtmp'], last:null },
+      { key:'dvr', total:0, errors:0, subs:[], last:null }] }), text:()=>Promise.resolve('{}') });
+  if (s.includes('/logs/facets')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    levels:[{key:'E',n:15341},{key:'D',n:130772}], subs:[{key:'srtpull',n:101815},{key:'remtranmgmt',n:9447}], servers:[] }),
+    text:()=>Promise.resolve('{}') });
+  if (s.includes('/logs/groups')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    groups:[{ sub:'srtpull', level:'E', template:'connection closed for [#] socket=N errno=N srterror=[Connection does not exist]',
+              count:8661, first:new Date().toISOString(), last:new Date().toISOString(), servers:2, sample:'x', lastOffset:1 }],
+    distinct:142, scanned:163628, capped:false }), text:()=>Promise.resolve('{}') });
+  if (s.includes('/logs/search')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    rows:[{ id:'r1', serverId:'S1', file:'nimble.log', offset:1, ts:new Date().toISOString(), raw:'2026-07-29T19:14:49',
+            pid:1, tid:2, tag:'srtpull0', sub:'srtpull', level:'E', msg:'connection closed', cont:'', contLines:0 }],
+    nextBefore:null }), text:()=>Promise.resolve('{}') });
+  if (s.includes('/logs/status')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    settings:{ enabled:true, files:['nimble.log'] }, collector:{ mode:'push' }, cursors:[] }), text:()=>Promise.resolve('{}') });
   if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'] };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
   else if (s.includes('/stream-tags/')) body = { map:{} };
@@ -186,7 +216,7 @@ if (ed.error) { bad++; console.log('  ✗ ' + ed.error); }
 else if (!ed.opened) { bad++; console.log(`  ✗ builder did not render (${ed.len} chars)`); }
 else console.log(`  ✓ function builder + step editor render (${ed.len} chars)`);
 
-console.log('\nHANDLER BINDING (every button on every page is clicked):');
+console.log('\nHANDLER BINDING (every button on every page is clicked, and must not crash):');
 let clicks = 0;
 for (const [name, path] of PAGES) {
   const r = await window.__CLICKS(name, path);

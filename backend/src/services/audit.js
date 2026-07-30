@@ -1,7 +1,12 @@
 import { AuditLog } from '../models/AuditLog.js';
 
 // Deep-sanitize: any key smelling of a secret is masked before persisting.
-const SECRET_RE = /(password|token|api_?key|secret|ticket|code|backup)/i;
+//
+// iter11 m2 — `privateKey` and `passphrase` were NOT covered, and the audit
+// middleware persists the whole request body. Adding an SSH install route
+// would have written operators' private keys into the audit log in the clear.
+// Found before the route existed, which is the only good time to find it.
+const SECRET_RE = /(password|passphrase|token|api_?key|private_?key|secret|ticket|code|backup|credential)/i;
 export function sanitize(value, depth = 0) {
   if (depth > 6 || value === null || value === undefined) return value ?? null;
   if (Array.isArray(value)) return value.map(v => sanitize(v, depth + 1));

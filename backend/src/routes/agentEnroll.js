@@ -7,7 +7,7 @@ import { AgentEnrollment, hashTicket, newTicket } from '../models/AgentEnrollmen
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import crypto from 'node:crypto';
 import { installScript } from '../services/agentInstaller.js';
-import { agent } from '../services/agentClient.js';
+import { probeHostKey, runOverSsh, createJob, appendJob, finishJob, getJob } from '../services/sshInstaller.js';
 import { logEvent } from '../services/audit.js';
 
 // iter11 m1 — agent installation by one-time ticket.
@@ -45,35 +45,6 @@ function rateLimit(req, res, next) {
 
 const clientIp = (req) =>
   (req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || '').trim();
-
-// RFC1918 / loopback / link-local. Used only to WARN: a private address is
-// perfectly normal when the panel sits on the same network, and is a red flag
-// when it does not.
-export function isPrivateAddress(host) {
-  const h = String(host || '').replace(/^\[|\]$/g, '');
-  if (/^(localhost|127\.|::1$)/i.test(h)) return true;
-  if (/^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  if (/^169\.254\./.test(h)) return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(h)) return true;
-  return false;
-}
-
-function scriptFor(doc, rawTicket) {
-  return installScript({
-    panelUrl: doc.panelUrl,
-    ticket: rawTicket,
-    baseUrl: doc.baseUrlHint,
-    agentPort: doc.agentPort,
-    bind: doc.bind,
-    logDir: doc.logDir,
-    confDir: doc.confDir,
-    mediaDir: doc.mediaDir,
-  });
-}
-
-const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
 
 async function findLive(rawTicket) {
   if (!rawTicket || !/^[0-9a-f]{64}$/.test(rawTicket)) return null;
@@ -115,7 +86,7 @@ agentEnrollRouter.get('/agents/install/:ticket/nnm-agent.mjs', rateLimit, async 
 // that will ever write an agent credential without a logged-in operator, and
 // it consumes the ticket doing so.
 agentEnrollRouter.post('/agents/enroll', rateLimit, async (req, res) => {
-  const { ticket, agentToken, baseUrl, hostname, agentVersion } = req.body || {};
+  const { ticket, agentToken, hostname, agentVersion } = req.body || {};
   const doc = await findLive(ticket);
   if (!doc) {
     logEvent({ req, action: 'agent:enroll', target: 'unknown ticket', outcome: 'error', status: 404 });
@@ -127,12 +98,11 @@ agentEnrollRouter.post('/agents/enroll', rateLimit, async (req, res) => {
   const server = await NimbleServer.findById(doc.serverId);
   if (!server) return res.status(410).json({ error: 'the server this ticket was issued for no longer exists' });
 
-  // The hint wins when the operator gave one: only they know whether the
-  // address the box sees on itself is the address the panel can use.
-  const finalUrl = (doc.baseUrlHint || baseUrl || '').trim();
-  if (!finalUrl) return res.status(400).json({ error: 'no reachable address for the agent' });
-
-  server.agent = { enabled: true, baseUrl: finalUrl.replace(/\/+$/, ''), token: String(agentToken) };
+  // iter12 m5 — no address is recorded, because none is needed. From here the
+  // agent calls in; the panel never dials out. That is what makes this work on
+  // a machine with no inbound route at all.
+  server.agent.enabled = true;
+  server.agent.token = String(agentToken);
   await server.save();
 
   doc.status = 'enrolled';
@@ -144,10 +114,14 @@ agentEnrollRouter.post('/agents/enroll', rateLimit, async (req, res) => {
 
   logEvent({
     req, username: `enroll:${doc.createdBy}`, action: 'agent:enroll', target: server.name,
-    detail: { baseUrl: server.agent.baseUrl, hostname: doc.reportedHostname, agentVersion: doc.reportedVersion },
+    detail: { hostname: doc.reportedHostname, agentVersion: doc.reportedVersion },
     outcome: 'ok', status: 200,
   });
-  res.json({ ok: true, server: server.name });
+  // iter12 m1 — the agent needs to know which server it is before it can
+  // poll, and the panel is the only one who knows. Handing it back here is
+  // what closes the loop: from this point the agent connects to us and no
+  // address of its own is ever needed.
+  res.json({ ok: true, server: server.name, serverId: String(server._id), panelUrl: doc.panelUrl });
 });
 
 // ----------------------------------------------------------- authenticated ---
@@ -178,7 +152,6 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
     panelUrl,
     serverId: server._id,
     tokenHash: hashTicket(raw),
-    baseUrlHint: String(b.baseUrl || (server.host ? `http://${server.host}:${port}` : '')).trim(),
     agentPort: port,
     bind: String(b.bind || '0.0.0.0'),
     logDir: String(b.logDir || '/var/log/nimble'),
@@ -191,15 +164,11 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
   const url = `${panelUrl}/api/agents/install/${raw}`;
   const digest = sha256(scriptFor(doc, raw));
 
-  let host = '';
-  try { host = new URL(panelUrl).hostname; } catch { /* reported as a warning below */ }
-
   logEvent({ req, action: 'agent:enrollment-issued', target: server.name, outcome: 'ok', status: 200 });
   res.json({
     ticket: raw,                       // shown once; only its hash is stored
     expiresAt: doc.expiresAt,
     panelUrl,
-    baseUrlHint: doc.baseUrlHint,
     scriptUrl: url,
     scriptSha256: digest,
     // The convenient form.
@@ -212,10 +181,10 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
       `  && echo "${digest}  /tmp/nnm-install.sh" | sha256sum -c - \\`,
       `  && sudo sh /tmp/nnm-install.sh`,
     ].join('\n'),
-    warnings: [
-      ...(panelUrl.startsWith('https://') ? [] : ['panelNotHttps']),
-      ...(host && isPrivateAddress(host) ? ['panelPrivateAddress'] : []),
-    ],
+    // Only one warning survives: the agent's token crosses this link at
+    // enrollment. The panel's address being private is no longer a problem —
+    // the server has to reach the panel, and that is the only direction.
+    warnings: panelUrl.startsWith('https://') ? [] : ['panelNotHttps'],
   });
 });
 
@@ -243,24 +212,103 @@ agentEnrollRouter.delete('/servers/:id/agent/enrollment', requireAuth, requirePe
   res.json({ ok: true });
 });
 
-// Enrollment proves the box could reach the PANEL. It proves nothing about
-// the panel reaching the AGENT, which is the direction everything else uses.
-// This says which of the two is actually true.
-agentEnrollRouter.post('/servers/:id/agent/verify', requireAuth, requirePerm('servers.view'), async (req, res) => {
+
+// ---- iter11 m2: install over SSH -------------------------------------------
+//
+// This is the same enrollment as the copy-and-paste path — same ticket, same
+// checksum-verified command — with the panel doing the typing. Nothing about
+// the credential is kept: it arrives in one request, is used, and goes when
+// the request does.
+
+// Step one: what am I about to trust? Runs before any credential is asked for,
+// because ssh2 offers the host key during the handshake and this aborts there.
+agentEnrollRouter.post('/servers/:id/agent/ssh/probe', requireAuth, requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Server not found' });
-  if (!server.agent?.enabled || !server.agent?.baseUrl) return res.json({ reachable: false, reason: 'notConfigured' });
-  let host = '';
-  try { host = new URL(server.agent.baseUrl).hostname; } catch { /* malformed, reported below */ }
+  const host = String(req.body?.host || server.host || '').trim();
+  const port = Number(req.body?.port) > 0 ? Number(req.body.port) : 22;
+  if (!host) return res.status(400).json({ error: 'host is required' });
   try {
-    const health = await agent.health(server);
-    res.json({ reachable: true, health, privateAddress: isPrivateAddress(host) });
+    const key = await probeHostKey({ host, port });
+    logEvent({ req, action: 'agent:ssh-probe', target: `${host}:${port}`, outcome: 'ok', status: 200 });
+    res.json({ host, port, ...key });
   } catch (e) {
-    res.json({
-      reachable: false,
-      reason: 'unreachable',
-      error: e.message,
-      privateAddress: isPrivateAddress(host),
-    });
+    logEvent({ req, action: 'agent:ssh-probe', target: `${host}:${port}`, outcome: 'error', status: 502 });
+    res.status(502).json({ error: e.message });
   }
+});
+
+// Step two: install. The fingerprint the operator confirmed is required, and
+// the command is built here from a fresh ticket — the request cannot influence
+// what runs.
+agentEnrollRouter.post('/servers/:id/agent/ssh/install', requireAuth, requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+
+  const b = req.body || {};
+  const host = String(b.host || server.host || '').trim();
+  const port = Number(b.port) > 0 ? Number(b.port) : 22;
+  const username = String(b.username || '').trim();
+  const expectedFingerprint = String(b.fingerprint || '').trim();
+  if (!host || !username) return res.status(400).json({ error: 'host and username are required' });
+  if (!expectedFingerprint.startsWith('SHA256:')) {
+    return res.status(400).json({ error: 'confirm the host fingerprint first' });
+  }
+  if (!b.password && !b.privateKey) return res.status(400).json({ error: 'a password or a private key is required' });
+
+  // One live ticket per server, as with the manual path.
+  await AgentEnrollment.updateMany(
+    { serverId: server._id, status: { $in: ['pending', 'fetched'] } },
+    { $set: { status: 'revoked' } },
+  );
+  const raw = newTicket();
+  const agentPort = Number(b.agentPort) > 0 ? Number(b.agentPort) : 8090;
+  const panelUrl = String(b.panelUrl || `${req.protocol}://${req.get('host')}`).trim().replace(/\/+$/, '');
+  const doc = await AgentEnrollment.create({
+    serverId: server._id,
+    tokenHash: hashTicket(raw),
+    panelUrl,
+    agentPort,
+    bind: String(b.bind || '127.0.0.1'),
+    logDir: String(b.logDir || '/var/log/nimble'),
+    expiresAt: new Date(Date.now() + TTL_MIN * 60_000),
+    createdBy: req.user?.username || '',
+  });
+
+  const url = `${panelUrl}/api/agents/install/${raw}`;
+  const digest = sha256(scriptFor(doc, raw));
+  // The verified form, not the one-liner: the panel is about to run this as
+  // root on a broadcast server, and "it downloaded, so it must be fine" is not
+  // a standard we hold operators to either.
+  const command =
+    `curl -fsSL ${url} -o /tmp/nnm-install.sh` +
+    ` && echo "${digest}  /tmp/nnm-install.sh" | sha256sum -c -` +
+    ` && sh /tmp/nnm-install.sh; rc=$?; rm -f /tmp/nnm-install.sh; exit $rc`;
+
+  const jobId = createJob({ server: server.name, host, username });
+  logEvent({
+    req, action: 'agent:ssh-install', target: `${server.name} (${username}@${host}:${port})`,
+    detail: { fingerprint: expectedFingerprint, panelUrl }, outcome: 'ok', status: 202,
+  });
+  res.status(202).json({ jobId });
+
+  // Deliberately not awaited: the browser follows the job. The credential is
+  // captured by this closure and by nothing else — it is never written down.
+  runOverSsh({
+    host, port, username,
+    password: b.password, privateKey: b.privateKey, passphrase: b.passphrase,
+    expectedFingerprint, command, useSudo: Boolean(b.useSudo) && username !== 'root',
+    onOutput: (chunk) => appendJob(jobId, chunk),
+  })
+    .then(r => finishJob(jobId, { status: r.exitCode === 0 ? 'done' : 'failed', exitCode: r.exitCode }))
+    .catch(e => finishJob(jobId, { status: 'failed', error: e.message }));
+});
+
+agentEnrollRouter.get('/servers/:id/agent/ssh/jobs/:jobId', requireAuth, requirePerm('servers.manage'), (req, res) => {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'unknown or expired job' });
+  res.json({
+    id: job.id, status: job.status, exitCode: job.exitCode, error: job.error,
+    output: job.output, startedAt: job.startedAt, finishedAt: job.finishedAt || null,
+  });
 });

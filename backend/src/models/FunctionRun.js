@@ -17,6 +17,11 @@ const runStepSchema = new mongoose.Schema({
 const runSchema = new mongoose.Schema({
   functionId: { type: mongoose.Schema.Types.ObjectId, ref: 'FunctionDef' },
   functionName: String,
+  // Which set of values this run used. Recorded because "the function ran" is
+  // not the interesting fact when the same function can switch to four
+  // different inputs — the history has to say which one.
+  variantId: { type: String, default: '' },
+  variantName: { type: String, default: '' },
   startedBy: String,
   // running -> success | rolled_back | rollback_failed
   status: { type: String, default: 'running' },

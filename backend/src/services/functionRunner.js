@@ -76,13 +76,27 @@ async function getObject(cfg, kind, sid, targetId) {
 // Deep-tolerant comparison: primitives via String() (WMSPanel mixes "false"
 // and false), objects/arrays via canonical JSON (source_streams is an array
 // of objects — String() would falsely equal '[object Object]').
-function valueEq(a, b) {
-  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object') {
+// A patch says "make these fields be these values". Verification must ask
+// exactly that, and no more.
+//
+// The old comparison stringified whole objects, which is fine for arrays and
+// for flat values but wrong for a nested reference: switching an outgoing
+// stream's source sends `video_source: { id: 'X' }` while WMSPanel returns
+// `{ id: 'X', application: '…', stream: '…' }`. Byte equality would never
+// hold, and a correctly applied change would fail verification and roll itself
+// back. So for objects the wanted keys are compared as a SUBSET, recursively;
+// arrays and scalars keep exact comparison, where extra elements really would
+// mean the patch did not take.
+export function valueEq(a, b) {
+  if (Array.isArray(a) || Array.isArray(b)) {
     try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+  }
+  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object') {
+    return Object.keys(b).every(k => valueEq(a[k], b[k]));
   }
   return String(a) === String(b);
 }
-function valuesMatch(obj, patch) {
+export function valuesMatch(obj, patch) {
   return Object.keys(patch).every(k => valueEq(obj[k], patch[k]));
 }
 
@@ -339,18 +353,61 @@ async function preflight(cfg, fnDoc, run) {
   return problems;
 }
 
-export async function executeFunction(fnDoc, startedBy) {
+/**
+ * Resolve a function definition against one variant.
+ *
+ * Exported and pure so the same resolution can be shown in the UI, checked in
+ * preflight and used by the executor — three places that must never disagree
+ * about what is going to be sent.
+ *
+ * Overrides are merged over each step's own patch rather than replacing it, so
+ * a variant only names the fields it differs in. A missing variant id is an
+ * error rather than a silent fallback to the base steps: running the wrong
+ * inputs is exactly the failure this feature exists to prevent.
+ */
+export function resolveVariant(fnDoc, variantId) {
+  const variants = fnDoc.variants || [];
+  if (!variantId) {
+    // No variant asked for. Fine when the function has none; ambiguous when it
+    // does, and ambiguity here means switching to inputs nobody chose.
+    if (variants.length > 0) {
+      throw Object.assign(new Error(`This function has ${variants.length} variants — pick one`), { status: 400 });
+    }
+    return { steps: fnDoc.steps, variant: null };
+  }
+  const v = variants.find(x => x.id === variantId);
+  if (!v) throw Object.assign(new Error(`Unknown variant "${variantId}"`), { status: 400 });
+
+  const overrides = v.overrides || {};
+  const steps = fnDoc.steps.map((st, i) => {
+    const o = overrides[String(i)];
+    if (!o || typeof o !== 'object') return st;
+    const plain = typeof st.toObject === 'function' ? st.toObject() : { ...st };
+    return { ...plain, patch: { ...(plain.patch || {}), ...o } };
+  });
+  return { steps, variant: { id: v.id, name: v.name } };
+}
+
+export async function executeFunction(fnDoc, startedBy, variantId = '') {
   const settings = await Settings.load();
   if (settings.controlPlane !== 'wmspanel') {
     throw new Error('Functions require the WMSPanel control plane (see Settings)');
   }
   const cfg = settings.wmspanel;
 
+  // Resolved once, up front. Everything below — preflight, apply, rollback —
+  // works on the resolved steps, so there is no path where preflight validates
+  // one thing and the executor sends another.
+  const { steps, variant } = resolveVariant(fnDoc, variantId);
+  const resolved = { ...(typeof fnDoc.toObject === 'function' ? fnDoc.toObject() : fnDoc), steps };
+
   const run = await FunctionRun.create({
     functionId: fnDoc._id,
     functionName: fnDoc.name,
+    variantId: variant?.id || '',
+    variantName: variant?.name || '',
     startedBy,
-    steps: fnDoc.steps.map((st, i) => ({
+    steps: steps.map((st, i) => ({
       index: i,
       label: st.label || `${st.type}${st.objectKind ? ':' + st.objectKind : ''}${st.action ? ':' + st.action : ''}`,
       status: 'pending',
@@ -360,7 +417,7 @@ export async function executeFunction(fnDoc, startedBy) {
   // Fire-and-forget executor; UI polls the run document.
   (async () => {
     // Phase 0: preflight — zero mutations unless every step validates.
-    const problems = await preflight(cfg, fnDoc, run);
+    const problems = await preflight(cfg, resolved, run);
     if (problems.length > 0) {
       run.status = 'preflight_failed';
       run.cancelReason = 'Preflight failed, nothing was changed: ' +
@@ -369,12 +426,12 @@ export async function executeFunction(fnDoc, startedBy) {
       await run.save();
       return;
     }
-    for (let i = 0; i < fnDoc.steps.length; i++) await persistStep(run, i, { detail: '' });
+    for (let i = 0; i < steps.length; i++) await persistStep(run, i, { detail: '' });
 
     let failedAt = -1;
-    for (let i = 0; i < fnDoc.steps.length; i++) {
+    for (let i = 0; i < steps.length; i++) {
       try {
-        await applyStep(cfg, run, i, fnDoc.steps[i]);
+        await applyStep(cfg, run, i, steps[i]);
       } catch (e) {
         failedAt = i;
         await persistStep(run, i, { status: 'error', detail: e.message });
@@ -391,7 +448,7 @@ export async function executeFunction(fnDoc, startedBy) {
       let allOk = true;
       for (let i = failedAt; i >= 0; i--) {
         if (i === failedAt && !run.steps[i].applied) continue;
-        const ok = await rollbackStep(cfg, run, i, fnDoc.steps[i]);
+        const ok = await rollbackStep(cfg, run, i, steps[i]);
         if (!ok) allOk = false;
       }
       run.status = allOk ? 'rolled_back' : 'rollback_failed';

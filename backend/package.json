@@ -1,23 +1,31 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.10.2",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "test:functions": "node tests/function-actions.test.mjs",
     "test:stats": "node tests/stats-collector.test.mjs",
-    "test": "npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll",
+    "test": "npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants",
     "test:template": "node tests/transcoder-template.test.mjs",
     "test:fleet": "node tests/transcoder-fleet.test.mjs",
     "test:playback": "node tests/playback-endpoints.test.mjs",
     "test:logs": "node tests/log-transport.test.mjs",
-    "test:enroll": "node tests/agent-enroll.test.mjs"
+    "test:enroll": "node tests/agent-enroll.test.mjs",
+    "test:transport": "node tests/agent-transport.test.mjs",
+    "test:media": "node tests/media-transfer.test.mjs",
+    "test:diagnosis": "node tests/agent-diagnosis.test.mjs",
+    "test:ssh": "node tests/ssh-install.test.mjs",
+    "test:logquery": "node tests/log-query.test.mjs",
+    "test:dashboards": "node tests/log-dashboards.test.mjs",
+    "test:variants": "node tests/function-variants.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.5.0"
+    "mongoose": "^8.5.0",
+    "ssh2": "^1.17.0"
   }
 }

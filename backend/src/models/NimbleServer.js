@@ -37,10 +37,22 @@ const serverSchema = new mongoose.Schema({
   httpPort: { type: Number, default: 0 },
   // Optional file-access agent. Absent for servers where the operator has not
   // installed it; the panel works fully without it.
+  // iter12 m5 — there is no address here on purpose. The agent connects to
+  // the panel; the panel never connects to the agent, so how to reach the
+  // server is not something this system needs to know or store.
   agent: {
     enabled: { type: Boolean, default: false },
-    baseUrl: { type: String, default: '' },                                  // http://host:8090
     token: { type: String, default: '', set: encryptField, get: decryptField },
+    // Filled in by the agent itself on every poll.
+    lastContactAt: { type: Date, default: null },
+    instanceId: { type: String, default: '' },   // changes when the agent restarts
+    version: { type: Number, default: 0 },
+    // iter12 m4 — a restarting agent still polls, so it looks alive. Counting
+    // identity changes inside a window is what separates "running" from
+    // "coming back".
+    restarts: { type: Number, default: 0 },
+    restartWindowStart: { type: Date, default: null },
+    lastHealth: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   // iter10 m1 — Nimble stamps log lines with local time and no zone marker.
   // Minutes east of UTC for this box, so a fleet spanning zones stays

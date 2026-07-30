@@ -1,0 +1,270 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api.js';
+import { useI18n } from '../i18n.jsx';
+import Select from '../components/Select.jsx';
+import SearchInput from '../components/SearchInput.jsx';
+import { copyText } from '../lib/clipboard.js';
+import { useToast } from '../toast.jsx';
+
+// iter10 m3 — the general log warehouse.
+//
+// The default view is GROUPED, and that is the whole design. On the measured
+// data one message accounts for 93% of a server's output — 15,237 identical
+// SRT errors in 31 minutes — so a chronological list is one line repeated
+// eight times a second. Grouped, the same window is 142 rows and the shape of
+// what is happening is legible at a glance. Raw is one click away for when
+// someone needs the sequence rather than the summary.
+
+const LEVELS = [
+  { key: 'E', label: 'Error', cls: 'lvl-e' },
+  { key: 'W', label: 'Warn', cls: 'lvl-w' },
+  { key: 'I', label: 'Info', cls: 'lvl-i' },
+  { key: 'V', label: 'Verbose', cls: 'lvl-v' },
+  { key: 'D', label: 'Debug', cls: 'lvl-d' },
+];
+const RANGES = [
+  { key: '15m', mins: 15 }, { key: '1h', mins: 60 },
+  { key: '6h', mins: 360 }, { key: '24h', mins: 1440 }, { key: 'all', mins: 0 },
+];
+
+const fmtTs = (d) => (d ? new Date(d).toISOString().replace('T', ' ').slice(0, 19) : '—');
+const fmtN = (n) => new Intl.NumberFormat().format(n);
+
+export default function LogsPage() {
+  const { t } = useI18n();
+  const { push } = useToast();
+  const [servers, setServers] = useState([]);
+  const [status, setStatus] = useState(null);
+
+  const [serverId, setServerId] = useState('');
+  const [levels, setLevels] = useState([]);          // empty = all
+  const [subs, setSubs] = useState([]);
+  const [range, setRange] = useState('1h');
+  const [q, setQ] = useState('');
+  const [mode, setMode] = useState('grouped');
+  const [live, setLive] = useState(false);
+
+  const [facets, setFacets] = useState(null);
+  const [groups, setGroups] = useState(null);
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(null);            // expanded template
+  const [openRows, setOpenRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const timer = useRef(null);
+
+  useEffect(() => {
+    api('/servers').then(setServers).catch(() => {});
+    api('/logs/status').then(setStatus).catch(() => {});
+  }, []);
+
+  const params = useMemo(() => {
+    const p = new URLSearchParams();
+    if (serverId) p.set('serverId', serverId);
+    if (levels.length) p.set('levels', levels.join(','));
+    if (subs.length) p.set('subs', subs.join(','));
+    if (q.trim()) p.set('q', q.trim());
+    const r = RANGES.find(x => x.key === range);
+    if (r?.mins) p.set('from', new Date(Date.now() - r.mins * 60_000).toISOString());
+    return p;
+  }, [serverId, levels, subs, q, range]);
+
+  const load = useCallback(async () => {
+    setBusy(true); setError('');
+    try {
+      const qs = params.toString();
+      const [f, data] = await Promise.all([
+        api(`/logs/facets?${qs}`),
+        mode === 'grouped' ? api(`/logs/groups?${qs}&limit=100`) : api(`/logs/search?${qs}&limit=200`),
+      ]);
+      setFacets(f);
+      if (mode === 'grouped') { setGroups(data); setRows(null); }
+      else { setRows(data); setGroups(null); }
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }, [params, mode]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Live follow only makes sense on the raw view; a grouped view that reshuffles
+  // every few seconds is unreadable.
+  useEffect(() => {
+    if (timer.current) { clearInterval(timer.current); timer.current = null; }
+    if (live) timer.current = setInterval(load, 5000);
+    return () => { if (timer.current) clearInterval(timer.current); timer.current = null; };
+  }, [live, load]);
+
+  const toggle = (arr, set, key) => set(arr.includes(key) ? arr.filter(x => x !== key) : [...arr, key]);
+
+  const expand = async (g) => {
+    if (open === g.template) { setOpen(null); setOpenRows(null); return; }
+    setOpen(g.template); setOpenRows(null);
+    try {
+      const p = new URLSearchParams(params);
+      p.set('template', g.template);
+      p.set('subs', g.sub);
+      p.set('levels', g.level);
+      setOpenRows(await api(`/logs/groups/rows?${p.toString()}`));
+    } catch (e) { setOpenRows({ rows: [], error: e.message }); }
+  };
+
+  const serverName = (id) => servers.find(s => s.id === id)?.name || id.slice(-6);
+
+  return (
+    <div>
+      <h1>{t('logs.title')}</h1>
+      <div className="sub">{t('logs.sub')}</div>
+
+      {status && !status.settings?.enabled && (
+        <div className="error-box">{t('logs.disabled')}</div>
+      )}
+
+      <div className="panel" style={{ marginBottom: 10 }}>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Select value={serverId} onChange={setServerId} style={{ minWidth: 180 }}
+                  options={[{ value: '', label: t('logs.allServers') },
+                            ...servers.map(s => ({ value: s.id, label: s.name }))]} />
+          <Select value={range} onChange={setRange} style={{ width: 120 }}
+                  options={RANGES.map(r => ({ value: r.key, label: t(`logs.range.${r.key}`) }))} />
+          <SearchInput style={{ flex: 1, minWidth: 220 }} value={q} onChange={setQ}
+                       placeholder={t('logs.searchPlaceholder')} />
+          <button onClick={load} disabled={busy}>{busy ? '…' : t('action.refresh')}</button>
+        </div>
+
+        <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="hint">{t('logs.level')}</span>
+          {LEVELS.map(l => {
+            const n = facets?.levels?.find(x => x.key === l.key)?.n || 0;
+            return (
+              <button key={l.key} className={levels.includes(l.key) ? 'primary' : ''}
+                      onClick={() => toggle(levels, setLevels, l.key)} title={l.label}>
+                {l.key}{n ? ` ${fmtN(n)}` : ''}
+              </button>
+            );
+          })}
+          <span style={{ width: 12 }} />
+          <span className="hint">{t('logs.subsystem')}</span>
+          {(facets?.subs || []).slice(0, 14).map(s => (
+            <button key={s.key} className={subs.includes(s.key) ? 'primary' : ''}
+                    onClick={() => toggle(subs, setSubs, s.key)}>
+              {s.key} {fmtN(s.n)}
+            </button>
+          ))}
+          {(levels.length > 0 || subs.length > 0) && (
+            <button onClick={() => { setLevels([]); setSubs([]); }}>{t('logs.clearFilters')}</button>
+          )}
+        </div>
+
+        <div className="row" style={{ gap: 12, marginTop: 8, alignItems: 'center' }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+            <input type="radio" checked={mode === 'grouped'} onChange={() => setMode('grouped')} />
+            {t('logs.grouped')}
+          </label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+            <input type="radio" checked={mode === 'raw'} onChange={() => setMode('raw')} />
+            {t('logs.raw')}
+          </label>
+          {mode === 'raw' && (
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+              <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
+              {t('logs.follow')}
+            </label>
+          )}
+          {groups && (
+            <span className="hint">
+              {t('logs.collapsed', { records: fmtN(groups.scanned), templates: fmtN(groups.distinct) })}
+              {groups.capped && <> · {t('logs.capped')}</>}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {mode === 'grouped' && groups && (
+        <div className="panel">
+          <table>
+            <thead><tr>
+              <th style={{ width: 90 }}>{t('logs.count')}</th>
+              <th style={{ width: 70 }}>{t('logs.lvl')}</th>
+              <th style={{ width: 130 }}>{t('logs.subsystem')}</th>
+              <th>{t('logs.message')}</th>
+              <th style={{ width: 160 }}>{t('logs.lastSeen')}</th>
+            </tr></thead>
+            <tbody>
+              {groups.groups.map(g => (
+                <>
+                  <tr key={g.sub + g.level + g.template} className="tally" style={{ cursor: 'pointer' }}
+                      onClick={() => expand(g)}>
+                    <td className="mono"><b>{fmtN(g.count)}</b></td>
+                    <td><span className={'badge ' + (g.level === 'E' ? 'err' : 'live')}>{g.level}</span></td>
+                    <td className="mono">{g.sub}</td>
+                    <td className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>{g.template}</td>
+                    <td className="mono" style={{ fontSize: 12 }}>{fmtTs(g.last)}</td>
+                  </tr>
+                  {open === g.template && (
+                    <tr key={g.template + '-rows'}>
+                      <td colSpan={5} style={{ background: 'var(--panel2, rgba(0,0,0,.15))' }}>
+                        {!openRows ? <div className="hint">{t('sd.loading')}</div> : (
+                          <>
+                            <div className="row" style={{ justifyContent: 'space-between' }}>
+                              <span className="hint">{t('logs.samples', { n: openRows.rows.length })}</span>
+                              <button onClick={async (e) => {
+                                e.stopPropagation();
+                                const text = openRows.rows.map(r => `[${r.raw}] [${r.tag}] ${r.level}: ${r.msg}`).join('\n');
+                                push(await copyText(text)
+                                  ? { type: 'ok', message: t('srt.copied') }
+                                  : { type: 'error', message: t('copy.failed') });
+                              }}>{t('srt.copy')}</button>
+                            </div>
+                            <pre className="mono" style={{ fontSize: 11, maxHeight: 260, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                              {openRows.rows.map(r => `[${r.raw}] P${r.pid}-T${r.tid} [${r.tag}] ${r.level}: ${r.msg}${r.cont ? '\n' + r.cont : ''}`).join('\n')}
+                            </pre>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+              {groups.groups.length === 0 && (
+                <tr><td colSpan={5} className="hint">{t('logs.nothing')}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {mode === 'raw' && rows && (
+        <div className="panel">
+          <table>
+            <thead><tr>
+              <th style={{ width: 160 }}>{t('logs.time')}</th>
+              <th style={{ width: 40 }}></th>
+              <th style={{ width: 120 }}>{t('logs.subsystem')}</th>
+              {!serverId && <th style={{ width: 120 }}>{t('logs.server')}</th>}
+              <th>{t('logs.message')}</th>
+            </tr></thead>
+            <tbody>
+              {rows.rows.map(r => (
+                <tr key={r.id} className="tally">
+                  <td className="mono" style={{ fontSize: 12 }}>{r.raw?.replace('T', ' ') || fmtTs(r.ts)}</td>
+                  <td><span className={'badge ' + (r.level === 'E' ? 'err' : 'live')}>{r.level}</span></td>
+                  <td className="mono" style={{ fontSize: 12 }}>{r.tag}</td>
+                  {!serverId && <td className="mono" style={{ fontSize: 12 }}>{serverName(r.serverId)}</td>}
+                  <td className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                    {r.msg}
+                    {r.contLines > 0 && <span className="hint"> · {t('logs.plusLines', { n: r.contLines })}</span>}
+                  </td>
+                </tr>
+              ))}
+              {rows.rows.length === 0 && (
+                <tr><td colSpan={serverId ? 4 : 5} className="hint">{t('logs.nothing')}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

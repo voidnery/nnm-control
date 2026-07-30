@@ -23,6 +23,10 @@ import AuditPage from './pages/AuditPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import PlaylistsPage from './pages/PlaylistsPage.jsx';
 import ServerAgentsPage from './pages/ServerAgentsPage.jsx';
+import LogsPage from './pages/LogsPage.jsx';
+import LogCategoriesPage from './pages/LogCategoriesPage.jsx';
+import LogDashboardsPage from './pages/LogDashboardsPage.jsx';
+import SharedLogsPage from './pages/SharedLogsPage.jsx';
 import CategoriesPage from './pages/CategoriesPage.jsx';
 import TranscodersPage from './pages/TranscodersPage.jsx';
 import DistributionPage from './pages/DistributionPage.jsx';
@@ -43,6 +47,9 @@ function Layout({ children }) {
           {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/transcoders">{t('nav.transcoders')}</NavLink>}
           {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/distribution">{t('nav.distribution')}</NavLink>}
           {can('playlist.view') && <NavLink to="/playlists">{t('nav.playlists')}</NavLink>}
+          {can('streams.view') && <NavLink to="/logs">{t('nav.logs')}</NavLink>}
+          {can('streams.view') && <NavLink to="/logs/categories">{t('nav.logCategories')}</NavLink>}
+          {can('streams.view') && <NavLink to="/logs/dashboards">{t('nav.logDashboards')}</NavLink>}
           {can('servers.manage') && <NavLink to="/agents">{t('nav.agents')}</NavLink>}
           {can('category.view') && <NavLink to="/categories">{t('nav.categories')}</NavLink>}
           {can('users.manage') && <NavLink to="/users">{t('nav.users')}</NavLink>}
@@ -77,6 +84,14 @@ export default function App() {
       .catch(() => setNeedsSetup(false)); // backend down -> fall through to login, which will show its own error
   }, []);
 
+  // iter10 m5 — a shared dashboard is answered before anything to do with
+  // sessions. Someone watching a wall display has no account, and running the
+  // setup or login checks first would send them to a login page they cannot
+  // use.
+  if (loc.pathname.startsWith('/shared/logs/')) {
+    return <SharedLogsPage token={decodeURIComponent(loc.pathname.slice('/shared/logs/'.length))} />;
+  }
+
   if (!ready || needsSetup === null) return null;
   if (needsSetup) return <SetupPage onDone={() => setNeedsSetup(false)} />;
   if (!user) {
@@ -99,6 +114,9 @@ export default function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/playlists" element={<PlaylistsPage />} />
         <Route path="/agents" element={<ServerAgentsPage />} />
+        <Route path="/logs" element={<LogsPage />} />
+        <Route path="/logs/categories" element={<LogCategoriesPage />} />
+        <Route path="/logs/dashboards" element={<LogDashboardsPage />} />
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/transcoders" element={<TranscodersPage />} />
         <Route path="/distribution" element={<DistributionPage />} />

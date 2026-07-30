@@ -47,6 +47,16 @@ const PRESETS = [
   { key: 'fn.p.switchRepublish', label: 'Switch republish source', step: { type: 'patch', objectKind: 'republish', patch: { src_app: 'zagl_app', src_strm: 'zagl_stream' }, label: 'Switch republish source' } },
   { key: 'fn.p.switchUdp', label: 'Switch SRT/UDP output source', step: { type: 'patch', objectKind: 'udp', patch: { source_streams: [{ application: 'zagl_app', stream: 'zagl_stream' }] }, label: 'Switch SRT/UDP source' } },
   { key: 'fn.p.patchOutgoing', label: 'Patch outgoing stream',   step: { type: 'patch', objectKind: 'outgoing', patch: {}, label: 'Patch outgoing stream' } },
+  // iter11 2b — "SRT in Nimble" is an `outgoing` object, and its inputs are
+  // nested references to `incoming` objects. Field names pinned from the live
+  // account dump; the source is picked, not typed, because an id typed wrong
+  // is a stream switched to nothing.
+  { key: 'fn.p.switchSources', label: 'SRT in Nimble: switch video + audio source',
+    step: { type: 'patch', objectKind: 'outgoing', patch: { video_source: { id: '' }, audio_source: { id: '' } }, label: 'Switch sources' } },
+  { key: 'fn.p.switchVideoSource', label: 'SRT in Nimble: switch video source',
+    step: { type: 'patch', objectKind: 'outgoing', patch: { video_source: { id: '' } }, label: 'Switch video source' } },
+  { key: 'fn.p.switchAudioSource', label: 'SRT in Nimble: switch audio source',
+    step: { type: 'patch', objectKind: 'outgoing', patch: { audio_source: { id: '' } }, label: 'Switch audio source' } },
   { key: 'fn.p.hotswapOn', label: 'Подмена картинкой ON (hotswap)', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: true }, label: 'Substitute ON' } },
   { key: 'fn.p.hotswapOff', label: 'Подмена картинкой OFF (hotswap)', step: { type: 'patch', objectKind: 'hotswap', patch: { emergency: false }, label: 'Substitute OFF' } },
   { key: 'fn.p.pauseOutgoing', label: 'Pause outgoing',  step: { type: 'action', action: 'pause', label: 'Pause outgoing' } },
@@ -145,6 +155,28 @@ function StepEditor({ step, servers, onChange, onRemove }) {
   const [liveErr, setLiveErr] = useState('');
   const [pick, setPick] = useState('');          // "app/stream"
   const [pairKind, setPairKind] = useState(defaultPairFor(step.objectKind));
+  // iter11 2a — the source pickers. Nested references to `incoming` objects,
+  // so the operator picks a source rather than typing an id: an id typed wrong
+  // is a stream switched to nothing, and it verifies as "applied".
+  const wantsSource = step.type === 'patch' && step.objectKind === 'outgoing' &&
+    ('video_source' in (step.patch || {}) || 'audio_source' in (step.patch || {}));
+  const [sources, setSources] = useState(null);
+  const [srcErr, setSrcErr] = useState('');
+  useEffect(() => {
+    if (!wantsSource || !step.serverId) return;
+    let dead = false;
+    api(`/functions/objects/${step.serverId}/incoming`)
+      .then(d => { if (!dead) { setSources(d.objects || d || []); setSrcErr(''); } })
+      .catch(e => { if (!dead) setSrcErr(e.message); });
+    return () => { dead = true; };
+  }, [wantsSource, step.serverId]);
+  const setSource = (field, id) => {
+    const patch = { ...(step.patch || {}) };
+    patch[field] = { id };
+    onChange({ ...step, patch });
+    setPatchText(JSON.stringify(patch));
+  };
+  const srcLabel = (o) => `${o.application || o.app || '?'}/${o.stream || o.strm || '?'}`;
   const applyPatchText = (t) => {
     setPatchText(t);
     try { onChange({ ...step, patch: JSON.parse(t || '{}') }); setPatchErr(''); }
@@ -244,6 +276,20 @@ function StepEditor({ step, servers, onChange, onRemove }) {
                   <button disabled={!pick.includes('/')} onClick={insertPick}>{t('fn.insert')}</button>
                 </div>
               )}
+              {wantsSource && (
+                <div className="panel" style={{ marginBottom: 6 }}>
+                  <div className="hint" style={{ marginBottom: 4 }}>{t('fn.sourceHint')}</div>
+                  {srcErr && <div className="hint" style={{ color: 'var(--warn)' }}>{srcErr}</div>}
+                  {['video_source', 'audio_source'].filter(f => f in (step.patch || {})).map(f => (
+                    <div key={f} style={{ marginBottom: 4 }}>
+                      <label>{t(f === 'video_source' ? 'fn.videoSource' : 'fn.audioSource')}</label>
+                      <Select searchable value={step.patch[f]?.id || ''} onChange={v => setSource(f, v)}
+                              options={[{ value: '', label: t('fn.pickSource') },
+                                        ...(sources || []).map(o => ({ value: String(o.id), label: srcLabel(o) }))]} />
+                    </div>
+                  ))}
+                </div>
+              )}
               <label>Patch (JSON: fields to change; snapshot/rollback is automatic)</label>
               <textarea className="mono" rows={2} value={patchText} onChange={e => applyPatchText(e.target.value)} />
               {patchErr && <div className="hint" style={{ color: 'var(--warn)' }}>{patchErr}</div>}
@@ -261,6 +307,67 @@ function StepEditor({ step, servers, onChange, onRemove }) {
   );
 }
 
+// Choosing which set of values to run with, and seeing what that means before
+// committing. The preview comes from the server, resolved by the SAME function
+// the executor uses — a preview computed a second way would eventually
+// disagree with the run, and the operator would be reading a reassurance
+// rather than a fact.
+function VariantPicker({ fn, onCancel, onPick }) {
+  const { t } = useI18n();
+  const [sel, setSel] = useState(fn.variants[0]?.id || '');
+  const [preview, setPreview] = useState(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (!sel) return;
+    let dead = false;
+    setPreview(null); setErr('');
+    api(`/functions/${fn._id}/preview?variantId=${encodeURIComponent(sel)}`)
+      .then(d => { if (!dead) setPreview(d); })
+      .catch(e => { if (!dead) setErr(e.message); });
+    return () => { dead = true; };
+  }, [fn._id, sel]);
+
+  return (
+    <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="modal">
+        <h3 style={{ marginTop: 0 }}>{t('fn.pickVariant', { name: fn.name })}</h3>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+          {fn.variants.map(v => (
+            <button key={v.id} className={sel === v.id ? 'primary' : ''} onClick={() => setSel(v.id)}>{v.name}</button>
+          ))}
+        </div>
+        {err && <div className="error-box">{err}</div>}
+        {preview && (
+          <div className="panel">
+            <div className="hint" style={{ marginBottom: 4 }}>{t('fn.previewHint')}</div>
+            <table>
+              <tbody>
+                {preview.steps.map(st => (
+                  <tr key={st.index} className="tally">
+                    <td className="mono" style={{ width: 24, fontSize: 12 }}>{st.index + 1}</td>
+                    <td style={{ fontSize: 12 }}>{st.label || st.type}{st.targetLabel ? ` · ${st.targetLabel}` : ''}</td>
+                    <td className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                      {st.type === 'patch' ? JSON.stringify(st.patch) : '—'}
+                      {st.overridden?.length > 0 && (
+                        <span className="badge live" style={{ marginLeft: 6 }}>{st.overridden.join(', ')}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+          <button onClick={onCancel}>{t('action.cancel')}</button>
+          <button className="primary" disabled={!sel} onClick={() => onPick(sel)}>{t('fn.run')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Builder({ initial, servers, onClose, onSaved }) {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -271,13 +378,35 @@ function Builder({ initial, servers, onClose, onSaved }) {
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
   const [steps, setSteps] = useState(initial.steps || []);
+  // iter11 2b — one skeleton, several sets of values. An empty list means the
+  // function runs exactly as it always did.
+  const [variants, setVariants] = useState(initial.variants || []);
+  const [openVariant, setOpenVariant] = useState(null);
   const [error, setError] = useState('');
 
   const addPreset = (preset) => setSteps(st => [...st, { serverId: '', targetId: '', waitSec: 0, ...JSON.parse(JSON.stringify(preset.step)) }]);
+
+  const addVariant = () => setVariants(v => [...v, {
+    id: `v${Math.random().toString(36).slice(2, 8)}`,
+    name: `${t('fn.variant')} ${v.length + 1}`,
+    overrides: {},
+  }]);
+  const patchVariant = (id, patch) => setVariants(v => v.map(x => (x.id === id ? { ...x, ...patch } : x)));
+  const dropVariant = (id) => setVariants(v => v.filter(x => x.id !== id));
+  const setOverride = (vid, stepIdx, text) => {
+    setVariants(vs => vs.map(v => {
+      if (v.id !== vid) return v;
+      const o = { ...(v.overrides || {}) };
+      const trimmed = String(text).trim();
+      if (!trimmed) { delete o[String(stepIdx)]; return { ...v, overrides: o }; }
+      try { o[String(stepIdx)] = JSON.parse(trimmed); } catch { return v; }   // keep last valid
+      return { ...v, overrides: o };
+    }));
+  };
   const save = async () => {
     setError('');
     try {
-      const body = { name, description, steps };
+      const body = { name, description, steps, variants };
       if (isEdit) await api(`/functions/${initial._id}`, { method: 'PUT', body });
       else await api('/functions', { method: 'POST', body });
       onSaved();
@@ -302,6 +431,54 @@ function Builder({ initial, servers, onClose, onSaved }) {
         <div className="row" style={{ flexWrap: 'wrap' }}>
           {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>)}
         </div>
+        {/* iter11 2b — the same steps, several sets of values. Only the fields
+            that differ are named per variant; everything else falls through to
+            the step's own patch, so adding a stream to the function adds it to
+            every variant at once instead of once per copy. */}
+        <div className="panel" style={{ marginTop: 12 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <b>{t('fn.variants')}</b>
+              <div className="hint">{variants.length === 0 ? t('fn.variantsNone') : t('fn.variantsHint')}</div>
+            </div>
+            <button onClick={addVariant}>{t('fn.addVariant')}</button>
+          </div>
+          {variants.map(v => (
+            <div key={v.id} className="panel" style={{ marginTop: 8 }}>
+              <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                <input style={{ flex: 1 }} value={v.name} onChange={e => patchVariant(v.id, { name: e.target.value })} />
+                <button onClick={() => setOpenVariant(openVariant === v.id ? null : v.id)}>
+                  {openVariant === v.id ? t('fn.hideValues') : t('fn.editValues', { n: Object.keys(v.overrides || {}).length })}
+                </button>
+                <button className="danger" onClick={() => dropVariant(v.id)}>{t('action.delete')}</button>
+              </div>
+              {openVariant === v.id && (
+                <div style={{ marginTop: 6 }}>
+                  {steps.map((st, i) => (
+                    st.type === 'patch' ? (
+                      <div key={i} style={{ marginBottom: 6 }}>
+                        <label style={{ fontSize: 12 }}>
+                          {i + 1}. {st.label || st.objectKind} {st.targetLabel ? `· ${st.targetLabel}` : ''}
+                        </label>
+                        <div className="hint mono" style={{ fontSize: 11 }}>
+                          {t('fn.variantBase')}: {JSON.stringify(st.patch || {})}
+                        </div>
+                        <textarea className="mono" rows={1} style={{ fontSize: 11 }}
+                                  placeholder={t('fn.variantSame')}
+                                  defaultValue={v.overrides?.[String(i)] ? JSON.stringify(v.overrides[String(i)]) : ''}
+                                  onChange={e => setOverride(v.id, i, e.target.value)} />
+                      </div>
+                    ) : null
+                  ))}
+                  {!steps.some(st => st.type === 'patch') && (
+                    <div className="hint">{t('fn.variantNoPatchSteps')}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
           <button onClick={onClose}>{t('action.cancel')}</button>
@@ -369,6 +546,7 @@ export default function FunctionsPage() {
   const [runs, setRuns] = useState([]);
   const [builder, setBuilder] = useState(null);
   const [activeRun, setActiveRun] = useState(null);
+  const [pickVariant, setPickVariant] = useState(null);
   const [error, setError] = useState('');
 
   const load = async () => {
@@ -380,12 +558,18 @@ export default function FunctionsPage() {
   };
   useEffect(() => { load(); }, []);
 
-  const run = async (fn) => {
-    if (!(await confirm(`Execute function "${fn.name}"? Steps will apply and verify sequentially; any failure rolls everything back.`))) return;
+  // A function with variants must not be runnable without choosing one:
+  // running the wrong inputs is the failure this feature exists to prevent,
+  // so the backend refuses too rather than trusting the UI to have asked.
+  const run = async (fn, variantId = '') => {
+    if ((fn.variants?.length || 0) > 0 && !variantId) { setPickVariant(fn); return; }
+    const which = variantId ? fn.variants.find(v => v.id === variantId)?.name : '';
+    if (!(await confirm(t('fn.confirmRun', { name: fn.name + (which ? ` · ${which}` : '') })))) return;
     try {
-      const r = await api(`/functions/${fn._id}/run`, { method: 'POST' });
+      const r = await api(`/functions/${fn._id}/run`, { method: 'POST', body: { variantId } });
+      setPickVariant(null);
       setActiveRun(r.runId);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); setPickVariant(null); }
   };
 
   const remove = async (fn) => {
@@ -412,7 +596,11 @@ export default function FunctionsPage() {
                 <td className="hint">{fn.description}</td>
                 <td>{fn.steps.map((s, i) => <span key={i} className="badge" style={{ margin: '1px 3px 1px 0' }}>{s.label || s.type}</span>)}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {can('functions.execute') && <button className="primary" onClick={() => run(fn)}>{t('fn.run')}</button>}{' '}
+                  {can('functions.execute') && (
+                    <button className="primary" onClick={() => run(fn)}>
+                      {t('fn.run')}{fn.variants?.length ? ` (${fn.variants.length})` : ''}
+                    </button>
+                  )}{' '}
                   {can('functions.manage') && <><button onClick={() => setBuilder(fn)}>{t('action.edit')}</button>{' '}
                   <button className="danger" onClick={() => remove(fn)}>{t('action.delete')}</button></>}
                 </td>
@@ -443,6 +631,10 @@ export default function FunctionsPage() {
       )}
       {builder && <Builder initial={builder} servers={servers}
                            onClose={() => setBuilder(null)} onSaved={() => { setBuilder(null); load(); }} />}
+      {pickVariant && (
+        <VariantPicker fn={pickVariant} onCancel={() => setPickVariant(null)}
+                       onPick={(vid) => run(pickVariant, vid)} />
+      )}
       {activeRun && <RunView runId={activeRun} onClose={() => { setActiveRun(null); load(); }} />}
     </div>
   );

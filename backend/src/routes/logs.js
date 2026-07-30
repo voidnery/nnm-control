@@ -3,8 +3,9 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { Settings } from '../models/Settings.js';
 import { LogRecord, LogCursor, LOG_CAP_MB } from '../models/LogRecord.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
-import { agent } from '../services/agentClient.js';
-import { collectorState, collectOnce, ingestFile, startLogCollector, stopLogCollector } from '../services/logCollector.js';
+import { runTask } from '../services/agentBus.js';
+import { collectorState } from '../services/logCollector.js';
+import { searchLogs, groupLogs, logFacets, templateOf, categoryCounts, CATEGORIES } from '../services/logQuery.js';
 import { logEvent } from '../services/audit.js';
 
 // iter10 m1 — transport only. This exposes enough to prove the pipe works and
@@ -53,7 +54,7 @@ logsRouter.get('/servers/:id/files', requirePerm('streams.view'), async (req, re
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Not found' });
   try {
-    res.json(await agent.logsList(server));
+    res.json(await runTask(server, 'GET /logs', { createdBy: req.user?.username }));
   } catch (e) {
     res.status(e.status || 502).json({ error: e.message });
   }
@@ -73,26 +74,61 @@ logsRouter.get('/tail', requirePerm('streams.view'), async (req, res) => {
   res.json({ records: records.reverse(), limit });
 });
 
-// Manual pull, for setting up and for proving a change took effect without
-// waiting for the next tick.
-logsRouter.post('/ingest', requirePerm('servers.manage'), async (req, res) => {
+// iter10 m3 — the general warehouse: every record, with the filters needed to
+// find something in ~14 GB/day.
+//
+// Grouped by default. On the measured data an ungrouped view is one line
+// repeated eight times a second, and the operator opened this during an
+// incident, not for entertainment.
+const readQuery = (req) => ({
+  serverId: req.query.serverId || undefined,
+  file: req.query.file || undefined,
+  levels: req.query.levels ? String(req.query.levels).split(',').filter(Boolean) : undefined,
+  subs: req.query.subs ? String(req.query.subs).split(',').filter(Boolean) : undefined,
+  from: req.query.from || undefined,
+  to: req.query.to || undefined,
+  q: req.query.q || undefined,
+  category: req.query.category || undefined,
+  tag: req.query.tag || undefined,
+  pid: req.query.pid || undefined,
+  limit: req.query.limit,
+  before: req.query.before,
+});
+
+logsRouter.get('/search', requirePerm('streams.view'), async (req, res) => {
+  try { res.json(await searchLogs(readQuery(req))); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+logsRouter.get('/groups', requirePerm('streams.view'), async (req, res) => {
+  try { res.json(await groupLogs(readQuery(req))); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// iter10 m4 — the functional windows: how much each part of Nimble is saying,
+// and how much of that is bad.
+logsRouter.get('/categories', requirePerm('streams.view'), async (req, res) => {
   try {
-    if (req.body?.serverId) {
-      const server = await NimbleServer.findById(req.body.serverId);
-      if (!server) return res.status(404).json({ error: 'Not found' });
-      const s = await Settings.load();
-      const files = s.logs?.files?.length ? s.logs.files : ['nimble.log'];
-      const results = [];
-      for (const f of files) results.push(await ingestFile(server, f));
-      logEvent({ req, action: 'logs:ingest', target: server.name, outcome: 'ok', status: 200 });
-      return res.json({ results });
-    }
-    const out = await collectOnce();
-    logEvent({ req, action: 'logs:ingest', target: 'all servers', outcome: 'ok', status: 200 });
-    res.json(out);
-  } catch (e) {
-    res.status(502).json({ error: e.message });
-  }
+    res.json({ definitions: CATEGORIES, counts: await categoryCounts(readQuery(req)) });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+logsRouter.get('/facets', requirePerm('streams.view'), async (req, res) => {
+  try { res.json(await logFacets(readQuery(req))); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// The records behind one group. The template is not stored, so the rows are
+// matched by re-templating within the same subsystem and level — the same
+// function that produced the group, which is what keeps the two consistent.
+logsRouter.get('/groups/rows', requirePerm('streams.view'), async (req, res) => {
+  const template = String(req.query.template || '');
+  if (!template) return res.status(400).json({ error: 'template is required' });
+  try {
+    const { rows } = await searchLogs({ ...readQuery(req), limit: 500 });
+    const want = rows.filter(r => templateOf(r.msg) === template).slice(0, Number(req.query.limit) || 100);
+    res.json({ rows: want, scanned: rows.length });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // Start/stop without a container restart, mirroring how the stats collector
@@ -104,7 +140,8 @@ logsRouter.post('/collector', requirePerm('settings.manage'), async (req, res) =
   if (req.body?.intervalSec) s.logs.intervalSec = Math.max(2, Number(req.body.intervalSec));
   if (Array.isArray(req.body?.files) && req.body.files.length) s.logs.files = req.body.files;
   await s.save();
-  if (on) await startLogCollector(); else stopLogCollector();
+  // iter12 m2 — nothing to start or stop here any more. Agents learn the new
+  // setting on their next poll, within seconds, and begin or stop shipping.
   logEvent({ req, action: 'logs:collector', target: on ? 'start' : 'stop', outcome: 'ok', status: 200 });
   res.json({ ok: true, settings: s.logs, collector: collectorState() });
 });

@@ -15,14 +15,17 @@ import { copyStreamsRouter } from './routes/copyStreams.js';
 import { categoriesRouter } from './routes/categories.js';
 import { statsRouter } from './routes/stats.js';
 import { logsRouter } from './routes/logs.js';
+import { logDashboardRouter } from './routes/logDashboards.js';
 import { agentEnrollRouter } from './routes/agentEnroll.js';
+import { agentGatewayRouter } from './routes/agentGateway.js';
 import { agentRouter } from './routes/agentProxy.js';
 import { transcoderGraphRouter } from './routes/transcoderGraph.js';
 import { transcoderTemplateRouter } from './routes/transcoderTemplate.js';
 import { transcoderFleetRouter } from './routes/transcoderFleet.js';
 import { transcoderEditRouter } from './routes/transcoderEdit.js';
 import { startStatsCollector } from './services/statsCollector.js';
-import { startLogCollector } from './services/logCollector.js';
+import { startSpoolSweeper } from './services/mediaSpool.js';
+import { startTaskReaper } from './services/agentBus.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
 import { auditRouter } from './routes/audit.js';
@@ -61,7 +64,13 @@ app.use('/api/stream-tags', streamTagsRouter);
 app.use('/api/wmspanel', copyStreamsRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/stats', statsRouter);
+// Declared first: its public share routes must not be shadowed by the
+// authenticated log router mounted on the same prefix.
+app.use('/api/log-dashboards', logDashboardRouter);
 app.use('/api/logs', logsRouter);
+// iter12 m1 — the agent's own entry point. Authenticated by the agent token,
+// never by an operator session.
+app.use('/api/agent-gw', agentGatewayRouter);
 app.use('/api', agentEnrollRouter);
 app.use('/api/servers', agentRouter);
 app.use('/api/wmspanel', transcoderGraphRouter);
@@ -79,7 +88,8 @@ const start = async () => {
   await connectDb();
   startPeriodicSync();
   await startStatsCollector();
-  await startLogCollector();
+  startSpoolSweeper();
+  startTaskReaper();
   if (!config.setupToken) {
     console.warn('[setup] SETUP_TOKEN is empty — first-run setup via web UI is disabled until it is set.');
   }

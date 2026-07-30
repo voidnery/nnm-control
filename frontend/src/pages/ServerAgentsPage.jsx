@@ -16,8 +16,9 @@ export default function ServerAgentsPage() {
   const { t } = useI18n();
   const { push } = useToast();
   const [servers, setServers] = useState(null);
-  const [rows, setRows] = useState({});      // serverId -> { enabled, baseUrl, hasToken, token }
+  const [rows, setRows] = useState({});      // serverId -> { enabled, hasToken, token }
   const [health, setHealth] = useState({});
+  const [diag, setDiag] = useState({});
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
@@ -30,9 +31,18 @@ export default function ServerAgentsPage() {
       const out = {};
       await Promise.all(list.map(async s => {
         try { out[s.id] = await api(`/servers/${s.id}/agent`); }
-        catch { out[s.id] = { enabled: false, baseUrl: '', hasToken: false }; }
+        catch { out[s.id] = { enabled: false, hasToken: false }; }
       }));
       setRows(out);
+      // iter12 m4 — the diagnosis is loaded with the list rather than on
+      // demand: an operator opening this page is usually here because
+      // something is wrong, and making them click to find out which kind of
+      // wrong is the whole problem it exists to solve.
+      const dg = {};
+      await Promise.all(list.filter(x => out[x.id]?.enabled).map(async x => {
+        try { dg[x.id] = await api(`/servers/${x.id}/agent/diagnosis`); } catch { /* shown as unknown */ }
+      }));
+      setDiag(dg);
     } catch (e) { setError(e.message); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -43,7 +53,7 @@ export default function ServerAgentsPage() {
     setBusy(id);
     try {
       const r = rows[id];
-      await api(`/servers/${id}/agent`, { method: 'PUT', body: { enabled: r.enabled, baseUrl: r.baseUrl, token: r.token || '' } });
+      await api(`/servers/${id}/agent`, { method: 'PUT', body: { enabled: r.enabled, token: r.token || '' } });
       // The token is write-only: once stored it is never sent back, so the
       // field is cleared and the "set" marker updated rather than re-shown.
       set(id, { token: '', hasToken: r.token ? true : r.hasToken });
@@ -100,13 +110,11 @@ export default function ServerAgentsPage() {
                   a mode of the form below. */}
               <button onClick={() => setInstall(s)}>{r.enabled ? t('inst.reinstall') : t('inst.install')}</button>
             </div>
+            {/* iter12 m5 — no address field. The token is normally set by
+                enrollment and never shown again; this stays for the case where
+                an operator rotated it on the box by hand. */}
             {r.enabled && (
-              <div className="grid" style={{ gridTemplateColumns: '2fr 2fr auto', gap: 8, alignItems: 'end', marginTop: 8 }}>
-                <div>
-                  <label>{t('agent.baseUrl')}</label>
-                  <input className="mono" placeholder="http://10.0.0.5:8090" value={r.baseUrl || ''}
-                         onChange={e => set(s.id, { baseUrl: e.target.value })} />
-                </div>
+              <div className="grid" style={{ gridTemplateColumns: '3fr auto', gap: 8, alignItems: 'end', marginTop: 8 }}>
                 <div>
                   <label>{r.hasToken ? t('agent.tokenSet') : t('agent.token')}</label>
                   <input type="password" className="mono" value={r.token || ''}
@@ -115,8 +123,22 @@ export default function ServerAgentsPage() {
                 </div>
                 <div className="row">
                   <button disabled={busy === s.id} onClick={() => save(s.id)}>{t('action.save')}</button>
-                  <button disabled={busy === s.id || !r.baseUrl} onClick={() => check(s.id)}>{t('agent.check')}</button>
+                  <button disabled={busy === s.id} onClick={() => check(s.id)}>{t('agent.check')}</button>
                 </div>
+              </div>
+            )}
+            {r.enabled && diag[s.id] && diag[s.id].code !== 'healthy' && diag[s.id].code !== 'not-configured' && (
+              <div className="error-box" style={{ marginTop: 8 }}>
+                <b>{t(`agent.diag.${diag[s.id].code}`)}</b>
+                <div className="hint" style={{ marginTop: 2 }}>{diag[s.id].evidence}</div>
+                {diag[s.id].hint && <div style={{ marginTop: 4 }}>{t(diag[s.id].hint)}</div>}
+              </div>
+            )}
+            {r.enabled && diag[s.id]?.code === 'healthy' && (
+              <div className="hint" style={{ marginTop: 8 }}>
+                ✓ {t('agent.diag.healthy')}
+                {diag[s.id].lastContactAt && <> · {t('agent.lastContact', { ago: Math.round((diag[s.id].sinceContactMs || 0) / 1000) })}</>}
+                {diag[s.id].agentVersion ? <> · v{diag[s.id].agentVersion}</> : null}
               </div>
             )}
             {h && (h.ok

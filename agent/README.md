@@ -10,33 +10,40 @@ in one sitting.
 * **read, and only read, files in the log directory** (`iter10 m1`)
 * report its own health
 
+**The panel never connects to this agent.** The agent calls out to the panel,
+takes whatever work is queued for it, and reports back — which is why it runs
+on a machine behind NAT with no port forwarding, no public address and no
+firewall hole. It listens on loopback only, so an operator with a shell can ask
+it how it is; nothing else uses that socket.
+
 It cannot run commands, reach any other path, or list anything outside those
 three directories. Names are single filenames — a name containing `/`, `..` or a
 NUL byte is refused. The log directory has no write route at all, only
 `GET /logs` and `GET /logs/read`, and only `.log`/`.txt` files are served, so a
 key or certificate sitting next to a log cannot be fetched through it.
 
-## Log reading
+## Log shipping
 
-Nimble writes ~13 KB/s per server at debug level and rotates by size, so logs
-are read as byte ranges rather than whole files:
+Nimble writes ~13 KB/s per server at debug level and rotates by size. The agent
+follows the file itself, keeps its own cursor, and **pushes** batches to the
+panel — the panel never reads out of the agent.
 
-    GET /logs                                  -> [{ name, size, mtime, ino, dev }]
-    GET /logs/read?name=nimble.log&offset=N    -> { data, nextOffset, size, ino, eof }
+* The cursor lives in `$STATE_DIRECTORY/logcursor.json` (`/var/lib/nnm-agent`
+  under the supplied unit) and survives a restart. If that directory is not
+  writable the agent still ships; it just resumes at the end of the file after
+  a restart, and says so in its log once.
+* **The cursor only advances after a batch is accepted.** A panel that is down
+  costs nothing: the log file is the buffer, and the agent re-reads from where
+  it was rather than holding anything in memory.
+* **Batches end on a line boundary.** Nimble writes multi-line records — raw
+  HTTP dumps follow their header line with no timestamp of their own — and a
+  split inside one would corrupt the panel's framing.
+* **Rotation is detected here**, by inode change or by the file shrinking below
+  the cursor, which is far more reliable than the panel inferring it between
+  two polls.
 
-Two properties the panel relies on:
-
-* **a read is always trimmed to a whole number of lines.** Nimble writes
-  multi-line records (raw HTTP dumps follow their header line with no
-  timestamp), and a range split mid-line would corrupt the panel's framing.
-* **`ino` identifies the file generation.** After rotation the same name is a
-  different inode, which is how the collector notices instead of guessing from
-  sizes. An `offset` past the end returns `truncated: true` rather than data
-  from the middle of a fresh file.
-
-Rotated copies (`nimble.log.1` …) are not served — their extension is not a log
-extension. The panel follows the live file and reports any gap a rotation
-caused rather than pretending the tail is continuous.
+Whether to ship, and which files, arrives on the poll response. There is
+nothing to configure on the server.
 
 ## Install
 
@@ -77,6 +84,7 @@ Set `NNM_AGENT_LOGS=0` to disable log access entirely on a given box.
     ExecStart=/usr/bin/node /usr/local/bin/nnm-agent
     Restart=on-failure
     # The agent only ever needs these two trees for writing...
+    StateDirectory=nnm-agent
     ReadWritePaths=/srv/nimble/conf /srv/nimble/media/gallery
     # ...and the log tree strictly for reading. Enforced by systemd as well as
     # by the code, so a bug in the agent still cannot damage a log.
@@ -107,6 +115,12 @@ Then `systemctl enable --now nnm-agent` and paste the URL and token into
 | `NNM_AGENT_LOGS` | `1` | `0` removes the log routes entirely |
 | `NNM_AGENT_LOG_CHUNK_KB` | `1024` | ceiling on one read; ~80s of output at the measured rate |
 | `NNM_AGENT_LOG_EXT` | `log,txt` | only these are listed or served |
+| `NNM_AGENT_BIND` | `127.0.0.1` | loopback: nothing connects in, this is a local diagnostic surface |
+| `NNM_AGENT_PANEL_URL` | — | where the agent calls in; set by the installer |
+| `NNM_AGENT_SERVER_ID` | — | which server it is; written at enrollment |
+| `NNM_AGENT_STATE_DIR` | `/var/lib/nnm-agent` | log cursor; systemd sets `STATE_DIRECTORY` |
+| `NNM_AGENT_LOG_BATCH_KB` | `256` | ceiling on one shipped batch |
+| `NNM_AGENT_LOG_BATCH_MS` | `2000` | how often the tail is checked |
 
 ## Exposure - read this before opening a port
 

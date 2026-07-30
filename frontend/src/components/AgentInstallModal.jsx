@@ -20,7 +20,6 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
   const { t } = useI18n();
   const { push } = useToast();
   const [form, setForm] = useState({
-    baseUrl: server.host ? `http://${server.host}:8090` : '',
     agentPort: 8090,
     logDir: '/var/log/nimble',
     // Whatever address the browser used is only a guess at what the SERVER can
@@ -29,9 +28,15 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
     panelUrl: window.location.origin,
   });
   const [safe, setSafe] = useState(true);
+  // iter11 m2 — two ways to do the same enrollment: the operator runs the
+  // command, or the panel runs it for them over SSH. Same ticket, same
+  // checksum-verified command; only the typing differs.
+  const [mode, setMode] = useState('manual');
+  const [ssh, setSsh] = useState({ host: server.host || '', port: 22, username: 'root', password: '', privateKey: '', passphrase: '', useSudo: false });
+  const [hostKey, setHostKey] = useState(null);
+  const [job, setJob] = useState(null);
   const [ticket, setTicket] = useState(null);
   const [status, setStatus] = useState(null);
-  const [verify, setVerify] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const poll = useRef(null);
@@ -48,7 +53,6 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
         setStatus(d.enrollment);
         if (d.enrollment?.status === 'enrolled') {
           clearInterval(poll.current); poll.current = null;
-          setVerify(await api(`/servers/${server.id}/agent/verify`, { method: 'POST' }).catch(() => null));
           onEnrolled?.();
         } else if (d.enrollment?.status === 'expired' || d.enrollment?.status === 'revoked') {
           clearInterval(poll.current); poll.current = null;
@@ -61,12 +65,11 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
   }, [ticket, server.id, onEnrolled]);
 
   const issue = async () => {
-    setBusy(true); setError(''); setVerify(null); setStatus(null);
+    setBusy(true); setError(''); setStatus(null);
     try {
       setTicket(await api(`/servers/${server.id}/agent/enrollment`, {
         method: 'POST',
         body: {
-          baseUrl: form.baseUrl.trim(),
           panelUrl: form.panelUrl.trim(),
           agentPort: Number(form.agentPort) || 8090,
           logDir: form.logDir.trim(),
@@ -78,7 +81,52 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
 
   const revoke = async () => {
     try { await api(`/servers/${server.id}/agent/enrollment`, { method: 'DELETE' }); } catch { /* already gone */ }
-    setTicket(null); setStatus(null); setVerify(null);
+    setTicket(null); setStatus(null);
+  };
+
+  const setS = (k, v) => setSsh(x => ({ ...x, [k]: v }));
+
+  const probe = async () => {
+    setBusy(true); setError(''); setHostKey(null);
+    try {
+      setHostKey(await api(`/servers/${server.id}/agent/ssh/probe`, {
+        method: 'POST', body: { host: ssh.host.trim(), port: Number(ssh.port) || 22 },
+      }));
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const install = async () => {
+    setBusy(true); setError(''); setJob(null);
+    try {
+      const { jobId } = await api(`/servers/${server.id}/agent/ssh/install`, {
+        method: 'POST',
+        body: {
+          host: ssh.host.trim(), port: Number(ssh.port) || 22, username: ssh.username.trim(),
+          password: ssh.password || undefined,
+          privateKey: ssh.privateKey || undefined,
+          passphrase: ssh.passphrase || undefined,
+          useSudo: ssh.useSudo,
+          fingerprint: hostKey.fingerprint,
+          panelUrl: form.panelUrl.trim(),
+          agentPort: Number(form.agentPort) || 8090,
+          logDir: form.logDir.trim(),
+        },
+      });
+      // The credential was needed for exactly one request. Dropping it here
+      // means a dialog left open does not keep a root password in a form.
+      setSsh(x => ({ ...x, password: '', privateKey: '', passphrase: '' }));
+      const tick = async () => {
+        try {
+          const j = await api(`/servers/${server.id}/agent/ssh/jobs/${jobId}`);
+          setJob(j);
+          if (j.status !== 'running') { clearInterval(poll.current); poll.current = null; if (j.status === 'done') onEnrolled?.(); }
+        } catch { /* the next tick retries */ }
+      };
+      await tick();
+      poll.current = setInterval(tick, 1500);
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
   };
 
   const copy = async (s) => push(await copyText(s)
@@ -91,32 +139,92 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
     <Modal onClose={onClose} size="wide">
       <h3>{t('inst.title', { name: server.name })}</h3>
 
-      {!ticket && (
+      {!ticket && !job && (
         <>
-          <p className="hint">{t('inst.intro')}</p>
-          <div className="grid" style={{ gridTemplateColumns: '2fr 1fr', gap: 8 }}>
-            <div>
-              <label>{t('inst.baseUrl')}</label>
-              <input className="mono" value={form.baseUrl} placeholder="http://10.0.0.5:8090"
-                     onChange={e => set('baseUrl', e.target.value)} />
-              <div className="hint">{t('inst.baseUrlHint')}</div>
-            </div>
-            <div>
-              <label>{t('inst.port')}</label>
-              <input type="number" value={form.agentPort} onChange={e => set('agentPort', e.target.value)} />
-            </div>
+          <div className="row" style={{ gap: 12, marginBottom: 8 }}>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+              <input type="radio" checked={mode === 'manual'} onChange={() => setMode('manual')} />{t('inst.modeManual')}
+            </label>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+              <input type="radio" checked={mode === 'ssh'} onChange={() => setMode('ssh')} />{t('inst.modeSsh')}
+            </label>
           </div>
+          <p className="hint">{mode === 'ssh' ? t('inst.sshIntro') : t('inst.intro')}</p>
+          {/* iter12 m5 — the only address in this dialog is the one the SERVER
+              needs. How the panel would reach the agent is no longer a
+              question anyone has to answer, because it never does. */}
           <label>{t('inst.panelUrl')}</label>
           <input className="mono" value={form.panelUrl} onChange={e => set('panelUrl', e.target.value)} />
           <div className="hint">{t('inst.panelUrlHint')}</div>
           <label>{t('inst.logDir')}</label>
           <input className="mono" value={form.logDir} onChange={e => set('logDir', e.target.value)} />
+          {mode === 'ssh' && (
+            <div className="panel" style={{ marginTop: 10 }}>
+              <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr', gap: 8 }}>
+                <div><label>{t('inst.sshHost')}</label>
+                  <input className="mono" value={ssh.host} onChange={e => setS('host', e.target.value)} /></div>
+                <div><label>{t('inst.sshPort')}</label>
+                  <input type="number" value={ssh.port} onChange={e => setS('port', e.target.value)} /></div>
+                <div><label>{t('inst.sshUser')}</label>
+                  <input className="mono" value={ssh.username} onChange={e => setS('username', e.target.value)} /></div>
+              </div>
+
+              {/* The fingerprint is confirmed before any credential is typed.
+                  ssh2 offers the host key during the handshake, so the probe
+                  never authenticates — and a mismatch later aborts before the
+                  password is sent. */}
+              {!hostKey
+                ? <div style={{ marginTop: 8 }}>
+                    <button disabled={busy || !ssh.host.trim()} onClick={probe}>{t('inst.sshProbe')}</button>
+                    <div className="hint" style={{ marginTop: 4 }}>{t('inst.sshProbeHint')}</div>
+                  </div>
+                : <>
+                    <div className="hint" style={{ marginTop: 8 }}>{t('inst.sshFingerprint')}</div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <code className="mono" style={{ flex: 1, wordBreak: 'break-all' }}>{hostKey.fingerprint}</code>
+                      <button onClick={() => { setHostKey(null); }}>{t('action.cancel')}</button>
+                    </div>
+                    <div className="hint" style={{ marginTop: 4 }}>{t('inst.sshFingerprintHint')}</div>
+
+                    <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                      <div><label>{t('inst.sshPassword')}</label>
+                        <input type="password" value={ssh.password} onChange={e => setS('password', e.target.value)} /></div>
+                      <div><label>{t('inst.sshPassphrase')}</label>
+                        <input type="password" value={ssh.passphrase} onChange={e => setS('passphrase', e.target.value)} /></div>
+                    </div>
+                    <label>{t('inst.sshKey')}</label>
+                    <textarea rows={3} className="mono" style={{ fontSize: 11 }} value={ssh.privateKey}
+                              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                              onChange={e => setS('privateKey', e.target.value)} />
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input type="checkbox" checked={ssh.useSudo} onChange={e => setS('useSudo', e.target.checked)} />
+                      {t('inst.sshSudo')}
+                    </label>
+                    <div className="hint">{t('inst.sshNotStored')}</div>
+                  </>}
+            </div>
+          )}
           {error && <div className="error-box">{error}</div>}
           <div className="row" style={{ justifyContent: 'flex-end', marginTop: 14 }}>
             <button onClick={onClose}>{t('action.cancel')}</button>
-            <button className="primary" disabled={busy || !form.baseUrl.trim()} onClick={issue}>
-              {busy ? '…' : t('inst.issue')}
-            </button>
+            {mode === 'ssh'
+              ? <button className="primary"
+                        disabled={busy || !hostKey || !ssh.username.trim() || (!ssh.password && !ssh.privateKey)}
+                        onClick={install}>{busy ? '…' : t('inst.sshInstall')}</button>
+              : <button className="primary" disabled={busy || !form.panelUrl.trim()} onClick={issue}>
+                  {busy ? '…' : t('inst.issue')}
+                </button>}
+          </div>
+        </>
+      )}
+
+      {job && (
+        <>
+          <h4 style={{ margin: '0 0 6px' }}>{t(`inst.job.${job.status}`)}{job.exitCode ? ` (exit ${job.exitCode})` : ''}</h4>
+          {job.error && <div className="error-box">{job.error}</div>}
+          <pre className="mono" style={{ fontSize: 11, maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{job.output || '…'}</pre>
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
+            <button className={job.status === 'done' ? 'primary' : ''} onClick={onClose}>{t('action.close')}</button>
           </div>
         </>
       )}
@@ -125,9 +233,6 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
         <>
           {ticket.warnings?.includes('panelNotHttps') && (
             <div className="error-box">{t('inst.warnHttp')}</div>
-          )}
-          {ticket.warnings?.includes('panelPrivateAddress') && (
-            <div className="hint" style={{ marginBottom: 8 }}>{t('inst.warnPanelPrivate')}</div>
           )}
 
           <p className="hint">{t('inst.runThis')}</p>
@@ -175,25 +280,6 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
             {state === 'expired' && <div className="error-box" style={{ marginTop: 8 }}>{t('inst.expired')}</div>}
             {state === 'revoked' && <div className="hint" style={{ marginTop: 8 }}>{t('inst.revoked')}</div>}
           </div>
-
-          {/* The whole point of the separate check: the box reaching the panel
-              says nothing about the panel reaching the box, and everything the
-              panel does afterwards runs in that second direction. */}
-          {verify && (
-            <div className="panel" style={{ marginTop: 8, borderColor: verify.reachable ? 'var(--ok)' : 'var(--warn)' }}>
-              <b>{t('inst.reachTitle')}</b>
-              {verify.reachable
-                ? <div className="hint" style={{ marginTop: 4 }}>
-                    ✓ {t('inst.reachOk')}
-                    {verify.health?.logs === false && <> · {t('agent.logsOff')}</>}
-                  </div>
-                : <div style={{ marginTop: 4 }}>
-                    <div className="hint">{t('inst.reachFail')}</div>
-                    <div className="mono hint" style={{ fontSize: 12 }}>{verify.error}</div>
-                    {verify.privateAddress && <div className="hint" style={{ marginTop: 4 }}>{t('inst.reachNat')}</div>}
-                  </div>}
-            </div>
-          )}
 
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 14 }}>
             <button className="danger" onClick={revoke}>{t('inst.revokeBtn')}</button>
