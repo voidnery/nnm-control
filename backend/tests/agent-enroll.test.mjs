@@ -193,5 +193,47 @@ check('a changed script changes the digest', () => {
   assert.notEqual(digest(build()), digest(build() + '\n# tampered\n'));
 });
 
+// The panel returned 502 and restarted because `scriptFor` and `sha256` were
+// deleted during the iter12 m5 cleanup while their three call sites stayed.
+// Syntax was valid, so nothing noticed until the route ran — and a
+// ReferenceError in an async Express handler is an unhandled rejection, which
+// Node answers by terminating the process.
+console.log('\nTHE 502:');
+
+await acheck('every helper the enrollment routes call is actually defined', async () => {
+  // Importing is not enough — a missing declaration only fails when the line
+  // runs. So the pure part of the handler is executed here.
+  const { installScript } = await import('../src/services/agentInstaller.js');
+  const src = readFileSync(path.join(HERE, '..', 'src', 'routes', 'agentEnroll.js'), 'utf8');
+  for (const name of ['scriptFor', 'sha256']) {
+    assert.ok(new RegExp(`(function|const)\\s+${name}\\b`).test(src),
+      `${name} is called by these routes but declared nowhere`);
+  }
+  // And the composition itself produces something.
+  const doc = { panelUrl: 'https://p.example', agentPort: 8090, bind: '127.0.0.1',
+    logDir: '/var/log/nimble', confDir: '/srv/nimble/conf', mediaDir: '/srv/nimble/media/gallery' };
+  const script = installScript({ panelUrl: doc.panelUrl, ticket: 'a'.repeat(64), agentPort: doc.agentPort,
+    bind: doc.bind, logDir: doc.logDir, confDir: doc.confDir, mediaDir: doc.mediaDir });
+  assert.ok(script.length > 1000);
+});
+
+await acheck('a throwing async route returns 500 and leaves the process running', async () => {
+  await import('../src/asyncGuard.js');
+  const app = express();
+  const r = express.Router();
+  r.get('/boom', async () => { thisNameDoesNotExist(); });   // eslint-disable-line
+  r.get('/fine', (_req, res) => res.json({ ok: true }));
+  app.use('/api', r);
+  app.use((_e, _q, res, _n) => res.status(500).json({ error: 'Internal server error' }));
+  const srv = app.listen(0);
+  try {
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const boom = await fetch(`${base}/api/boom`);
+    assert.equal(boom.status, 500, 'a route defect must cost one request, not the panel');
+    const after = await fetch(`${base}/api/fine`);
+    assert.equal(after.status, 200, 'the process must still be serving afterwards');
+  } finally { srv.close(); }
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-enrollment checks passed');
 process.exit(fail ? 1 : 0);

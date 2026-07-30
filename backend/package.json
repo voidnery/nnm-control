@@ -1,13 +1,13 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "test:functions": "node tests/function-actions.test.mjs",
     "test:stats": "node tests/stats-collector.test.mjs",
-    "test": "npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants",
+    "test": "npm run audit:undef && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants",
     "test:template": "node tests/transcoder-template.test.mjs",
     "test:fleet": "node tests/transcoder-fleet.test.mjs",
     "test:playback": "node tests/playback-endpoints.test.mjs",
@@ -19,7 +19,8 @@
     "test:ssh": "node tests/ssh-install.test.mjs",
     "test:logquery": "node tests/log-query.test.mjs",
     "test:dashboards": "node tests/log-dashboards.test.mjs",
-    "test:variants": "node tests/function-variants.test.mjs"
+    "test:variants": "node tests/function-variants.test.mjs",
+    "audit:undef": "node scripts/undef-audit.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

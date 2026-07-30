@@ -1,3 +1,7 @@
+// Must be first: it patches Express's router prototype so an async handler
+// that throws returns 500 instead of terminating the process, and ES modules
+// evaluate imports before the importing module's body.
+import './asyncGuard.js';
 import express from 'express';
 import { config } from './config.js';
 import { connectDb } from './db.js';

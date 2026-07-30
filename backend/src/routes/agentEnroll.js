@@ -46,6 +46,27 @@ function rateLimit(req, res, next) {
 const clientIp = (req) =>
   (req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || '').trim();
 
+// One generator used by both the issue path (to hash) and the fetch path (to
+// serve), so the published checksum is always the checksum of what is served.
+//
+// This and sha256 below were deleted by accident during the iter12 m5 cleanup
+// of the pull path, while their three call sites stayed. The result was a
+// ReferenceError inside an async route, which Node turns into an unhandled
+// rejection and a process exit — a 502 and a restarted panel.
+function scriptFor(doc, rawTicket) {
+  return installScript({
+    panelUrl: doc.panelUrl,
+    ticket: rawTicket,
+    agentPort: doc.agentPort,
+    bind: doc.bind,
+    logDir: doc.logDir,
+    confDir: doc.confDir,
+    mediaDir: doc.mediaDir,
+  });
+}
+
+const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+
 async function findLive(rawTicket) {
   if (!rawTicket || !/^[0-9a-f]{64}$/.test(rawTicket)) return null;
   const doc = await AgentEnrollment.findOne({ tokenHash: hashTicket(rawTicket) });

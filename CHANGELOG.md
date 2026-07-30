@@ -1,5 +1,35 @@
 # Changelog
 
+### v0.16.1 — hotfix: issuing an install ticket took the panel down
+- **`POST /servers/:id/agent/enrollment` returned 502 and restarted the
+  backend.** `scriptFor` and `sha256` were deleted during the iter12 m5 cleanup
+  of the pull path, while their three call sites stayed. Syntax was valid, so
+  `node --check` passed and nothing noticed until the route ran — and a
+  `ReferenceError` in an async Express 4 handler is an unhandled rejection,
+  which Node 22 answers by terminating the process. Hence the 502, the restart,
+  and having to log in again
+- Both helpers restored; the served script and its published digest are stable
+  again
+- **This is the second time this exact class has reached production** — the
+  first was `move` on the Servers page. The frontend gained a gate then
+  (`audit:pages` clicks every button). The backend had none, so it gets one:
+  `npm run audit:undef` flags any identifier called but declared nowhere in its
+  file, across all 65 backend modules, and runs before the test suite. Verified
+  against the real defect
+- Building that audit surfaced a defect in the audit itself: an apostrophe
+  inside a regex literal — this codebase has several — desynchronised the
+  naive string stripper, which then swallowed the rest of the file. Regex
+  literals are now stripped first, and that ordering is load-bearing
+- **Defence in depth: a route defect now costs one request, not the panel.**
+  `src/asyncGuard.js` patches Express's router prototype so a throwing or
+  rejecting handler goes to the error middleware as a 500. It is imported
+  first in `index.js`, and that ordering matters — ES modules evaluate imports
+  before the importing module's body, and route modules create their routers at
+  module scope. Anything that still escapes is logged instead of exiting
+- Two regression checks: that the enrollment routes' helpers exist, and that a
+  throwing async route answers 500 and leaves the process serving
+
+
 ## iter13 — functions: sources and execution variants
 ### v0.16.0 — the original epic's remaining half
 - **2a: switching the sources of an "SRT in Nimble" stream.** Three presets for
