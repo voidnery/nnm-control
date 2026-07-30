@@ -1,6 +1,33 @@
 # Changelog
 
 ## iter11 — agent installation
+### v0.10.1 — hotfix: v0.10.0 could not be built or deployed
+- **v0.10.0 changed the api image so it built only from the repository root.**
+  To serve the agent to a server being enrolled, `agentEnroll.js` read
+  `../../../agent/nnm-agent.mjs`, which sits outside the backend directory, so
+  the Dockerfile was rewritten around a wider context and the release workflow
+  with it. Every other build path — `docker build ./backend`, any local script,
+  any pipeline not edited in that commit — started failing on
+  `COPY backend/package.json`. Nothing in the repo caught it: the code was
+  correct, the tests passed, and the defect lived entirely in packaging
+- Fixed by removing the need for the wider context. The agent is vendored at
+  `backend/src/assets/nnm-agent.mjs`; `backend/Dockerfile` and the release
+  workflow are byte-for-byte what they were in v0.9.1, and the root
+  `.dockerignore` v0.10.0 added is gone
+- Two gates so this class cannot return: one refuses an `AGENT_SRC` that
+  reaches outside the build context, one asserts the vendored copy is
+  byte-identical to `agent/nnm-agent.mjs`. Both verified against the real
+  defect
+- **Second defect, found while diagnosing:** the enrollment router mounted its
+  authenticated half as a sub-router with `use(requireAuth)` at `/`. Mounted at
+  `/api`, that put `requireAuth` — and an extra user lookup — in front of every
+  request falling through to routers registered after it, and answered 401 for
+  paths that belong to them. Each route now names its own middleware
+- New mount-isolation check isolates that: it mounts the router at `/api`,
+  registers two routers after it, and fails if either stops receiving requests
+
+
+## iter11 — agent installation
 ### v0.10.0 (m1) — install by one-time ticket
 - **Finding first:** `agentClient` only ever calls panel → agent. An install
   link fixes installation behind NAT and nothing else — once installed, the

@@ -30,11 +30,9 @@ jobs:
       matrix:
         include:
           - name: api
-            context: .
-            dockerfile: ./backend/Dockerfile
+            context: ./backend
           - name: web
             context: ./frontend
-            dockerfile: ./frontend/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - id: meta
@@ -50,7 +48,6 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
           tags: |

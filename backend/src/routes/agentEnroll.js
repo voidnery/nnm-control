@@ -19,7 +19,12 @@ import { logEvent } from '../services/audit.js';
 export const agentEnrollRouter = Router();
 
 const TTL_MIN = 30;
-const AGENT_SRC = path.resolve(fileURLToPath(new URL('../../../agent/nnm-agent.mjs', import.meta.url)));
+// The agent source has to be INSIDE the backend's own tree. Reaching up to
+// agent/ meant the api image could only be built from the repository root,
+// which broke every existing build command — see docs/iter11-agent-install.md.
+// src/assets/ is a vendored copy of agent/nnm-agent.mjs, kept byte-identical
+// by `npm run audit:agent-sync`.
+const AGENT_SRC = path.resolve(fileURLToPath(new URL('../assets/nnm-agent.mjs', import.meta.url)));
 
 // A ticket is 32 random bytes, so brute force is not the threat — but an
 // unauthenticated endpoint with no ceiling is a free amplifier for anyone who
@@ -141,11 +146,11 @@ agentEnrollRouter.post('/agents/enroll', rateLimit, async (req, res) => {
 
 // ----------------------------------------------------------- authenticated ---
 
-const auth = Router();
-auth.use(requireAuth);
-agentEnrollRouter.use(auth);
-
-auth.post('/servers/:id/agent/enrollment', requirePerm('servers.manage'), async (req, res) => {
+// Each authenticated route names its own middleware. The previous shape —
+// a sub-router with `use(requireAuth)` mounted at '/' — ran requireAuth, and
+// therefore an extra user lookup, on every /api request that fell through to
+// it, and answered 401 for paths belonging to routers mounted later.
+agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Server not found' });
 
@@ -189,7 +194,7 @@ auth.post('/servers/:id/agent/enrollment', requirePerm('servers.manage'), async 
   });
 });
 
-auth.get('/servers/:id/agent/enrollment', requirePerm('servers.view'), async (req, res) => {
+agentEnrollRouter.get('/servers/:id/agent/enrollment', requireAuth, requirePerm('servers.view'), async (req, res) => {
   const doc = await AgentEnrollment.findOne({ serverId: req.params.id }).sort({ createdAt: -1 }).lean();
   if (!doc) return res.json({ enrollment: null });
   res.json({
@@ -204,7 +209,7 @@ auth.get('/servers/:id/agent/enrollment', requirePerm('servers.view'), async (re
   });
 });
 
-auth.delete('/servers/:id/agent/enrollment', requirePerm('servers.manage'), async (req, res) => {
+agentEnrollRouter.delete('/servers/:id/agent/enrollment', requireAuth, requirePerm('servers.manage'), async (req, res) => {
   await AgentEnrollment.updateMany(
     { serverId: req.params.id, status: { $in: ['pending', 'fetched'] } },
     { $set: { status: 'revoked' } },
@@ -216,7 +221,7 @@ auth.delete('/servers/:id/agent/enrollment', requirePerm('servers.manage'), asyn
 // Enrollment proves the box could reach the PANEL. It proves nothing about
 // the panel reaching the AGENT, which is the direction everything else uses.
 // This says which of the two is actually true.
-auth.post('/servers/:id/agent/verify', requirePerm('servers.view'), async (req, res) => {
+agentEnrollRouter.post('/servers/:id/agent/verify', requireAuth, requirePerm('servers.view'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Server not found' });
   if (!server.agent?.enabled || !server.agent?.baseUrl) return res.json({ reachable: false, reason: 'notConfigured' });

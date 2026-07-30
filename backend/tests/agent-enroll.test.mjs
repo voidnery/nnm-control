@@ -4,6 +4,10 @@
 // running the installer has no panel account. The ticket is therefore the
 // entire authority, and these checks exist to prove it is a narrow one.
 import assert from 'node:assert/strict';
+import express from 'express';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { hashTicket, newTicket } from '../src/models/AgentEnrollment.js';
@@ -135,6 +139,55 @@ check('shell metacharacters in operator input cannot break out', () => {
   // so a quote in the input closes and reopens the literal rather than
   // ending it.
   assert.ok(nasty.includes(`'\\''`), 'quotes must be escaped, not stripped');
+});
+
+const acheck = async (name, fn) => {
+  try { await fn(); console.log(`  ✓ ${name}`); pass++; }
+  catch (e) { console.log(`  ✗ ${name}: ${e.message}`); fail++; }
+};
+
+// The api image is built with the backend directory as its context, so
+// anything the panel serves has to live under backend/src. Reaching up to
+// agent/ compiled fine and broke every build command that existed.
+console.log('\nPACKAGING:');
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const VENDORED = path.join(HERE, '..', 'src', 'assets', 'nnm-agent.mjs');
+const ORIGINAL = path.join(HERE, '..', '..', 'agent', 'nnm-agent.mjs');
+
+check('the agent the panel serves lives inside backend/src', () => {
+  const src = readFileSync(path.join(HERE, '..', 'src', 'routes', 'agentEnroll.js'), 'utf8');
+  const line = src.split('\n').find(l => l.includes('const AGENT_SRC'));
+  assert.ok(line, 'AGENT_SRC not found');
+  assert.ok(!line.includes('../../../'), 'must not reach outside the Docker build context');
+  assert.ok(readFileSync(VENDORED, 'utf8').startsWith('#!'), 'vendored copy missing or not the agent');
+});
+
+check('the vendored copy has not drifted from agent/nnm-agent.mjs', () => {
+  assert.equal(readFileSync(VENDORED, 'utf8'), readFileSync(ORIGINAL, 'utf8'),
+    'run: cp agent/nnm-agent.mjs backend/src/assets/nnm-agent.mjs');
+});
+
+// Mounting this router at /api must not put anything in front of the routers
+// mounted after it. A sub-router with use(requireAuth) did exactly that.
+console.log('\nMOUNT ISOLATION:');
+
+await acheck('routers mounted after this one still receive their requests', async () => {
+  const { agentEnrollRouter } = await import('../src/routes/agentEnroll.js');
+  const app = express();
+  app.use(express.json());
+  app.use('/api', agentEnrollRouter);
+  app.use('/api/servers', (req, res) => res.json({ reached: 'later' }));
+  app.use('/api/audit', (req, res) => res.json({ reached: 'later' }));
+  const srv = app.listen(0);
+  const port = srv.address().port;
+  try {
+    for (const p of ['/api/servers/S1/agent', '/api/audit']) {
+      const r = await fetch(`http://127.0.0.1:${port}${p}`);
+      assert.equal(r.status, 200, `${p} was intercepted with ${r.status}`);
+      assert.equal((await r.json()).reached, 'later');
+    }
+  } finally { srv.close(); }
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-enrollment checks passed');
