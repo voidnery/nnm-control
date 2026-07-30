@@ -8,6 +8,7 @@ import Modal, { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import * as E from '../lib/playlistEngine.js';
 import { DeployPlaylistModal } from '../components/AgentPanel.jsx';
+import { copyText } from '../lib/clipboard.js';
 
 // ---- small field helpers ----
 function Field({ label, children }) {
@@ -229,7 +230,9 @@ function Builder({ initial, onClose, onSaved }) {
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <b>{t('pl.jsonPreview')}</b>
                 <div className="row">
-                  <button onClick={() => { navigator.clipboard?.writeText(built); push({ type: 'ok', message: t('pl.copied') }); }}>{t('srt.copy')}</button>
+                  <button onClick={async () => push(await copyText(built)
+                    ? { type: 'ok', message: t('pl.copied') }
+                    : { type: 'error', message: t('copy.failed') })}>{t('srt.copy')}</button>
                   <button onClick={download}>{t('pl.download')}</button>
                 </div>
               </div>

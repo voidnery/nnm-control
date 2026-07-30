@@ -3,6 +3,7 @@ import { compute, SCENARIOS } from '../lib/srtHelper.js';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import Select from './Select.jsx';
+import { copyText } from '../lib/clipboard.js';
 
 // Collapsible SRT tuning helper. Given a bitrate, channel scenario and a
 // "drops observed" flag, it produces Nimble SRT params, a URL query, sysctl
@@ -23,7 +24,9 @@ export default function SrtHelper() {
     try { setRes(compute(Number(bitrate), scenario, drops, rtt || null)); }
     catch (e) { setErr(e.message); setRes(null); }
   };
-  const copy = (text) => { navigator.clipboard?.writeText(text); push({ type: 'ok', message: t('srt.copied') }); };
+  const copy = async (text) => push(await copyText(text)
+    ? { type: 'ok', message: t('srt.copied') }
+    : { type: 'error', message: t('copy.failed') });
 
   const notes = res ? buildNotes(res, t) : [];
 

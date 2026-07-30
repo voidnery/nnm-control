@@ -4,6 +4,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import Modal from './Modal.jsx';
 import Select from './Select.jsx';
+import { copyText } from '../lib/clipboard.js';
 
 // Playback URLs for a live stream. Which address a viewer should use is an
 // operator decision — a box usually answers on its IP plus one or more domain
@@ -138,7 +139,9 @@ export function PlaybackModal({ endpoints, initialEndpoint, app, stream, onClose
   const endpoint = endpoints[idx] || null;
   const urls = useMemo(() => playbackUrls(endpoint, app, stream), [endpoint, app, stream]);
 
-  const copy = (text) => { navigator.clipboard?.writeText(text); push({ type: 'ok', message: t('play.copied') }); };
+  const copy = async (text) => push(await copyText(text)
+    ? { type: 'ok', message: t('play.copied') }
+    : { type: 'error', message: t('copy.failed') });
 
   return (
     <Modal onClose={onClose} size="wide">

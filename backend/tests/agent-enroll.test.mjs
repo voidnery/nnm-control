@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import express from 'express';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -188,6 +189,32 @@ await acheck('routers mounted after this one still receive their requests', asyn
       assert.equal((await r.json()).reached, 'later');
     }
   } finally { srv.close(); }
+});
+
+// The published digest is only worth anything if it is the digest of what
+// gets served. The two are produced at different moments from different code
+// paths, so this pins that they cannot diverge.
+console.log('\nCHECKSUM STABILITY:');
+
+const doc = { panelUrl:'https://panel.example', baseUrlHint:'http://10.0.0.5:8090', agentPort:8090,
+  bind:'0.0.0.0', logDir:'/var/log/nimble', confDir:'/srv/nimble/conf', mediaDir:'/srv/nimble/media/gallery' };
+const build = () => installScript({ panelUrl:doc.panelUrl, ticket:'c'.repeat(64), baseUrl:doc.baseUrlHint,
+  agentPort:doc.agentPort, bind:doc.bind, logDir:doc.logDir, confDir:doc.confDir, mediaDir:doc.mediaDir });
+const digest = (x) => createHash('sha256').update(x, 'utf8').digest('hex');
+
+check('the same ticket yields a byte-identical script every time', () => {
+  assert.equal(build(), build());
+  assert.equal(digest(build()), digest(build()));
+});
+
+check('the script depends on the operator-set panel URL, not the request', () => {
+  const other = installScript({ ...doc, panelUrl:'http://10.0.0.2:4000', ticket:'c'.repeat(64), baseUrl:doc.baseUrlHint });
+  assert.notEqual(digest(other), digest(build()), 'a different panel URL must change the script');
+  assert.ok(other.includes('http://10.0.0.2:4000'));
+});
+
+check('a changed script changes the digest', () => {
+  assert.notEqual(digest(build()), digest(build() + '\n# tampered\n'));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-enrollment checks passed');

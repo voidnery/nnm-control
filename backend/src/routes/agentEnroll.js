@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { AgentEnrollment, hashTicket, newTicket } from '../models/AgentEnrollment.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
+import crypto from 'node:crypto';
 import { installScript } from '../services/agentInstaller.js';
 import { agent } from '../services/agentClient.js';
 import { logEvent } from '../services/audit.js';
@@ -59,6 +60,21 @@ export function isPrivateAddress(host) {
   return false;
 }
 
+function scriptFor(doc, rawTicket) {
+  return installScript({
+    panelUrl: doc.panelUrl,
+    ticket: rawTicket,
+    baseUrl: doc.baseUrlHint,
+    agentPort: doc.agentPort,
+    bind: doc.bind,
+    logDir: doc.logDir,
+    confDir: doc.confDir,
+    mediaDir: doc.mediaDir,
+  });
+}
+
+const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+
 async function findLive(rawTicket) {
   if (!rawTicket || !/^[0-9a-f]{64}$/.test(rawTicket)) return null;
   const doc = await AgentEnrollment.findOne({ tokenHash: hashTicket(rawTicket) });
@@ -81,17 +97,7 @@ agentEnrollRouter.get('/agents/install/:ticket', rateLimit, async (req, res) => 
     doc.fetchedFrom = clientIp(req);
     await doc.save();
   }
-  const panelUrl = `${req.protocol}://${req.get('host')}`;
-  res.type('text/plain').send(installScript({
-    panelUrl,
-    ticket: req.params.ticket,
-    baseUrl: doc.baseUrlHint,
-    agentPort: doc.agentPort,
-    bind: doc.bind,
-    logDir: doc.logDir,
-    confDir: doc.confDir,
-    mediaDir: doc.mediaDir,
-  }));
+  res.type('text/plain').send(scriptFor(doc, req.params.ticket));
 });
 
 // The agent binary itself, behind the same ticket so it is not an anonymous
@@ -164,7 +170,12 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
   const raw = newTicket();
   const b = req.body || {};
   const port = Number(b.agentPort) > 0 ? Number(b.agentPort) : 8090;
+  // The operator can override how the server should reach us. They have to be
+  // able to: the address this request arrived on may be a public name whose
+  // certificate does not match, or one the servers cannot resolve at all.
+  const panelUrl = String(b.panelUrl || `${req.protocol}://${req.get('host')}`).trim().replace(/\/+$/, '');
   const doc = await AgentEnrollment.create({
+    panelUrl,
     serverId: server._id,
     tokenHash: hashTicket(raw),
     baseUrlHint: String(b.baseUrl || (server.host ? `http://${server.host}:${port}` : '')).trim(),
@@ -177,19 +188,33 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
     createdBy: req.user?.username || '',
   });
 
-  const panelUrl = `${req.protocol}://${req.get('host')}`;
+  const url = `${panelUrl}/api/agents/install/${raw}`;
+  const digest = sha256(scriptFor(doc, raw));
+
+  let host = '';
+  try { host = new URL(panelUrl).hostname; } catch { /* reported as a warning below */ }
+
   logEvent({ req, action: 'agent:enrollment-issued', target: server.name, outcome: 'ok', status: 200 });
   res.json({
     ticket: raw,                       // shown once; only its hash is stored
     expiresAt: doc.expiresAt,
     panelUrl,
     baseUrlHint: doc.baseUrlHint,
-    command: `curl -fsSL ${panelUrl}/api/agents/install/${raw} | sudo sh -s`,
-    scriptUrl: `${panelUrl}/api/agents/install/${raw}`,
-    // Both are the operator's problem to fix, not ours to hide.
+    scriptUrl: url,
+    scriptSha256: digest,
+    // The convenient form.
+    command: `curl -fsSL ${url} | sudo sh -s`,
+    // The form to prefer: a script about to run as root should be checked
+    // against a digest the operator got over a different channel — this one,
+    // through the browser — rather than trusted because the download worked.
+    safeCommand: [
+      `curl -fsSL ${url} -o /tmp/nnm-install.sh \\`,
+      `  && echo "${digest}  /tmp/nnm-install.sh" | sha256sum -c - \\`,
+      `  && sudo sh /tmp/nnm-install.sh`,
+    ].join('\n'),
     warnings: [
       ...(panelUrl.startsWith('https://') ? [] : ['panelNotHttps']),
-      ...(isPrivateAddress(new URL(panelUrl).hostname) ? ['panelPrivateAddress'] : []),
+      ...(host && isPrivateAddress(host) ? ['panelPrivateAddress'] : []),
     ],
   });
 });

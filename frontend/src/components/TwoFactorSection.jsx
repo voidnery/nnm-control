@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import Modal from './Modal.jsx';
+import { copyText } from '../lib/clipboard.js';
 
 export default function TwoFactorSection() {
   const { t } = useI18n();
@@ -95,7 +96,7 @@ export default function TwoFactorSection() {
             {backupCodes.map(c => <div key={c} style={{ userSelect: 'all', padding: '2px 0' }}>{c}</div>)}
           </div>
           <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
-            <button onClick={() => { navigator.clipboard?.writeText(backupCodes.join('\n')); }}>{t('twofa.copy')}</button>
+            <button onClick={() => copyText(backupCodes.join('\n'))}>{t('twofa.copy')}</button>
             <button className="primary" onClick={() => setBackupCodes(null)}>{t('twofa.saved')}</button>
           </div>
         </Modal>

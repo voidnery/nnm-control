@@ -26,6 +26,11 @@ const enrollmentSchema = new mongoose.Schema({
   // it, because only they know how their network is arranged; the enrol
   // callback may override it with what the box actually reports.
   baseUrlHint: { type: String, default: '' },
+  // How the SERVER reaches the PANEL. Resolved once, when the ticket is
+  // issued, and stored — the installer is regenerated on every fetch and its
+  // SHA-256 is published to the operator, so it must not depend on anything
+  // that could differ between the two moments.
+  panelUrl: { type: String, default: '' },
   logDir: { type: String, default: '/var/log/nimble' },
   confDir: { type: String, default: '/srv/nimble/conf' },
   mediaDir: { type: String, default: '/srv/nimble/media/gallery' },

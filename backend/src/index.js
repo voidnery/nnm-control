@@ -31,6 +31,14 @@ import { startPeriodicSync } from './services/wmspanelSync.js';
 
 const app = express();
 app.disable('x-powered-by');
+// The panel always runs behind nginx (see docker-compose.yml), which terminates
+// TLS. Without this, req.protocol is 'http' no matter how the browser reached
+// us — which is how the agent installer came to hand out an http:// URL for a
+// panel that is served over https, and why the "this panel is on plain HTTP"
+// warning fired on a panel that was not. TRUST_PROXY counts hops; set it to 2
+// if there is a CDN in front of nginx as well, or 0 to disable when the panel
+// is exposed directly.
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
 // Media uploads are streamed straight through to the server agent, so the JSON
 // parser must not consume (or reject) their binary body.
 const isMediaUpload = (req) => req.method === 'PUT' && /^\/api\/servers\/[^/]+\/agent\/media$/.test(req.path);

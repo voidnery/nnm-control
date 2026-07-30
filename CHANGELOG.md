@@ -1,6 +1,38 @@
 # Changelog
 
 ## iter11 — agent installation
+### v0.10.2 — the install link could not actually be used
+- **The panel did not know it was behind TLS.** `trust proxy` was never set, so
+  `req.protocol` was always `http` regardless of how the browser reached the
+  panel. The generated command therefore said `http://`, and curl followed the
+  proxy's redirect to `https://`, where the certificate did not cover the
+  hostname — `curl: (60)`, before the request ever reached us. The same blind
+  spot made the "this panel is on plain HTTP" warning fire on a panel that was
+  not. `TRUST_PROXY` (default 1 hop) now controls this
+- **The panel URL is editable.** The address the browser used is only a guess
+  at what a server can use: it may not resolve inside the fleet, and its
+  certificate may not cover it. The operator sets it, and the installer is
+  built from the stored value rather than from the request
+- **The command can now be verified.** The dialog offers a two-step form that
+  downloads the script, checks it against a SHA-256 published by the panel, and
+  only then runs it as root. The digest travels through the browser rather than
+  through the download, so a tampered script fails the check. The one-liner is
+  still there, and is now labelled for what it is
+- **Copy buttons never worked outside a secure context — in six places.**
+  `navigator.clipboard?.writeText(...)` is a silent no-op when the API is
+  absent, and every call site paired it with an unconditional "copied" toast,
+  so the failure was not just silent, it lied. There is one helper now with an
+  `execCommand` fallback that reports whether it actually worked, and the toast
+  follows the result
+- New `npm run audit:clipboard` refuses any direct `navigator.clipboard` use
+  outside the helper and requires the helper to keep its fallback and its
+  return value. Verified against the pattern it replaced
+- Three checksum-stability checks: the same ticket must yield a byte-identical
+  script, the script must depend on the operator's panel URL, and any change
+  must change the digest
+
+
+## iter11 — agent installation
 ### v0.10.1 — hotfix: v0.10.0 could not be built or deployed
 - **v0.10.0 changed the api image so it built only from the repository root.**
   To serve the agent to a server being enrolled, `agentEnroll.js` read
