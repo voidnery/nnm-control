@@ -33,7 +33,6 @@ const settingsSchema = new mongoose.Schema({
   // not something to switch itself on after an upgrade.
   logs: {
     enabled: { type: Boolean, default: false },
-    intervalSec: { type: Number, default: 5 },
     // Which files in the agent's log directory to follow. Rotated copies
     // (nimble.log.1 ...) are deliberately absent — the agent only serves
     // .log/.txt, so the panel follows the live file and reports any gap.

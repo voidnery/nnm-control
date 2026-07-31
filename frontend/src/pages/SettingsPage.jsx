@@ -21,6 +21,8 @@ export default function SettingsPage() {
   const [customUrl, setCustomUrl] = useState(false);
   const [controlPlane, setControlPlane] = useState('native');
   const [srtHelperEnabled, setSrtHelperEnabled] = useState(true);
+  const [logs, setLogs] = useState({ enabled: false, files: ['nimble.log'] });
+  const [logStatus, setLogStatus] = useState(null);
   const [stats, setStats] = useState({ enabled: false, intervalSec: 10, retentionDays: 3,
                                        groups: { streams: true, republish: true, srt: true, server: true } });
   const [usage, setUsage] = useState(null);
@@ -37,13 +39,18 @@ export default function SettingsPage() {
     setControlPlane(s.controlPlane);
     setSrtHelperEnabled(s.srtHelperEnabled !== false);
     if (s.stats) setStats(s.stats);
+    if (s.logs) setLogs({ enabled: Boolean(s.logs.enabled), files: s.logs.files?.length ? s.logs.files : ['nimble.log'] });
+    // Status alongside the switch, because "is it on" and "is anything
+    // arriving" are different questions and only the second one is useful
+    // when an operator has just turned it on and nothing is happening.
+    api('/logs/status').then(setLogStatus).catch(() => setLogStatus(null));
   };
   useEffect(() => { load().catch(e => setMsg({ ok: false, text: e.message })); }, []);
 
   const save = async () => {
     setBusy(true); setMsg(null);
     try {
-      const body = { controlPlane, srtHelperEnabled, stats, wmspanel: { baseUrl, clientId } };
+      const body = { controlPlane, srtHelperEnabled, stats, logs, wmspanel: { baseUrl, clientId } };
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
       push({ type: 'ok', message: 'Settings saved' });
@@ -132,6 +139,52 @@ export default function SettingsPage() {
           {t('settings.srtHelper.desc')}
         </label>
       </div>
+      {/* Log collection. The setting has existed since iter10 m1 and the agents
+          have always honoured it, but it was never given a control here — so
+          the Logs page sent operators to a page with nothing on it. */}
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>{t('settings.logs')}</h2>
+        <p className="hint">{t('settings.logs.desc')}</p>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="checkbox" checked={Boolean(logs.enabled)}
+                 onChange={e => setLogs(v => ({ ...v, enabled: e.target.checked }))} />
+          {t('settings.logs.enabled')}
+        </label>
+        {logs.enabled && (
+          <>
+            <label style={{ marginTop: 8 }}>{t('settings.logs.files')}</label>
+            <input className="mono" value={logs.files.join(', ')}
+                   onChange={e => setLogs(v => ({ ...v, files: e.target.value.split(',').map(x => x.trim()).filter(Boolean) }))} />
+            <div className="hint">{t('settings.logs.filesHint')}</div>
+            <div className="hint" style={{ marginTop: 6 }}>{t('settings.logs.applyHint')}</div>
+          </>
+        )}
+        {logStatus && (
+          <div className="panel" style={{ marginTop: 10, marginBottom: 0 }}>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <b>{t('settings.logs.status')}</b>
+              <div className="row" style={{ flexShrink: 0 }}>
+                <span className="hint">
+                  {t('settings.logs.stored', { n: new Intl.NumberFormat().format(logStatus.storedRecords || 0), cap: logStatus.capMb })}
+                </span>
+                <button onClick={() => api('/logs/status').then(setLogStatus).catch(() => {})}>{t('action.refresh')}</button>
+              </div>
+            </div>
+            {logStatus.agentServers === 0 && <div className="hint" style={{ marginTop: 4 }}>{t('settings.logs.noAgents')}</div>}
+            {(logStatus.cursors || []).length === 0 && logStatus.agentServers > 0 && (
+              <div className="hint" style={{ marginTop: 4 }}>{t('settings.logs.noneYet')}</div>
+            )}
+            {(logStatus.cursors || []).map(c => (
+              <div key={c.serverId + c.file} className="hint mono" style={{ fontSize: 12, marginTop: 3 }}>
+                {c.serverName} · {c.file} · {new Intl.NumberFormat().format(c.recordsStored)} rec
+                {c.bytesMissed > 0 && <span style={{ color: 'var(--warn)' }}> · missed {c.bytesMissed} B</span>}
+                {c.lastError && <span style={{ color: 'var(--warn)' }}> · {c.lastError}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>{t('settings.stats')}</h2>
         <p className="hint">{t('settings.stats.desc')}</p>
@@ -166,9 +219,15 @@ export default function SettingsPage() {
               <button onClick={async () => { try { setUsage(await api('/stats/_usage')); } catch { /* optional */ } }}>
                 {t('action.refresh')}
               </button>
-              {usage && (
+              {/* A response without `docs` used to take the whole Settings page
+                  down. The click gate found it once the section actually
+                  rendered under test. */}
+              {Number.isFinite(usage?.docs) && (
                 <span className="hint">
-                  {t('settings.stats.usage', { docs: usage.docs.toLocaleString(), mb: (usage.storageBytes / 1e6).toFixed(1) })}
+                  {t('settings.stats.usage', {
+                    docs: usage.docs.toLocaleString(),
+                    mb: ((usage.storageBytes || 0) / 1e6).toFixed(1),
+                  })}
                 </span>
               )}
             </div>

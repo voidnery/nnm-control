@@ -30,6 +30,14 @@ const pub = (s) => ({
       server: s.stats?.groups?.server !== false,
     },
   },
+  // iter10 m1 added this setting, the gateway has always honoured it, and the
+  // agent acts on it — but it was never exposed here, so the only way to turn
+  // log collection on was a route no screen called. The Logs page told the
+  // operator to enable it "in Settings", where there was nothing.
+  logs: {
+    enabled: Boolean(s.logs?.enabled),
+    files: s.logs?.files?.length ? s.logs.files : ['nimble.log'],
+  },
   wmspanel: {
     baseUrl: s.wmspanel.baseUrl,
     clientId: s.wmspanel.clientId,
@@ -41,7 +49,7 @@ settingsRouter.get('/', async (_req, res) => res.json(pub(await Settings.load())
 
 settingsRouter.put('/', async (req, res) => {
   const s = await Settings.load();
-  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats } = req.body || {};
+  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs } = req.body || {};
   if (controlPlane !== undefined) {
     if (!['wmspanel', 'native'].includes(controlPlane)) return res.status(400).json({ error: 'controlPlane must be wmspanel or native' });
     if (controlPlane === 'wmspanel' && !( (wp?.clientId ?? s.wmspanel.clientId) && (wp?.apiKey ?? s.wmspanel.apiKey) )) {
@@ -50,6 +58,21 @@ settingsRouter.put('/', async (req, res) => {
     s.controlPlane = controlPlane;
   }
   if (srtHelperEnabled !== undefined) s.srtHelperEnabled = Boolean(srtHelperEnabled);
+  if (logs !== undefined) {
+    s.logs = s.logs || {};
+    if (logs.enabled !== undefined) s.logs.enabled = Boolean(logs.enabled);
+    if (Array.isArray(logs.files)) {
+      // Only real file names, and only a handful: this list is handed to every
+      // agent, and each entry is a file each of them will tail.
+      const clean = logs.files
+        .map(x => String(x).trim())
+        .filter(x => x && !x.includes('/') && !x.includes('..') && /\.(log|txt)$/i.test(x))
+        .slice(0, 8);
+      if (clean.length) s.logs.files = [...new Set(clean)];
+    }
+    s.markModified('logs');
+  }
+
   let statsChanged = false;
   if (stats !== undefined) {
     s.stats = s.stats || {};

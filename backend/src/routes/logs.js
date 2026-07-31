@@ -137,7 +137,6 @@ logsRouter.post('/collector', requirePerm('settings.manage'), async (req, res) =
   const on = Boolean(req.body?.enabled);
   const s = await Settings.load();
   s.logs.enabled = on;
-  if (req.body?.intervalSec) s.logs.intervalSec = Math.max(2, Number(req.body.intervalSec));
   if (Array.isArray(req.body?.files) && req.body.files.length) s.logs.files = req.body.files;
   await s.save();
   // iter12 m2 — nothing to start or stop here any more. Agents learn the new

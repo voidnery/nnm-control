@@ -167,6 +167,10 @@ window.fetch = (u) => {
     nextBefore:null }), text:()=>Promise.resolve('{}') });
   if (s.includes('/logs/status')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     settings:{ enabled:true, files:['nimble.log'] }, collector:{ mode:'push' }, cursors:[] }), text:()=>Promise.resolve('{}') });
+  if (/\/settings$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    controlPlane:'wmspanel', srtHelperEnabled:true, wmspanel:{ clientId:'c', baseUrl:'https://api.wmspanel.ru/v1' },
+    stats:{ enabled:true, intervalSec:10, retentionDays:3, groups:{} },
+    logs:{ enabled:true, files:['nimble.log'] } }), text:()=>Promise.resolve('{}') });  // settings.logs fixture
   if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'] };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
   else if (s.includes('/stream-tags/')) body = { map:{} };

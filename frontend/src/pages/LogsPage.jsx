@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import Select from '../components/Select.jsx';
 import SearchInput from '../components/SearchInput.jsx';
@@ -33,6 +34,7 @@ const fmtN = (n) => new Intl.NumberFormat().format(n);
 export default function LogsPage() {
   const { t } = useI18n();
   const { push } = useToast();
+  const { can } = useAuth();
   const [servers, setServers] = useState([]);
   const [status, setStatus] = useState(null);
 
@@ -115,8 +117,26 @@ export default function LogsPage() {
       <h1>{t('logs.title')}</h1>
       <div className="sub">{t('logs.sub')}</div>
 
+      {/* Telling someone to go and flip a switch on another page is poor when
+          the panel already knows they are allowed to flip it. */}
       {status && !status.settings?.enabled && (
-        <div className="error-box">{t('logs.disabled')}</div>
+        <div className="error-box">
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{can('settings.manage') ? t('logs.disabledCanFix') : t('logs.disabled')}</span>
+            {can('settings.manage') && (
+              <div className="row" style={{ flexShrink: 0 }}>
+                <button className="primary" onClick={async () => {
+                  try {
+                    await api('/logs/collector', { method: 'POST', body: { enabled: true } });
+                    setStatus(await api('/logs/status'));
+                    push({ type: 'ok', message: t('logs.enabledNow') });
+                    load();
+                  } catch (e) { setError(e.message); }
+                }}>{t('logs.enableNow')}</button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="panel" style={{ marginBottom: 10 }}>

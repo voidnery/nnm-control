@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.17.1 — log collection had no switch to turn on
+- **`Settings.logs.enabled` has existed since iter10 m1, the gateway has always
+  sent it to agents, and the agents have always acted on it — but it was never
+  given a control.** The settings route neither returned it nor accepted it, and
+  the Settings page had no mention of logs at all. The Logs page told operators
+  to "turn it on in Settings", where there was nothing to turn on
+- New **Nimble log collection** section in Settings: the switch, the list of
+  files to follow, and a live status panel showing what is actually arriving —
+  records held against the cap, and per-server cursors with any gap or error.
+  "Is it on" and "is anything arriving" are different questions, and after
+  switching it on only the second one is useful
+- The Logs page banner now offers to switch collection on in place for anyone
+  holding `settings.manage`. Sending someone to another page to flip one switch
+  is poor when the panel already knows they may flip it
+- `settings.logs.intervalSec` removed. The push model made it vestigial — the
+  agent batches on its own timer and the gateway never sent it — and a setting
+  that does nothing is worse than no setting
+- **Two defects found by the gates while doing this.** The i18n audit caught the
+  Russian block being written into the English dictionary, where ten keys
+  silently shadowed their English counterparts. The click gate caught a crash on
+  the Settings page: `usage.docs.toLocaleString()` with no guard, latent until
+  the new fixture made the metrics section render under test
+
+
 ### v0.17.0 — sidebar grouping, active-link fix, control placement
 - **The sidebar is grouped** instead of being seventeen entries in one list:
   Broadcast, Logs, Infrastructure, Access & audit, System, with the dashboard
