@@ -5,6 +5,7 @@ import { useI18n } from '../i18n.jsx';
 import Select from '../components/Select.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 import { copyText } from '../lib/clipboard.js';
+import { cacheGet, cacheSet, rememberFilters, recallFilters } from '../lib/logCache.js';
 import { useToast } from '../toast.jsx';
 
 // iter10 m3 — the general log warehouse.
@@ -38,13 +39,17 @@ export default function LogsPage() {
   const [servers, setServers] = useState([]);
   const [status, setStatus] = useState(null);
 
-  const [serverId, setServerId] = useState('');
-  const [levels, setLevels] = useState([]);          // empty = all
-  const [subs, setSubs] = useState([]);
-  const [range, setRange] = useState('1h');
-  const [q, setQ] = useState('');
-  const [mode, setMode] = useState('grouped');
+  // Coming back to a page that forgot which server and level you had picked is
+  // the same annoyance as coming back to an empty table.
+  const saved = recallFilters('logs', {});
+  const [serverId, setServerId] = useState(saved.serverId ?? '');
+  const [levels, setLevels] = useState(saved.levels ?? []);   // empty = all
+  const [subs, setSubs] = useState(saved.subs ?? []);
+  const [range, setRange] = useState(saved.range ?? '1h');
+  const [q, setQ] = useState(saved.q ?? '');
+  const [mode, setMode] = useState(saved.mode ?? 'grouped');
   const [live, setLive] = useState(false);
+  const [stale, setStale] = useState(0);             // age of what is on screen
 
   const [facets, setFacets] = useState(null);
   const [groups, setGroups] = useState(null);
@@ -71,22 +76,41 @@ export default function LogsPage() {
     return p;
   }, [serverId, levels, subs, q, range]);
 
+  const apply = useCallback((f, data, isGrouped) => {
+    setFacets(f);
+    if (isGrouped) { setGroups(data); setRows(null); }
+    else { setRows(data); setGroups(null); }
+  }, []);
+
   const load = useCallback(async () => {
+    const qs = params.toString();
+    const key = `logs|${mode}|${qs}`;
+
+    // Whatever was last seen for this exact query goes up in the first frame,
+    // and the query still runs behind it. An out-of-date table beats an empty
+    // one when someone is looking for something they just saw.
+    const hit = cacheGet(key);
+    if (hit) { apply(hit.data.facets, hit.data.data, mode === 'grouped'); setStale(hit.ageMs); }
+
     setBusy(true); setError('');
     try {
-      const qs = params.toString();
       const [f, data] = await Promise.all([
         api(`/logs/facets?${qs}`),
         mode === 'grouped' ? api(`/logs/groups?${qs}&limit=100`) : api(`/logs/search?${qs}&limit=200`),
       ]);
-      setFacets(f);
-      if (mode === 'grouped') { setGroups(data); setRows(null); }
-      else { setRows(data); setGroups(null); }
-    } catch (e) { setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message); }
-    finally { setBusy(false); }
-  }, [params, mode]);
+      apply(f, data, mode === 'grouped');
+      setStale(0);
+      cacheSet(key, { facets: f, data });
+    } catch (e) {
+      // A failed refresh must not wipe what is already readable on screen.
+      setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message);
+    } finally { setBusy(false); }
+  }, [params, mode, apply, t]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    rememberFilters('logs', { serverId, levels, subs, range, q, mode });
+  }, [serverId, levels, subs, range, q, mode]);
 
   // Live follow only makes sense on the raw view; a grouped view that reshuffles
   // every few seconds is unreadable.
@@ -196,6 +220,7 @@ export default function LogsPage() {
               {groups.capped && <> · {t('logs.capped')}</>}
             </span>
           )}
+          {stale > 0 && busy && <span className="hint">{t('logs.showingCached', { s: Math.round(stale / 1000) })}</span>}
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import Select from '../components/Select.jsx';
 import LogWindow from '../components/LogWindow.jsx';
+import { cacheGet, cacheSet, rememberFilters, recallFilters } from '../lib/logCache.js';
 
 // iter10 m4 — Nimble's output split by what part of it is talking.
 //
@@ -22,8 +23,9 @@ const fmtN = (n) => new Intl.NumberFormat().format(n);
 export default function LogCategoriesPage() {
   const { t } = useI18n();
   const [servers, setServers] = useState([]);
-  const [serverId, setServerId] = useState('');
-  const [range, setRange] = useState('1h');
+  const saved = recallFilters('logCategories', {});
+  const [serverId, setServerId] = useState(saved.serverId ?? '');
+  const [range, setRange] = useState(saved.range ?? '1h');
   const [counts, setCounts] = useState(null);
   const [focus, setFocus] = useState(null);        // one window, full height
   const [hidden, setHidden] = useState([]);
@@ -38,12 +40,17 @@ export default function LogCategoriesPage() {
       if (serverId) p.set('serverId', serverId);
       const mins = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440, all: 0 }[range];
       if (mins) p.set('from', new Date(Date.now() - mins * 60_000).toISOString());
+      const key = `cats|${p.toString()}`;
+      const hit = cacheGet(key);
+      if (hit) setCounts(hit.data);
       const d = await api(`/logs/categories?${p.toString()}`);
       setCounts(d.counts);
+      cacheSet(key, d.counts);
     } catch (e) { setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message); }
   }, [serverId, range]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { rememberFilters('logCategories', { serverId, range }); }, [serverId, range]);
 
   const byKey = useMemo(() => new Map((counts || []).map(c => [c.key, c])), [counts]);
   // A category with nothing in it is noise on the screen, but hiding it

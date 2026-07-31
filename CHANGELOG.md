@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.18.2 — logs are there when you come back, and the scrollbars match
+- **Leaving a log page and returning meant waiting for the aggregation again**,
+  with an empty table in the meantime. During an incident an operator flips
+  between the logs, a server and back several times a minute, and each hop cost
+  seconds of blank screen
+- Results are now kept for a minute and shown in the first frame while a fresh
+  query runs behind them, with a quiet note giving the age of what is on
+  screen. A failed refresh leaves the readable answer where it is instead of
+  wiping it
+- The same applies to every log window, which is what the categorical page and
+  each dashboard render — a dashboard of seven windows used to mean seven blank
+  panes on every visit
+- Filters are remembered per page too: coming back to a page that has forgotten
+  which server and level you chose is the same annoyance in a different place
+- The cache is in memory, bounded to 40 entries, and least-recently-used — an
+  operator tuning filters produces a new key per keystroke, and the query being
+  looked at must not be pushed out by its own refinements
+- **Scrollbars follow the theme.** Driven by the same variables as everything
+  else, so the light theme gets a light scrollbar without a second set of
+  rules; both the Firefox and the WebKit forms are kept, because dropping
+  either leaves one browser with a stock grey bar in the middle of a dark panel
+- New `npm run audit:cache`. It found an off-by-one on the first run: the age
+  check was strict, so `maxAgeMs: 0` — the natural way to say "do not use the
+  cache" — served the entry anyway
+
+
 ### v0.18.1 — the 504, and a quieter bug behind it
 - **`$limit` with no `$sort` in front of it.** A capped collection returns
   insertion order, so the cap was selecting the **oldest** matching records:

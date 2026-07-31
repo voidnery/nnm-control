@@ -4,6 +4,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import SearchInput from './SearchInput.jsx';
 import { copyText } from '../lib/clipboard.js';
+import { cacheGet, cacheSet } from '../lib/logCache.js';
 
 // iter10 m4 — one log window.
 //
@@ -71,14 +72,27 @@ export default function LogWindow({
   }, [category, levels, range, q, mode, onConfigChange]);
 
   const load = useCallback(async () => {
+    // A dashboard of seven windows meant seven blank panes on every visit.
+    // Each window shows its own last answer immediately and refreshes behind
+    // it; a shared link, whose fetch is token-scoped, is not cached here.
+    const key = fetchData ? null : `win|${mode}|${qs}`;
+    if (key) {
+      const hit = cacheGet(key);
+      if (hit) setData(hit.data);
+    }
     setBusy(true); setError('');
     try {
-      setData(fetchData
+      const d = fetchData
         ? await fetchData({ mode })
-        : await api(mode === 'grouped' ? `/logs/groups?${qs}&limit=40` : `/logs/search?${qs}&limit=120`));
-    } catch (e) { setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message); }
-    finally { setBusy(false); }
-  }, [qs, mode, fetchData]);
+        : await api(mode === 'grouped' ? `/logs/groups?${qs}&limit=40` : `/logs/search?${qs}&limit=120`);
+      setData(d);
+      if (key) cacheSet(key, d);
+    } catch (e) {
+      // Keep whatever is on screen: a failed refresh should not empty a window
+      // an operator is reading.
+      setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message);
+    } finally { setBusy(false); }
+  }, [qs, mode, fetchData, t]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -16,6 +16,31 @@
   --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+/* Scrollbars.
+   Driven by the same variables as everything else, so the light theme gets a
+   light scrollbar without a second set of rules. Firefox takes the standard
+   two-value form; Chromium and WebKit still need the -webkit pseudo-elements,
+   and both are kept because dropping either leaves one browser with a stock
+   grey bar in the middle of a dark panel. */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 6px;
+  /* The border is transparent and shows the track through it, which is what
+     makes the thumb look inset rather than filling the gutter. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); background-clip: padding-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
+/* A pane the operator is reading — a log window, a run trace — earns a
+   slightly more visible bar, because there the scroll position is information. */
+pre::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb,
+.panel > div[style*="overflow"]::-webkit-scrollbar-thumb { background: var(--accent-dim); background-clip: padding-box; }
+
 /* Light theme overrides. Applied when <html data-theme="light">. */
 :root[data-theme="light"] {
   --bg: #eef1f4;
