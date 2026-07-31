@@ -1,5 +1,36 @@
 # Changelog
 
+### v0.20.0 — functions: the broken source picker and four rough edges
+- **The source pickers were empty, and the SRT In steps had never been
+  saveable.** The list of object kinds existed in three copies — the runner's
+  `KIND_OPS`, the object browser's if-chain, and the model's enum — and they
+  had drifted. `incoming` was in the runner and in the UI's presets but in
+  neither of the others, so a step of that kind could be built, could not be
+  browsed ("Unknown kind"), and failed to save with a mongoose enum violation
+  that surfaced as **HTTP 500**
+- One canonical list now, in `src/objectKinds.js`. The model derives its enum
+  from it, the browser serves every per-server kind in it, and a test asserts
+  the runner implements exactly it and that every kind a preset can produce is
+  one the model accepts
+- **"Internal server error" for a rejected shape is gone.** A validation
+  failure returns 400 naming the field. Saving a function with no steps asks
+  first — it is legal, someone may be building it over two sittings, but it is
+  almost always a slip
+- **The step palette and the variants moved up**, beside the name and
+  description. They are what the function *is*, and having them below the step
+  list meant scrolling past everything to add the next one
+- **The variant picker is a real modal.** It was hand-rolled backdrop markup
+  rendered wherever it sat in the tree, which put it at the bottom of the page
+  under the run history; `Modal` portals to `document.body`, which is the whole
+  reason it exists
+- **Run history can be pruned**: one button clears runs older than three days.
+  The minimum age is enforced on the server, so a mistyped zero cannot wipe the
+  trace of what happened this morning, and a run still in flight is not history
+- The undefined-reference audit earned its keep, catching a missing `logEvent`
+  import in this change before it shipped — the same class that returned 502
+  and restarted the panel in v0.16.1
+
+
 ### v0.19.1 — the log cache never hit once
 - **The cache added in v0.18.2 never worked.** Its key was built from the query
   string, and the query string contains `from` as an absolute timestamp derived

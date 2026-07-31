@@ -6,6 +6,18 @@ import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm, hasPerm } from '../middleware/auth.js';
 import { executeFunction, resolveVariant } from '../services/functionRunner.js';
+import { logEvent } from '../services/audit.js';
+
+// A rejected shape is the operator's problem to fix and must say what is wrong.
+// Letting a mongoose ValidationError reach the async guard turned "this step
+// has no server" into "Internal server error", which tells nobody anything.
+function asBadRequest(e, res) {
+  if (e?.name === 'ValidationError') {
+    const first = Object.values(e.errors || {})[0];
+    return res.status(400).json({ error: first?.message || e.message, field: first?.path || '' });
+  }
+  return null;
+}
 import { wmspanel } from '../services/wmspanelClient.js';
 
 // iter11 2b — variants are stored data that decides what gets sent to a live
@@ -45,7 +57,10 @@ functionsRouter.get('/', async (req, res) => {
 functionsRouter.post('/', requirePerm('functions.manage'), async (req, res) => {
   const { name, description = '', steps = [], variants = [] } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name required' });
-  const fn = await FunctionDef.create({ name, description, steps, variants: cleanVariants(variants), createdBy: req.user.username });
+  let fn;
+  try {
+    fn = await FunctionDef.create({ name, description, steps, variants: cleanVariants(variants), createdBy: req.user.username });
+  } catch (e) { if (asBadRequest(e, res)) return; throw e; }
   res.status(201).json(fn);
 });
 
@@ -57,7 +72,8 @@ functionsRouter.put('/:id', requirePerm('functions.manage'), async (req, res) =>
   if (description !== undefined) fn.description = description;
   if (steps !== undefined) fn.steps = steps;
   if (variants !== undefined) fn.variants = cleanVariants(variants);
-  await fn.save();
+  try { await fn.save(); }
+  catch (e) { if (asBadRequest(e, res)) return; throw e; }
   res.json(fn);
 });
 
@@ -110,6 +126,21 @@ functionsRouter.get('/:id/preview', requirePerm('functions.execute'), async (req
   } catch (e) {
     res.status(e.status || 400).json({ error: e.message });
   }
+});
+
+// The run history is a log, not a record: it grows for ever and the interesting
+// part is the last few days. Deleting is explicit and bounded — a minimum age
+// is enforced here rather than trusted from the request, so a mistyped zero
+// cannot wipe the trace of what happened this morning.
+functionsRouter.delete('/runs', requirePerm('functions.execute'), async (req, res) => {
+  const days = Math.max(1, Math.min(365, Number(req.query.olderThanDays) || 3));
+  const before = new Date(Date.now() - days * 86400_000);
+  const r = await FunctionRun.deleteMany({ startedAt: { $lt: before }, status: { $ne: 'running' } });
+  logEvent({
+    req, action: 'functions:prune-runs',
+    target: `${r.deletedCount || 0} run(s) older than ${days}d`, outcome: 'ok', status: 200,
+  });
+  res.json({ deleted: r.deletedCount || 0, olderThanDays: days, before });
 });
 
 functionsRouter.get('/runs', requirePerm('functions.execute'), async (_req, res) => {
@@ -185,7 +216,10 @@ functionsRouter.get('/objects/:serverId/:kind', requirePerm('functions.manage'),
     else if (kind === 'outgoing') { data = await wmspanel.outgoingList(cfg, sid); data = data.streams || data.settings || []; }
     else if (kind === 'hotswap') { data = await wmspanel.hotswapList(cfg, sid); data = data.settings || []; }
     else if (kind === 'live_pull') { data = await wmspanel.livePullList(cfg, sid); data = data.settings || []; }
-    else return res.status(400).json({ error: 'Unknown kind' });
+    // SRT In / MPEG-TS In — the sources an outgoing stream points at. Missing
+    // here for as long as the steps that need it have existed.
+    else if (kind === 'incoming') { data = await wmspanel.incomingList(cfg, sid); data = data.streams || data.settings || []; }
+    else return res.status(400).json({ error: `Unknown kind "${kind}"` });
     res.json({ objects: data });
   } catch (e) {
     res.status(502).json({ error: e.message, upstream: e.data ?? null });

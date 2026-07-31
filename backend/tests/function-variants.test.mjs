@@ -156,5 +156,58 @@ check('a variant with no overrides is the base steps under a name', () => {
   assert.equal(r.variant.id, 'plain');
 });
 
+// The kind list existed in three copies — the runner's KIND_OPS, the object
+// browser's if-chain, and the model's enum — and they drifted. `incoming` was
+// in the first and in the UI's presets but in neither of the others, so the
+// SRT In steps could be built, could not be browsed, and failed to save with a
+// mongoose enum violation surfacing as HTTP 500.
+console.log('\nOBJECT KINDS (one list, three consumers):');
+
+const { OBJECT_KINDS } = await import('../src/objectKinds.js');
+const { KIND_OPS } = await import('../src/services/functionRunner.js');
+const { readFileSync } = await import('node:fs');
+const routeSrc = readFileSync(new URL('../src/routes/functions.js', import.meta.url), 'utf8');
+const modelSrc = readFileSync(new URL('../src/models/FunctionDef.js', import.meta.url), 'utf8');
+const uiSrc = readFileSync(new URL('../../frontend/src/pages/FunctionsPage.jsx', import.meta.url), 'utf8');
+
+check('the runner implements exactly the canonical list', () => {
+  assert.deepEqual([...OBJECT_KINDS].sort(), Object.keys(KIND_OPS).sort());
+});
+
+check('the model enum is derived, not retyped', () => {
+  assert.ok(modelSrc.includes('OBJECT_KINDS'), 'a second hand-written list is how this drifted');
+  assert.ok(!/enum: \['republish'/.test(modelSrc));
+});
+
+check('every kind a preset can produce is one the model accepts', () => {
+  const used = new Set([...uiSrc.matchAll(/objectKind: '([a-z_]+)'/g)].map(m => m[1]));
+  for (const k of used) {
+    assert.ok(OBJECT_KINDS.includes(k), `the UI can build a step of kind "${k}" that cannot be saved`);
+  }
+  assert.ok(used.has('incoming'), 'the SRT In steps are the ones this broke');
+});
+
+check('every per-server kind can be browsed', () => {
+  const browsable = new Set([...routeSrc.matchAll(/kind === '([a-z_]+)'/g)].map(m => m[1]));
+  const accountLevel = new Set(['transcoder', 'abr', 'alias']);
+  for (const k of OBJECT_KINDS) {
+    if (accountLevel.has(k)) continue;
+    assert.ok(browsable.has(k), `"${k}" cannot be browsed, so its picker is empty`);
+  }
+});
+
+check('a rejected shape is a 400 with a reason, not a 500', () => {
+  // "Internal server error" for a missing field tells the operator nothing and
+  // looks like the panel is broken rather than the input.
+  assert.ok(routeSrc.includes('function asBadRequest'));
+  assert.ok(routeSrc.includes("e?.name === 'ValidationError'"));
+});
+
+check('purging run history has a floor the request cannot lower', () => {
+  assert.ok(routeSrc.includes('Math.max(1, Math.min(365, Number(req.query.olderThanDays) || 3))'),
+    'a mistyped zero must not wipe this morning');
+  assert.ok(routeSrc.includes("status: { $ne: 'running' }"), 'a run in flight is not history yet');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);

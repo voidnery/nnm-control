@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { backdropClose } from '../components/Modal.jsx';
+import Modal, { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import { useToast } from '../toast.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 
 const KINDS = [
@@ -330,9 +331,12 @@ function VariantPicker({ fn, onCancel, onPick }) {
     return () => { dead = true; };
   }, [fn._id, sel]);
 
+  // Hand-rolled backdrop markup rendered wherever it happened to sit in the
+  // tree — at the bottom of the page, under the run history. Modal portals to
+  // document.body, which is the whole reason it exists.
   return (
-    <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="modal">
+    <Modal onClose={onCancel} size="wide">
+      <>
         <h3 style={{ marginTop: 0 }}>{t('fn.pickVariant', { name: fn.name })}</h3>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           {fn.variants.map(v => (
@@ -365,13 +369,14 @@ function VariantPicker({ fn, onCancel, onPick }) {
           <button onClick={onCancel}>{t('action.cancel')}</button>
           <button className="primary" disabled={!sel} onClick={() => onPick(sel)}>{t('fn.run')}</button>
         </div>
-      </div>
-    </div>
+      </>
+    </Modal>
   );
 }
 
 function Builder({ initial, servers, onClose, onSaved }) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const { user } = useAuth();
   const backDown = useRef(false);
   const w = user?.preferences?.functionModalWidth || 'default';
@@ -407,6 +412,10 @@ function Builder({ initial, servers, onClose, onSaved }) {
   };
   const save = async () => {
     setError('');
+    // A function with no steps is legal — someone may be building it over two
+    // sittings — but it is almost always a slip, and the old failure for it was
+    // a 500 that explained nothing.
+    if (steps.length === 0 && !(await confirm(t('fn.confirmEmpty')))) return;
     try {
       const body = { name, description, steps, variants };
       if (isEdit) await api(`/functions/${initial._id}`, { method: 'PUT', body });
@@ -424,14 +433,14 @@ function Builder({ initial, servers, onClose, onSaved }) {
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Подмена потоков картинкой" />
         <label>{t('fn.description')}</label>
         <input value={description} onChange={e => setDescription(e.target.value)} />
-        <label>{t('fn.stepsHint')}</label>
-        {steps.map((st, i) => (
-          <StepEditor key={i} step={st} servers={servers}
-                      onChange={next => setSteps(all => all.map((s, j) => j === i ? next : s))}
-                      onRemove={() => setSteps(all => all.filter((_, j) => j !== i))} />
-        ))}
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>)}
+        {/* The palette and the variants belong with the name and description:
+            they are what the function IS, and having them below a list of
+            steps meant scrolling past everything to add the next one. */}
+        <div className="panel" style={{ marginTop: 10, marginBottom: 4 }}>
+          <div className="hint" style={{ marginBottom: 6 }}>{t('fn.addStep')}</div>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+            {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>)}
+          </div>
         </div>
         {/* iter11 2b — the same steps, several sets of values. Only the fields
             that differ are named per variant; everything else falls through to
@@ -456,7 +465,9 @@ function Builder({ initial, servers, onClose, onSaved }) {
               </div>
               {openVariant === v.id && (
                 <div style={{ marginTop: 6 }}>
-                  {steps.map((st, i) => (
+                  <label style={{ marginTop: 12 }}>{t('fn.stepsHint')}</label>
+        {steps.length === 0 && <div className="hint">{t('fn.noSteps')}</div>}
+        {steps.map((st, i) => (
                     st.type === 'patch' ? (
                       <div key={i} style={{ marginBottom: 6 }}>
                         <label style={{ fontSize: 12 }}>
@@ -480,6 +491,13 @@ function Builder({ initial, servers, onClose, onSaved }) {
             </div>
           ))}
         </div>
+
+
+        {steps.map((st, i) => (
+          <StepEditor key={i} step={st} servers={servers}
+                      onChange={next => setSteps(all => all.map((s, j) => j === i ? next : s))}
+                      onRemove={() => setSteps(all => all.filter((_, j) => j !== i))} />
+        ))}
 
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
@@ -549,6 +567,7 @@ export default function FunctionsPage() {
   const [builder, setBuilder] = useState(null);
   const [activeRun, setActiveRun] = useState(null);
   const [pickVariant, setPickVariant] = useState(null);
+  const { push } = useToast();
   const [error, setError] = useState('');
 
   const load = async () => {
@@ -614,7 +633,21 @@ export default function FunctionsPage() {
       </div>
       {can('functions.execute') && runs.length > 0 && (
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>{t('fn.runHistory')}</h2>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>{t('fn.runHistory')}</h2>
+            {/* The history is a log, not a record. The minimum age is enforced
+                on the server, so this cannot be turned into "delete today". */}
+            <div className="row" style={{ flexShrink: 0 }}>
+              <button onClick={async () => {
+                if (!(await confirm(t('fn.pruneConfirm')))) return;
+                try {
+                  const r = await api('/functions/runs?olderThanDays=3', { method: 'DELETE' });
+                  push({ type: 'ok', message: t('fn.pruned', { n: r.deleted }) });
+                  load();
+                } catch (e) { setError(e.message); }
+              }}>{t('fn.pruneRuns')}</button>
+            </div>
+          </div>
           <table>
             <thead><tr><th>{t('fn.function')}</th><th>{t('fn.by')}</th><th>{t('fn.started')}</th><th>{t('fn.status')}</th><th></th></tr></thead>
             <tbody>

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { OBJECT_KINDS } from '../objectKinds.js';
 
 // An engineering function: an ordered list of transactional steps.
 const stepSchema = new mongoose.Schema({
@@ -11,7 +12,9 @@ const stepSchema = new mongoose.Schema({
   //  'delay'  — wait N seconds (no rollback)
   type: { type: String, enum: ['patch', 'action', 'delay'], required: true },
   serverId: { type: mongoose.Schema.Types.ObjectId, ref: 'NimbleServer' },
-  objectKind: { type: String, enum: ['republish', 'udp', 'outgoing', 'hotswap', 'live_pull', 'transcoder', 'abr', 'alias', ''], default: '' },
+  // From the single list, so this can never again reject a kind the runner and
+  // the UI both support.
+  objectKind: { type: String, enum: [...OBJECT_KINDS, ''], default: '' },
   targetId: { type: String, default: '' },      // WMSPanel object id
   targetLabel: { type: String, default: '' },   // human-readable app/stream of the picked object (UI aid)
   patch: { type: mongoose.Schema.Types.Mixed, default: {} },
