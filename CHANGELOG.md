@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.20.1 — a shadowed route and a guessed field name
+- **Clearing old runs returned 500.** `DELETE /:id` was declared before
+  `DELETE /runs`, and Express matches in declaration order — so the request was
+  handled as "delete the function whose id is `runs`", which casts badly. The
+  servers router carries a comment warning about exactly this for `/order`; the
+  functions router was written anyway
+- New `npm run audit:routes`, which runs before the test suite. It reads every
+  router and fails when a literal path is declared after a same-method
+  parameter route that would match it first. Order is not something to
+  remember; it is something to check. Verified against the real defect
+- **The source dropdown showed a list of `?/?`.** An incoming object is named,
+  not addressed by app/stream — `srcLabel` guessed `application`/`stream` when
+  the outgoing tab three files away already resolved these by `name`. It uses
+  the name now, with the description as context and the id as a last resort,
+  because a truncated id can at least be matched against the server's incoming
+  list where question marks cannot
+
+
 ### v0.20.0 — functions: the broken source picker and four rough edges
 - **The source pickers were empty, and the SRT In steps had never been
   saveable.** The list of object kinds existed in three copies — the runner's

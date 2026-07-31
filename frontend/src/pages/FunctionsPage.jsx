@@ -177,7 +177,17 @@ function StepEditor({ step, servers, onChange, onRemove }) {
     onChange({ ...step, patch });
     setPatchText(JSON.stringify(patch));
   };
-  const srcLabel = (o) => `${o.application || o.app || '?'}/${o.stream || o.strm || '?'}`;
+  // An incoming object is named, not addressed by app/stream — which is how
+  // the rest of the panel labels them, and what I should have looked at
+  // instead of guessing field names. The guess produced a list of "?/?".
+  const srcLabel = (o) => {
+    const name = String(o.name || '').trim();
+    const extra = String(o.description || '').trim();
+    if (name) return extra && extra !== name ? `${name} — ${extra}` : name;
+    // Nothing to show but an id is still better than a row of question marks:
+    // it can at least be matched against the server's incoming list.
+    return `id ${String(o.id ?? '').slice(-8) || '?'}`;
+  };
   const applyPatchText = (t) => {
     setPatchText(t);
     try { onChange({ ...step, patch: JSON.parse(t || '{}') }); setPatchErr(''); }

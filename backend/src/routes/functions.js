@@ -77,6 +77,41 @@ functionsRouter.put('/:id', requirePerm('functions.manage'), async (req, res) =>
   res.json(fn);
 });
 
+// Declared BEFORE '/:id', and that ordering is load-bearing: Express matches
+// in declaration order, so with '/:id' first a DELETE of /runs was handled as
+// "delete the function whose id is 'runs'", which casts badly and comes back
+// as HTTP 500. The servers router carries the same warning about /order; this
+// one was written anyway.
+// The run history is a log, not a record: it grows for ever and the interesting
+// part is the last few days. Deleting is explicit and bounded — a minimum age
+// is enforced here rather than trusted from the request, so a mistyped zero
+// cannot wipe the trace of what happened this morning.
+functionsRouter.delete('/runs', requirePerm('functions.execute'), async (req, res) => {
+  const days = Math.max(1, Math.min(365, Number(req.query.olderThanDays) || 3));
+  const before = new Date(Date.now() - days * 86400_000);
+  const r = await FunctionRun.deleteMany({ startedAt: { $lt: before }, status: { $ne: 'running' } });
+  logEvent({
+    req, action: 'functions:prune-runs',
+    target: `${r.deletedCount || 0} run(s) older than ${days}d`, outcome: 'ok', status: 200,
+  });
+  res.json({ deleted: r.deletedCount || 0, olderThanDays: days, before });
+});
+
+functionsRouter.get('/runs', requirePerm('functions.execute'), async (_req, res) => {
+  const runs = await FunctionRun.find().sort({ startedAt: -1 }).limit(50);
+  res.json(runs);
+});
+
+functionsRouter.get('/runs/:id', requirePerm('functions.execute'), async (req, res) => {
+  const run = await FunctionRun.findById(req.params.id);
+  if (!run) return res.status(404).json({ error: 'Not found' });
+  res.json(run);
+});
+
+// App/stream picker source: active streams via WMSPanel Streams API (needs
+// Deep stats enabled); falls back to aggregating app/stream pairs from
+// configured republish/outgoing/udp objects.
+
 functionsRouter.delete('/:id', requirePerm('functions.manage'), async (req, res) => {
   const fn = await FunctionDef.findByIdAndDelete(req.params.id);
   if (!fn) return res.status(404).json({ error: 'Not found' });
@@ -128,35 +163,6 @@ functionsRouter.get('/:id/preview', requirePerm('functions.execute'), async (req
   }
 });
 
-// The run history is a log, not a record: it grows for ever and the interesting
-// part is the last few days. Deleting is explicit and bounded — a minimum age
-// is enforced here rather than trusted from the request, so a mistyped zero
-// cannot wipe the trace of what happened this morning.
-functionsRouter.delete('/runs', requirePerm('functions.execute'), async (req, res) => {
-  const days = Math.max(1, Math.min(365, Number(req.query.olderThanDays) || 3));
-  const before = new Date(Date.now() - days * 86400_000);
-  const r = await FunctionRun.deleteMany({ startedAt: { $lt: before }, status: { $ne: 'running' } });
-  logEvent({
-    req, action: 'functions:prune-runs',
-    target: `${r.deletedCount || 0} run(s) older than ${days}d`, outcome: 'ok', status: 200,
-  });
-  res.json({ deleted: r.deletedCount || 0, olderThanDays: days, before });
-});
-
-functionsRouter.get('/runs', requirePerm('functions.execute'), async (_req, res) => {
-  const runs = await FunctionRun.find().sort({ startedAt: -1 }).limit(50);
-  res.json(runs);
-});
-
-functionsRouter.get('/runs/:id', requirePerm('functions.execute'), async (req, res) => {
-  const run = await FunctionRun.findById(req.params.id);
-  if (!run) return res.status(404).json({ error: 'Not found' });
-  res.json(run);
-});
-
-// App/stream picker source: active streams via WMSPanel Streams API (needs
-// Deep stats enabled); falls back to aggregating app/stream pairs from
-// configured republish/outgoing/udp objects.
 functionsRouter.get('/streams/:serverId', requirePerm('functions.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.serverId);
   if (!server?.wmspanelServerId) return res.status(409).json({ error: 'Server is not mapped to WMSPanel' });

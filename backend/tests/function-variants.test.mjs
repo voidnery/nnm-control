@@ -209,5 +209,21 @@ check('purging run history has a floor the request cannot lower', () => {
   assert.ok(routeSrc.includes("status: { $ne: 'running' }"), 'a run in flight is not history yet');
 });
 
+check('the runs routes are declared before the id routes', () => {
+  // Express matches in declaration order. With '/:id' first, DELETE /runs was
+  // handled as "delete the function whose id is 'runs'" and came back 500.
+  const del = routeSrc.indexOf("functionsRouter.delete('/runs'");
+  const byId = routeSrc.indexOf("functionsRouter.delete('/:id'");
+  assert.ok(del > 0 && byId > 0 && del < byId, 'the literal path must come first');
+});
+
+check('an incoming source is labelled by its name, as the rest of the panel does', () => {
+  // Guessing application/stream produced a dropdown of "?/?" — the object
+  // carries `name`, and the outgoing tab already resolved it that way.
+  assert.ok(uiSrc.includes('const srcLabel'));
+  assert.ok(/srcLabel = \(o\) => \{[\s\S]{0,200}o\.name/.test(uiSrc), 'name first');
+  assert.ok(!/o\.application \|\| o\.app/.test(uiSrc), 'the guessed fields must be gone');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);
