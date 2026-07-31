@@ -4,7 +4,11 @@ import SearchInput from './SearchInput.jsx';
 import { useI18n } from '../i18n.jsx';
 
 // Custom themed select. Drop-in-ish: value + onChange(value) + options
-// [{value,label}] or children via `options`. Supports optional search.
+// [{value, label, hint}] or children via `options`. Supports optional search.
+//
+// `hint` is secondary text â€” a stream's description beside its name. Rendered
+// dimmed and after a separator, because run together in one colour an operator
+// cannot tell where the name ends and the description begins.
 //
 // The dropdown renders in a portal with fixed positioning: modals are scroll
 // containers (overflow:auto), which would clip an absolutely-positioned popup
@@ -63,7 +67,7 @@ export default function Select({ value, onChange, options = [], placeholder = 'â
 
   const current = options.find(o => String(o.value) === String(value));
   const shown = searchable && q
-    ? options.filter(o => String(o.label).toLowerCase().includes(q.toLowerCase()))
+    ? options.filter(o => `${o.label} ${o.hint || ''}`.toLowerCase().includes(q.toLowerCase()))
     : options;
 
   const pop = open && pos && createPortal(
@@ -82,6 +86,7 @@ export default function Select({ value, onChange, options = [], placeholder = 'â
              className={'cselect-opt' + (String(o.value) === String(value) ? ' selected' : '')}
              onClick={() => { onChange(o.value); setOpen(false); setQ(''); }}>
           {o.label}
+          {o.hint && <span style={{ color: 'var(--text-dim)', opacity: .75, marginLeft: 8 }}>{o.hint}</span>}
         </div>
       ))}
       {shown.length === 0 && <div className="cselect-opt" style={{ color: 'var(--text-dim)' }}>{t('cm.noMatches')}</div>}
@@ -94,7 +99,9 @@ export default function Select({ value, onChange, options = [], placeholder = 'â
       <button type="button" className="cselect-btn" disabled={disabled}
               onClick={() => !disabled && setOpen(v => !v)}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {current ? current.label : <span style={{ color: 'var(--text-dim)' }}>{placeholder}</span>}
+          {current
+            ? <>{current.label}{current.hint && <span style={{ color: 'var(--text-dim)', opacity: .75, marginLeft: 8 }}>{current.hint}</span>}</>
+            : <span style={{ color: 'var(--text-dim)' }}>{placeholder}</span>}
         </span>
         <span className="caret">â–¼</span>
       </button>

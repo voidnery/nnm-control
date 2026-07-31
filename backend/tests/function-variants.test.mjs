@@ -220,8 +220,11 @@ check('the runs routes are declared before the id routes', () => {
 check('an incoming source is labelled by its name, as the rest of the panel does', () => {
   // Guessing application/stream produced a dropdown of "?/?" — the object
   // carries `name`, and the outgoing tab already resolved it that way.
-  assert.ok(uiSrc.includes('const srcLabel'));
-  assert.ok(/srcLabel = \(o\) => \{[\s\S]{0,200}o\.name/.test(uiSrc), 'name first');
+  // Name and description are returned as separate fields now, so the dropdown
+  // can dim the second — but the name is still what leads.
+  assert.ok(uiSrc.includes('const srcOption'));
+  assert.ok(/srcOption = \(o\) => \{[\s\S]{0,300}o\.name/.test(uiSrc), 'name first');
+  assert.ok(/label: name \|\|/.test(uiSrc), 'the label is the name, not the description');
   assert.ok(!/o\.application \|\| o\.app/.test(uiSrc), 'the guessed fields must be gone');
 });
 
@@ -265,6 +268,58 @@ check('object labels lead with the name, as every tab does', () => {
 check('the two questions are labelled apart', () => {
   assert.ok(uiSrc.includes("t('fn.whatToChange')"));
   assert.ok(uiSrc.includes("t('fn.changeToWhat')"));
+});
+
+console.log('\nSTEP EDITOR — SMALLER THINGS THAT COST TIME:');
+
+check('audio follows video, unless it was deliberately set apart', () => {
+  // The two come from one source in almost every case; setting it twice is a
+  // step nobody wants. But an audio pointed somewhere else on purpose must
+  // survive a change of video.
+  const setSource = (patch, field, id) => {
+    const p = { ...patch };
+    const prev = p[field]?.id || '';
+    p[field] = { id };
+    if (field === 'video_source' && 'audio_source' in p) {
+      const a = p.audio_source?.id || '';
+      if (!a || a === prev) p.audio_source = { id };
+    }
+    return p;
+  };
+  assert.deepEqual(setSource({ video_source: { id: '' }, audio_source: { id: '' } }, 'video_source', 'V1').audio_source, { id: 'V1' });
+  assert.deepEqual(setSource({ video_source: { id: 'V1' }, audio_source: { id: 'V1' } }, 'video_source', 'V2').audio_source, { id: 'V2' });
+  assert.deepEqual(setSource({ video_source: { id: 'V1' }, audio_source: { id: 'A9' } }, 'video_source', 'V2').audio_source, { id: 'A9' });
+  assert.ok(uiSrc.includes("if (!audio || audio === prev)"), 'the rule must be in the page, not only here');
+});
+
+check('a duplicated step is a deep copy', () => {
+  // A shallow copy shares the patch object, so editing one step would silently
+  // edit its twin.
+  assert.ok(uiSrc.includes('JSON.parse(JSON.stringify({ ...all[i]'));
+  assert.ok(uiSrc.includes("(copy)"), 'and it is marked, so two identical rows are tellable apart');
+});
+
+check('running a function still asks first, with or without variants', () => {
+  const from = uiSrc.indexOf('const run = async (fn, variantId');
+  const body = uiSrc.slice(from, from + 700);
+  assert.ok(body.includes("confirm(t('fn.confirmRun'"));
+  const guard = body.indexOf('setPickVariant(fn); return;');
+  const ask = body.indexOf("confirm(t('fn.confirmRun'");
+  assert.ok(guard < ask, 'the variant picker comes first, the confirmation always follows');
+});
+
+check('a dropdown separates the name from the description', () => {
+  const sel = readFileSync(new URL('../../frontend/src/components/Select.jsx', import.meta.url), 'utf8');
+  assert.ok(sel.includes('o.hint'), 'run together in one colour they read as one long name');
+  assert.ok(sel.includes("color: 'var(--text-dim)'"));
+  assert.ok(sel.includes("`${o.label} ${o.hint || ''}`"), 'and search must still cover both');
+});
+
+check('a transport failure names its cause instead of saying "fetch failed"', () => {
+  const client = readFileSync(new URL('../src/services/wmspanelClient.js', import.meta.url), 'utf8');
+  assert.ok(client.includes('WMSPanel API is unreachable'));
+  assert.ok(client.includes('cause?.code'), 'the reason Node hides in `cause` is what an operator needs');
+  assert.ok(client.includes("e?.name === 'AbortError'"), 'a timeout is its own message');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');

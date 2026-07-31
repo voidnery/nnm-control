@@ -1,5 +1,27 @@
 # Changelog
 
+### v0.21.0 — step editor polish, and a legible transport error
+- **"fetch failed" now names its cause.** Node reports every transport failure
+  as `TypeError: fetch failed` and hides the reason in `cause`, so the panel
+  showed a string that points at nothing — DNS, a firewall, an unreachable
+  route and a timeout all look identical and have different fixes. The message
+  carries the code and the path now, and a timeout says so in its own words
+- **Descriptions are dimmed in dropdowns.** `Select` takes an optional `hint`
+  rendered in muted text after the label; run together in one colour, a name
+  and a description read as one long name. Search still covers both
+- **The audio source follows the video source** when it is empty or was
+  tracking the previous video value. An audio deliberately pointed elsewhere
+  survives a change of video — the convenience must not overwrite a decision
+- **Steps can be duplicated**, inserted next to the original and marked
+  `(copy)`. Deep-copied: a shallow copy would share the patch object and
+  editing one step would silently edit its twin
+- **The step palette moved back below the list.** It is nine rows of buttons,
+  and above the steps it pushed the thing being edited off the screen
+- Confirmed that running a function still asks first whether or not it has
+  variants — the variant picker comes first, the confirmation always follows
+- 5 new checks
+
+
 ### v0.20.2 — three source fields where there should have been one
 - **The step editor offered every field pair for every object kind**, so a
   "switch the source" step ended up with `"application":"Sport_tv_obs",

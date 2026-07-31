@@ -28,12 +28,30 @@ async function call(cfg, path, { method = 'GET', body } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(buildUrl(cfg, path), {
-      method,
-      signal: ctrl.signal,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res;
+    try {
+      res = await fetch(buildUrl(cfg, path), {
+        method,
+        signal: ctrl.signal,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      // Node reports every transport failure as `TypeError: fetch failed` and
+      // hides the reason in `cause`. Shown to an operator, that string says
+      // nothing and points at nothing — it could be DNS, a firewall, an
+      // unreachable route or a timeout, and those have different fixes.
+      if (e?.name === 'AbortError') {
+        throw Object.assign(new Error(`WMSPanel API: no answer within ${TIMEOUT_MS / 1000}s (${path})`), { status: 504 });
+      }
+      const cause = e?.cause;
+      const detail = [cause?.code, cause?.message, cause?.errors?.map(x => x.code || x.message).join(', ')]
+        .filter(Boolean).join(' — ') || e?.message || 'unknown transport error';
+      throw Object.assign(
+        new Error(`WMSPanel API is unreachable: ${detail} (${path})`),
+        { status: 502, transport: cause?.code || 'unknown' },
+      );
+    }
     const text = await res.text();
     let data;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }

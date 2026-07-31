@@ -178,7 +178,7 @@ const pairsFor = (kind) => {
   return allowed === undefined ? KEY_PAIRS : KEY_PAIRS.filter(k => allowed.includes(k.value));
 };
 
-function StepEditor({ step, servers, onChange, onRemove }) {
+function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...step, [k]: v });
   const [patchText, setPatchText] = useState(JSON.stringify(step.patch || {}, null, 0));
@@ -207,20 +207,34 @@ function StepEditor({ step, servers, onChange, onRemove }) {
   }, [wantsSource, step.serverId]);
   const setSource = (field, id) => {
     const patch = { ...(step.patch || {}) };
+    const prev = patch[field]?.id || '';
     patch[field] = { id };
+    // Audio follows video, because the two come from the same source in almost
+    // every case and setting it twice is a step nobody wants. Only when audio
+    // is empty or was tracking the old video value — an audio deliberately
+    // pointed somewhere else is left alone.
+    if (field === 'video_source' && 'audio_source' in patch) {
+      const audio = patch.audio_source?.id || '';
+      if (!audio || audio === prev) patch.audio_source = { id };
+    }
     onChange({ ...step, patch });
     setPatchText(JSON.stringify(patch));
   };
   // An incoming object is named, not addressed by app/stream — which is how
   // the rest of the panel labels them, and what I should have looked at
   // instead of guessing field names. The guess produced a list of "?/?".
-  const srcLabel = (o) => {
+  // Name and description are returned separately so the dropdown can dim the
+  // second: run together in one colour they read as one long name.
+  const srcOption = (o) => {
     const name = String(o.name || '').trim();
     const extra = String(o.description || '').trim();
-    if (name) return extra && extra !== name ? `${name} — ${extra}` : name;
-    // Nothing to show but an id is still better than a row of question marks:
-    // it can at least be matched against the server's incoming list.
-    return `id ${String(o.id ?? '').slice(-8) || '?'}`;
+    return {
+      value: String(o.id),
+      // An id is still better than nothing: it can be matched against the
+      // server's incoming list, where a blank cannot.
+      label: name || `id ${String(o.id ?? '').slice(-8) || '?'}`,
+      hint: extra && extra !== name ? extra : '',
+    };
   };
   const applyPatchText = (t) => {
     setPatchText(t);
@@ -259,6 +273,7 @@ function StepEditor({ step, servers, onChange, onRemove }) {
                onChange={e => set('label', e.target.value)} />
         <div className="row" style={{ gap: 8, flexShrink: 0 }}>
           <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
+          {onDuplicate && <button onClick={onDuplicate}>{t('fn.duplicate')}</button>}
           <button className="danger" onClick={onRemove}>{t('fn.remove')}</button>
         </div>
       </div>
@@ -343,7 +358,7 @@ function StepEditor({ step, servers, onChange, onRemove }) {
                       <label>{t(f === 'video_source' ? 'fn.videoSource' : 'fn.audioSource')}</label>
                       <Select searchable value={step.patch[f]?.id || ''} onChange={v => setSource(f, v)}
                               options={[{ value: '', label: t('fn.pickSource') },
-                                        ...(sources || []).map(o => ({ value: String(o.id), label: srcLabel(o) }))]} />
+                                        ...(sources || []).map(srcOption)]} />
                     </div>
                   ))}
                 </div>
@@ -488,15 +503,6 @@ function Builder({ initial, servers, onClose, onSaved }) {
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Подмена потоков картинкой" />
         <label>{t('fn.description')}</label>
         <input value={description} onChange={e => setDescription(e.target.value)} />
-        {/* The palette and the variants belong with the name and description:
-            they are what the function IS, and having them below a list of
-            steps meant scrolling past everything to add the next one. */}
-        <div className="panel" style={{ marginTop: 10, marginBottom: 4 }}>
-          <div className="hint" style={{ marginBottom: 6 }}>{t('fn.addStep')}</div>
-          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-            {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>)}
-          </div>
-        </div>
         {/* iter11 2b — the same steps, several sets of values. Only the fields
             that differ are named per variant; everything else falls through to
             the step's own patch, so adding a stream to the function adds it to
@@ -551,8 +557,26 @@ function Builder({ initial, servers, onClose, onSaved }) {
         {steps.map((st, i) => (
           <StepEditor key={i} step={st} servers={servers}
                       onChange={next => setSteps(all => all.map((s, j) => j === i ? next : s))}
-                      onRemove={() => setSteps(all => all.filter((_, j) => j !== i))} />
+                      onRemove={() => setSteps(all => all.filter((_, j) => j !== i))}
+                      onDuplicate={() => setSteps(all => [
+                        ...all.slice(0, i + 1),
+                        // Deep-copied: a shallow copy would share the patch
+                        // object, and editing one step would silently edit its
+                        // twin. Inserted next to the original, because a copy
+                        // made to be tweaked belongs beside what it came from.
+                        JSON.parse(JSON.stringify({ ...all[i], label: `${all[i].label || ''} (copy)`.trim() })),
+                        ...all.slice(i + 1),
+                      ])} />
         ))}
+        {/* Back below the list: the palette is nine rows of buttons, and above
+            the steps it pushed the thing being edited off the screen. It sits
+            where it appends to now. */}
+        <div className="panel" style={{ marginTop: 10, marginBottom: 4 }}>
+          <div className="hint" style={{ marginBottom: 6 }}>{t('fn.addStep')}</div>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+            {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>)}
+          </div>
+        </div>
 
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
