@@ -171,6 +171,23 @@ window.fetch = (u) => {
     controlPlane:'wmspanel', srtHelperEnabled:true, wmspanel:{ clientId:'c', baseUrl:'https://api.wmspanel.ru/v1' },
     stats:{ enabled:true, intervalSec:10, retentionDays:3, groups:{} },
     logs:{ enabled:true, files:['nimble.log'] } }), text:()=>Promise.resolve('{}') });  // settings.logs fixture
+  if (s.includes('/agent-fleet/overview')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    shipped:{ version:7, sha256:'a'.repeat(64), bytes:27123 },
+    watchdog:{ tickMs:30000, confirmAfter:3, active:true, tracking:[] },
+    unacknowledged:2,
+    servers:[
+      { id:'S1', name:'NimbleFIN-1', host:'194.34.236.205', enabled:true, code:'healthy', severity:'ok',
+        evidence:'agent polling normally', lastContactAt:new Date().toISOString(), sinceContactMs:4000,
+        restarts:0, version:6, versionState:'outdated', selfUpdate:true, pendingUpdate:false },
+      { id:'S2', name:'NimbleRU-4', host:'95.181.213.127', enabled:true, code:'stopped-polling', severity:'error',
+        evidence:'last contact was 300s ago', sinceContactMs:300000, restarts:0, version:7,
+        versionState:'current', selfUpdate:false, pendingUpdate:false },
+      { id:'S3', name:'mediaserver', host:'192.168.200.129', enabled:false, code:'not-configured' }],
+    summary:{ total:3, configured:2, healthy:1, faulty:1, outdated:1 } }), text:()=>Promise.resolve('{}') });
+  if (s.includes('/agent-fleet/events')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve([
+    { id:'E1', serverId:'S2', serverName:'NimbleRU-4', code:'stopped-polling', kind:'fault', severity:'error',
+      evidence:'last contact was 300s ago', detail:null, createdAt:new Date().toISOString(),
+      acknowledgedAt:null, acknowledgedBy:'' }]), text:()=>Promise.resolve('{}') });
   if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'] };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
   else if (s.includes('/stream-tags/')) body = { map:{} };

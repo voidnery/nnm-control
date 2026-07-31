@@ -1,5 +1,51 @@
 # Changelog
 
+## iter14 — agent lifecycle
+### v0.19.0 — updates, watchdog, notifications, recovery
+- **The panel never uploads code.** An update queues a task asking the agent to
+  run its own verified update: the agent downloads the panel's copy, checks it
+  against a digest that travelled with the request, keeps the old file, swaps
+  atomically and exits non-zero so systemd starts the new code. A bad download
+  is discarded and the agent keeps running what it has — the failure mode is
+  "nothing happened", not "the server lost its agent". The mechanism is
+  borrowed from NET-Control, where it has already survived production
+- **Versions are compared by exact match, not by ordering** — the other lesson
+  from that work. `ahead` is its own state rather than being flattened into
+  "current": it means the panel was rolled back while its agents were not, and
+  reporting that as current would be untrue
+- The agent now installs into its systemd `StateDirectory`, which is the only
+  place the service user can rewrite. An agent installed the old way keeps
+  working and reports that it cannot update itself, rather than trying and
+  failing halfway
+- **Watchdog with debounce.** A verdict must repeat three times before it is
+  recorded, and any change of verdict restarts the count. So a single missed
+  poll during a panel restart raises nothing, an agent down for an hour is one
+  entry rather than a hundred and twenty, and a flapping agent produces nothing
+  at all. A notification channel that cries wolf is worse than none
+- **The watchdog never acts.** Detection and action are separate on purpose:
+  an automatic restart triggered by a false positive would be the panel
+  reaching into a live broadcast server on the strength of a late heartbeat.
+  This is the rule ServerMonitor arrived at, and it is asserted by a test
+- **Recovery is a button**, staged and over SSH on the same terms as the SSH
+  install: host key confirmed before a credential is typed, credential used
+  once and never stored, and a fixed list of commands — restart the unit, then
+  read its status, its journal and its environment without the token. Whether
+  it worked is decided by the agent calling in, not by a restart command
+  returning zero
+- **Agent centre**: one button on the Agents page opening fleet state, versions,
+  update-one and update-all, the event log, and recovery — because an operator
+  thinks "which of them are broken and which are behind", not "this server's
+  agent" thirteen times. Bulk update skips agents that are not polling and ones
+  that cannot rewrite themselves, rather than queueing tasks that expire
+- **A latent inconsistency fixed and caught by a test:** health reported a
+  hardcoded version 2 while the poll reported `AGENT_VERSION` — one agent
+  describing itself with two different numbers, both of which the update logic
+  reads. The agent suite now asserts they agree rather than checking a magic
+  number
+- New `npm run test:lifecycle`: 20 checks, most of them on the debounce and on
+  the safety properties of the mechanism. Agent protocol version 7
+
+
 ### v0.18.2 — logs are there when you come back, and the scrollbars match
 - **Leaving a log page and returning meant waiting for the aggregation again**,
   with an empty table in the meantime. During an incident an operator flips

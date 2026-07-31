@@ -110,7 +110,22 @@ await fs.writeFile(path.join(LOGS, 'secrets.key'), 'PRIVATE KEY MATERIAL');
 
 await check('health advertises the log root', async () => {
   const d = await (await call('GET', '/health')).json();
-  return d.logs === true && d.logDir === LOGS && d.logExists === true && d.version === 2;
+  return d.logs === true && d.logDir === LOGS && d.logExists === true;
+});
+// health used to report a hardcoded 2 while the poll reported AGENT_VERSION —
+// one agent describing itself with two different numbers, and the panel's
+// update logic reads both.
+await check('health reports the same version the agent polls with', async () => {
+  const src = await fs.readFile(new URL('../nnm-agent.mjs', import.meta.url), 'utf8');
+  const declared = Number(/const AGENT_VERSION = (\d+);/.exec(src)[1]);
+  const d = await (await call('GET', '/health')).json();
+  return d.version === declared && declared > 0;
+});
+await check('health says whether the agent can rewrite itself', async () => {
+  const d = await (await call('GET', '/health')).json();
+  // Run from a temp path in this harness, so the answer is a real probe of the
+  // file rather than a constant.
+  return typeof d.selfUpdate === 'boolean' && typeof d.selfPath === 'string' && d.selfPath.length > 0;
 });
 await check('listing shows log files with inode and size', async () => {
   const d = await (await call('GET', '/logs')).json();

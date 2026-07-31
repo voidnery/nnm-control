@@ -5,6 +5,7 @@ import { AgentTask } from '../models/AgentTask.js';
 import { Settings } from '../models/Settings.js';
 import { waitForTask, deliverResult } from '../services/agentBus.js';
 import { RESTART_WINDOW_MS } from '../services/agentDiagnosis.js';
+import { agentRelease } from '../services/agentRelease.js';
 import { ingestBatch } from '../services/logCollector.js';
 import { MediaTransfer } from '../models/MediaTransfer.js';
 import { readSpooled, discardSpooled } from '../services/mediaSpool.js';
@@ -116,6 +117,17 @@ agentGatewayRouter.post('/logs', authAgent, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// iter14 — the agent's own source, for an agent updating itself. Served to a
+// machine that has already authenticated as a known server; the digest it
+// checks against came from the task, not from this response, so a tampered
+// body fails the comparison rather than replacing the agent.
+agentGatewayRouter.get('/agent-source', authAgent, async (_req, res) => {
+  const rel = await agentRelease();
+  res.setHeader('content-type', 'text/plain; charset=utf-8');
+  res.setHeader('x-nnm-agent-version', String(rel.version));
+  res.send(rel.body);
 });
 
 // iter12 m3 — the file itself. Streamed from the spool; the panel never holds

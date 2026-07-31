@@ -1,13 +1,13 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.18.2",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "test:functions": "node tests/function-actions.test.mjs",
     "test:stats": "node tests/stats-collector.test.mjs",
-    "test": "npm run audit:undef && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl",
+    "test": "npm run audit:undef && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl && npm run test:lifecycle",
     "test:template": "node tests/transcoder-template.test.mjs",
     "test:fleet": "node tests/transcoder-fleet.test.mjs",
     "test:playback": "node tests/playback-endpoints.test.mjs",
@@ -21,7 +21,8 @@
     "test:dashboards": "node tests/log-dashboards.test.mjs",
     "test:variants": "node tests/function-variants.test.mjs",
     "audit:undef": "node scripts/undef-audit.mjs",
-    "test:publicurl": "node tests/public-url.test.mjs"
+    "test:publicurl": "node tests/public-url.test.mjs",
+    "test:lifecycle": "node tests/agent-lifecycle.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

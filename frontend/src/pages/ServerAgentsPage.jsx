@@ -4,6 +4,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 import AgentInstallModal from '../components/AgentInstallModal.jsx';
+import AgentCentreModal from '../components/AgentCentreModal.jsx';
 
 // Server agents used to live in a modal behind a button on the Playlists page,
 // because deploying a playlist was the first thing an agent was needed for.
@@ -23,6 +24,8 @@ export default function ServerAgentsPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
   const [install, setInstall] = useState(null);
+  const [centre, setCentre] = useState(false);
+  const [fleet, setFleet] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -43,6 +46,9 @@ export default function ServerAgentsPage() {
         try { dg[x.id] = await api(`/servers/${x.id}/agent/diagnosis`); } catch { /* shown as unknown */ }
       }));
       setDiag(dg);
+      // A summary line at the top, so the page says whether anything needs
+      // attention before the operator scrolls thirteen rows looking.
+      api('/agent-fleet/overview').then(setFleet).catch(() => setFleet(null));
     } catch (e) { setError(e.message); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -85,10 +91,24 @@ export default function ServerAgentsPage() {
       <div className="sub">{t('page.agents.sub')}</div>
       {error && <div className="error-box">{error}</div>}
 
-      <div className="row" style={{ marginBottom: 12, alignItems: 'center' }}>
-        <SearchInput style={{ maxWidth: 260 }} value={filter} onChange={setFilter} placeholder={t('agent.filter')} />
-        <button onClick={load}>{t('action.refresh')}</button>
-        <span className="hint">{t('agent.countConfigured', { n: configured, total: servers.length })}</span>
+      {/* One button, everything about agents behind it: what is running, what
+          is behind, what has gone wrong, and how to recover it. */}
+      <div className="row" style={{ marginBottom: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="row" style={{ gap: 10 }}>
+          <SearchInput style={{ maxWidth: 260 }} value={filter} onChange={setFilter} placeholder={t('agent.filter')} />
+          <button onClick={load}>{t('action.refresh')}</button>
+          <span className="hint">{t('agent.countConfigured', { n: configured, total: servers.length })}</span>
+        </div>
+        <div className="row" style={{ flexShrink: 0, gap: 8 }}>
+          {fleet?.summary?.faulty > 0 && (
+            <span className="badge err">{t('ac.sFaulty', { n: fleet.summary.faulty })}</span>
+          )}
+          {fleet?.summary?.outdated > 0 && (
+            <span className="badge">{t('ac.sOutdated', { n: fleet.summary.outdated })}</span>
+          )}
+          <button className={fleet?.summary?.faulty || fleet?.summary?.outdated ? 'primary' : ''}
+                  onClick={() => setCentre(true)}>{t('ac.open')}</button>
+        </div>
       </div>
 
       {shown.map(s => {
@@ -167,6 +187,7 @@ export default function ServerAgentsPage() {
       {install && (
         <AgentInstallModal server={install} onClose={() => setInstall(null)} onEnrolled={load} />
       )}
+      {centre && <AgentCentreModal onClose={() => setCentre(false)} onChanged={load} />}
     </div>
   );
 }

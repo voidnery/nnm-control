@@ -48,7 +48,28 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 6;
+const AGENT_VERSION = 7;
+
+// iter14 — the agent updates ITSELF. The panel never pushes code.
+//
+// That distinction is the whole safety argument, and it is borrowed from
+// NET-Control where this mechanism has already survived production: a button
+// in the panel does not upload anything, it asks the agent to run its own
+// verified update now instead of waiting. A download whose digest does not
+// match the one the panel published is discarded and the agent keeps running
+// the code it already has — the failure mode is "nothing happened", not "the
+// server lost its agent".
+//
+// Self-update needs the agent's own file to be writable by the service user.
+// systemd's StateDirectory is exactly that, so installs put the agent there.
+// An agent installed under /usr/local/bin cannot rewrite itself and says so,
+// rather than trying and failing halfway.
+const SELF_PATH = process.argv[1] || '';
+async function canSelfUpdate() {
+  if (!SELF_PATH) return false;
+  try { await fs.access(SELF_PATH, (await import('node:fs')).constants.W_OK); return true; }
+  catch { return false; }
+}
 
 // iter12 m2 — log shipping.
 //
@@ -130,7 +151,9 @@ const routes = {
       try { await fs.access(LOG_DIR); disk.logExists = true; }
       catch { disk.logExists = false; }
     }
-    return { ok: true, agent: 'nnm-agent', version: 2, logs: LOG_ENABLED,
+    disk.selfPath = SELF_PATH;
+    disk.selfUpdate = await canSelfUpdate();
+    return { ok: true, agent: 'nnm-agent', version: AGENT_VERSION, logs: LOG_ENABLED,
              maxLogChunk: MAX_LOG_CHUNK, maxUploadBytes: MAX_UPLOAD, ...disk };
   },
 
@@ -256,6 +279,47 @@ const routes = {
   // Downloaded to a .part file, hashed while it streams, and only renamed into
   // place once the digest matches what the panel said. A 2 GB transfer cut
   // short must never become a media file Nimble will play half of.
+  // iter14 — fetch the panel's copy of the agent, check it, become it.
+  //
+  // Ordering matters and is the reason this is safe: verify the digest, write
+  // beside the current file, keep the old one, swap atomically, and only then
+  // exit so systemd starts the new code. Every step before the rename can fail
+  // without consequence.
+  async 'POST /self-update'(req, url, task) {
+    const { sha256: expected, version } = task || {};
+    if (!expected) throw new Error('the panel did not say what to expect');
+    if (!(await canSelfUpdate())) {
+      throw new Error(`cannot rewrite ${SELF_PATH || 'the agent'} — this agent was installed ` +
+                      'somewhere it cannot update itself; reinstall it from the panel');
+    }
+
+    const res = await fetch(`${PANEL_URL}/api/agent-gw/agent-source`, {
+      headers: { authorization: `Bearer ${TOKEN}`, 'x-nnm-server': SERVER_ID },
+    });
+    if (!res.ok) throw new Error(`panel returned ${res.status} for the agent source`);
+    const body = Buffer.from(await res.arrayBuffer());
+
+    const digest = crypto.createHash('sha256').update(body).digest('hex');
+    if (digest !== expected) {
+      throw new Error(`checksum mismatch: got ${digest.slice(0, 12)}…, expected ${String(expected).slice(0, 12)}…`);
+    }
+    if (!body.subarray(0, 200).toString('utf8').includes('nnm-agent')) {
+      throw new Error('the downloaded file does not look like the agent');
+    }
+
+    const tmp = `${SELF_PATH}.new`;
+    const bak = `${SELF_PATH}.bak`;
+    await fs.writeFile(tmp, body, { mode: 0o755 });
+    try { await fs.copyFile(SELF_PATH, bak); } catch { /* first update, nothing to keep */ }
+    await fs.rename(tmp, SELF_PATH);
+
+    // Exit non-zero so `Restart=on-failure` brings the new code up. Delayed a
+    // beat so this task's result reaches the panel first — otherwise every
+    // successful update would look like a failed one.
+    setTimeout(() => process.exit(9), 1500);
+    return { updated: true, from: AGENT_VERSION, to: Number(version) || null, sha256: digest };
+  },
+
   async 'POST /media/fetch'(req, url, task) {
     const { transferId, name, sha256: expected, size } = task || {};
     if (!transferId || !name) throw new Error('transferId and name are required');

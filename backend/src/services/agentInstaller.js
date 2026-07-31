@@ -47,7 +47,15 @@ LOG_DIR='${sh(logDir)}'
 CONF_DIR='${sh(confDir)}'
 MEDIA_DIR='${sh(mediaDir)}'
 
-BIN=/usr/local/bin/nnm-agent
+# iter14 - the agent lives where it can rewrite itself.
+#
+# systemd's StateDirectory is created and owned by the service user, so an
+# agent there can replace its own file and exit for systemd to restart it. Under
+# /usr/local/bin it could not: ProtectSystem=strict makes /usr read-only, and
+# a self-update would fail halfway. An agent installed the old way keeps
+# working and simply reports that it cannot update itself.
+STATE_DIR=/var/lib/nnm-agent
+BIN=$STATE_DIR/nnm-agent.mjs
 ENV_FILE=/etc/nnm-agent.env
 UNIT=/etc/systemd/system/nnm-agent.service
 RUN_USER=nimble
@@ -66,11 +74,16 @@ echo "==> installing as user: $RUN_USER"
 
 # --- binary -----------------------------------------------------------------
 echo "==> fetching agent"
+install -d -m 0755 -o "$RUN_USER" -g "$RUN_USER" "$STATE_DIR" 2>/dev/null || mkdir -p "$STATE_DIR"
 curl -4fsS "$PANEL/api/agents/install/$TICKET/nnm-agent.mjs" -o "$BIN.new" \\
   || die "could not fetch the agent from $PANEL (is the panel reachable from this server?)"
 head -n 1 "$BIN.new" | grep -q '^#!' || die "downloaded file does not look like the agent"
 mv "$BIN.new" "$BIN"
 chmod 0755 "$BIN"
+chown "$RUN_USER:$RUN_USER" "$BIN" 2>/dev/null || true
+# An agent installed before iter14 lives here; leave nothing behind that
+# systemd might still be pointed at.
+rm -f /usr/local/bin/nnm-agent 2>/dev/null || true
 
 # --- token ------------------------------------------------------------------
 # Generated HERE. The panel has never seen it and cannot derive it.
@@ -117,7 +130,10 @@ EnvironmentFile=$ENV_FILE
 # the right ownership and exports STATE_DIRECTORY.
 StateDirectory=nnm-agent
 ExecStart=$(command -v node) $BIN
+# A self-update ends with a deliberate non-zero exit so that systemd starts the
+# new code. Without on-failure the agent would update itself and stay down.
 Restart=on-failure
+RestartSec=2
 ReadWritePaths=$CONF_DIR $MEDIA_DIR
 $READONLY_LOGS
 ProtectSystem=strict
