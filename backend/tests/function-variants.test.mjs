@@ -464,5 +464,33 @@ check('fields the preview cannot name are still shown as they will be sent', () 
   assert.ok(uiSrc.includes('JSON.stringify(rest)'));
 });
 
+console.log('\nVARIANT PICKER — NO FLICKER:');
+
+check('the preview is not cleared before the next one arrives', () => {
+  // setPreview(null) emptied the table, which collapsed the dialog and then
+  // re-expanded it — read as the whole window blinking.
+  const from = uiSrc.indexOf('function VariantPicker');
+  const body = uiSrc.slice(from, uiSrc.indexOf('function Builder', from));
+  assert.ok(!/setPreview\(null\)/.test(body), 'clearing first is what caused the collapse');
+  assert.ok(body.includes('cache.current.set(sel, d)'), 'each answer is kept');
+  assert.ok(body.includes('cache.current.get(sel)'), 'and shown at once when it is already known');
+});
+
+check('what is on screen is never passed off as the selected variant', () => {
+  // Keeping the old table is only honest if it says which variant it belongs
+  // to while a different one loads.
+  const from = uiSrc.indexOf('function VariantPicker');
+  const body = uiSrc.slice(from, uiSrc.indexOf('function Builder', from));
+  assert.ok(body.includes("const showing = preview?.variant?.id"));
+  assert.ok(body.includes('showing !== sel'), 'staleness is derived, not guessed');
+  assert.ok(body.includes("t('fn.previewLoading')"));
+});
+
+check('the dialog keeps its height while loading', () => {
+  const from = uiSrc.indexOf('function VariantPicker');
+  const body = uiSrc.slice(from, uiSrc.indexOf('function Builder', from));
+  assert.ok(body.includes('minHeight: 120'), 'so the first load does not resize it either');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);

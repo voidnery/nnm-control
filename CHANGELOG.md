@@ -1,5 +1,20 @@
 # Changelog
 
+### v0.21.5 — the variant picker stopped blinking
+- Switching variants cleared the preview before fetching the next one, so the
+  table emptied, the dialog collapsed and then re-expanded a moment later —
+  read as the whole window blinking
+- The previous answer stays on screen until the new one arrives, the same
+  approach the log views use, and each variant's preview is kept so flipping
+  between two of them is instant after the first look
+- **Keeping the old table is only honest if it says so.** While a different
+  variant is loading it is dimmed and labelled, and staleness is derived from
+  comparing the preview's own variant id against the selected one rather than
+  from a flag someone has to remember to set
+- A floor under the table height, so the first load does not resize the dialog
+  either
+
+
 ### v0.21.4 — release pipeline hardened against a Docker Hub blip
 - **The v0.21.3 tag failed in CI, and not because of anything in the code.**
   `docker/setup-buildx-action` starts a BuildKit container which it pulls from

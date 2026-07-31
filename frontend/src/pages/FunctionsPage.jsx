@@ -488,17 +488,42 @@ function VariantPicker({ fn, onCancel, onPick }) {
   const { t } = useI18n();
   const [sel, setSel] = useState(fn.variants[0]?.id || '');
   const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  // Switching between variants re-asks the server, and each answer is worth
+  // keeping: an operator comparing two variants flips between them several
+  // times before deciding.
+  const cache = useRef(new Map());
 
   useEffect(() => {
     if (!sel) return;
     let dead = false;
-    setPreview(null); setErr('');
+
+    // Clearing the preview before fetching emptied the table, which collapsed
+    // the dialog and then re-expanded it a moment later — read as the whole
+    // window blinking. The previous answer stays on screen until the new one
+    // arrives; the same reason the log views keep their last result.
+    const hit = cache.current.get(sel);
+    if (hit) { setPreview(hit); setErr(''); }
+    setLoading(true);
+
     api(`/functions/${fn._id}/preview?variantId=${encodeURIComponent(sel)}`)
-      .then(d => { if (!dead) setPreview(d); })
-      .catch(e => { if (!dead) setErr(e.message); });
+      .then(d => {
+        if (dead) return;
+        cache.current.set(sel, d);
+        setPreview(d); setErr('');
+      })
+      .catch(e => { if (!dead) setErr(e.message); })
+      .finally(() => { if (!dead) setLoading(false); });
+
     return () => { dead = true; };
   }, [fn._id, sel]);
+
+  // The preview on screen belongs to the variant it was fetched for. While a
+  // different one is loading, saying so beats showing another variant's values
+  // as though they were this one's.
+  const showing = preview?.variant?.id;
+  const stale = Boolean(showing && showing !== sel);
 
   // Hand-rolled backdrop markup rendered wherever it happened to sit in the
   // tree — at the bottom of the page, under the run history. Modal portals to
@@ -513,12 +538,17 @@ function VariantPicker({ fn, onCancel, onPick }) {
           ))}
         </div>
         {err && <div className="error-box">{err}</div>}
-        {preview && (
-          <div className="panel">
-            <div className="hint" style={{ marginBottom: 4 }}>{t('fn.previewHint')}</div>
+        {/* A fixed floor under the table, so the first load does not resize the
+            dialog either. */}
+        {(preview || loading) && (
+          <div className="panel" style={{ minHeight: 120, opacity: stale ? 0.55 : 1, transition: 'opacity .12s' }}>
+            <div className="hint" style={{ marginBottom: 4 }}>
+              {t('fn.previewHint')}
+              {stale && <> · {t('fn.previewLoading')}</>}
+            </div>
             <table>
               <tbody>
-                {preview.steps.map(st => (
+                {(preview?.steps || []).map(st => (
                   <tr key={st.index} className="tally">
                     <td className="mono" style={{ width: 24, fontSize: 12 }}>{st.index + 1}</td>
                     <td style={{ fontSize: 12 }}>{st.label || st.type}{st.targetLabel ? ` · ${st.targetLabel}` : ''}</td>
