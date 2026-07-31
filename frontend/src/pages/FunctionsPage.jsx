@@ -178,6 +178,95 @@ const pairsFor = (kind) => {
   return allowed === undefined ? KEY_PAIRS : KEY_PAIRS.filter(k => allowed.includes(k.value));
 };
 
+// Loading a server's SRT In / MPEG-TS In objects, shared by the step editor
+// and the variant editor. One place, so the two cannot end up offering
+// different lists for the same server.
+function useIncoming(serverId, enabled) {
+  const [sources, setSources] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    if (!enabled || !serverId) return;
+    let dead = false;
+    api(`/functions/objects/${serverId}/incoming`)
+      .then(d => { if (!dead) { setSources(d.objects || d || []); setErr(''); } })
+      .catch(e => { if (!dead) setErr(e.message); });
+    return () => { dead = true; };
+  }, [serverId, enabled]);
+  return { sources, err };
+}
+
+// Name and description separately so a dropdown can dim the second.
+function srcOptionOf(o) {
+  const name = String(o.name || '').trim();
+  const extra = String(o.description || '').trim();
+  return {
+    value: String(o.id),
+    label: name || `id ${String(o.id ?? '').slice(-8) || '?'}`,
+    hint: extra && extra !== name ? extra : '',
+  };
+}
+
+// The values a variant overrides for one step, as controls rather than JSON.
+//
+// A variant only names the fields it differs in, so every control starts from
+// the step's own value and writes into the override only once it is changed.
+// Asking for hand-typed JSON here was asking for exactly the mistake the step
+// editor exists to prevent: an id typed wrong points a stream at nothing and
+// still verifies as applied.
+function VariantStepFields({ step, override, onChange }) {
+  const { t } = useI18n();
+  const base = step.patch || {};
+  const wantsSource = 'video_source' in base || 'audio_source' in base;
+  const { sources, err } = useIncoming(step.serverId, wantsSource);
+
+  const valueOf = (key) => (key in (override || {}) ? override[key] : base[key]);
+  const setKey = (key, value) => {
+    const next = { ...(override || {}) };
+    // Setting a value back to the step's own is not an override; dropping it
+    // keeps the variant honest about what it actually changes.
+    if (JSON.stringify(value) === JSON.stringify(base[key])) delete next[key];
+    else next[key] = value;
+    onChange(Object.keys(next).length ? next : null);
+  };
+
+  const keys = Object.keys(base);
+  if (!keys.length) return <div className="hint">{t('fn.variantNoFields')}</div>;
+
+  return (
+    <div>
+      {err && <div className="hint" style={{ color: 'var(--warn)' }}>{err}</div>}
+      {keys.map(key => {
+        const isSource = key === 'video_source' || key === 'audio_source';
+        const overridden = key in (override || {});
+        return (
+          <div key={key} style={{ marginBottom: 6 }}>
+            <label style={{ fontSize: 12 }}>
+              {key}
+              {overridden && <span className="badge live" style={{ marginLeft: 6 }}>{t('fn.variantChanged')}</span>}
+            </label>
+            {isSource ? (
+              <Select searchable value={valueOf(key)?.id || ''}
+                      onChange={v => setKey(key, { id: v })}
+                      options={[{ value: '', label: t('fn.pickSource') },
+                                ...(sources || []).map(srcOptionOf)]} />
+            ) : typeof base[key] === 'object' && base[key] !== null ? (
+              // Arrays and nested shapes have no honest control yet, so they
+              // keep the raw form rather than a control that silently mangles
+              // them.
+              <textarea className="mono" rows={1} style={{ fontSize: 11 }}
+                        value={JSON.stringify(valueOf(key) ?? base[key])}
+                        onChange={e => { try { setKey(key, JSON.parse(e.target.value)); } catch { /* keep last valid */ } }} />
+            ) : (
+              <input className="mono" value={String(valueOf(key) ?? '')}
+                     onChange={e => setKey(key, e.target.value)} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...step, [k]: v });
@@ -195,16 +284,7 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
   // A source switch has its own pickers, and the generic app/stream inserter
   // can only add fields that do not belong — so it is not offered at all.
   const availablePairs = wantsSource ? [] : pairsFor(step.objectKind);
-  const [sources, setSources] = useState(null);
-  const [srcErr, setSrcErr] = useState('');
-  useEffect(() => {
-    if (!wantsSource || !step.serverId) return;
-    let dead = false;
-    api(`/functions/objects/${step.serverId}/incoming`)
-      .then(d => { if (!dead) { setSources(d.objects || d || []); setSrcErr(''); } })
-      .catch(e => { if (!dead) setSrcErr(e.message); });
-    return () => { dead = true; };
-  }, [wantsSource, step.serverId]);
+  const { sources, err: srcErr } = useIncoming(step.serverId, wantsSource);
   const setSource = (field, id) => {
     const patch = { ...(step.patch || {}) };
     const prev = patch[field]?.id || '';
@@ -223,19 +303,7 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
   // An incoming object is named, not addressed by app/stream — which is how
   // the rest of the panel labels them, and what I should have looked at
   // instead of guessing field names. The guess produced a list of "?/?".
-  // Name and description are returned separately so the dropdown can dim the
-  // second: run together in one colour they read as one long name.
-  const srcOption = (o) => {
-    const name = String(o.name || '').trim();
-    const extra = String(o.description || '').trim();
-    return {
-      value: String(o.id),
-      // An id is still better than nothing: it can be matched against the
-      // server's incoming list, where a blank cannot.
-      label: name || `id ${String(o.id ?? '').slice(-8) || '?'}`,
-      hint: extra && extra !== name ? extra : '',
-    };
-  };
+  const srcOption = srcOptionOf;
   const applyPatchText = (t) => {
     setPatchText(t);
     try { onChange({ ...step, patch: JSON.parse(t || '{}') }); setPatchErr(''); }
@@ -463,23 +531,38 @@ function Builder({ initial, servers, onClose, onSaved }) {
 
   const addPreset = (preset) => setSteps(st => [...st, { serverId: '', targetId: '', waitSec: 0, ...JSON.parse(JSON.stringify(preset.step)) }]);
 
-  const addVariant = () => setVariants(v => [...v, {
-    id: `v${Math.random().toString(36).slice(2, 8)}`,
-    name: `${t('fn.variant')} ${v.length + 1}`,
-    overrides: {},
-  }]);
+  const addVariant = () => setVariants(v => {
+    // The first variant is what the function already does. Starting it empty
+    // meant an operator who had configured everything for input A had to type
+    // A in again before they could add B — and an empty first variant runs the
+    // base steps, which looks identical until it is not.
+    const seed = {};
+    if (v.length === 0) {
+      steps.forEach((st, i) => {
+        if (st.type === 'patch' && st.patch && Object.keys(st.patch).length) {
+          seed[String(i)] = JSON.parse(JSON.stringify(st.patch));
+        }
+      });
+    }
+    return [...v, {
+      id: `v${Math.random().toString(36).slice(2, 8)}`,
+      name: `${t('fn.variant')} ${v.length + 1}`,
+      overrides: seed,
+    }];
+  });
   const patchVariant = (id, patch) => setVariants(v => v.map(x => (x.id === id ? { ...x, ...patch } : x)));
   const dropVariant = (id) => setVariants(v => v.filter(x => x.id !== id));
-  const setOverride = (vid, stepIdx, text) => {
+  // Controls hand back an object (or null to stop overriding), not text.
+  const setOverrideObject = (vid, stepIdx, next) => {
     setVariants(vs => vs.map(v => {
       if (v.id !== vid) return v;
       const o = { ...(v.overrides || {}) };
-      const trimmed = String(text).trim();
-      if (!trimmed) { delete o[String(stepIdx)]; return { ...v, overrides: o }; }
-      try { o[String(stepIdx)] = JSON.parse(trimmed); } catch { return v; }   // keep last valid
+      if (!next) delete o[String(stepIdx)];
+      else o[String(stepIdx)] = next;
       return { ...v, overrides: o };
     }));
   };
+
   const save = async () => {
     setError('');
     // A function with no steps is legal — someone may be building it over two
@@ -530,17 +613,14 @@ function Builder({ initial, servers, onClose, onSaved }) {
         {steps.length === 0 && <div className="hint">{t('fn.noSteps')}</div>}
         {steps.map((st, i) => (
                     st.type === 'patch' ? (
-                      <div key={i} style={{ marginBottom: 6 }}>
+                      <div key={i} className="panel" style={{ marginBottom: 6, padding: 8 }}>
                         <label style={{ fontSize: 12 }}>
                           {i + 1}. {st.label || st.objectKind} {st.targetLabel ? `· ${st.targetLabel}` : ''}
                         </label>
-                        <div className="hint mono" style={{ fontSize: 11 }}>
-                          {t('fn.variantBase')}: {JSON.stringify(st.patch || {})}
-                        </div>
-                        <textarea className="mono" rows={1} style={{ fontSize: 11 }}
-                                  placeholder={t('fn.variantSame')}
-                                  defaultValue={v.overrides?.[String(i)] ? JSON.stringify(v.overrides[String(i)]) : ''}
-                                  onChange={e => setOverride(v.id, i, e.target.value)} />
+                        <VariantStepFields
+                          step={st}
+                          override={v.overrides?.[String(i)] || null}
+                          onChange={(next) => setOverrideObject(v.id, i, next)} />
                       </div>
                     ) : null
                   ))}

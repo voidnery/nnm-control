@@ -222,9 +222,11 @@ check('an incoming source is labelled by its name, as the rest of the panel does
   // carries `name`, and the outgoing tab already resolved it that way.
   // Name and description are returned as separate fields now, so the dropdown
   // can dim the second — but the name is still what leads.
-  assert.ok(uiSrc.includes('const srcOption'));
-  assert.ok(/srcOption = \(o\) => \{[\s\S]{0,300}o\.name/.test(uiSrc), 'name first');
+  // One builder, used by the step editor and the variant editor alike.
+  assert.ok(uiSrc.includes('function srcOptionOf'));
+  assert.ok(/function srcOptionOf\(o\) \{[\s\S]{0,300}o\.name/.test(uiSrc), 'name first');
   assert.ok(/label: name \|\|/.test(uiSrc), 'the label is the name, not the description');
+  assert.ok(uiSrc.includes('const srcOption = srcOptionOf'), 'the step editor uses the shared one');
   assert.ok(!/o\.application \|\| o\.app/.test(uiSrc), 'the guessed fields must be gone');
 });
 
@@ -320,6 +322,64 @@ check('a transport failure names its cause instead of saying "fetch failed"', ()
   assert.ok(client.includes('WMSPanel API is unreachable'));
   assert.ok(client.includes('cause?.code'), 'the reason Node hides in `cause` is what an operator needs');
   assert.ok(client.includes("e?.name === 'AbortError'"), 'a timeout is its own message');
+});
+
+console.log('\nVARIANT EDITOR — CONTROLS, NOT JSON:');
+
+// The rule the controls implement: a value equal to the step's own is not an
+// override, and a variant that overrides nothing carries no entry at all.
+function setKey(base, override, key, value) {
+  const next = { ...(override || {}) };
+  if (JSON.stringify(value) === JSON.stringify(base[key])) delete next[key];
+  else next[key] = value;
+  return Object.keys(next).length ? next : null;
+}
+
+check('changing a value records it as an override', () => {
+  const base = { video_source: { id: 'A' }, audio_source: { id: 'A' } };
+  const o = setKey(base, null, 'video_source', { id: 'B' });
+  assert.deepEqual(o, { video_source: { id: 'B' } });
+});
+
+check('setting a value back to the step\'s own drops the override', () => {
+  // A variant that claims to change something it does not is a variant that
+  // will confuse whoever reads it next.
+  const base = { video_source: { id: 'A' } };
+  const o = setKey(base, { video_source: { id: 'B' } }, 'video_source', { id: 'A' });
+  assert.equal(o, null, 'and with nothing left, the whole entry goes');
+});
+
+check('one field can differ while another follows the step', () => {
+  const base = { video_source: { id: 'A' }, audio_source: { id: 'A' } };
+  const o = setKey(base, null, 'audio_source', { id: 'MIC' });
+  assert.deepEqual(o, { audio_source: { id: 'MIC' } });
+  assert.ok(!('video_source' in o), 'unchanged fields fall through to the step');
+});
+
+check('the first variant is seeded from what is already configured', () => {
+  // An operator who has configured the function for input A should get A as
+  // variant 1, not an empty variant that runs the base steps and looks
+  // identical until it is not.
+  assert.ok(uiSrc.includes('if (v.length === 0)'));
+  assert.ok(uiSrc.includes('seed[String(i)] = JSON.parse(JSON.stringify(st.patch))'),
+    'and deep-copied, or editing the variant would edit the step');
+});
+
+check('a second variant starts empty, inheriting the steps', () => {
+  assert.ok(/const seed = \{\};[\s\S]{0,300}if \(v\.length === 0\)/.test(uiSrc),
+    'seeding is for the first one only');
+});
+
+check('sources in a variant are picked, not typed', () => {
+  assert.ok(uiSrc.includes('function VariantStepFields'));
+  assert.ok(uiSrc.includes("key === 'video_source' || key === 'audio_source'"));
+  assert.ok(!uiSrc.includes("placeholder={t('fn.variantSame')}"), 'the JSON textarea is gone');
+});
+
+check('both editors load sources through one hook', () => {
+  // Two loaders would eventually offer different lists for the same server.
+  assert.ok(uiSrc.includes('function useIncoming'));
+  assert.equal([...uiSrc.matchAll(/objects\/\$\{serverId\}\/incoming/g)].length, 1);
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');

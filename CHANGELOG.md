@@ -1,5 +1,26 @@
 # Changelog
 
+### v0.21.1 — variants are picked, not typed
+- **The variant editor asked for hand-typed JSON**, which is exactly the
+  mistake the step editor exists to prevent: an id typed wrong points a stream
+  at nothing and still verifies as applied. Each overridable field now gets the
+  control its type deserves — sources come from a searchable dropdown of the
+  server's SRT In / MPEG-TS In objects, scalars get an input, and only nested
+  shapes with no honest control keep a raw form rather than one that would
+  silently mangle them
+- A value set back to the step's own **stops being an override**, and a variant
+  with nothing left carries no entry at all. A variant that claims to change
+  something it does not is one that confuses whoever reads it next
+- **The first variant is seeded from what is already configured.** An operator
+  who has set the function up for input A gets A as variant 1 instead of an
+  empty variant that runs the base steps and looks identical until it is not.
+  Deep-copied, or editing the variant would edit the step. Later variants start
+  empty and inherit
+- Both editors load the source list through one hook, because two loaders would
+  eventually offer different lists for the same server
+- 7 new checks on the override semantics and the seeding rule
+
+
 ### v0.21.0 — step editor polish, and a legible transport error
 - **"fetch failed" now names its cause.** Node reports every transport failure
   as `TypeError: fetch failed` and hides the reason in `cause`, so the panel
