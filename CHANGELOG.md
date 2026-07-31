@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.19.1 — the log cache never hit once
+- **The cache added in v0.18.2 never worked.** Its key was built from the query
+  string, and the query string contains `from` as an absolute timestamp derived
+  from `Date.now()`. Two visits a second apart produced two different keys, so
+  every lookup missed and every return to a log page waited for the aggregation
+  exactly as before
+- The key is built from what the operator **chose** now, never from what that
+  choice resolved to: "last hour" is the same request whichever second it is
+  opened in, and the resolved instant belongs in the query rather than in the
+  key. Fixed in all three places — the Logs page, every log window, and the
+  categorical page
+- The key is also order-insensitive across multi-select filters, so the same
+  filter reached two ways is one entry rather than two
+- The cache audit gained five checks it should have had from the start,
+  including that no absolute time or epoch millisecond appears in a key.
+  Verified against the real defect: putting a timestamp back makes it fail
+
+
 ## iter14 — agent lifecycle
 ### v0.19.0 — updates, watchdog, notifications, recovery
 - **The panel never uploads code.** An update queues a task asking the agent to

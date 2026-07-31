@@ -4,7 +4,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import SearchInput from './SearchInput.jsx';
 import { copyText } from '../lib/clipboard.js';
-import { cacheGet, cacheSet } from '../lib/logCache.js';
+import { cacheGet, cacheSet, cacheKey } from '../lib/logCache.js';
 
 // iter10 m4 — one log window.
 //
@@ -75,7 +75,7 @@ export default function LogWindow({
     // A dashboard of seven windows meant seven blank panes on every visit.
     // Each window shows its own last answer immediately and refreshes behind
     // it; a shared link, whose fetch is token-scoped, is not cached here.
-    const key = fetchData ? null : `win|${mode}|${qs}`;
+    const key = fetchData ? null : cacheKey('win', { mode, serverId, category, levels, range, query: q });
     if (key) {
       const hit = cacheGet(key);
       if (hit) setData(hit.data);
@@ -92,7 +92,7 @@ export default function LogWindow({
       // an operator is reading.
       setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message);
     } finally { setBusy(false); }
-  }, [qs, mode, fetchData, t]);
+  }, [qs, mode, fetchData, t, serverId, category, levels, range, q]);
 
   useEffect(() => { load(); }, [load]);
 

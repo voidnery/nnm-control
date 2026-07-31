@@ -12,6 +12,25 @@
 // the tab, it must never be what an operator is looking at after a reload, and
 // nothing here is worth writing to disk.
 
+/**
+ * The key a result is filed under.
+ *
+ * Built from what the operator CHOSE, never from what that choice resolved to.
+ * The first version keyed on the query string, which contains `from` as an
+ * absolute timestamp derived from Date.now() — so every visit produced a
+ * different key and the cache never hit once. "Last hour" is the same request
+ * whichever second it is opened in; the resolved instant belongs in the query,
+ * not in the key.
+ */
+export function cacheKey(scope, filter = {}) {
+  const norm = (v) => (Array.isArray(v) ? [...v].sort().join(',') : String(v ?? ''));
+  return [
+    scope,
+    norm(filter.mode), norm(filter.serverId), norm(filter.category),
+    norm(filter.levels), norm(filter.subs), norm(filter.range), norm(filter.query),
+  ].join('|');
+}
+
 const TTL_MS = 60_000;
 // Bounded: each entry can hold a few hundred grouped rows, and an operator
 // tuning filters produces a new key every keystroke.

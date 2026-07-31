@@ -5,7 +5,7 @@ import { useI18n } from '../i18n.jsx';
 import Select from '../components/Select.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 import { copyText } from '../lib/clipboard.js';
-import { cacheGet, cacheSet, rememberFilters, recallFilters } from '../lib/logCache.js';
+import { cacheGet, cacheSet, cacheKey, rememberFilters, recallFilters } from '../lib/logCache.js';
 import { useToast } from '../toast.jsx';
 
 // iter10 m3 — the general log warehouse.
@@ -84,7 +84,8 @@ export default function LogsPage() {
 
   const load = useCallback(async () => {
     const qs = params.toString();
-    const key = `logs|${mode}|${qs}`;
+    // Keyed on the choice, not on the instant it resolved to.
+    const key = cacheKey('logs', { mode, serverId, levels, subs, range, query: q });
 
     // Whatever was last seen for this exact query goes up in the first frame,
     // and the query still runs behind it. An out-of-date table beats an empty
@@ -105,7 +106,7 @@ export default function LogsPage() {
       // A failed refresh must not wipe what is already readable on screen.
       setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message);
     } finally { setBusy(false); }
-  }, [params, mode, apply, t]);
+  }, [params, mode, apply, t, serverId, levels, subs, range, q]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {

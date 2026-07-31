@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import Select from '../components/Select.jsx';
 import LogWindow from '../components/LogWindow.jsx';
-import { cacheGet, cacheSet, rememberFilters, recallFilters } from '../lib/logCache.js';
+import { cacheGet, cacheSet, cacheKey, rememberFilters, recallFilters } from '../lib/logCache.js';
 
 // iter10 m4 — Nimble's output split by what part of it is talking.
 //
@@ -40,7 +40,7 @@ export default function LogCategoriesPage() {
       if (serverId) p.set('serverId', serverId);
       const mins = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440, all: 0 }[range];
       if (mins) p.set('from', new Date(Date.now() - mins * 60_000).toISOString());
-      const key = `cats|${p.toString()}`;
+      const key = cacheKey('cats', { serverId, range });
       const hit = cacheGet(key);
       if (hit) setCounts(hit.data);
       const d = await api(`/logs/categories?${p.toString()}`);
