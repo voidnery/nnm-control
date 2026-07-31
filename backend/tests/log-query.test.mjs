@@ -231,5 +231,33 @@ check('the real dump is fully covered by the windows', async () => {
   console.log(`    (${total} records, ${counts.size} windows populated, 0 uncategorised)`);
 });
 
+// Picking a server emptied every view. find() casts a string to ObjectId from
+// the schema; an aggregation pipeline does not, and grouped view, facets and
+// category counts are all aggregations.
+console.log('\nSERVER FILTER:');
+
+check('a server id is cast, so $match can match an ObjectId', () => {
+  const f = buildFilter({ serverId: '65f1c2a3b4d5e6f7a8b9c0d1' });
+  assert.equal(f.serverId.constructor.name, 'ObjectId',
+    'a raw string in a pipeline compares against ObjectId and matches nothing');
+  assert.equal(String(f.serverId), '65f1c2a3b4d5e6f7a8b9c0d1');
+});
+
+check('an already-cast id passes through untouched', async () => {
+  const mongoose = (await import('mongoose')).default;
+  const oid = new mongoose.Types.ObjectId();
+  assert.equal(String(buildFilter({ serverId: oid }).serverId), String(oid));
+});
+
+check('an id that is not an ObjectId matches nothing rather than everything', () => {
+  const f = buildFilter({ serverId: 'not-an-id' });
+  assert.ok(f.serverId, 'the constraint must stay, or the view silently widens to the fleet');
+  assert.equal(String(f.serverId), '000000000000000000000000');
+});
+
+check('no server selected means no constraint at all', () => {
+  assert.ok(!('serverId' in buildFilter({})));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall log-query checks passed');
 process.exit(fail ? 1 : 0);

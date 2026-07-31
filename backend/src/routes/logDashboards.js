@@ -3,6 +3,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { LogDashboard, hashShareToken, newShareToken } from '../models/LogDashboard.js';
 import { searchLogs, groupLogs, maskSecrets } from '../services/logQuery.js';
 import { logEvent } from '../services/audit.js';
+import { publicUrl } from '../services/publicUrl.js';
 
 // iter10 m5 — dashboards, and links to them.
 //
@@ -170,7 +171,16 @@ logDashboardRouter.post('/:id/share', requirePerm('logs.manage'), async (req, re
   });
   // Shown once. Only the hash is stored, so a database dump yields no live
   // link — and a lost link is reissued rather than recovered.
-  res.json({ token: raw, url: `${req.protocol}://${req.get('host')}/shared/logs/${raw}`, expiresAt: d.shareExpiresAt });
+  // Built from the panel's public address, not from this request: a reverse
+  // proxy that rewrites Host drops the port, and the resulting link then
+  // reaches whatever else answers on 443.
+  const { url: base, source } = await publicUrl(req);
+  res.json({
+    token: raw,
+    url: `${base}/shared/logs/${raw}`,
+    expiresAt: d.shareExpiresAt,
+    urlSource: source,
+  });
 });
 
 logDashboardRouter.delete('/:id/share', requirePerm('logs.manage'), async (req, res) => {

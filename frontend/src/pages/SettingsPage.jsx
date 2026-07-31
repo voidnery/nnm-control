@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [customUrl, setCustomUrl] = useState(false);
   const [controlPlane, setControlPlane] = useState('native');
   const [srtHelperEnabled, setSrtHelperEnabled] = useState(true);
+  const [publicUrl, setPublicUrl] = useState('');
   const [logs, setLogs] = useState({ enabled: false, files: ['nimble.log'] });
   const [logStatus, setLogStatus] = useState(null);
   const [stats, setStats] = useState({ enabled: false, intervalSec: 10, retentionDays: 3,
@@ -39,6 +40,7 @@ export default function SettingsPage() {
     setControlPlane(s.controlPlane);
     setSrtHelperEnabled(s.srtHelperEnabled !== false);
     if (s.stats) setStats(s.stats);
+    setPublicUrl(s.publicUrl || '');
     if (s.logs) setLogs({ enabled: Boolean(s.logs.enabled), files: s.logs.files?.length ? s.logs.files : ['nimble.log'] });
     // Status alongside the switch, because "is it on" and "is anything
     // arriving" are different questions and only the second one is useful
@@ -50,7 +52,7 @@ export default function SettingsPage() {
   const save = async () => {
     setBusy(true); setMsg(null);
     try {
-      const body = { controlPlane, srtHelperEnabled, stats, logs, wmspanel: { baseUrl, clientId } };
+      const body = { controlPlane, srtHelperEnabled, stats, logs, publicUrl, wmspanel: { baseUrl, clientId } };
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
       push({ type: 'ok', message: 'Settings saved' });
@@ -139,6 +141,22 @@ export default function SettingsPage() {
           {t('settings.srtHelper.desc')}
         </label>
       </div>
+      {/* Links the panel hands out have to be built from an address that works
+          from outside. A reverse proxy with `proxy_set_header Host $host`
+          strips the port, so a panel on :8095 was generating share links to
+          :443 — where something else answers. */}
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>{t('settings.public')}</h2>
+        <p className="hint">{t('settings.public.desc')}</p>
+        <input className="mono" value={publicUrl} placeholder={window.location.origin}
+               onChange={e => setPublicUrl(e.target.value)} />
+        <div className="hint" style={{ marginTop: 4 }}>
+          {publicUrl
+            ? t('settings.public.set')
+            : t('settings.public.derived', { url: window.location.origin })}
+        </div>
+      </div>
+
       {/* Log collection. The setting has existed since iter10 m1 and the agents
           have always honoured it, but it was never given a control here — so
           the Logs page sent operators to a page with nothing on it. */}

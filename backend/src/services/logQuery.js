@@ -8,7 +8,21 @@
 //
 // So grouping is not a nicety here, it is the thing that makes the view work
 // at all: 163,628 records collapse to 142 templates.
+import mongoose from 'mongoose';
 import { LogRecord } from '../models/LogRecord.js';
+import { NimbleServer } from '../models/NimbleServer.js';
+
+// Records store a server id; an operator reads server names. Resolved here so
+// every view labels them the same way and the browser is not left joining ids
+// against a list it fetched separately.
+let nameCache = { at: 0, map: new Map() };
+async function serverNames() {
+  if (Date.now() - nameCache.at < 60_000) return nameCache.map;
+  const rows = await NimbleServer.find({}, { name: 1 }).lean();
+  nameCache = { at: Date.now(), map: new Map(rows.map(r => [String(r._id), r.name])) };
+  return nameCache.map;
+}
+export function invalidateServerNames() { nameCache = { at: 0, map: new Map() }; }
 
 // How a message becomes a template.
 //
@@ -82,9 +96,26 @@ const literal = (s) => String(s).replace(ESCAPE, '\\$&');
  * index cannot answer "contains this substring", which is what an operator
  * chasing a stream name actually types.
  */
+// Mongoose casts a string to ObjectId inside find(), but NOT inside an
+// aggregation pipeline: there, `$match: { serverId: '65f…' }` compares a string
+// against an ObjectId and matches nothing. Grouped view, facets and the
+// category counts are all aggregations, so picking a server emptied the whole
+// page while "all servers" — which has no serverId in the filter at all —
+// worked. Cast once, here, where every query gets its filter.
+function asObjectId(v) {
+  if (!v) return null;
+  if (v instanceof mongoose.Types.ObjectId) return v;
+  return mongoose.Types.ObjectId.isValid(String(v)) ? new mongoose.Types.ObjectId(String(v)) : null;
+}
+
 export function buildFilter({ serverId, file, levels, subs, category, from, to, q, tag, pid } = {}) {
   const f = {};
-  if (serverId) f.serverId = serverId;
+  if (serverId) {
+    const oid = asObjectId(serverId);
+    // An id that is not an ObjectId cannot match anything; say so with an
+    // impossible filter rather than silently widening to the whole fleet.
+    f.serverId = oid || new mongoose.Types.ObjectId('000000000000000000000000');
+  }
   if (file) f.file = file;
   if (Array.isArray(levels) && levels.length) f.level = { $in: levels };
   // An explicit subsystem selection is the operator narrowing within a window,
@@ -123,9 +154,12 @@ export async function searchLogs(opts = {}) {
   // `before` is an opaque cursor: the offset of the oldest row already shown.
   if (opts.before) filter.offset = { ...(filter.offset || {}), $lt: Number(opts.before) };
   const rows = await LogRecord.find(filter).sort({ gen: -1, offset: -1 }).limit(limit).lean();
+  const names = await serverNames();
   return {
     rows: rows.map(r => ({
-      id: String(r._id), serverId: String(r.serverId), file: r.file, offset: r.offset,
+      id: String(r._id), serverId: String(r.serverId),
+      serverName: names.get(String(r.serverId)) || String(r.serverId).slice(-6),
+      file: r.file, offset: r.offset,
       ts: r.ts, raw: r.raw, pid: r.pid, tid: r.tid, tag: r.tag, sub: r.sub,
       level: r.level, msg: r.msg, cont: r.cont || '', contLines: r.contLines || 0,
     })),
@@ -184,6 +218,7 @@ export async function groupLogs(opts = {}) {
     }
   }
 
+  const names = await serverNames();
   const groups = [...byTemplate.values()]
     .sort((a, b) => b.count - a.count)
     .slice(0, limit)
@@ -192,6 +227,9 @@ export async function groupLogs(opts = {}) {
       template: maskSecrets(g.template),
       sample: maskSecrets(g.sample),
       servers: g.servers.size,
+      // Named, and capped at a handful: a template seen on every box in the
+      // fleet should say "13 servers", not print thirteen names into a row.
+      serverNames: [...g.servers].map(id => names.get(id) || id.slice(-6)).sort().slice(0, 4),
     }));
 
   return { groups, distinct: byTemplate.size, scanned, capped: scanned >= SCAN_CAP };

@@ -13,6 +13,12 @@ const settingsSchema = new mongoose.Schema({
   // 'wmspanel' — persistent changes via WMSPanel Control API (primary mode).
   // 'native'   — backup mode via Nimble native API (ephemeral rules; limited).
   controlPlane: { type: String, enum: ['wmspanel', 'native'], default: 'native' },
+  // How the panel is reachable from outside. Links the panel generates — the
+  // agent installer command, a dashboard share link — are built from this when
+  // set. Only the operator knows how their proxy publishes the panel, and a
+  // reverse proxy that rewrites the Host header makes the request unreliable
+  // as a source.
+  publicUrl: { type: String, default: '' },
   // Show the SRT settings helper (latency/maxbw/buffers calculator) on SRT tabs.
   srtHelperEnabled: { type: Boolean, default: true },
   // Metric collection. Off by default: sampling every server every few seconds

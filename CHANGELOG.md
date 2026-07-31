@@ -1,5 +1,35 @@
 # Changelog
 
+### v0.18.0 — server filter, server labels, window types, link port
+- **Picking a server emptied every log view.** Mongoose casts a string to
+  ObjectId inside `find()`, but **not** inside an aggregation pipeline — and the
+  grouped view, the facet counts and the category counts are all aggregations,
+  so `$match: { serverId: '65f…' }` compared a string against an ObjectId and
+  matched nothing. "All servers" worked because that filter has no serverId in
+  it at all. Cast once, where every query gets its filter; an id that is not an
+  ObjectId now matches nothing rather than silently widening to the fleet
+- **Records say which server they came from.** Names are resolved on the
+  backend, so every view labels them identically, and shown as a quiet chip
+  only when the view spans more than one server — on a single-server view it
+  would be noise on every row. A template seen fleet-wide says "13 servers"
+  rather than printing thirteen names into a row
+- **Adding a dashboard window always produced "Everything"**, leaving the
+  operator to find the edit control inside a window showing the whole firehose.
+  The type is chosen as part of the add action now
+- **Share links pointed at the wrong port.** They were built from
+  `req.get('host')`, which carries a port only if the client sent one *and* the
+  proxy passed it through — nginx's common `proxy_set_header Host $host` drops
+  it, where `$http_host` would have kept it. A panel published on :8095 handed
+  out links to :443, where a different application answers
+- Fixed both ways, as asked. There is now a **public address** setting, used
+  for every link the panel hands out; and when it is empty the address is
+  derived far more carefully — `X-Forwarded-Host` and `X-Forwarded-Proto` ahead
+  of `Host`, a port from `X-Forwarded-Port` re-attached when the proxy dropped
+  it, and default ports never appended
+- New `npm run test:publicurl`: 7 checks over the forwarded-header shapes,
+  plus 4 on the server filter
+
+
 ### v0.17.1 — log collection had no switch to turn on
 - **`Settings.logs.enabled` has existed since iter10 m1, the gateway has always
   sent it to agents, and the agents have always acted on it — but it was never

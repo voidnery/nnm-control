@@ -35,6 +35,10 @@ export default function LogDashboardsPage() {
   const [share, setShare] = useState(null);
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
+  // Adding a window used to always produce "Everything", leaving the operator
+  // to find the edit control inside a window that showed the whole firehose.
+  // The choice belongs to the action.
+  const [newCat, setNewCat] = useState('transcoder');
   // window.prompt does not exist in every browsing context and cannot be
   // styled, translated or cancelled cleanly. The click gate found it.
   const [creating, setCreating] = useState(null);
@@ -88,8 +92,11 @@ export default function LogDashboardsPage() {
     setDash(d => ({ ...d, windows: d.windows.map(w => (w.id === id ? { ...w, ...patch } : w)) }));
     setDirty(true);
   };
-  const addWindow = () => {
-    setDash(d => ({ ...d, windows: [...d.windows, { id: newId(), category: 'all', range: '1h', mode: 'grouped', height: 240, levels: [], subs: [], query: '', span: 1 }] }));
+  const addWindow = (category = newCat) => {
+    setDash(d => ({ ...d, windows: [...d.windows, {
+      id: newId(), category, range: '1h', mode: 'grouped', height: 240,
+      levels: [], subs: [], query: '', span: 1,
+    }] }));
     setDirty(true);
   };
   const dropWindow = (id) => {
@@ -189,7 +196,9 @@ export default function LogDashboardsPage() {
         <h1 style={{ margin: 0 }}>{dash.name}</h1>
         <div className="row">
           <button onClick={() => { setOpenId(null); setDash(null); }}>{t('dash.back')}</button>
-          <button onClick={addWindow}>{t('dash.addWindow')}</button>
+          <Select value={newCat} onChange={setNewCat} style={{ width: 170 }}
+                  options={CATS.map(c => ({ value: c, label: t(`logs.cat.${c}`) }))} />
+          <button onClick={() => addWindow()}>{t('dash.addWindow')}</button>
           <Select value={String(dash.columns)} style={{ width: 130 }}
                   onChange={v => { setDash({ ...dash, columns: Number(v) }); setDirty(true); }}
                   options={[1, 2, 3, 4].map(n => ({ value: String(n), label: t('dash.columns', { n }) }))} />
@@ -248,7 +257,7 @@ export default function LogDashboardsPage() {
               category={w.category} serverId={w.serverId}
               initialLevels={w.levels || []} initialRange={w.range} initialQuery={w.query || ''}
               height={w.height} refreshMs={dash.refreshSec ? dash.refreshSec * 1000 : 0}
-              onEdit={() => setEditing(w)}
+              onEdit={() => setEditing({ ...w })}
               onRemove={() => dropWindow(w.id)}
             />
           </div>

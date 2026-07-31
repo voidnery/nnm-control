@@ -56,6 +56,14 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 .nav a:hover { color: var(--text); }
 /* Grouped sidebar. The heading is quiet on purpose — it is a signpost, not a
    competitor to the links under it. */
+/* Which server a log line came from. Deliberately quiet: it is context, not
+   content, and on a fleet view it appears on every row. */
+.srv-chip {
+  margin-left: 8px; padding: 1px 6px; border-radius: 4px;
+  font-size: 10.5px; letter-spacing: .2px; white-space: nowrap;
+  color: var(--text-dim); background: var(--bg); border: 1px solid var(--line);
+  opacity: .8;
+}
 .nav-group { margin-bottom: 14px; }
 .nav-group:last-child { margin-bottom: 0; }
 .nav-group-title {

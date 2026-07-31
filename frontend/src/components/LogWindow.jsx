@@ -165,7 +165,14 @@ export default function LogWindow({
                       <span className={'badge ' + (g.level === 'E' ? 'err' : 'live')}>{g.level}</span>
                     </td>
                     <td className="mono" style={{ width: 110, fontSize: 11 }}>{g.sub}</td>
-                    <td className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>{g.template}</td>
+                    <td className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                      {g.template}
+                      {!serverId && g.servers > 0 && (
+                        <span className="srv-chip" title={(g.serverNames || []).join(', ')}>
+                          {g.servers === 1 ? (g.serverNames?.[0] || '?') : t('logs.nServers', { n: g.servers })}
+                        </span>
+                      )}
+                    </td>
                   </tr>
                   {open === g.template && (
                     <tr key={g.template + '-x'}>
@@ -194,7 +201,10 @@ export default function LogWindow({
                     <span className={'badge ' + (r.level === 'E' ? 'err' : 'live')}>{r.level}</span>
                   </td>
                   <td className="mono" style={{ width: 100, fontSize: 11 }}>{r.tag}</td>
-                  <td className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>{r.msg}</td>
+                  <td className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                    {r.msg}
+                    {!serverId && r.serverName && <span className="srv-chip">{r.serverName}</span>}
+                  </td>
                 </tr>
               ))}
               {data && !data.rows?.length && (

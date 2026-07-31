@@ -34,6 +34,7 @@ const pub = (s) => ({
   // agent acts on it — but it was never exposed here, so the only way to turn
   // log collection on was a route no screen called. The Logs page told the
   // operator to enable it "in Settings", where there was nothing.
+  publicUrl: s.publicUrl || '',
   logs: {
     enabled: Boolean(s.logs?.enabled),
     files: s.logs?.files?.length ? s.logs.files : ['nimble.log'],
@@ -49,7 +50,14 @@ settingsRouter.get('/', async (_req, res) => res.json(pub(await Settings.load())
 
 settingsRouter.put('/', async (req, res) => {
   const s = await Settings.load();
-  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs } = req.body || {};
+  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs, publicUrl: pub } = req.body || {};
+  if (pub !== undefined) {
+    const v = String(pub).trim().replace(/\/+$/, '');
+    if (v && !/^https?:\/\/[^\s/]+$/i.test(v)) {
+      return res.status(400).json({ error: 'publicUrl must look like http://host[:port] with no path' });
+    }
+    s.publicUrl = v;
+  }
   if (controlPlane !== undefined) {
     if (!['wmspanel', 'native'].includes(controlPlane)) return res.status(400).json({ error: 'controlPlane must be wmspanel or native' });
     if (controlPlane === 'wmspanel' && !( (wp?.clientId ?? s.wmspanel.clientId) && (wp?.apiKey ?? s.wmspanel.apiKey) )) {

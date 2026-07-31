@@ -219,7 +219,16 @@ export default function LogsPage() {
                     <td className="mono"><b>{fmtN(g.count)}</b></td>
                     <td><span className={'badge ' + (g.level === 'E' ? 'err' : 'live')}>{g.level}</span></td>
                     <td className="mono">{g.sub}</td>
-                    <td className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>{g.template}</td>
+                    <td className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                      {g.template}
+                      {/* Only when it could be ambiguous. On a single-server
+                          view the chip would be noise on every row. */}
+                      {!serverId && g.servers > 0 && (
+                        <span className="srv-chip" title={(g.serverNames || []).join(', ')}>
+                          {g.servers === 1 ? (g.serverNames?.[0] || '?') : t('logs.nServers', { n: g.servers })}
+                        </span>
+                      )}
+                    </td>
                     <td className="mono" style={{ fontSize: 12 }}>{fmtTs(g.last)}</td>
                   </tr>
                   {open === g.template && (
@@ -271,7 +280,7 @@ export default function LogsPage() {
                   <td className="mono" style={{ fontSize: 12 }}>{r.raw?.replace('T', ' ') || fmtTs(r.ts)}</td>
                   <td><span className={'badge ' + (r.level === 'E' ? 'err' : 'live')}>{r.level}</span></td>
                   <td className="mono" style={{ fontSize: 12 }}>{r.tag}</td>
-                  {!serverId && <td className="mono" style={{ fontSize: 12 }}>{serverName(r.serverId)}</td>}
+                  {!serverId && <td className="mono" style={{ fontSize: 12 }}>{r.serverName || serverName(r.serverId)}</td>}
                   <td className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>
                     {r.msg}
                     {r.contLines > 0 && <span className="hint"> · {t('logs.plusLines', { n: r.contLines })}</span>}

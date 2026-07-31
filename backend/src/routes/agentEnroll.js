@@ -8,6 +8,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import crypto from 'node:crypto';
 import { installScript } from '../services/agentInstaller.js';
 import { probeHostKey, runOverSsh, createJob, appendJob, finishJob, getJob } from '../services/sshInstaller.js';
+import { publicUrl } from '../services/publicUrl.js';
 import { logEvent } from '../services/audit.js';
 
 // iter11 m1 — agent installation by one-time ticket.
@@ -168,7 +169,7 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
   // The operator can override how the server should reach us. They have to be
   // able to: the address this request arrived on may be a public name whose
   // certificate does not match, or one the servers cannot resolve at all.
-  const panelUrl = String(b.panelUrl || `${req.protocol}://${req.get('host')}`).trim().replace(/\/+$/, '');
+  const panelUrl = String(b.panelUrl || (await publicUrl(req)).url).trim().replace(/\/+$/, '');
   const doc = await AgentEnrollment.create({
     panelUrl,
     serverId: server._id,
@@ -284,7 +285,7 @@ agentEnrollRouter.post('/servers/:id/agent/ssh/install', requireAuth, requirePer
   );
   const raw = newTicket();
   const agentPort = Number(b.agentPort) > 0 ? Number(b.agentPort) : 8090;
-  const panelUrl = String(b.panelUrl || `${req.protocol}://${req.get('host')}`).trim().replace(/\/+$/, '');
+  const panelUrl = String(b.panelUrl || (await publicUrl(req)).url).trim().replace(/\/+$/, '');
   const doc = await AgentEnrollment.create({
     serverId: server._id,
     tokenHash: hashTicket(raw),
