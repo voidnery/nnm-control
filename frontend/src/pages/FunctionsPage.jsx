@@ -206,6 +206,33 @@ function srcOptionOf(o) {
   };
 }
 
+/**
+ * Apply one source change, with audio following video.
+ *
+ * Shared by the step editor and the variant editor. It lived only in the step
+ * editor at first, so picking a video source in a variant left the audio
+ * behind — the same rule written once and used twice, rather than twice and
+ * remembered once.
+ *
+ * @param current  the values in force before the change
+ * @param field    which source is being set
+ * @param id       the new source id
+ * @returns the full set of source values after the change
+ */
+export function withSourceFollow(current, field, id) {
+  const next = { ...current };
+  const prev = current[field]?.id || '';
+  next[field] = { id };
+  // Audio follows video when it is empty or was tracking the old video value.
+  // An audio deliberately pointed elsewhere is a decision, and convenience
+  // must not overwrite it.
+  if (field === 'video_source' && 'audio_source' in current) {
+    const audio = current.audio_source?.id || '';
+    if (!audio || audio === prev) next.audio_source = { id };
+  }
+  return next;
+}
+
 // The values a variant overrides for one step, as controls rather than JSON.
 //
 // A variant only names the fields it differs in, so every control starts from
@@ -220,13 +247,27 @@ function VariantStepFields({ step, override, onChange }) {
   const { sources, err } = useIncoming(step.serverId, wantsSource);
 
   const valueOf = (key) => (key in (override || {}) ? override[key] : base[key]);
-  const setKey = (key, value) => {
+
+  // Only what the variant genuinely changes is kept: a value equal to the
+  // step's own is dropped, and a variant left with nothing carries no entry.
+  const commit = (values) => {
     const next = { ...(override || {}) };
-    // Setting a value back to the step's own is not an override; dropping it
-    // keeps the variant honest about what it actually changes.
-    if (JSON.stringify(value) === JSON.stringify(base[key])) delete next[key];
-    else next[key] = value;
+    for (const [k, v] of Object.entries(values)) {
+      if (JSON.stringify(v) === JSON.stringify(base[k])) delete next[k];
+      else next[k] = v;
+    }
     onChange(Object.keys(next).length ? next : null);
+  };
+
+  const setKey = (key, value) => commit({ [key]: value });
+
+  const setSourceKey = (key, id) => {
+    // The values in force for this variant, which is the step's patch with the
+    // variant's own overrides on top — not the step's patch alone, or picking
+    // a second video would compare against the wrong "previous".
+    const current = {};
+    for (const k of Object.keys(base)) current[k] = valueOf(k);
+    commit(withSourceFollow(current, key, id));
   };
 
   const keys = Object.keys(base);
@@ -246,7 +287,7 @@ function VariantStepFields({ step, override, onChange }) {
             </label>
             {isSource ? (
               <Select searchable value={valueOf(key)?.id || ''}
-                      onChange={v => setKey(key, { id: v })}
+                      onChange={v => setSourceKey(key, v)}
                       options={[{ value: '', label: t('fn.pickSource') },
                                 ...(sources || []).map(srcOptionOf)]} />
             ) : typeof base[key] === 'object' && base[key] !== null ? (
@@ -286,17 +327,7 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
   const availablePairs = wantsSource ? [] : pairsFor(step.objectKind);
   const { sources, err: srcErr } = useIncoming(step.serverId, wantsSource);
   const setSource = (field, id) => {
-    const patch = { ...(step.patch || {}) };
-    const prev = patch[field]?.id || '';
-    patch[field] = { id };
-    // Audio follows video, because the two come from the same source in almost
-    // every case and setting it twice is a step nobody wants. Only when audio
-    // is empty or was tracking the old video value — an audio deliberately
-    // pointed somewhere else is left alone.
-    if (field === 'video_source' && 'audio_source' in patch) {
-      const audio = patch.audio_source?.id || '';
-      if (!audio || audio === prev) patch.audio_source = { id };
-    }
+    const patch = { ...(step.patch || {}), ...withSourceFollow(step.patch || {}, field, id) };
     onChange({ ...step, patch });
     setPatchText(JSON.stringify(patch));
   };

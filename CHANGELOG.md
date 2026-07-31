@@ -1,5 +1,20 @@
 # Changelog
 
+### v0.21.2 — audio follows video in variants too
+- The rule added in v0.21.0 lived only in the step editor, so picking a video
+  source **inside a variant** left the audio behind. It is one exported
+  function used by both editors now — written once rather than written twice
+  and remembered once
+- The follow compares against the values **in force for that variant** — the
+  step's patch with the variant's own overrides on top — not the step's patch
+  alone. Comparing against the step would have stopped audio following after
+  the first pick
+- Four cases pinned, including the two that are easy to get wrong: an audio set
+  apart inside a variant survives a change of video, and returning video to the
+  step's own value makes audio return with it, which leaves the variant
+  overriding nothing and drops the entry entirely
+
+
 ### v0.21.1 — variants are picked, not typed
 - **The variant editor asked for hand-typed JSON**, which is exactly the
   mistake the step editor exists to prevent: an id typed wrong points a stream

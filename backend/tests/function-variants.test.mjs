@@ -356,6 +356,51 @@ check('one field can differ while another follows the step', () => {
   assert.ok(!('video_source' in o), 'unchanged fields fall through to the step');
 });
 
+check('audio follows video inside a variant too', () => {
+  // The rule lived only in the step editor, so picking a video source in a
+  // variant left the audio behind. It is one function used by both now.
+  const withSourceFollow = (current, field, id) => {
+    const next = { ...current };
+    const prev = current[field]?.id || '';
+    next[field] = { id };
+    if (field === 'video_source' && 'audio_source' in current) {
+      const audio = current.audio_source?.id || '';
+      if (!audio || audio === prev) next.audio_source = { id };
+    }
+    return next;
+  };
+  const pick = (base, override, key, id) => {
+    const current = {};
+    for (const k of Object.keys(base)) current[k] = (k in (override || {}) ? override[k] : base[k]);
+    const next = { ...(override || {}) };
+    for (const [k, v] of Object.entries(withSourceFollow(current, key, id))) {
+      if (JSON.stringify(v) === JSON.stringify(base[k])) delete next[k];
+      else next[k] = v;
+    }
+    return Object.keys(next).length ? next : null;
+  };
+
+  const base = { video_source: { id: 'A' }, audio_source: { id: 'A' } };
+  const b = pick(base, null, 'video_source', 'B');
+  assert.deepEqual(b, { video_source: { id: 'B' }, audio_source: { id: 'B' } });
+
+  // The second change must compare against the variant's own value, not the
+  // step's, or audio would stop following after the first pick.
+  assert.deepEqual(pick(base, b, 'video_source', 'C'),
+    { video_source: { id: 'C' }, audio_source: { id: 'C' } });
+
+  // An audio set apart in the variant survives a change of video.
+  assert.deepEqual(pick(base, { audio_source: { id: 'MIC' } }, 'video_source', 'B'),
+    { audio_source: { id: 'MIC' }, video_source: { id: 'B' } });
+
+  // Back to the step's own value and the override disappears entirely.
+  assert.equal(pick(base, b, 'video_source', 'A'), null);
+
+  assert.ok(uiSrc.includes('export function withSourceFollow'), 'one rule, used twice');
+  assert.equal([...uiSrc.matchAll(/if \(!audio \|\| audio === prev\)/g)].length, 1,
+    'written once, or the two editors drift again');
+});
+
 check('the first variant is seeded from what is already configured', () => {
   // An operator who has configured the function for input A should get A as
   // variant 1, not an empty variant that runs the base steps and looks
