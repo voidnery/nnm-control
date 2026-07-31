@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.20.2 — three source fields where there should have been one
+- **The step editor offered every field pair for every object kind**, so a
+  "switch the source" step ended up with `"application":"Sport_tv_obs",
+  "stream":"feed1"` in its patch alongside the source ids. On an outgoing
+  stream those two fields are the stream's **own** name — that patch would have
+  renamed it rather than repointed it
+- Pairs are now declared per kind: republish has `src_app`/`src_strm`, SRT/UDP
+  has `source_streams`, hot swap has the substitute and original pairs,
+  outgoing and live pull have `application`/`stream`. A source switch offers no
+  generic inserter at all, because there is nothing it could insert that would
+  not be wrong
+- **`live_pull` was checked, not assumed.** It genuinely does carry
+  `application`/`stream` — confirmed against the tab that edits them — so it
+  was left alone rather than "fixed"
+- **The two questions are labelled apart**: what is being changed, and what to
+  set on it. Running them together is why three fields looked like three ways
+  to answer the same thing
+- **Object labels lead with the name**, then what the object does, then its
+  description — the order every tab in the panel already uses. The picker led
+  with routing detail and dropped the name entirely for republish rules and hot
+  swaps, so a rule an operator had named could not be found by that name
+- 5 new checks pinning which fields belong to which kind
+
+
 ### v0.20.1 — a shadowed route and a guessed field name
 - **Clearing old runs returned 500.** `DELETE /:id` was declared before
   `DELETE /runs`, and Express matches in declaration order — so the request was

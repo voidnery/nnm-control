@@ -100,13 +100,26 @@ function ObjectPicker({ servers, step, onPick }) {
   // settings, which carry source_streams but no name/protocol) never render
   // the literal "undefined".
   const headOf = (o) => o.name || o.protocol || o.title || (o.id ? '#' + String(o.id).slice(-6) : 'object');
-  const labelOf = (o) =>
+  // What the object DOES, without its name.
+  const shapeOf = (o) =>
     o.src_app !== undefined ? `${o.src_app}/${o.src_strm || '*'} → ${o.dest_addr || ''}` :
-    o.source_streams !== undefined ? `${headOf(o)} ⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
+    o.source_streams !== undefined ? `⇐ ${(o.source_streams[0]?.application || '?')}/${(o.source_streams[0]?.stream || '?')}` :
     o.original_app !== undefined ? `${o.original_app}/${o.original_stream} → ${o.substitute_app}/${o.substitute_stream}${o.emergency ? ' [EMERGENCY]' : ''}` :
-    (o.name !== undefined && o.paused !== undefined && o.server_id !== undefined) ? `${o.name}${o.paused ? ' [paused]' : ' [running]'}` :
+    (o.name !== undefined && o.paused !== undefined && o.server_id !== undefined) ? (o.paused ? '[paused]' : '[running]') :
     o.application !== undefined ? `${o.application}/${o.stream || ''}${o.status ? ' · ' + o.status : ''}` :
-    o.name || o.protocol || '';
+    o.protocol || '';
+
+  // Name first, then what it does, then its description — the order every tab
+  // in the panel already uses. The picker used to lead with the routing detail
+  // and drop the name entirely for republish rules and hot swaps, so an
+  // operator who had named a rule could not find it by that name.
+  const labelOf = (o) => {
+    const name = String(o.name || '').trim();
+    const shape = shapeOf(o);
+    const desc = String(o.description || '').trim();
+    return [name, shape, desc && desc !== name ? `— ${desc}` : '']
+      .filter(Boolean).join('  ') || headOf(o);
+  };
   const describe = (o) => `${String(o.id).slice(-6)} · ${labelOf(o)}`;
   return (
     <div style={{ marginTop: 6 }}>
@@ -147,6 +160,24 @@ const KEY_PAIRS = [
 ];
 const defaultPairFor = (kind) => kind === 'republish' ? 'src' : kind === 'hotswap' ? 'sub' : kind === 'udp' ? 'udps' : 'app';
 
+// Which field pairs actually exist on each kind of object. Offering all five
+// everywhere is how a "switch the source" step ended up with
+// `"application":"Sport_tv_obs","stream":"feed1"` in its patch: on an outgoing
+// stream those two are its OWN name, so that patch renames the stream instead
+// of repointing it.
+const PAIRS_FOR = {
+  republish: ['src'],
+  udp: ['udps'],
+  hotswap: ['sub', 'orig'],
+  outgoing: ['app'],
+  live_pull: ['app'],          // live pull genuinely carries application/stream
+  incoming: [],
+};
+const pairsFor = (kind) => {
+  const allowed = PAIRS_FOR[kind];
+  return allowed === undefined ? KEY_PAIRS : KEY_PAIRS.filter(k => allowed.includes(k.value));
+};
+
 function StepEditor({ step, servers, onChange, onRemove }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...step, [k]: v });
@@ -161,6 +192,9 @@ function StepEditor({ step, servers, onChange, onRemove }) {
   // is a stream switched to nothing, and it verifies as "applied".
   const wantsSource = step.type === 'patch' && step.objectKind === 'outgoing' &&
     ('video_source' in (step.patch || {}) || 'audio_source' in (step.patch || {}));
+  // A source switch has its own pickers, and the generic app/stream inserter
+  // can only add fields that do not belong — so it is not offered at all.
+  const availablePairs = wantsSource ? [] : pairsFor(step.objectKind);
   const [sources, setSources] = useState(null);
   const [srcErr, setSrcErr] = useState('');
   useEffect(() => {
@@ -259,6 +293,9 @@ function StepEditor({ step, servers, onChange, onRemove }) {
                       options={KINDS.map(k => ({ value: k.value, label: k.label }))} />
             </>
           )}
+          {/* Two questions, and the editor used to run them together: which
+              object is being changed, and what to set on it. */}
+          <div className="hint" style={{ marginTop: 8, marginBottom: 2 }}><b>{t('fn.whatToChange')}</b></div>
           <label>{t('fn.targetId')}</label>
           <input className="mono" value={step.targetId || ''} onChange={e => set('targetId', e.target.value)} />
           <ObjectPicker servers={servers} step={step} onPick={(o, label) => { set('targetId', String(o.id)); set('targetLabel', label); }} />
@@ -270,6 +307,12 @@ function StepEditor({ step, servers, onChange, onRemove }) {
           )}
           {step.type === 'patch' && (
             <>
+              <div className="hint" style={{ marginTop: 10, marginBottom: 2 }}><b>{t('fn.changeToWhat')}</b></div>
+              {/* Only offered where the object actually has such a pair. The
+                  step's own pickers replace it for a source switch, where
+                  application/stream would mean the outgoing stream's own name
+                  and the patch would rename it instead of repointing it. */}
+              {availablePairs.length > 0 && (<>
               <label>{t('fn.sourcePicker')}</label>
               <div className="row">
                 <button disabled={!step.serverId} onClick={loadLive}>{t('fn.loadStreams')}</button>
@@ -284,14 +327,16 @@ function StepEditor({ step, servers, onChange, onRemove }) {
                   </div>
                   <div style={{ flex: 3 }}>
                     <Select value={pairKind} onChange={setPairKind}
-                            options={KEY_PAIRS.map(k => ({ value: k.value, label: k.label }))} />
+                            options={availablePairs.map(k => ({ value: k.value, label: k.label }))} />
                   </div>
                   <button disabled={!pick.includes('/')} onClick={insertPick}>{t('fn.insert')}</button>
                 </div>
               )}
+              </>)}
               {wantsSource && (
                 <div className="panel" style={{ marginBottom: 6 }}>
                   <div className="hint" style={{ marginBottom: 4 }}>{t('fn.sourceHint')}</div>
+
                   {srcErr && <div className="hint" style={{ color: 'var(--warn)' }}>{srcErr}</div>}
                   {['video_source', 'audio_source'].filter(f => f in (step.patch || {})).map(f => (
                     <div key={f} style={{ marginBottom: 4 }}>

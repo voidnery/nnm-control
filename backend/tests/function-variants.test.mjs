@@ -225,5 +225,47 @@ check('an incoming source is labelled by its name, as the rest of the panel does
   assert.ok(!/o\.application \|\| o\.app/.test(uiSrc), 'the guessed fields must be gone');
 });
 
+// A "switch the source" step came back with
+// `"application":"Sport_tv_obs","stream":"feed1"` in its patch, because the
+// generic app/stream inserter was offered for every kind. On an outgoing
+// stream those two fields are its OWN name, so that patch renames the stream
+// instead of repointing it.
+console.log('\nSTEP EDITOR — WHICH FIELDS BELONG TO WHICH KIND:');
+
+check('each kind only offers pairs the object actually has', () => {
+  assert.ok(uiSrc.includes('const PAIRS_FOR'));
+  const m = /const PAIRS_FOR = \{([\s\S]*?)\};/.exec(uiSrc);
+  assert.ok(m, 'the per-kind map must exist');
+  assert.match(m[1], /republish: \['src'\]/);
+  assert.match(m[1], /udp: \['udps'\]/);
+  assert.match(m[1], /outgoing: \['app'\]/);
+  // live_pull really does carry application/stream — checked against the tab
+  // that edits them, rather than assumed.
+  assert.match(m[1], /live_pull: \['app'\]/);
+});
+
+check('a source switch offers no generic inserter at all', () => {
+  assert.ok(uiSrc.includes('const availablePairs = wantsSource ? [] : pairsFor(step.objectKind)'),
+    'there is nothing it could insert that would not be wrong');
+  assert.ok(uiSrc.includes('{availablePairs.length > 0 && (<>'), 'and the block is hidden, not just emptied');
+});
+
+check('the inserter dropdown is built from the allowed pairs, not all of them', () => {
+  assert.ok(!/options=\{KEY_PAIRS\.map/.test(uiSrc), 'offering every pair everywhere is the defect');
+  assert.ok(uiSrc.includes('options={availablePairs.map'));
+});
+
+check('object labels lead with the name, as every tab does', () => {
+  // The picker used to lead with routing detail and drop the name entirely for
+  // republish rules and hot swaps, so a named rule could not be found by name.
+  assert.ok(uiSrc.includes('const shapeOf'), 'name and shape are separate now');
+  assert.ok(/const labelOf = \(o\) => \{[\s\S]{0,120}o\.name/.test(uiSrc));
+});
+
+check('the two questions are labelled apart', () => {
+  assert.ok(uiSrc.includes("t('fn.whatToChange')"));
+  assert.ok(uiSrc.includes("t('fn.changeToWhat')"));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);
