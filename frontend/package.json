@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-frontend",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,13 +12,14 @@
     "audit:ui": "node scripts/ui-components-test.mjs",
     "audit:docker": "node scripts/docker-build-context-test.mjs",
     "audit:i18n": "python3 scripts/i18n-keys-audit.py",
-    "audit": "npm run audit:hooks && npm run audit:i18n && npm run audit:select && npm run audit:ui && npm run audit:playback && npm run audit:stats && npm run audit:graph && npm run audit:render && npm run audit:pages && npm run audit:docker && npm run audit:version && npm run audit:clipboard",
+    "audit": "npm run audit:hooks && npm run audit:i18n && npm run audit:select && npm run audit:ui && npm run audit:playback && npm run audit:stats && npm run audit:graph && npm run audit:render && npm run audit:pages && npm run audit:docker && npm run audit:version && npm run audit:clipboard && npm run audit:layout",
     "audit:pages": "node scripts/pages-smoke.mjs",
     "audit:playback": "node scripts/playback-url-test.mjs",
     "audit:stats": "node scripts/stats-chart-test.mjs",
     "audit:graph": "node scripts/pipeline-layout-test.mjs",
     "audit:version": "node scripts/version-audit.mjs",
-    "audit:clipboard": "node scripts/clipboard-audit.mjs"
+    "audit:clipboard": "node scripts/clipboard-audit.mjs",
+    "audit:layout": "node scripts/layout-audit.mjs"
   },
   "dependencies": {
     "hls.js": "^1.5.17",

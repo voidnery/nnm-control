@@ -96,19 +96,23 @@ export default function ServerAgentsPage() {
         const h = health[s.id];
         return (
           <div className="panel" key={s.id} style={{ marginBottom: 8 }}>
+            {/* Identity on the left, every control grouped on the right.
+                Three children directly under space-between spread evenly, which
+                is what left the checkbox floating in the middle of the row. */}
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <b>{s.name}</b>
                 <div className="hint mono">{s.host || '—'}</div>
               </div>
-              <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
-                <input type="checkbox" checked={Boolean(r.enabled)} onChange={e => set(s.id, { enabled: e.target.checked })} />
-                {t('agent.enabled')}
-              </label>
-              {/* iter11 m1 - installing is a different act from configuring an
-                  already-installed agent, so it is its own action rather than
-                  a mode of the form below. */}
-              <button onClick={() => setInstall(s)}>{r.enabled ? t('inst.reinstall') : t('inst.install')}</button>
+              <div className="row" style={{ gap: 12, flexShrink: 0 }}>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+                  <input type="checkbox" checked={Boolean(r.enabled)} onChange={e => set(s.id, { enabled: e.target.checked })} />
+                  {t('agent.enabled')}
+                </label>
+                {/* Installing is a different act from configuring an agent that
+                    is already there, so it stays its own action. */}
+                <button onClick={() => setInstall(s)}>{r.enabled ? t('inst.reinstall') : t('inst.install')}</button>
+              </div>
             </div>
             {/* iter12 m5 — no address field. The token is normally set by
                 enrollment and never shown again; this stays for the case where
@@ -121,8 +125,8 @@ export default function ServerAgentsPage() {
                          placeholder={r.hasToken ? '••••••••' : ''}
                          onChange={e => set(s.id, { token: e.target.value })} />
                 </div>
-                <div className="row">
-                  <button disabled={busy === s.id} onClick={() => save(s.id)}>{t('action.save')}</button>
+                <div className="row" style={{ flexShrink: 0 }}>
+                  <button className="primary" disabled={busy === s.id} onClick={() => save(s.id)}>{t('action.save')}</button>
                   <button disabled={busy === s.id} onClick={() => check(s.id)}>{t('agent.check')}</button>
                 </div>
               </div>

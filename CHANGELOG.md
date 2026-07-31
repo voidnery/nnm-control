@@ -1,5 +1,32 @@
 # Changelog
 
+### v0.17.0 — sidebar grouping, active-link fix, control placement
+- **The sidebar is grouped** instead of being seventeen entries in one list:
+  Broadcast, Logs, Infrastructure, Access & audit, System, with the dashboard
+  alone above them. Driven by data, so a group whose items are all hidden by
+  permissions disappears with them — a limited role must never be shown the
+  heading of a section it has nothing in
+- **Two navigation entries lit up at once.** React Router marks a `NavLink`
+  active for descendant routes too, so `/logs/dashboards` matched `/logs` as
+  well. `/logs` is `end`-anchored now. `/servers` deliberately is not: a
+  server's detail page should keep its section highlighted
+- **Controls no longer float in the middle of a row.** A flex row with
+  `space-between` and three children spreads all three evenly, which is how the
+  Agents page ended up with its "agent configured" checkbox stranded in empty
+  space. The convention is now explicit — identity on the left, every control
+  grouped in a nested row on the right
+- The same defect was found and fixed in the Functions step editor, where the
+  type badge floated between the label field and the Remove button
+- New `npm run audit:layout` refuses a `space-between` row with three or more
+  direct children, across all 49 components. It found the Functions case on its
+  first run — the user had reported it only on the Agents page
+- Building that audit surfaced a defect in the audit: counting JSX children by
+  scanning for tags does not survive this codebase, because arrow functions in
+  attributes (`n => ...`) contain `>` and break any "find the next angle
+  bracket" logic. The first version reported the correctly-built rows as
+  broken. It counts by indentation now
+
+
 ### v0.16.1 — hotfix: issuing an install ticket took the panel down
 - **`POST /servers/:id/agent/enrollment` returned 502 and restarted the
   backend.** `scriptFor` and `sha256` were deleted during the iter12 m5 cleanup

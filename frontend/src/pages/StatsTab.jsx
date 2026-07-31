@@ -102,13 +102,16 @@ export default function StatsTab({ serverId }) {
   return (
     <div>
       {error && <div className="error-box">{error}</div>}
+      {/* Two children, always: the empty span used to be a spacer holding the
+          layout together. Made explicit so the shape does not depend on which
+          branch rendered. */}
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        {subjects && subjects.length === 0
-          ? <span className="hint">{t('stats.none')}</span>
-          : <span />}
-        <button className="linklike" onClick={() => { setShowHealth(v => !v); loadHealth(); }}>
-          {showHealth ? t('stats.hideHealth') : t('stats.showHealth')}
-        </button>
+        <span className="hint">{subjects && subjects.length === 0 ? t('stats.none') : ''}</span>
+        <div className="row" style={{ flexShrink: 0 }}>
+          <button className="linklike" onClick={() => { setShowHealth(v => !v); loadHealth(); }}>
+            {showHealth ? t('stats.hideHealth') : t('stats.showHealth')}
+          </button>
+        </div>
       </div>
 
       {showHealth && (

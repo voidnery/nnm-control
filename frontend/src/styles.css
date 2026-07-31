@@ -54,6 +54,15 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 }
 .nav a.active { color: var(--text); background: var(--bg-panel); border-left-color: var(--accent); }
 .nav a:hover { color: var(--text); }
+/* Grouped sidebar. The heading is quiet on purpose — it is a signpost, not a
+   competitor to the links under it. */
+.nav-group { margin-bottom: 14px; }
+.nav-group:last-child { margin-bottom: 0; }
+.nav-group-title {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .9px;
+  color: var(--text-dim); opacity: .62; padding: 0 10px 5px; margin-top: 2px;
+  user-select: none;
+}
 .sidebar .spacer { flex: 1; }
 .userbox { padding: 10px; border-top: 1px solid var(--line); color: var(--text-dim); font-size: 12.5px; }
 .userbox .mono { color: var(--text); }

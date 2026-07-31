@@ -7,6 +7,44 @@ import { useI18n } from './i18n.jsx';
 // Injected by Vite from package.json — never edit by hand. The fallback only
 // applies to the audit harnesses, which bundle these files with esbuild rather
 // than Vite and so have no define step.
+// One place that decides what is in the sidebar and in what order.
+//
+// `end` matters on /logs: React Router marks a NavLink active for descendant
+// routes too, so without it /logs/dashboards lit up both "Logs" and
+// "Log dashboards" at once. /servers deliberately does NOT set it — a server's
+// detail page should keep its section highlighted.
+const NAV_GROUPS = [
+  { key: 'overview', items: [
+    { to: '/', key: 'nav.dashboard', label: 'Dashboard', end: true, show: ({ can }) => can('servers.view') },
+  ] },
+  { key: 'broadcast', items: [
+    { to: '/servers', key: 'nav.servers', show: ({ can }) => can('servers.view') },
+    { to: '/functions', key: 'nav.functions', show: ({ can }) => can('functions.execute') || can('functions.manage') },
+    { to: '/transcoders', key: 'nav.transcoders', show: ({ can, sys }) => can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' },
+    { to: '/distribution', key: 'nav.distribution', show: ({ can, sys }) => can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' },
+    { to: '/playlists', key: 'nav.playlists', show: ({ can }) => can('playlist.view') },
+  ] },
+  { key: 'logs', items: [
+    { to: '/logs', key: 'nav.logs', end: true, show: ({ can }) => can('streams.view') },
+    { to: '/logs/categories', key: 'nav.logCategories', show: ({ can }) => can('streams.view') },
+    { to: '/logs/dashboards', key: 'nav.logDashboards', show: ({ can }) => can('streams.view') },
+  ] },
+  { key: 'infra', items: [
+    { to: '/agents', key: 'nav.agents', show: ({ can }) => can('servers.manage') },
+    { to: '/categories', key: 'nav.categories', show: ({ can }) => can('category.view') },
+    { to: '/zabbix', key: 'nav.zabbix', show: ({ can }) => can('zabbix.view') },
+  ] },
+  { key: 'access', items: [
+    { to: '/users', key: 'nav.users', show: ({ can }) => can('users.manage') },
+    { to: '/roles', key: 'nav.roles', show: ({ can }) => can('roles.manage') },
+    { to: '/audit', key: 'nav.audit', show: ({ can }) => can('audit.view') },
+  ] },
+  { key: 'system', items: [
+    { to: '/settings', key: 'nav.settings', show: ({ can }) => can('settings.manage') },
+    { to: '/profile', key: 'nav.profile' },
+  ] },
+];
+
 export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 import { api } from './api.js';
 import SetupPage from './pages/SetupPage.jsx';
@@ -40,24 +78,23 @@ function Layout({ children }) {
     <div className="layout">
       <aside className="sidebar">
         <div className="brand">NNM<b>CONTROL</b></div>
+        {/* Grouped rather than one flat list of seventeen entries.
+            Data-driven so a group whose items are all hidden by permissions
+            disappears with them — a limited role must not be shown the
+            heading of a section it has nothing in. */}
         <nav className="nav">
-          {can('servers.view') && <NavLink to="/" end>Dashboard</NavLink>}
-          {can('servers.view') && <NavLink to="/servers">{t('nav.servers')}</NavLink>}
-          {(can('functions.execute') || can('functions.manage')) && <NavLink to="/functions">{t('nav.functions')}</NavLink>}
-          {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/transcoders">{t('nav.transcoders')}</NavLink>}
-          {can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' && <NavLink to="/distribution">{t('nav.distribution')}</NavLink>}
-          {can('playlist.view') && <NavLink to="/playlists">{t('nav.playlists')}</NavLink>}
-          {can('streams.view') && <NavLink to="/logs">{t('nav.logs')}</NavLink>}
-          {can('streams.view') && <NavLink to="/logs/categories">{t('nav.logCategories')}</NavLink>}
-          {can('streams.view') && <NavLink to="/logs/dashboards">{t('nav.logDashboards')}</NavLink>}
-          {can('servers.manage') && <NavLink to="/agents">{t('nav.agents')}</NavLink>}
-          {can('category.view') && <NavLink to="/categories">{t('nav.categories')}</NavLink>}
-          {can('users.manage') && <NavLink to="/users">{t('nav.users')}</NavLink>}
-          {can('roles.manage') && <NavLink to="/roles">{t('nav.roles')}</NavLink>}
-          {can('zabbix.view') && <NavLink to="/zabbix">{t('nav.zabbix')}</NavLink>}
-          {can('audit.view') && <NavLink to="/audit">{t('nav.audit')}</NavLink>}
-          {can('settings.manage') && <NavLink to="/settings">{t('nav.settings')}</NavLink>}
-          <NavLink to="/profile">{t('nav.profile')}</NavLink>
+          {NAV_GROUPS.map(group => {
+            const items = group.items.filter(it => !it.show || it.show({ can, sys }));
+            if (items.length === 0) return null;
+            return (
+              <div className="nav-group" key={group.key}>
+                {group.key !== 'overview' && <div className="nav-group-title">{t(`nav.g.${group.key}`)}</div>}
+                {items.map(it => (
+                  <NavLink key={it.to} to={it.to} end={it.end}>{it.label ? it.label : t(it.key)}</NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <div className="spacer" />
         <div className="verline">NNM Control v{APP_VERSION}</div>

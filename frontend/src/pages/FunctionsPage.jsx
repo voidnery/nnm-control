@@ -212,8 +212,10 @@ function StepEditor({ step, servers, onChange, onRemove }) {
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <input style={{ maxWidth: 260 }} value={step.label} placeholder={t('fn.stepLabel')}
                onChange={e => set('label', e.target.value)} />
-        <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
-        <button className="danger" onClick={onRemove}>{t('fn.remove')}</button>
+        <div className="row" style={{ gap: 8, flexShrink: 0 }}>
+          <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
+          <button className="danger" onClick={onRemove}>{t('fn.remove')}</button>
+        </div>
       </div>
       {step.type === 'action' && (
         <>
