@@ -37,14 +37,26 @@ function MemberPicker({ servers, onAdd, onClose, existing }) {
   const [objects, setObjects] = useState(null);
   const [q, setQ] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
+  // Emptying the list before fetching its replacement collapsed the table and
+  // re-expanded it a moment later, which reads as the page blinking. The old
+  // list stays until the new one arrives — and because a refresh of the SAME
+  // server and kind is genuinely the same question, there is nothing
+  // misleading about showing it meanwhile.
+  //
+  // Changing server or kind IS a different question, so that case clears
+  // deliberately: showing one kind's objects under another kind's heading
+  // would be wrong rather than merely stale.
   const load = async () => {
-    setError(''); setObjects(null);
+    setError('');
+    setBusy(true);
     const spec = KINDS.find(k => k.value === kind);
     try {
       const d = await api(`/wmspanel/server/${serverId}/${spec.ep}`);
       setObjects(spec.pick(d));
     } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
   };
 
   const shown = (objects || []).filter(o => {
@@ -59,13 +71,16 @@ function MemberPicker({ servers, onAdd, onClose, existing }) {
       <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div>
           <label>{t('cat.server')}</label>
-          <Select value={serverId} onChange={setServerId} searchable
+          {/* A different server or kind is a different question: the list on
+              screen would be wrong under the new heading, not merely stale. */}
+          <Select value={serverId} onChange={v => { setServerId(v); setObjects(null); }} searchable
                   options={[{ value: '', label: '— ' + t('cat.pickServer') + ' —' },
                             ...servers.map(s => ({ value: s.id, label: s.name }))]} />
         </div>
         <div>
           <label>{t('cat.kind')}</label>
-          <Select value={kind} onChange={setKind} options={KINDS.map(k => ({ value: k.value, label: k.label }))} />
+          <Select value={kind} onChange={v => { setKind(v); setObjects(null); }}
+                  options={KINDS.map(k => ({ value: k.value, label: k.label }))} />
         </div>
       </div>
       <div className="row" style={{ marginTop: 10 }}>

@@ -1,5 +1,27 @@
 # Changelog
 
+### v0.21.6 — swept the rest of the app for the same flicker
+- Checked every component that empties state before fetching: 39 places. **One
+  was the defect** — the category member picker blanked its table before
+  reloading it, so the dialog collapsed and re-expanded on every load
+- It keeps the list now and shows progress on the button instead. Changing the
+  server or the kind still clears it, because that list under a different
+  heading would be **wrong** rather than merely stale
+- The other 38 are correct and were left alone: a clear inside a `catch`
+  happens after the attempt, and a reset on opening a dialog drops the previous
+  run's result. Three more looked identical to the defect and are not — a probe
+  of a different host, a new run's report, another group's expanded rows. There
+  the old value belongs to a different subject
+- **No general audit for this.** One was written and then deleted: it flagged
+  sixteen places to catch one, because the distinction is semantic rather than
+  syntactic, and a gate that cries wolf is worse than none — it teaches people
+  to skip it. The two views that genuinely refresh themselves are pinned by
+  checks instead
+- The shared `useObjects` hook every object tab uses was already correct: it
+  assigns only on success. Worth recording, since it is why the object tabs
+  never had this
+
+
 ### v0.21.5 — the variant picker stopped blinking
 - Switching variants cleared the preview before fetching the next one, so the
   table emptied, the dialog collapsed and then re-expanded a moment later —

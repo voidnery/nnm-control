@@ -492,5 +492,31 @@ check('the dialog keeps its height while loading', () => {
   assert.ok(body.includes('minHeight: 120'), 'so the first load does not resize it either');
 });
 
+// A sweep for the same defect across the app found one more: the category
+// member picker emptied its table before reloading it.
+//
+// It also found sixteen places that look identical and are correct — a probe
+// of a different host, a new run's report, a different group's rows. In those
+// the old value belongs to a DIFFERENT subject, so showing it would be wrong
+// rather than stale. That distinction is semantic, not syntactic, which is why
+// this is a check on the two known views rather than a general audit: one that
+// flagged sixteen places to catch one would be ignored within a week.
+console.log('\nNO BLANK-THEN-RELOAD IN THE VIEWS THAT REFRESH THEMSELVES:');
+
+const catSrc = readFileSync(new URL('../../frontend/src/pages/CategoriesPage.jsx', import.meta.url), 'utf8');
+
+check('the member picker keeps its list while reloading the same view', () => {
+  const from = catSrc.indexOf('const load = async ()');
+  const body = catSrc.slice(from, catSrc.indexOf('const shown', from));
+  assert.ok(!/setObjects\(null\)/.test(body), 'clearing before the fetch is what collapsed the table');
+  assert.ok(body.includes('setBusy(true)'), 'progress is shown instead of a blank');
+});
+
+check('but a change of server or kind does clear it', () => {
+  // The list under a different heading would be wrong, not merely old.
+  assert.ok(catSrc.includes('setServerId(v); setObjects(null)'));
+  assert.ok(catSrc.includes('setKind(v); setObjects(null)'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);
