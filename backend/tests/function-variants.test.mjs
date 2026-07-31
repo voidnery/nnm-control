@@ -427,5 +427,42 @@ check('both editors load sources through one hook', () => {
   assert.equal([...uiSrc.matchAll(/objects\/\$\{serverId\}\/incoming/g)].length, 1);
 });
 
+console.log('\nRUN PREVIEW — NAMES, NOT IDS:');
+
+check('the preview resolves source ids to names', () => {
+  // The preview is the last thing read before a function touches live
+  // streams. A wall of 24-character ids is not something anyone can check.
+  assert.ok(routeSrc.includes('async function incomingNames'));
+  assert.ok(routeSrc.includes("for (const field of ['video_source', 'audio_source'])"));
+  assert.ok(routeSrc.includes('resolved'), 'and it is returned alongside the raw patch');
+});
+
+check('an unresolvable id degrades to a short id, not a blank', () => {
+  assert.ok(routeSrc.includes("`id ${String(id).slice(-8)}`"),
+    'an id can still be matched against the incoming list; a blank cannot');
+});
+
+check('a failed lookup does not stop the preview', () => {
+  // A name is a nicety. Failing to fetch one must not stop an operator seeing
+  // what is about to run.
+  const from = routeSrc.indexOf('async function incomingNames');
+  const body = routeSrc.slice(from, routeSrc.indexOf('functionsRouter.get', from));
+  assert.ok(body.includes('} catch {'), 'the lookup is best-effort');
+});
+
+check('only servers whose steps reference a source are queried', () => {
+  // One upstream call per distinct server, and none at all for a function
+  // that switches nothing.
+  assert.ok(routeSrc.includes("'video_source' in st.patch || 'audio_source' in st.patch"));
+  assert.ok(routeSrc.includes('new Set(steps'));
+  assert.ok(routeSrc.includes('NAME_TTL_MS'), 'switching between variants must not re-query each time');
+});
+
+check('fields the preview cannot name are still shown as they will be sent', () => {
+  // Hiding part of a patch is how one comes to carry something nobody meant.
+  assert.ok(uiSrc.includes('const named = new Set(Object.keys(st.resolved || {}))'));
+  assert.ok(uiSrc.includes('JSON.stringify(rest)'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);

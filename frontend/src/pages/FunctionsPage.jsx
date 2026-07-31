@@ -522,8 +522,35 @@ function VariantPicker({ fn, onCancel, onPick }) {
                   <tr key={st.index} className="tally">
                     <td className="mono" style={{ width: 24, fontSize: 12 }}>{st.index + 1}</td>
                     <td style={{ fontSize: 12 }}>{st.label || st.type}{st.targetLabel ? ` · ${st.targetLabel}` : ''}</td>
-                    <td className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>
-                      {st.type === 'patch' ? JSON.stringify(st.patch) : '—'}
+                    <td style={{ fontSize: 12, wordBreak: 'break-word' }}>
+                      {/* Names, not ids. This is the last thing read before a
+                          function touches live streams, and a wall of
+                          24-character ids is not something anyone can check. */}
+                      {st.type !== 'patch' ? <span className="hint">—</span> : (
+                        <>
+                          {Object.keys(st.resolved || {}).length > 0 && (
+                            <div>
+                              {st.resolved.video_source && (
+                                <div>{t('fn.videoSource')}: <b>{st.resolved.video_source}</b></div>
+                              )}
+                              {st.resolved.audio_source && (
+                                <div>{t('fn.audioSource')}: <b>{st.resolved.audio_source}</b></div>
+                              )}
+                            </div>
+                          )}
+                          {/* Anything the preview could not name stays visible
+                              as it will be sent — hidden fields are how a patch
+                              carries something nobody meant. */}
+                          {(() => {
+                            const named = new Set(Object.keys(st.resolved || {}));
+                            const rest = Object.fromEntries(
+                              Object.entries(st.patch || {}).filter(([k]) => !named.has(k)));
+                            return Object.keys(rest).length
+                              ? <div className="mono hint" style={{ fontSize: 11 }}>{JSON.stringify(rest)}</div>
+                              : null;
+                          })()}
+                        </>
+                      )}
                       {st.overridden?.length > 0 && (
                         <span className="badge live" style={{ marginLeft: 6 }}>{st.overridden.join(', ')}</span>
                       )}

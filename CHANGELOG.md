@@ -1,5 +1,21 @@
 # Changelog
 
+### v0.21.3 — the run preview names its sources
+- The variant picker showed the raw patch, so the last thing read before a
+  function touches live streams was a wall of 24-character ids. The panel
+  already resolves these everywhere else; the preview was the one place that
+  did not
+- Source ids are resolved server-side, where the WMSPanel credentials are. One
+  upstream call per distinct server, only for steps that actually reference a
+  source, cached for a minute — the picker is switched between variants
+  repeatedly and each switch re-renders this
+- **A failed lookup does not stop the preview**, and an id that cannot be named
+  degrades to a short id rather than a blank: an id can still be matched
+  against the server's incoming list, a blank cannot
+- Fields the preview cannot name stay visible exactly as they will be sent.
+  Hiding part of a patch is how one comes to carry something nobody meant
+
+
 ### v0.21.2 — audio follows video in variants too
 - The rule added in v0.21.0 lived only in the step editor, so picking a video
   source **inside a variant** left the audio behind. It is one exported

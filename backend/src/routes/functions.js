@@ -139,24 +139,80 @@ functionsRouter.post('/:id/run', requirePerm('functions.execute'), async (req, r
 // What will actually be sent, resolved by the SAME function the executor uses.
 // A preview computed a second way would eventually disagree with the run, and
 // the operator would be reading a reassurance rather than a fact.
+// Resolving source ids to the names an operator recognises.
+//
+// The preview is the last thing read before a function touches live streams,
+// and a wall of 24-character ids is not something anyone can check. The panel
+// already resolves these everywhere else; the preview was the one place that
+// did not.
+//
+// One upstream call per distinct server, cached briefly — the picker is
+// switched between variants repeatedly and each switch re-renders this.
+const nameCache = new Map();   // serverId -> { at, map }
+const NAME_TTL_MS = 60_000;
+
+async function incomingNames(cfg, server) {
+  const key = String(server._id);
+  const hit = nameCache.get(key);
+  if (hit && Date.now() - hit.at < NAME_TTL_MS) return hit.map;
+  const map = new Map();
+  try {
+    const d = await wmspanel.incomingList(cfg, server.wmspanelServerId);
+    for (const o of (d.streams || d.settings || d || [])) {
+      if (o?.id) map.set(String(o.id), String(o.name || '').trim());
+    }
+  } catch {
+    // A name is a nicety; failing to fetch one must not stop an operator
+    // seeing what is about to run.
+  }
+  nameCache.set(key, { at: Date.now(), map });
+  return map;
+}
+
 functionsRouter.get('/:id/preview', requirePerm('functions.execute'), async (req, res) => {
   const fn = await FunctionDef.findById(req.params.id);
   if (!fn) return res.status(404).json({ error: 'Not found' });
   try {
     const { steps, variant } = resolveVariant(fn, String(req.query.variantId || ''));
+
+    // Only the servers whose steps actually reference a source.
+    const settings = await Settings.load();
+    const cfg = settings.wmspanel;
+    const needed = new Set(steps
+      .filter(st => st.patch && ('video_source' in st.patch || 'audio_source' in st.patch))
+      .map(st => String(st.serverId || ''))
+      .filter(Boolean));
+    const byServer = new Map();
+    for (const id of needed) {
+      const server = await NimbleServer.findById(id);
+      if (server?.wmspanelServerId) byServer.set(id, await incomingNames(cfg, server));
+    }
+
     res.json({
       variant,
-      steps: steps.map((st, i) => ({
-        index: i,
-        label: st.label || '',
-        type: st.type,
-        objectKind: st.objectKind || '',
-        targetLabel: st.targetLabel || '',
-        patch: st.patch || {},
-        overridden: Object.keys(
-          (fn.variants.find(v => v.id === req.query.variantId)?.overrides || {})[String(i)] || {},
-        ),
-      })),
+      steps: steps.map((st, i) => {
+        const names = byServer.get(String(st.serverId || '')) || new Map();
+        const resolved = {};
+        for (const field of ['video_source', 'audio_source']) {
+          const id = st.patch?.[field]?.id;
+          if (!id) continue;
+          // Falls back to a short id rather than a blank: an id can still be
+          // matched against the server's incoming list, a blank cannot.
+          resolved[field] = names.get(String(id)) || `id ${String(id).slice(-8)}`;
+        }
+        return {
+          index: i,
+          label: st.label || '',
+          type: st.type,
+          objectKind: st.objectKind || '',
+          targetLabel: st.targetLabel || '',
+          patch: st.patch || {},
+          resolved,
+          overridden: Object.keys(
+            (fn.variants.find(v => v.id === req.query.variantId)?.overrides || {})[String(i)] || {},
+          ),
+        };
+      }),
     });
   } catch (e) {
     res.status(e.status || 400).json({ error: e.message });
