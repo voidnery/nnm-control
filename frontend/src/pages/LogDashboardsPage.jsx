@@ -166,16 +166,25 @@ export default function LogDashboardsPage() {
             <tbody>
               {list.map(d => (
                 <tr key={d.id} className="tally">
-                  <td><b>{d.name}</b>{d.description && <div className="hint">{d.description}</div>}</td>
+                  {/* The name is the thing you came here to open, so it opens. */}
+                  <td>
+                    <button className="linklike" style={{ padding: 0, fontWeight: 600, fontSize: 'inherit' }}
+                            onClick={() => open(d.id)}>{d.name}</button>
+                    {d.description && <div className="hint">{d.description}</div>}
+                  </td>
                   <td className="mono">{d.windows}</td>
                   <td>
                     {d.shareEnabled
                       ? <span className="badge live">{t('dash.shared')}{d.shareHits ? ` · ${d.shareHits}` : ''}</span>
                       : <span className="hint">{t('dash.notShared')}</span>}
                   </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button onClick={() => open(d.id)}>{t('action.open')}</button>
-                    <button className="danger" onClick={() => remove(d)}>{t('action.delete')}</button>
+                  <td>
+                    {/* Apart, and with the destructive one last: they were
+                        touching, and one of them deletes a dashboard. */}
+                    <div className="row" style={{ gap: 14, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+                      <button onClick={() => open(d.id)}>{t('action.open')}</button>
+                      <button className="danger" onClick={() => remove(d)}>{t('action.delete')}</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -192,17 +201,29 @@ export default function LogDashboardsPage() {
   // ---- one dashboard ----
   return (
     <div>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: 0 }}>{dash.name}</h1>
-        <div className="row">
-          <button onClick={() => { setOpenId(null); setDash(null); }}>{t('dash.back')}</button>
-          <Select value={newCat} onChange={setNewCat} style={{ width: 170 }}
-                  options={CATS.map(c => ({ value: c, label: t(`logs.cat.${c}`) }))} />
-          <button onClick={() => addWindow()}>{t('dash.addWindow')}</button>
-          <Select value={String(dash.columns)} style={{ width: 130 }}
-                  onChange={v => { setDash({ ...dash, columns: Number(v) }); setDirty(true); }}
-                  options={[1, 2, 3, 4].map(n => ({ value: String(n), label: t('dash.columns', { n }) }))} />
-          <button className={dirty ? 'primary' : ''} disabled={!dirty} onClick={save}>{t('action.save')}</button>
+      {/* Three jobs, three places: get out, change the layout, save. Stacked
+          in one corner they read as a pile of controls with no order to them. */}
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+        <div className="row" style={{ gap: 12, minWidth: 0 }}>
+          <button onClick={() => { setOpenId(null); setDash(null); }}>← {t('dash.back')}</button>
+          <h1 style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dash.name}</h1>
+        </div>
+        <div className="row" style={{ gap: 20, flexShrink: 0 }}>
+          <div className="row" style={{ gap: 6 }}>
+            <span className="hint">{t('dash.addLabel')}</span>
+            <Select value={newCat} onChange={setNewCat} style={{ width: 160 }}
+                    options={CATS.map(c => ({ value: c, label: t(`logs.cat.${c}`) }))} />
+            <button onClick={() => addWindow()}>+ {t('dash.addWindow')}</button>
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            <span className="hint">{t('dash.layoutLabel')}</span>
+            <Select value={String(dash.columns)} style={{ width: 120 }}
+                    onChange={v => { setDash({ ...dash, columns: Number(v) }); setDirty(true); }}
+                    options={[1, 2, 3, 4].map(n => ({ value: String(n), label: t('dash.columns', { n }) }))} />
+          </div>
+          <button className={dirty ? 'primary' : ''} disabled={!dirty} onClick={save}>
+            {dirty ? t('dash.saveDirty') : t('action.save')}
+          </button>
         </div>
       </div>
       {dash.description && <div className="sub">{dash.description}</div>}
@@ -247,9 +268,11 @@ export default function LogDashboardsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${dash.columns}, minmax(0, 1fr))`, gap: 10, marginTop: 10 }}>
         {dash.windows.map((w, i) => (
           <div key={w.id} style={{ gridColumn: `span ${Math.min(w.span || 1, dash.columns)}`, minWidth: 0 }}>
-            <div className="row" style={{ gap: 4, marginBottom: 2 }}>
-              <button style={{ padding: '1px 6px', fontSize: 11 }} disabled={i === 0} onClick={() => move(w.id, -1)}>◀</button>
-              <button style={{ padding: '1px 6px', fontSize: 11 }} disabled={i === dash.windows.length - 1} onClick={() => move(w.id, 1)}>▶</button>
+            <div className="row" style={{ gap: 4, marginBottom: 2, justifyContent: 'flex-end' }}>
+              <button style={{ padding: '1px 6px', fontSize: 11 }} disabled={i === 0}
+                      title={t('dash.moveLeft')} onClick={() => move(w.id, -1)}>◀</button>
+              <button style={{ padding: '1px 6px', fontSize: 11 }} disabled={i === dash.windows.length - 1}
+                      title={t('dash.moveRight')} onClick={() => move(w.id, 1)}>▶</button>
             </div>
             <LogWindow
               key={`${w.id}-${w.category}-${w.range}-${(w.levels || []).join('')}-${w.serverId}`}

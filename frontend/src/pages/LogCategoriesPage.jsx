@@ -40,7 +40,7 @@ export default function LogCategoriesPage() {
       if (mins) p.set('from', new Date(Date.now() - mins * 60_000).toISOString());
       const d = await api(`/logs/categories?${p.toString()}`);
       setCounts(d.counts);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message); }
   }, [serverId, range]);
 
   useEffect(() => { load(); }, [load]);

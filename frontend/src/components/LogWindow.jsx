@@ -76,7 +76,7 @@ export default function LogWindow({
       setData(fetchData
         ? await fetchData({ mode })
         : await api(mode === 'grouped' ? `/logs/groups?${qs}&limit=40` : `/logs/search?${qs}&limit=120`));
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message); }
     finally { setBusy(false); }
   }, [qs, mode, fetchData]);
 

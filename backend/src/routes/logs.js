@@ -5,7 +5,7 @@ import { LogRecord, LogCursor, LOG_CAP_MB } from '../models/LogRecord.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { runTask } from '../services/agentBus.js';
 import { collectorState } from '../services/logCollector.js';
-import { searchLogs, groupLogs, logFacets, templateOf, categoryCounts, CATEGORIES } from '../services/logQuery.js';
+import { searchLogs, groupLogs, logFacets, templateOf, categoryCounts, CATEGORIES, tooWide } from '../services/logQuery.js';
 import { logEvent } from '../services/audit.js';
 
 // iter10 m1 — transport only. This exposes enough to prove the pipe works and
@@ -97,12 +97,22 @@ const readQuery = (req) => ({
 
 logsRouter.get('/search', requirePerm('streams.view'), async (req, res) => {
   try { res.json(await searchLogs(readQuery(req))); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  catch (e) {
+    // A pipeline that ran out of time is a filter that is too wide, not a
+    // server fault — and the operator can fix it in one click.
+    if (tooWide(e)) return res.status(400).json({ error: 'tooWide' });
+    res.status(400).json({ error: e.message });
+  }
 });
 
 logsRouter.get('/groups', requirePerm('streams.view'), async (req, res) => {
   try { res.json(await groupLogs(readQuery(req))); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  catch (e) {
+    // A pipeline that ran out of time is a filter that is too wide, not a
+    // server fault — and the operator can fix it in one click.
+    if (tooWide(e)) return res.status(400).json({ error: 'tooWide' });
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // iter10 m4 — the functional windows: how much each part of Nimble is saying,
@@ -110,12 +120,20 @@ logsRouter.get('/groups', requirePerm('streams.view'), async (req, res) => {
 logsRouter.get('/categories', requirePerm('streams.view'), async (req, res) => {
   try {
     res.json({ definitions: CATEGORIES, counts: await categoryCounts(readQuery(req)) });
-  } catch (e) { res.status(400).json({ error: e.message }); }
+  } catch (e) {
+    if (tooWide(e)) return res.status(400).json({ error: 'tooWide' });
+    res.status(400).json({ error: e.message });
+  }
 });
 
 logsRouter.get('/facets', requirePerm('streams.view'), async (req, res) => {
   try { res.json(await logFacets(readQuery(req))); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  catch (e) {
+    // A pipeline that ran out of time is a filter that is too wide, not a
+    // server fault — and the operator can fix it in one click.
+    if (tooWide(e)) return res.status(400).json({ error: 'tooWide' });
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // The records behind one group. The template is not stored, so the rows are

@@ -259,5 +259,57 @@ check('no server selected means no constraint at all', () => {
   assert.ok(!('serverId' in buildFilter({})));
 });
 
+// A capped collection returns insertion order, so `$limit` with no `$sort` in
+// front of it takes the OLDEST matching records. The grouped view was
+// summarising the start of the window rather than the present, and nothing
+// said so — it just looked like a quiet server.
+console.log('\nSCAN BOUNDS:');
+
+const source = await (async () => {
+  const { readFileSync } = await import('node:fs');
+  return readFileSync(new URL('../src/services/logQuery.js', import.meta.url), 'utf8');
+})();
+
+check('every capped pipeline sorts before it limits', () => {
+  // $limit must never appear without a $sort ahead of it in the same stage
+  // list, or the cap silently selects by insertion order.
+  const limits = [...source.matchAll(/\$limit: SCAN_CAP/g)].length;
+  assert.equal(limits, 1, 'the cap must exist in exactly one place — NEWEST_FIRST');
+  const sortAt = source.indexOf('$sort: { ts: -1 }');
+  const limitAt = source.indexOf('$limit: SCAN_CAP');
+  assert.ok(sortAt > 0 && sortAt < limitAt, 'the sort must come before the limit, or the cap picks the oldest');
+  // And every pipeline reaches the cap through that constant.
+  assert.equal([...source.matchAll(/\.\.\.NEWEST_FIRST/g)].length, 3,
+    'group, facets and category counts must all be bounded the same way');
+});
+
+check('all three aggregation entry points go through the bounded runner', () => {
+  const direct = [...source.matchAll(/LogRecord\.aggregate\(/g)].length;
+  assert.equal(direct, 1, 'only run() may call aggregate, so nothing escapes the time bound');
+  assert.ok(source.includes('maxTimeMS'), 'a pipeline must not outlive the proxy in front of it');
+});
+
+check('facets are one pass, not three', () => {
+  // Three pipelines over the same match meant scanning the same records three
+  // times for one screen — a third of the 504s on their own.
+  assert.ok(source.includes('$facet'), 'the three groupings share one scan');
+  assert.ok(source.includes('byLevel:') && source.includes('bySub:') && source.includes('byServer:'));
+});
+
+check('a timeout is reported as a filter problem, not a server fault', async () => {
+  const { tooWide } = await import('../src/services/logQuery.js');
+  assert.equal(tooWide(new Error('operation exceeded time limit')), true);
+  assert.equal(tooWide(new Error('PlanExecutor error: MaxTimeMSExpired')), true);
+  assert.equal(tooWide(new Error('connection refused')), false);
+  assert.equal(tooWide(null), false);
+});
+
+check('raw rows order by offset within a server and by time across the fleet', () => {
+  // Offsets are byte positions in one server's file; they are not comparable
+  // between servers, and Nimble's one-second stamps cannot order 98 lines/s
+  // within one.
+  assert.ok(source.includes("opts.serverId ? { gen: -1, offset: -1 } : { ts: -1 }"));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall log-query checks passed');
 process.exit(fail ? 1 : 0);

@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.18.1 — the 504, and a quieter bug behind it
+- **`$limit` with no `$sort` in front of it.** A capped collection returns
+  insertion order, so the cap was selecting the **oldest** matching records:
+  the grouped view had been summarising the start of the window rather than the
+  present, and nothing said so — it just looked like a quiet server. Every
+  capped pipeline sorts newest-first now, which is both the correct end and the
+  index-backed one
+- **Five aggregations per page load, each up to 200,000 records.** At the
+  measured 98 records/second per server, an hour of one server is ~350,000
+  records, so a fleet view hit the cap on every one of them. The three facet
+  pipelines are one `$facet` pass now, the cap is 60,000, and every pipeline
+  carries `maxTimeMS`
+- A query that runs out of time is reported as **too wide a filter**, with the
+  numbers and the three ways to narrow it, instead of a gateway timeout that
+  says nothing. Both are configurable: `NNM_LOG_SCAN_CAP`,
+  `NNM_LOG_MAX_TIME_MS`
+- Raw rows order by byte offset within a server and by time across the fleet.
+  Offsets are positions in one server's file and are not comparable between
+  them; timestamps cannot order 98 lines a second within one
+- **Dashboard list:** the name opens the dashboard, and Open/Delete are no
+  longer touching — one of them deletes a dashboard
+- **Dashboard toolbar** was a pile of controls in one corner. Three jobs, three
+  places now: leave on the left beside the title, add and layout labelled in
+  the middle, save on the right
+
+
 ### v0.18.0 — server filter, server labels, window types, link port
 - **Picking a server emptied every log view.** Mongoose casts a string to
   ObjectId inside `find()`, but **not** inside an aggregation pipeline — and the

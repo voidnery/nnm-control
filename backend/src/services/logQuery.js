@@ -145,7 +145,34 @@ export function buildFilter({ serverId, file, levels, subs, category, from, to, 
 // collection, the aggregation is capped and the answer says whether it was —
 // a truncated count that admits it is worth more than an exact one that
 // arrives after the incident.
-const SCAN_CAP = 200_000;
+//
+// The cap used to be 200,000 with no sort in front of it, and both halves of
+// that were wrong. A capped collection returns natural order, which is
+// INSERTION order, so `$limit` took the OLDEST matching records: the grouped
+// view was summarising the start of the window rather than the present. And at
+// the measured 98 records/second per server, an hour of one server is ~350,000
+// records, so every query on a fleet view hit the cap and scanned it in full —
+// five such pipelines per page load is how a request outlives the proxy and
+// comes back as 504.
+const SCAN_CAP = Number(process.env.NNM_LOG_SCAN_CAP || 60_000);
+// Nothing here is worth more than a few seconds. Failing with a message that
+// says "narrow the range" beats a gateway timeout that says nothing.
+const MAX_TIME_MS = Number(process.env.NNM_LOG_MAX_TIME_MS || 8_000);
+
+// Newest first, then cut. The `{ ts: -1 }` index makes this the cheap way to
+// bound the work AND the only way to bound it at the end an operator cares
+// about.
+const NEWEST_FIRST = [{ $sort: { ts: -1 } }, { $limit: SCAN_CAP }];
+
+function run(pipeline) {
+  return LogRecord.aggregate(pipeline).option({ allowDiskUse: true, maxTimeMS: MAX_TIME_MS });
+}
+
+// A pipeline that ran out of time is not an error to hide behind a 500 — it is
+// a filter that is too wide, and the operator can fix it in one click.
+export function tooWide(e) {
+  return /maxTimeMS|operation exceeded time limit|MaxTimeMSExpired/i.test(String(e?.message || e));
+}
 
 /** Rows, newest first, ordered by offset within a generation. */
 export async function searchLogs(opts = {}) {
@@ -153,7 +180,12 @@ export async function searchLogs(opts = {}) {
   const filter = buildFilter(opts);
   // `before` is an opaque cursor: the offset of the oldest row already shown.
   if (opts.before) filter.offset = { ...(filter.offset || {}), $lt: Number(opts.before) };
-  const rows = await LogRecord.find(filter).sort({ gen: -1, offset: -1 }).limit(limit).lean();
+  // Within one server, byte offset is the true order — Nimble's timestamps
+  // have one-second resolution at ~98 lines/s. Across servers, offsets are not
+  // comparable and only time is, and it is the indexed path besides.
+  const sort = opts.serverId ? { gen: -1, offset: -1 } : { ts: -1 };
+  const rows = await LogRecord.find(filter).sort(sort).limit(limit)
+    .maxTimeMS(MAX_TIME_MS).lean();
   const names = await serverNames();
   return {
     rows: rows.map(r => ({
@@ -178,9 +210,9 @@ export async function searchLogs(opts = {}) {
 export async function groupLogs(opts = {}) {
   const filter = buildFilter(opts);
   const limit = Math.min(200, Math.max(1, Number(opts.limit) || 50));
-  const agg = await LogRecord.aggregate([
+  const agg = await run([
     { $match: filter },
-    { $limit: SCAN_CAP },
+    ...NEWEST_FIRST,
     { $project: { sub: 1, level: 1, msg: 1, ts: 1, offset: 1, serverId: 1, tag: 1 } },
     { $group: {
       _id: { sub: '$sub', level: '$level', msg: '$msg' },
@@ -191,7 +223,7 @@ export async function groupLogs(opts = {}) {
       sample: { $first: '$msg' },
       lastOffset: { $max: '$offset' },
     } },
-  ]).option({ allowDiskUse: true });
+  ]);
 
   // Templating happens here rather than in the pipeline: the regexes that
   // decide what is noise are the measured part of this design, and Mongo's
@@ -249,9 +281,9 @@ export async function groupLogs(opts = {}) {
  */
 export async function categoryCounts(opts = {}) {
   const base = buildFilter({ ...opts, category: undefined, subs: undefined });
-  const rows = await LogRecord.aggregate([
+  const rows = await run([
     { $match: base },
-    { $limit: SCAN_CAP },
+    ...NEWEST_FIRST,
     { $group: { _id: { sub: '$sub', level: '$level' }, n: { $sum: 1 }, last: { $max: '$ts' } } },
   ]);
   const out = new Map(CATEGORIES.map(c => [c.key, { key: c.key, total: 0, errors: 0, subs: new Set(), last: null }]));
@@ -267,11 +299,19 @@ export async function categoryCounts(opts = {}) {
 
 export async function logFacets(opts = {}) {
   const filter = buildFilter(opts);
-  const [byLevel, bySub, byServer] = await Promise.all([
-    LogRecord.aggregate([{ $match: filter }, { $limit: SCAN_CAP }, { $group: { _id: '$level', n: { $sum: 1 } } }]),
-    LogRecord.aggregate([{ $match: filter }, { $limit: SCAN_CAP }, { $group: { _id: '$sub', n: { $sum: 1 } } }]),
-    LogRecord.aggregate([{ $match: filter }, { $limit: SCAN_CAP }, { $group: { _id: '$serverId', n: { $sum: 1 } } }]),
+  // One pass, three groupings. Three separate pipelines meant scanning the
+  // same records three times for one screen.
+  const [out] = await run([
+    { $match: filter },
+    ...NEWEST_FIRST,
+    { $project: { level: 1, sub: 1, serverId: 1 } },
+    { $facet: {
+      byLevel: [{ $group: { _id: '$level', n: { $sum: 1 } } }],
+      bySub: [{ $group: { _id: '$sub', n: { $sum: 1 } } }],
+      byServer: [{ $group: { _id: '$serverId', n: { $sum: 1 } } }],
+    } },
   ]);
+  const { byLevel = [], bySub = [], byServer = [] } = out || {};
   const asMap = (rows) => rows
     .filter(r => r._id !== null && r._id !== undefined)
     .sort((a, b) => b.n - a.n)

@@ -82,7 +82,7 @@ export default function LogsPage() {
       setFacets(f);
       if (mode === 'grouped') { setGroups(data); setRows(null); }
       else { setRows(data); setGroups(null); }
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message); }
     finally { setBusy(false); }
   }, [params, mode]);
 
@@ -131,7 +131,7 @@ export default function LogsPage() {
                     setStatus(await api('/logs/status'));
                     push({ type: 'ok', message: t('logs.enabledNow') });
                     load();
-                  } catch (e) { setError(e.message); }
+                  } catch (e) { setError(e.message === 'tooWide' ? t('logs.tooWide') : e.message); }
                 }}>{t('logs.enableNow')}</button>
               </div>
             )}
