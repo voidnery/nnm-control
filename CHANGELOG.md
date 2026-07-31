@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.21.4 — release pipeline hardened against a Docker Hub blip
+- **The v0.21.3 tag failed in CI, and not because of anything in the code.**
+  `docker/setup-buildx-action` starts a BuildKit container which it pulls from
+  Docker Hub, and the runner could not reach `registry-1.docker.io`. No build
+  step ran at all
+- The dependency cannot simply be dropped: the plain `docker` driver cannot
+  export the GitHub Actions layer cache this build relies on, and losing that
+  turns every release into a full `npm install`
+- So the exposure is reduced rather than removed. The buildx step is attempted
+  twice, which costs nothing and covers a blip. An actual Hub outage still
+  fails the release, and should
+- Optional Docker Hub credentials (`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`)
+  are used before the pull when present, because anonymous pulls are
+  rate-limited per source IP and GitHub's runners share theirs — the other
+  common way "Booting builder" fails with nothing wrong
+- A 30-minute job timeout, so a hung network step costs minutes rather than the
+  six hours a job is allowed by default
+
+
 ### v0.21.3 — the run preview names its sources
 - The variant picker showed the raw patch, so the last thing read before a
   function touches live streams was a wall of 24-character ids. The panel
