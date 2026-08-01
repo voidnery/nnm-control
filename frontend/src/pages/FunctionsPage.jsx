@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
@@ -233,6 +233,32 @@ export function withSourceFollow(current, field, id) {
   return next;
 }
 
+/**
+ * Which override values no longer correspond to anything in the step.
+ *
+ * A variant names only the fields it differs in. Change the step so it no
+ * longer sends a field, and the variant's override for it becomes a value
+ * nobody can see and nothing will apply; change the step's own value and the
+ * variant silently keeps the old one — which is the dangerous half, because
+ * that old value is what goes to a live stream.
+ *
+ * Neither is auto-corrected: a variant exists precisely to differ, so
+ * overwriting it would destroy the thing being configured. The operator is
+ * told instead.
+ */
+export function variantDrift(steps, variant) {
+  const out = [];
+  for (const [idx, over] of Object.entries(variant?.overrides || {})) {
+    const step = steps[Number(idx)];
+    if (!step) { out.push({ index: Number(idx), kind: 'noStep' }); continue; }
+    const base = step.patch || {};
+    for (const key of Object.keys(over || {})) {
+      if (!(key in base)) out.push({ index: Number(idx), key, kind: 'orphanField' });
+    }
+  }
+  return out;
+}
+
 // The values a variant overrides for one step, as controls rather than JSON.
 //
 // A variant only names the fields it differs in, so every control starts from
@@ -284,6 +310,13 @@ function VariantStepFields({ step, override, onChange }) {
             <label style={{ fontSize: 12 }}>
               {key}
               {overridden && <span className="badge live" style={{ marginLeft: 6 }}>{t('fn.variantChanged')}</span>}
+              {/* What the step itself sends, beside what the variant sends
+                  instead — the comparison an operator is actually making. */}
+              {overridden && base[key] !== undefined && (
+                <span className="hint mono" style={{ marginLeft: 8, fontSize: 11 }}>
+                  {t('fn.variantBaseIs')} {isSource ? (base[key]?.id || '—') : String(base[key])}
+                </span>
+              )}
             </label>
             {isSource ? (
               <Select searchable value={valueOf(key)?.id || ''}
@@ -619,6 +652,10 @@ function Builder({ initial, servers, onClose, onSaved }) {
 
   const addPreset = (preset) => setSteps(st => [...st, { serverId: '', targetId: '', waitSec: 0, ...JSON.parse(JSON.stringify(preset.step)) }]);
 
+  const drift = useMemo(() => Object.fromEntries(
+    variants.map(v => [v.id, variantDrift(steps, v)]),
+  ), [steps, variants]);
+
   const addVariant = () => setVariants(v => {
     // The first variant is what the function already does. Starting it empty
     // meant an operator who had configured everything for input A had to type
@@ -686,10 +723,21 @@ function Builder({ initial, servers, onClose, onSaved }) {
             </div>
             <button onClick={addVariant}>{t('fn.addVariant')}</button>
           </div>
+          {/* Changing a step does not change the variants that override it —
+              and a variant holding a stale value is what will be sent to a
+              live stream. Saying so is the only safe option: correcting it
+              automatically would overwrite the difference the variant exists
+              to express. */}
+          {variants.some(v => drift[v.id]?.length) && (
+            <div className="error-box" style={{ marginTop: 8 }}>{t('fn.driftWarn')}</div>
+          )}
           {variants.map(v => (
             <div key={v.id} className="panel" style={{ marginTop: 8 }}>
               <div className="row" style={{ gap: 6, alignItems: 'center' }}>
                 <input style={{ flex: 1 }} value={v.name} onChange={e => patchVariant(v.id, { name: e.target.value })} />
+                {drift[v.id]?.length > 0 && (
+                  <span className="badge err" title={t('fn.driftHint')}>{t('fn.driftBadge')}</span>
+                )}
                 <button onClick={() => setOpenVariant(openVariant === v.id ? null : v.id)}>
                   {openVariant === v.id ? t('fn.hideValues') : t('fn.editValues', { n: Object.keys(v.overrides || {}).length })}
                 </button>

@@ -67,9 +67,28 @@ const actionKind = (step) => step.objectKind || 'outgoing';
 async function getObject(cfg, kind, sid, targetId) {
   // List-then-find: single-object GET shapes vary; list shapes are confirmed.
   const ops = KIND_OPS[kind];
+
+  // A step that never had an object picked fails identically to one whose
+  // object was deleted, and the two need opposite fixes. Say which.
+  if (!targetId) {
+    throw new Error(`this step has no ${kind} object selected — open it and use “Browse objects…”`);
+  }
+
   const data = await wmspanel[ops.get](cfg, sid);
-  const obj = ops.pickList(data).find(o => String(o.id) === String(targetId));
-  if (!obj) throw new Error(`${kind} object ${targetId} not found on WMSPanel server ${sid}`);
+  const list = ops.pickList(data);
+  const obj = list.find(o => String(o.id) === String(targetId));
+  if (!obj) {
+    // "Not found" reads the same whether the object was deleted or the list
+    // came back empty — and those are different faults with different fixes.
+    // The count and a sample of what WAS there separate them at a glance.
+    const sample = list.slice(0, 3).map(o => `${o.id}${o.name ? ` (${o.name})` : ''}`).join(', ');
+    throw new Error(
+      list.length === 0
+        ? `WMSPanel listed no ${kind} objects at all on server ${sid} — check the server mapping and that the API key still has access`
+        : `${kind} object ${targetId} is not among the ${list.length} on server ${sid}; ` +
+          `it was probably deleted or recreated. Present: ${sample}${list.length > 3 ? ', …' : ''}`,
+    );
+  }
   return obj;
 }
 

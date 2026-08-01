@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.22.5 — preflight says which fault it hit; variants show when they drift
+- **"outgoing object not found" covered three different faults.** The object
+  was deleted, or the list came back empty (a server mapping or an API key that
+  lost access), or the step never had an object picked at all — one message,
+  three opposite fixes. Now: an empty list says so and points at the mapping and
+  the key; a stale id gives the count and names some of what WAS there; and a
+  step with nothing selected says that without calling WMSPanel to find out
+- **Variants no longer drift silently.** A variant overrides only the fields it
+  names, so changing a step changes everything else — but a field the variant
+  does name keeps its old value, and that old value is what reaches a live
+  stream. The editor warns when a variant overrides a field the step no longer
+  sends or a step that is gone, and shows the step's own value beside each
+  override so the comparison is made where the editing happens
+- **Nothing is corrected automatically.** Overwriting an override would destroy
+  the difference the variant exists to express; a variant that merely differs
+  in value is not flagged either, or the warning would be meaningless within a
+  day
+- 7 new checks
+
+
 ## iter15 — dashboard of charts
 ### v0.22.4 (m5) — the dashboard is configurable, and the click gate grew teeth
 - Which charts to show, the range, the column count, the refresh interval

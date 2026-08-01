@@ -518,5 +518,68 @@ check('but a change of server or kind does clear it', () => {
   assert.ok(catSrc.includes('setKind(v); setObjects(null)'));
 });
 
+console.log('\nPREFLIGHT SAYS WHICH FAULT IT HIT:');
+
+const runnerSrc = readFileSync(new URL('../src/services/functionRunner.js', import.meta.url), 'utf8');
+
+check('an empty list and a stale id are different messages', () => {
+  // Both read as "not found", and they need opposite fixes: one is a mapping
+  // or credentials problem, the other a deleted object.
+  assert.ok(runnerSrc.includes('listed no ${kind} objects at all'));
+  assert.ok(runnerSrc.includes('is not among the ${list.length}'));
+  assert.ok(runnerSrc.includes('list.slice(0, 3)'), 'and it shows what WAS there');
+});
+
+check('a step with nothing selected says so instead of failing as "not found"', () => {
+  assert.ok(runnerSrc.includes('has no ${kind} object selected'));
+  const guard = runnerSrc.indexOf('if (!targetId)');
+  const call = runnerSrc.indexOf('await wmspanel[ops.get]');
+  assert.ok(guard > 0 && guard < call, 'and it does not call WMSPanel to find that out');
+});
+
+console.log('\nVARIANT DRIFT:');
+
+function variantDrift(steps, variant) {
+  const out = [];
+  for (const [idx, over] of Object.entries(variant?.overrides || {})) {
+    const step = steps[Number(idx)];
+    if (!step) { out.push({ index: Number(idx), kind: 'noStep' }); continue; }
+    const base = step.patch || {};
+    for (const key of Object.keys(over || {})) {
+      if (!(key in base)) out.push({ index: Number(idx), key, kind: 'orphanField' });
+    }
+  }
+  return out;
+}
+
+check('an override for a field the step no longer sends is flagged', () => {
+  const steps = [{ type: 'patch', patch: { video_source: { id: 'A' } } }];
+  const v = { overrides: { 0: { video_source: { id: 'B' }, audio_source: { id: 'B' } } } };
+  assert.deepEqual(variantDrift(steps, v), [{ index: 0, key: 'audio_source', kind: 'orphanField' }]);
+});
+
+check('an override for a step that was removed is flagged', () => {
+  assert.deepEqual(variantDrift([], { overrides: { 2: { x: 1 } } }), [{ index: 2, kind: 'noStep' }]);
+});
+
+check('a variant that merely differs in value is NOT flagged', () => {
+  // Differing is the entire purpose; flagging it would make the warning
+  // meaningless within a day.
+  const steps = [{ type: 'patch', patch: { video_source: { id: 'A' } } }];
+  assert.deepEqual(variantDrift(steps, { overrides: { 0: { video_source: { id: 'B' } } } }), []);
+});
+
+check('nothing is corrected automatically', () => {
+  // Overwriting an override would destroy the difference the variant exists
+  // to express.
+  assert.ok(uiSrc.includes('export function variantDrift'));
+  assert.ok(!/setOverrideObject\([^)]*base\[/.test(uiSrc), 'the step value must not be written into the variant');
+  assert.ok(uiSrc.includes("t('fn.driftWarn')"), 'the operator is told instead');
+});
+
+check('the step\'s own value is shown beside the override', () => {
+  assert.ok(uiSrc.includes("t('fn.variantBaseIs')"), 'the comparison is made where it is edited');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);
