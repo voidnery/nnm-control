@@ -214,5 +214,32 @@ check('the dashboard block is declared on the user schema', () => {
   assert.ok(userSrc.includes('dashboard: { type: mongoose.Schema.Types.Mixed'));
 });
 
+console.log('\nA BROKEN UPDATER CANNOT FIX ITSELF:');
+
+const fleetSrc3 = readFileSync(new URL('../src/routes/agentFleet.js', import.meta.url), 'utf8');
+const centreSrc2 = readFileSync(new URL('../../frontend/src/components/AgentCentreModal.jsx', import.meta.url), 'utf8');
+
+check('the panel recognises the deadlock', () => {
+  // Agents up to v8 shipped a download check that could never pass. The fix is
+  // in the new agent — which that agent refuses to accept. Retrying cannot
+  // work: the code doing the checking IS the code being replaced.
+  assert.ok(fleetSrc3.includes('updateStuck:'));
+  assert.ok(fleetSrc3.includes('/does not look like the agent/i'));
+});
+
+check('the button that cannot succeed is not offered', () => {
+  assert.ok(centreSrc2.includes('!s.updateStuck && ('), 'no retry for a retry that cannot work');
+  assert.ok(centreSrc2.includes("t('ac.updateStuck')"), 'the way out is named instead');
+});
+
+check('reinstalling really is the way out', () => {
+  // Worth asserting rather than assuming: it must replace the binary and keep
+  // the token, or the advice costs the operator their enrollment.
+  const inst = readFileSync(new URL('../src/services/agentInstaller.js', import.meta.url), 'utf8');
+  assert.ok(inst.includes('mv "$BIN.new" "$BIN"'), 'the binary is replaced');
+  assert.ok(inst.includes('keeping the current token'), 'and the token survives');
+  assert.ok(inst.includes('STATE_DIR=/var/lib/nnm-agent'), 'landing where it can update itself next time');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-lifecycle checks passed');
 process.exit(fail ? 1 : 0);

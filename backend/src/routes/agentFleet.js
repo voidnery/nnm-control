@@ -59,6 +59,16 @@ agentFleetRouter.get('/overview', requirePerm('servers.view'), async (req, res) 
       // A self-update that failed left a task saying exactly why — and nothing
       // showed it, so an agent that refused to update looked identical to one
       // nobody had asked. The last attempt is reported either way.
+      // A self-update that fails inside the agent's own download check cannot
+      // be fixed by retrying: the agent doing the checking IS the code that
+      // needs replacing. Agents up to v8 shipped a check that could never
+      // pass, so the panel names the way out instead of offering the button
+      // that will fail again.
+      updateStuck: (() => {
+        const t = tasks.find(x => x.route === 'POST /self-update' && x.status === 'failed');
+        if (!t) return false;
+        return /does not look like the agent/i.test(t.error || '');
+      })(),
       lastUpdate: (() => {
         const t = tasks.find(x => x.route === 'POST /self-update' && ['done', 'failed', 'expired'].includes(x.status));
         if (!t) return null;

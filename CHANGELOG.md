@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.22.10 — a broken updater cannot fix itself
+- The v0.22.9 fix is in the new agent, and the agent that needs it is the one
+  that refuses to accept it: **the code doing the checking is the code being
+  replaced.** Every agent up to v8 will reject every download it is offered,
+  for ever, and retrying cannot change that
+- The panel recognises that specific failure now and says what does work —
+  reinstall from the Agents page: one command on the server, the token is kept,
+  and the agent lands where it can update itself by button afterwards. The
+  retry button is not offered for an agent in this state, because offering it
+  would be offering something that cannot succeed
+- The escape route is asserted rather than assumed: the installer replaces the
+  binary, keeps an existing token, and installs into the state directory
+- **The lesson, recorded:** a component that validates its own replacement can
+  lock itself out permanently with one over-strict check. The new check is as
+  permissive as safety allows — a shebang and a version marker — and is
+  verified against the real shipped file, so tightening it accidentally fails a
+  test instead of stranding a fleet
+
+
 ### v0.22.9 — self-update could never have worked, and preferences were never stored
 - **The agent's own sanity check on the download never passed.** It looked for
   the string `nnm-agent` in the leading 200 bytes, where the file has a shebang

@@ -181,7 +181,13 @@ export default function AgentCentreModal({ onClose, onChanged }) {
                     )}
                     {/* An update that was asked for and refused looked exactly
                         like one nobody had asked for. */}
-                    {s.lastUpdate?.status === 'failed' && (
+                    {/* Retrying is pointless here: the code doing the checking
+                        is the code that needs replacing. Say what does work. */}
+                    {s.updateStuck ? (
+                      <div className="hint" style={{ fontSize: 11, color: 'var(--warn)' }}>
+                        {t('ac.updateStuck')}
+                      </div>
+                    ) : s.lastUpdate?.status === 'failed' && (
                       <div className="hint" style={{ fontSize: 11, color: 'var(--warn)' }}
                            title={s.lastUpdate.error}>
                         {t('ac.updateFailed')}: {String(s.lastUpdate.error).slice(0, 90)}
@@ -196,7 +202,7 @@ export default function AgentCentreModal({ onClose, onChanged }) {
                     {s.enabled && (
                       <div className="row" style={{ gap: 8, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                         <button disabled={busy === s.id} onClick={() => probe(s)}>{t('ac.probe')}</button>
-                        {s.versionState === 'outdated' && s.selfUpdate !== false && (
+                        {s.versionState === 'outdated' && s.selfUpdate !== false && !s.updateStuck && (
                           <button disabled={busy === s.id || s.pendingUpdate} onClick={() => updateOne(s)}>
                             {s.pendingUpdate ? t('ac.pending') : t('ac.update')}
                           </button>
