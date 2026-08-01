@@ -317,5 +317,36 @@ check('the metrics the charts need are already stored', () => {
   }
 });
 
+console.log('\nWHY A SERIES IS EMPTY (v0.25.2):');
+
+const statsRoute = readFileSync(new URL('../src/routes/stats.js', import.meta.url), 'utf8');
+const tabsSrc2 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+
+check('the panel names the reason instead of listing possibilities', () => {
+  // Collection off, server silent, stream never seen, and outside the window
+  // need four different actions. The panel knows which one applies.
+  assert.ok(statsRoute.includes('let collection;'));
+  assert.ok(statsRoute.includes('serverLastSampleAt'));
+  assert.ok(statsRoute.includes('subjectLastSampleAt'));
+  for (const k of ['wo.histOff', 'wo.histNoServer', 'wo.histNeverSeen', 'wo.histOutside']) {
+    assert.ok(tabsSrc2.includes(k), k);
+  }
+});
+
+check('the extra queries only run when there is nothing to show', () => {
+  // They are two more round trips; on a populated series they would be waste
+  // on every open.
+  const from = statsRoute.indexOf('let collection;');
+  assert.ok(statsRoute.slice(from, from + 120).includes('if (points.length === 0)'));
+});
+
+check('a WMSPanel-sourced value is marked as such', () => {
+  // The two sources format differently, and that is what revealed the join
+  // silently falling back to WMSPanel's own reading. Made deliberate: when the
+  // two disagree, which one is on screen matters.
+  assert.ok(tabsSrc2.includes("t('wo.fromWms')"));
+  assert.ok(tabsSrc2.includes('<sup className="hint">wp</sup>'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

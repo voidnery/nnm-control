@@ -215,7 +215,28 @@ statsRouter.get('/:serverId/series', requirePerm('streams.view'), async (req, re
   const minutes = Math.min(4320, Math.max(1, Number(req.query.minutes) || 30));  // cap at the 3-day retention
   const from = new Date(Date.now() - minutes * 60 * 1000);
   const { bucketMs, points } = await seriesFor({ serverId, subject, metrics, from, minutes });
-  res.json({ subject, metrics, bucketMs, points });
+
+  // An empty series has several causes and they need different actions:
+  // collection switched off, a stream added minutes ago, a stream that has
+  // never reported. Listing them all and letting the operator guess is the
+  // thing worth avoiding — the panel knows which one it is.
+  let collection;
+  if (points.length === 0) {
+    const settings = await Settings.load();
+    const [newest, everForSubject] = await Promise.all([
+      StatSample.findOne({ serverId }, { ts: 1 }).sort({ ts: -1 }).lean(),
+      StatSample.findOne({ serverId, subject }, { ts: 1 }).sort({ ts: -1 }).lean(),
+    ]);
+    collection = {
+      enabled: Boolean(settings.stats?.enabled),
+      // The server is reporting something, so the pipeline works and the gap
+      // is this subject's alone.
+      serverLastSampleAt: newest?.ts || null,
+      subjectLastSampleAt: everForSubject?.ts || null,
+    };
+  }
+
+  res.json({ subject, metrics, bucketMs, points, collection });
 });
 
 // Why a server has little or no data: per-endpoint outcome of the last run.

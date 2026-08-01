@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Plot from '../components/Plot.jsx';
+import { Link } from 'react-router-dom';
 import Select from '../components/Select.jsx';
 import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
@@ -124,11 +125,34 @@ function StreamHistory({ serverId, objectId, name, kind, onClose }) {
       </div>
 
       {error && <div className="error-box">{error}</div>}
-      {!error && points.length === 0 && (
-        // Said plainly: a stream added minutes ago has no history and that is
-        // not a fault.
-        <div className="hint" style={{ marginTop: 10 }}>{t('wo.noHistory')}</div>
-      )}
+      {!error && points.length === 0 && (() => {
+        // Four different reasons, and they need four different actions. The
+        // panel knows which one applies, so it says that rather than listing
+        // possibilities for the operator to work through.
+        const c = data?.collection;
+        if (!c) return <div className="hint" style={{ marginTop: 10 }}>{t('wo.noHistory')}</div>;
+        if (!c.enabled) {
+          return (
+            <div className="hint" style={{ marginTop: 10, color: 'var(--warn)' }}>
+              {t('wo.histOff')} <Link to="/settings">{t('nav.settings')}</Link>
+            </div>
+          );
+        }
+        if (!c.serverLastSampleAt) {
+          // Collection is on and this server has produced nothing at all —
+          // that is the server or its native API, not this stream.
+          return <div className="hint" style={{ marginTop: 10, color: 'var(--warn)' }}>{t('wo.histNoServer')}</div>;
+        }
+        if (!c.subjectLastSampleAt) {
+          return <div className="hint" style={{ marginTop: 10 }}>{t('wo.histNeverSeen')}</div>;
+        }
+        // It has reported, just not inside the window asked for.
+        return (
+          <div className="hint" style={{ marginTop: 10 }}>
+            {t('wo.histOutside', { when: new Date(c.subjectLastSampleAt).toLocaleString() })}
+          </div>
+        );
+      })()}
 
       {points.length > 0 && (
         <>
@@ -822,7 +846,11 @@ export function WmsStreamsTab({ serverId, server }) {
 // SETTINGS view, not the full "Живые потоки" aggregate (that one covers all
 // protocols + codecs/uptime and needs a dedicated API — being pinned via the
 // probe dump).
-const fmtMbps = (b) => (b ? (b / 1e6).toFixed(2) + ' Mbps' : '—');
+// WMSPanel's own reading of the stream, which it refreshes on its ~30s sync.
+// Distinguishable from the live native reading on purpose: when the two
+// disagree the difference matters, and telling them apart by their format is
+// what revealed that the join was silently falling back here.
+const fmtMbps = (b) => (b ? `${(b / 1e6).toFixed(2)} Mbps` : '—');
 const codecsOf = (o) => {
   const types = (o.pmts || []).flatMap(p => (p.pids || []).map(x => x.type)).filter(Boolean);
   return [...new Set(types)].join(', ');
@@ -912,7 +940,7 @@ export function MpegtsInTab({ serverId }) {
                           {fmtBps(live.live[o.id].bps)}
                         </span>
                       : fmtBps(live.live[o.id].bps))
-                    : fmtMbps(o.bandwidth)}
+                    : <span title={t('wo.fromWms')}>{fmtMbps(o.bandwidth)}<sup className="hint">wp</sup></span>}
                 </td>
                 <td>
                   {(() => {

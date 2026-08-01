@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.25.2 — why the history is empty, and where a number came from
+- **The empty-history message listed possibilities and made the operator work
+  through them.** The panel knows which one applies, so it says it: collection
+  switched off (with a link to the setting), collection on but this server has
+  produced nothing at all (the server, not the stream), this stream never seen
+  in the samples (probably not connected), or samples exist but outside the
+  range asked for (with the timestamp, so the range can be widened). The extra
+  queries run only when there is nothing to show
+- **The live join was silently falling back to WMSPanel's own reading**, and
+  the only way to tell was that the two formatters differ — `0.03 Mbps` from
+  WMSPanel where a native reading would say `30 kb/s`. Values that came from
+  WMSPanel are marked now; when the two disagree, which one is on screen is the
+  whole question
+- 3 new checks
+
+**On the empty history:** metric collection has to be on for any of this to
+record. Settings → Metric collection. It is a separate switch from the host
+metrics one, and neither is on by default.
+
+
 ### v0.25.1 — the History button was never there
 - The state and the dialog shipped; the button did not. A string replacement
   matched nothing and said nothing, so v0.25.0 went out with a feature that had
