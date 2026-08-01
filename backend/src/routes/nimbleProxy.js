@@ -4,7 +4,13 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
 import { wmspanel } from '../services/wmspanelClient.js';
-import { joinLive, liveSummary, localPort } from '../services/streamJoin.js';
+import { joinLive, liveSummary, localPort, entryIdentity } from '../services/streamJoin.js';
+
+// The collector labels a series by the endpoint the entry came from, so that
+// label must be the same here. Inferring it from the presence of a `recv`
+// block would be guessing again — and the endpoint is known, because this is
+// the code that called it.
+const SERIES_OF = { srtReceiverStats: 'srt-receiver', srtSenderStats: 'srt-sender', republishStats: 'republish' };
 
 // Nimble returns its stats under a different key per endpoint, and an array
 // directly on some builds. Same tolerance the collector already uses.
@@ -148,14 +154,19 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   // A socket can appear in both lists; the local port identifies it.
   const seen = new Set();
   const entries = [];
-  for (const r of ok) {
+  nativeRes.forEach((r, i) => {
+    if (r.status !== 'fulfilled') return;
+    const series = SERIES_OF[src.native[i]] || 'srt-receiver';
     for (const e of asList(r.value)) {
       const key = `${e.setting_id ?? ''}|${e.id ?? ''}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      // Carried, not inferred: which endpoint answered decides which series
+      // the collector filed it under.
+      Object.defineProperty(e, '__series', { value: series, enumerable: false });
       entries.push(e);
     }
-  }
+  });
 
   // When the list comes out empty, the question is whether Nimble reported
   // nothing or whether we looked in the wrong place — and those need opposite
@@ -196,7 +207,17 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     portOverlap,
     objects: objects.length,
     entries: entries.length,
-    live: Object.fromEntries(Object.entries(joined.byObjectId).map(([id, e]) => [id, liveSummary(e)])),
+    // The subject travels with the reading. The history dialog then asks for
+    // the series this row's data is actually in, instead of deriving a subject
+    // from an id space the collector never used.
+    live: Object.fromEntries(Object.entries(joined.byObjectId).map(([id, list]) => {
+      const first = Array.isArray(list) ? list[0] : list;
+      const ident = entryIdentity(first);
+      return [id, {
+        ...liveSummary(list),
+        subject: ident ? `${first.__series || 'srt-receiver'}:${ident}` : null,
+      }];
+    })),
     // Returned so a fleet that matches on nothing shows WHY, rather than
     // thirteen tables of dashes. This is the evidence the field names have
     // never been documented for.

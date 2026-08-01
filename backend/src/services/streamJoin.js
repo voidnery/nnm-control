@@ -14,6 +14,36 @@
 
 const clean = (v) => String(v ?? '').trim().toLowerCase();
 
+/**
+ * How one native entry is identified in the stored series.
+ *
+ * There were two independent answers to "which stream is this" — the
+ * collector's, which keys the series, and the join's, which fills the table —
+ * and they used different id spaces. The live columns could therefore be
+ * right while the history was empty, for ever, which is exactly what happened.
+ * One function, used by both.
+ *
+ * Never the socket pair: its source port changes on every reconnect and a
+ * series keyed on it shatters.
+ */
+export function entryIdentity(entry) {
+  if (!entry) return '';
+  const stable = entry.setting_id ?? entry.settingId ?? entry.name ?? entry.stream;
+  if (stable) return String(stable);
+  // What must be excluded is the SOCKET PAIR, not `id` in general: some
+  // endpoints return a plain stable id there. A pair carries an address, and
+  // its source port changes on every reconnect — so it becomes the local port,
+  // which does not.
+  const id = String(entry.id ?? '');
+  if (!id) return '';
+  return isSocketPair(id) ? (localPort(id) || '') : id;
+}
+
+// "a:1->b:2", or a bare "1.2.3.4:5678". Anything else is a name.
+function isSocketPair(id) {
+  return id.includes('->') || /^[\d.]+:\d+$/.test(id) || /^\[?[0-9a-f:]+\]?:\d+$/i.test(id);
+}
+
 // A socket address, normalised. `0.0.0.0:21041` and `:21041` describe the same
 // listener, so a listen-mode object is identified by its port alone.
 // The local side of a socket pair. "a:1->b:2" gives 2; "b:2" alone is a

@@ -5,7 +5,7 @@
 // what is tested is that behaviour: that it finds a key when one exists,
 // prefers the stronger of two, and says so plainly when none does.
 import assert from 'node:assert/strict';
-import { joinLive, liveSummary } from '../src/services/streamJoin.js';
+import { joinLive, liveSummary, entryIdentity } from '../src/services/streamJoin.js';
 
 let pass = 0, fail = 0;
 const check = (n, f) => {
@@ -281,13 +281,11 @@ check('the series is keyed on setting_id, not on the socket pair', () => {
   // that way it produced up to 52 751 separate subjects, each holding seconds
   // of history, all of them crowding a capped collection shared by the fleet.
   // There was no usable history and no way to see that there wasn't.
-  assert.ok(collectorSrc.includes('so.setting_id ?? so.settingId'));
-  // `indexOf('so.id')` also matches inside `so.setting_id`, so the order is
-  // asserted on the fallback chain itself rather than on raw positions.
-  const chain = /const id = ([^;]+);/.exec(collectorSrc.slice(collectorSrc.indexOf("kind === 'srt-sender'")))[1];
-  const order = chain.split('??').map(x => x.trim());
-  assert.equal(order[0], 'so.setting_id', 'it is tried first');
-  assert.ok(order.indexOf('so.id') > order.indexOf('so.setting_id'), 'and the socket pair is only a last resort');
+  // The chain moved into entryIdentity(), shared with the join — asserted on
+  // the behaviour rather than on the line that used to hold it.
+  assert.ok(collectorSrc.includes('entryIdentity(so)'));
+  assert.equal(entryIdentity({ setting_id: 'abc', id: 'a:1->b:2' }), 'abc', 'setting_id first');
+  assert.equal(entryIdentity({ id: 'a:1->b:35001' }), 'port:35001', 'and never the socket pair itself');
 });
 
 check('one subject per stream across the whole capture', () => {
@@ -513,6 +511,53 @@ check('the diagnostics lead with counts, not with a truncated sample', () => {
   const proxy = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
   assert.ok(proxy.includes('nimblePortCount:'));
   assert.ok(proxy.includes('overlappingPorts:'));
+});
+
+console.log('\nONE ANSWER TO "WHICH STREAM IS THIS" (v0.25.8):');
+
+const collector = readFileSync(new URL('../src/services/statsCollector.js', import.meta.url), 'utf8');
+const proxySrc2 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+const tabsSrc3 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+
+check('the collector and the join share one identity function', () => {
+  // There were two independent answers — the collector's, which keys the
+  // series, and the join's, which fills the table — in different id spaces. So
+  // the live columns could be right while the history stayed empty for ever,
+  // which is precisely what happened.
+  assert.ok(collector.includes('entryIdentity(so)'));
+  assert.ok(proxySrc2.includes('entryIdentity(first)'));
+});
+
+check('identity excludes the socket pair, but not `id` in general', () => {
+  // The first version threw away `id` outright, and some endpoints return a
+  // perfectly stable id there — the collector suite caught it. What has to go
+  // is the pair, whose source port changes on every reconnect.
+  assert.equal(entryIdentity({ setting_id: 'abc' }), 'abc');
+  assert.equal(entryIdentity({ id: 's1', msRTT: 18 }), 's1', 'a plain id is an identity');
+  assert.equal(entryIdentity({ id: '31.28.6.149:60317->0.0.0.0:35001' }), 'port:35001');
+  assert.equal(entryIdentity({ id: '72.56.79.88:17802' }), 'port:17802', 'a bare peer address too');
+  assert.equal(entryIdentity({ name: 'feed' }), 'feed');
+  assert.equal(entryIdentity({}), '');
+});
+
+check('the subject travels with the reading', () => {
+  // Deriving it a second time in the browser is the mistake that made history
+  // unreachable; now the endpoint that did the join says where the series is.
+  assert.ok(proxySrc2.includes('subject: ident ?'));
+  assert.ok(tabsSrc3.includes('subject: live?.live?.[o.id]?.subject'));
+  assert.ok(!tabsSrc3.includes("`${kind === 'outgoing' ? 'srt-sender' : 'srt-receiver'}:${objectId}`"),
+    'the browser must not build a subject of its own');
+});
+
+check('the series label comes from the endpoint that answered', () => {
+  // Inferring it from the presence of a recv block would be guessing again.
+  assert.ok(proxySrc2.includes('const SERIES_OF ='));
+  assert.ok(proxySrc2.includes('__series'));
+});
+
+check('a row with no live socket says so instead of showing an empty chart', () => {
+  assert.ok(tabsSrc3.includes("t('wo.histNoLive')"));
+  assert.ok(tabsSrc3.includes('if (!subject) return undefined'), 'and asks for nothing');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

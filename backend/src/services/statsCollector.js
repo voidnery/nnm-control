@@ -2,6 +2,7 @@ import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { StatSample } from '../models/StatSample.js';
 import { nimble } from './nimbleClient.js';
+import { entryIdentity } from './streamJoin.js';
 
 // Sampling runs against the NATIVE Nimble API on purpose: WMSPanel allows
 // 15 000 calls/day per account, and a 10s poll of a single server would burn
@@ -85,7 +86,10 @@ export async function collectServer(server, groups, ts = new Date()) {
         //
         // `setting_id` is the WMSPanel object id: one stream, one series,
         // across any number of reconnects.
-        const id = so.setting_id ?? so.settingId ?? so.name ?? so.stream ?? so.id ?? 'unknown';
+        // The same identity the live join uses, so a row's history is the row's
+        // history. Two independent answers to "which stream is this" is how the
+        // columns came to be right while the history stayed empty.
+        const id = entryIdentity(so) || 'unknown';
         // The socket pair is worth keeping as a reading — a changed peer is
         // real information — just not as an identity.
         const metrics = flattenNumbers(so);

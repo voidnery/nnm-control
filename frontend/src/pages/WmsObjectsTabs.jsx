@@ -83,19 +83,18 @@ const fmtBps = (v) => {
 // The series has been accumulating since iter9; what it lacked was a way in
 // from the row that raises the question. The subject is `srt-receiver:<id>`
 // where the id is now `setting_id`, which is the same id the row already has.
-function StreamHistory({ serverId, objectId, name, kind, onClose }) {
+function StreamHistory({ serverId, subject, name, onClose }) {
   const { t } = useI18n();
   const [range, setRange] = useState('1h');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-
-  const subject = `${kind === 'outgoing' ? 'srt-sender' : 'srt-receiver'}:${objectId}`;
   // Rate, link quality and reconnects: the three questions asked of a feed
   // that misbehaved, and they answer different ones. Loss without RTT reads as
   // a bad source; RTT without loss reads as a slow path.
   const METRICS = ['stats.recv.mbpsRate', 'stats.send.mbpsRate', 'stats.link.rtt', 'retryCount'];
 
   useEffect(() => {
+    if (!subject) return undefined;
     let dead = false;
     const mins = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440 }[range] || 60;
     api(`/stats/${serverId}/series?subject=${encodeURIComponent(subject)}&metrics=${METRICS.join(',')}&minutes=${mins}`)
@@ -124,8 +123,12 @@ function StreamHistory({ serverId, objectId, name, kind, onClose }) {
         </div>
       </div>
 
+      {/* Without a subject there is no series to ask for: this row has no live
+          socket, so nothing has ever been recorded against it. Saying that is
+          the answer, not an empty chart. */}
+      {!subject && <div className="hint" style={{ marginTop: 10 }}>{t('wo.histNoLive')}</div>}
       {error && <div className="error-box">{error}</div>}
-      {!error && points.length === 0 && (() => {
+      {subject && !error && points.length === 0 && (() => {
         // Four different reasons, and they need four different actions. The
         // panel knows which one applies, so it says that rather than listing
         // possibilities for the operator to work through.
@@ -365,7 +368,7 @@ export function UdpTab({ serverId }) {
                 </td>
                 <td><TagChips st={st} kind="udp" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <button onClick={() => setHistory({ id: o.id, name: o.name })}>{t('wo.history')}</button>
+                  <button onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })}>{t('wo.history')}</button>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => openEdit(o)}>{t('wo.editSourceBtn')}</button>{' '}
                     <button disabled={busy} onClick={() => openCfg(o)}>{t('wo.settingsBtn')}</button>{' '}
@@ -465,8 +468,8 @@ export function UdpTab({ serverId }) {
       )}
       <CopyModal cp={cp} currentServerId={serverId} />
       {history && (
-        <StreamHistory serverId={serverId} objectId={history.id} name={history.name}
-                       kind="outgoing" onClose={() => setHistory(null)} />
+        <StreamHistory serverId={serverId} subject={history.subject} name={history.name}
+                       onClose={() => setHistory(null)} />
       )}
     </div>
   );
@@ -1014,7 +1017,7 @@ export function MpegtsInTab({ serverId }) {
                   {/* Asked from the row that raises the question, and available to
                       anyone who can see the stream — reading its past is not a
                       change to it. */}
-                  <button onClick={() => setHistory({ id: o.id, name: o.name })}>{t('wo.history')}</button>
+                  <button onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })}>{t('wo.history')}</button>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => setModal({
                       id: o.id, name: o.name, description: o.description || '',
@@ -1032,8 +1035,8 @@ export function MpegtsInTab({ serverId }) {
         </table>
       </div>
       {history && (
-        <StreamHistory serverId={serverId} objectId={history.id} name={history.name}
-                       kind="incoming" onClose={() => setHistory(null)} />
+        <StreamHistory serverId={serverId} subject={history.subject} name={history.name}
+                       onClose={() => setHistory(null)} />
       )}
       {modal && (
         <div className="modal-back" {...backdropClose(() => setModal(null))}>

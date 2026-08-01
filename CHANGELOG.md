@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.25.8 — one answer to "which stream is this"
+- Stepping back was the right call. **The history could never have worked**,
+  however well the live join performed: the collector keyed each series by
+  Nimble's own identifier while the dialog asked for one built from the
+  WMSPanel object id — two independent answers to the same question, in
+  different id spaces. So the columns could be right and the charts empty, for
+  ever, which is exactly what was happening
+- There is one `entryIdentity()` now, shared by the collector and the join, and
+  **the subject travels with the reading**: the endpoint that did the pairing
+  says which series the row's data is in, so the browser no longer derives one
+  of its own
+- The series label comes from the endpoint that answered rather than being
+  inferred from the presence of a `recv` block — the endpoint is known, because
+  that is the code that called it
+- A row with no live socket says so instead of showing an empty chart and four
+  possible reasons
+- The first cut of the shared identity threw away `id` outright, and the
+  collector suite caught it: some endpoints return a stable id there. What has
+  to be excluded is the **socket pair** specifically, whose source port changes
+  on every reconnect
+- 5 new checks; one from m2 rewritten to assert the behaviour rather than the
+  line that used to hold it
+
+
 ### v0.25.7 — the key that pairs the most wins
 - WMSPanel's own SRT stats for `72.56.79.88:17802` prove Nimble holds readings
   for an SRT In object at exactly that address, so the data was there and the
