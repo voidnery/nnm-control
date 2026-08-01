@@ -278,14 +278,24 @@ export default function DashboardPage() {
   // Saved on the account, so a wall display and a laptop can be set up
   // differently and neither loses its layout on reload — which the in-memory
   // filters used until now did.
-  const cfg = useMemo(() => {
-    const saved = user?.preferences?.dashboard || {};
+  // What the operator just chose, before the server has confirmed it.
+  //
+  // The range is reached for constantly, and making it wait on a PUT and then
+  // a GET meant the dropdown appeared not to respond — and did nothing at all
+  // if either call failed. The choice applies now; persistence catches up, and
+  // a failed save reverts it rather than leaving the screen disagreeing with
+  // the account.
+  const [pending, setPending] = useState(null);
+
+  const saved = useMemo(() => {
+    const s = user?.preferences?.dashboard || {};
     return {
       ...DEFAULTS,
-      ...saved,
-      charts: Array.isArray(saved.charts) ? ALL_CHARTS.filter(c => saved.charts.includes(c)) : DEFAULTS.charts,
+      ...s,
+      charts: Array.isArray(s.charts) ? ALL_CHARTS.filter(c => s.charts.includes(c)) : DEFAULTS.charts,
     };
   }, [user]);
+  const cfg = useMemo(() => ({ ...saved, ...(pending || {}) }), [saved, pending]);
 
   const [settings, setSettings] = useState(false);
   const [data, setData] = useState(null);
@@ -294,13 +304,19 @@ export default function DashboardPage() {
   const timer = useRef(null);
 
   const patch = useCallback(async (next) => {
+    const optimistic = { ...(pending || {}), ...next };
+    setPending(optimistic);
     try {
-      await api('/auth/me/preferences', { method: 'PUT', body: { dashboard: { ...cfg, ...next } } });
+      await api('/auth/me/preferences', { method: 'PUT', body: { dashboard: { ...saved, ...optimistic } } });
       await refreshUser();
-    } catch (e) { setError(e.message); }
-  }, [cfg, refreshUser]);
-
-  const range = cfg.range;
+      // Cleared only once the account agrees, so the two cannot disagree.
+      setPending(null);
+      setError('');
+    } catch (e) {
+      setPending(null);
+      setError(e.message);
+    }
+  }, [saved, pending, refreshUser]);
 
   const load = useCallback(async () => {
     const mins = RANGES.find(r => r.key === cfg.range)?.mins || 60;
@@ -354,7 +370,7 @@ export default function DashboardPage() {
         <div className="row" style={{ gap: 16, flexShrink: 0 }}>
           {/* The range is reached for constantly, so it stays in the toolbar;
               everything set once and left alone is behind the button. */}
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
             <span className="hint">{t('db.range')}</span>
             <Select value={cfg.range} onChange={v => patch({ range: v })} style={{ width: 130 }}
                     options={RANGES.map(r => ({ value: r.key, label: t(`logs.range.${r.key}`) }))} />

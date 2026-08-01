@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.22.8 — the range would not take, and the toolbar was wrapping
+- **`Select` ignored the width its caller gave it.** It accepted no `style`
+  prop, so every one took its natural width; the toolbar row overflowed and
+  wrapped, and each label landed on its own line above its own control. That is
+  the misalignment, and it was the same everywhere the pattern is used — the log
+  dashboards included
+- Labelled control groups are pinned against wrapping, with a `.row.pair` house
+  rule so the next one does not have to remember
+- **Choosing a range waited on the network.** I had put a control reached for
+  constantly behind a write: a PUT, then a GET, and only then did the screen
+  change — and nothing changed at all if either failed. The choice applies
+  immediately now, persistence catches up behind it, and a failed save reverts
+  rather than leaving the screen disagreeing with the account
+- The click gate caught the first attempt at that fix throwing `Cannot access
+  'pending' before initialization` — the state was declared below the memo that
+  reads it
+- 5 new checks
+
+
 ### v0.22.7 — a step that cannot run says so, and a refused update stops hiding
 - **Steps with no object are caught on save**, per step and by index, instead
   of on a live fleet at preflight. Reported rather than refused — building a

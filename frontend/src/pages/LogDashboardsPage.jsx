@@ -209,13 +209,13 @@ export default function LogDashboardsPage() {
           <h1 style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dash.name}</h1>
         </div>
         <div className="row" style={{ gap: 20, flexShrink: 0 }}>
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
             <span className="hint">{t('dash.addLabel')}</span>
             <Select value={newCat} onChange={setNewCat} style={{ width: 160 }}
                     options={CATS.map(c => ({ value: c, label: t(`logs.cat.${c}`) }))} />
             <button onClick={() => addWindow()}>+ {t('dash.addWindow')}</button>
           </div>
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
             <span className="hint">{t('dash.layoutLabel')}</span>
             <Select value={String(dash.columns)} style={{ width: 120 }}
                     onChange={v => { setDash({ ...dash, columns: Number(v) }); setDirty(true); }}
@@ -255,7 +255,7 @@ export default function LogDashboardsPage() {
         {share && (
           <div style={{ marginTop: 8 }}>
             <div className="hint">{t('dash.linkOnce')}</div>
-            <div className="row" style={{ gap: 6 }}>
+            <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
               <input readOnly className="mono" style={{ flex: 1 }} value={share.url} onFocus={e => e.target.select()} />
               <button onClick={async () => push(await copyText(share.url)
                 ? { type: 'ok', message: t('srt.copied') }

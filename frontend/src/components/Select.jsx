@@ -14,7 +14,13 @@ import { useI18n } from '../i18n.jsx';
 // containers (overflow:auto), which would clip an absolutely-positioned popup
 // and break the form layout. Fixed + portal keeps it above everything and
 // leaves the modal's own layout untouched.
-export default function Select({ value, onChange, options = [], placeholder = '— select —', searchable = false, disabled = false }) {
+// `style` and `className` are forwarded because callers lay these out in rows
+// beside buttons and labels; without them every Select took its natural width
+// and the row came out ragged.
+export default function Select({
+  value, onChange, options = [], placeholder = '— select —',
+  searchable = false, disabled = false, style, className = '',
+}) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -95,7 +101,7 @@ export default function Select({ value, onChange, options = [], placeholder = '�
   );
 
   return (
-    <div className="cselect" ref={ref}>
+    <div className={'cselect' + (className ? ' ' + className : '')} style={style} ref={ref}>
       <button type="button" className="cselect-btn" disabled={disabled}
               onClick={() => !disabled && setOpen(v => !v)}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

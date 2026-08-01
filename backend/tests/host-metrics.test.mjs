@@ -335,5 +335,45 @@ check('the chart order is canonical, not the order boxes were ticked', () => {
   assert.ok(dashSrc.includes('ALL_CHARTS.filter(x => next.includes(x))'));
 });
 
+console.log('\nTHE TOOLBAR (v0.22.8):');
+
+const selectSrc = readFileSync(new URL('../../frontend/src/components/Select.jsx', import.meta.url), 'utf8');
+
+check('a choice applies before the server confirms it', () => {
+  // The range is reached for constantly. Waiting on a PUT and then a GET made
+  // the dropdown look unresponsive, and did nothing at all if either failed.
+  assert.ok(dashSrc.includes('const [pending, setPending]'));
+  assert.ok(dashSrc.includes('setPending(optimistic)'));
+  assert.ok(/const cfg = useMemo\(\(\) => \(\{ \.\.\.saved, \.\.\.\(pending \|\| \{\}\) \}\)/.test(dashSrc));
+});
+
+check('a failed save reverts rather than leaving the two disagreeing', () => {
+  const from = dashSrc.indexOf('const patch = useCallback');
+  const body = dashSrc.slice(from, from + 700);
+  assert.ok(body.includes('setPending(null);\n      setError(e.message)'), 'the optimistic value is dropped on failure');
+  const clear = body.indexOf('setPending(null);\n      setError(\'\')');
+  const refresh = body.indexOf('await refreshUser()');
+  assert.ok(refresh > 0 && refresh < clear, 'and only cleared once the account agrees');
+});
+
+check('the optimistic state is declared before it is read', () => {
+  // It was not, and the page threw "Cannot access 'pending' before
+  // initialization" — caught by the click gate rather than by a browser.
+  assert.ok(dashSrc.indexOf('const [pending, setPending]') < dashSrc.indexOf('...(pending || {})'));
+});
+
+check('Select forwards the width its caller gives it', () => {
+  // It did not, so every Select took its natural width, the toolbar row
+  // overflowed and wrapped, and each label ended up above its own control.
+  assert.ok(/style,\s*className = ''/.test(selectSrc) || selectSrc.includes('className = \'\''));
+  assert.ok(selectSrc.includes('style={style}'));
+});
+
+check('a label and its control cannot wrap apart', () => {
+  assert.ok(dashSrc.includes("flexWrap: 'nowrap'"));
+  const css = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+  assert.ok(css.includes('.row .row.pair'), 'and there is a house rule for the next one');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall host-metric checks passed');
 process.exit(fail ? 1 : 0);

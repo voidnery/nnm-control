@@ -107,6 +107,10 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
 
 .panel { background: var(--bg-panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* A label and the control it names are one unit: wrapping between them puts
+   the label on its own line above its control, which reads as a broken
+   toolbar. The row containing such groups may still wrap — the group may not. */
+.row .row.pair { flex-wrap: nowrap; white-space: nowrap; }
 .grid { display: grid; gap: 12px; }
 .grid.cols3 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 
