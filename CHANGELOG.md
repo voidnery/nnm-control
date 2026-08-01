@@ -1,5 +1,27 @@
 # Changelog
 
+### v0.24.2 — "0 live streams" against 76 configured
+- **The list was being looked for under four fixed key names.** Nimble keys its
+  stats differently per endpoint and again between builds, so a name we had not
+  seen produced an empty list and a table of dashes. It now takes the first
+  array of objects at the top level — there is only ever one — and an object
+  keyed by stream name or port becomes a list with that key kept as the name,
+  because it is often the only identifier the entry has
+- **"Nothing came back" is now reported apart from "came back and did not line
+  up".** Only the first is answered by the shape of the response, and
+  conflating them sends the operator looking in the wrong place
+- When the list is empty the panel returns **the shape of what Nimble
+  actually sent** — key names, types and array lengths, never values, because
+  this crosses a screen and a stats response can carry addresses. It is
+  rendered expandable and copyable rather than in a tooltip, since a tooltip
+  cannot be copied and this is the thing worth sending on
+- 5 new checks
+
+Still unverified against a live server: whether these streams are genuinely
+idle or the response simply sits somewhere new. The panel now answers that
+itself on the next refresh.
+
+
 ### v0.24.1 — the live columns were blocked, and the block was invisible
 - **The whole native router is gated on the control plane**, so in WMSPanel
   mode the new endpoint was refused with a 409 before its handler ran. The gate

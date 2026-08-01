@@ -125,5 +125,58 @@ check('a failed request shows why instead of blanking the table', () => {
   assert.ok(!/catch\(\(\) => \{ if \(!dead\) setLive\(null\)/.test(tabsSrc));
 });
 
+console.log('\nFINDING THE LIST WHEREVER NIMBLE PUT IT:');
+
+const asList = (d) => {
+  if (Array.isArray(d)) return d;
+  if (!d || typeof d !== 'object') return [];
+  for (const k of ['streams', 'sockets', 'stats', 'rules']) if (Array.isArray(d[k])) return d[k];
+  for (const v of Object.values(d)) {
+    if (Array.isArray(v) && (v.length === 0 || (v[0] && typeof v[0] === 'object'))) return v;
+  }
+  const vals = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && !Array.isArray(v));
+  if (vals.length && vals.every(([, v]) => Object.values(v).some(x => typeof x === 'number'))) {
+    return vals.map(([k, v]) => ({ ...v, _key: k, name: v.name ?? k }));
+  }
+  return [];
+};
+
+check('a key we have not seen before still yields the list', () => {
+  // A fixed list of key names is what produced "0 live streams" against 76
+  // configured. There is only ever one array of objects at the top level.
+  assert.equal(asList({ SrtReceiverStats: [{ name: 'a' }] }).length, 1);
+  assert.equal(asList([{ name: 'a' }]).length, 1);
+});
+
+check('an object keyed by stream name becomes a list, keeping the key', () => {
+  // Some endpoints key by stream or port rather than listing — and that key is
+  // often the only identifier there is, so it must not be thrown away.
+  const out = asList({ CCT_FEED4_EU_BACKUP: { bitrate: 6.2, rtt: 12 } });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].name, 'CCT_FEED4_EU_BACKUP', 'the key becomes the name the join can match on');
+});
+
+check('a status envelope is not mistaken for data', () => {
+  assert.deepEqual(asList({ status: 'Ok' }), []);
+  assert.deepEqual(asList({ streams: [] }), []);
+});
+
+check('"nothing came back" is reported apart from "did not line up"', () => {
+  // Only the first is answered by the shape of the response; conflating them
+  // sends the operator looking in the wrong place.
+  const tabs = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+  assert.ok(tabs.includes('const empty = live.entries === 0'));
+  assert.ok(tabs.includes("t('wo.liveEmpty'") && tabs.includes("t('wo.liveNoMatch'"));
+  assert.ok(routeSrc.includes('responseShape: entries.length === 0'));
+});
+
+check('the shape carries names and types, never values', () => {
+  // It crosses a screen, and a stats response can carry addresses.
+  const from = routeSrc.indexOf('const shapeOf =');
+  const body = routeSrc.slice(from, routeSrc.indexOf('};', routeSrc.indexOf('return { type: typeof v }', from)));
+  assert.ok(body.includes('Object.keys(v)'));
+  assert.ok(!/Object\.values\(v\)\.slice/.test(body), 'values must not be copied into the shape');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

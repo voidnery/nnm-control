@@ -8,9 +8,25 @@ import { joinLive, liveSummary } from '../services/streamJoin.js';
 
 // Nimble returns its stats under a different key per endpoint, and an array
 // directly on some builds. Same tolerance the collector already uses.
+// Nimble returns its stats under a different key per endpoint and a different
+// one again between builds. Rather than keep a list of names that goes stale,
+// take the first array of objects at the top level — there is only ever one,
+// and a name we have not seen before is exactly the case that produced "0 live
+// streams" against 76 configured.
 const asList = (d) => {
-  for (const k of ['streams', 'sockets', 'stats', 'rules']) if (Array.isArray(d?.[k])) return d[k];
-  return Array.isArray(d) ? d : [];
+  if (Array.isArray(d)) return d;
+  if (!d || typeof d !== 'object') return [];
+  for (const k of ['streams', 'sockets', 'stats', 'rules']) if (Array.isArray(d[k])) return d[k];
+  for (const v of Object.values(d)) {
+    if (Array.isArray(v) && (v.length === 0 || (v[0] && typeof v[0] === 'object'))) return v;
+  }
+  // Some endpoints key an object by stream or port instead of listing it. The
+  // key is worth keeping: it is often the only identifier there is.
+  const vals = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && !Array.isArray(v));
+  if (vals.length && vals.every(([, v]) => Object.values(v).some(x => typeof x === 'number'))) {
+    return vals.map(([k, v]) => ({ ...v, _key: k, name: v.name ?? k }));
+  }
+  return [];
 };
 
 // Permission-gated proxy of Nimble native API per managed server.
@@ -117,6 +133,27 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   }
 
   const entries = asList(nativeRes.value);
+
+  // When the list comes out empty, the question is whether Nimble reported
+  // nothing or whether we looked in the wrong place — and those need opposite
+  // fixes. The shape of the response answers it, so the shape is returned:
+  // key names, their types and their sizes. Names and types only, never
+  // values, because this crosses a screen and a response can carry addresses.
+  const shapeOf = (v, depth = 0) => {
+    if (Array.isArray(v)) {
+      return { type: 'array', length: v.length, of: v.length && depth < 2 ? shapeOf(v[0], depth + 1) : undefined };
+    }
+    if (v && typeof v === 'object') {
+      return {
+        type: 'object',
+        keys: Object.keys(v).slice(0, 40),
+        children: depth < 2
+          ? Object.fromEntries(Object.entries(v).slice(0, 12).map(([k, x]) => [k, shapeOf(x, depth + 1)]))
+          : undefined,
+      };
+    }
+    return { type: typeof v };
+  };
   const objects = wmsRes.status === 'fulfilled' ? src.pick(wmsRes.value) : [];
   const joined = joinLive(entries, objects);
 
@@ -132,7 +169,15 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     // thirteen tables of dashes. This is the evidence the field names have
     // never been documented for.
     diagnostics: joined.matched === 0
-      ? { candidates: joined.candidates, sampleEntries: joined.unmatchedEntries }
+      ? {
+        candidates: joined.candidates,
+        sampleEntries: joined.unmatchedEntries,
+        // Only when the list itself came out empty: that is when the useful
+        // question stops being "which key" and becomes "which key was I
+        // supposed to read the list out of".
+        responseShape: entries.length === 0 ? shapeOf(nativeRes.value) : undefined,
+        endpoint: src.native,
+      }
       : null,
   });
 });
