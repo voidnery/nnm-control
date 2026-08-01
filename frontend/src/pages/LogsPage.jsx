@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
@@ -239,7 +239,7 @@ export default function LogsPage() {
             </tr></thead>
             <tbody>
               {groups.groups.map(g => (
-                <>
+                <Fragment key={g.sub + g.level + g.template}>
                   <tr key={g.sub + g.level + g.template} className="tally" style={{ cursor: 'pointer' }}
                       onClick={() => expand(g)}>
                     <td className="mono"><b>{fmtN(g.count)}</b></td>
@@ -280,7 +280,7 @@ export default function LogsPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
               {groups.groups.length === 0 && (
                 <tr><td colSpan={5} className="hint">{t('logs.nothing')}</td></tr>

@@ -53,6 +53,10 @@ const serverSchema = new mongoose.Schema({
     restarts: { type: Number, default: 0 },
     restartWindowStart: { type: Date, default: null },
     lastHealth: { type: mongoose.Schema.Types.Mixed, default: null },
+    // iter15 m1 — which NICs to graph on this box. Per-server because the
+    // machines differ; empty means every physical interface, which is what
+    // /sys/class/net/<if>/device distinguishes from bridges and veth pairs.
+    interfaces: { type: [String], default: [] },
   },
   // iter10 m1 — Nimble stamps log lines with local time and no zone marker.
   // Minutes east of UTC for this box, so a fleet spanning zones stays

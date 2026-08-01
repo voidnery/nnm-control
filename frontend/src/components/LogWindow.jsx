@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
@@ -171,7 +171,7 @@ export default function LogWindow({
           <table style={{ width: '100%' }}>
             <tbody>
               {(data?.groups || []).map(g => (
-                <>
+                <Fragment key={g.sub + g.level + g.template}>
                   <tr key={g.sub + g.level + g.template} className="tally" style={{ cursor: 'pointer' }}
                       onClick={() => expand(g)}>
                     <td className="mono" style={{ width: 70, fontSize: 12 }}><b>{fmtN(g.count)}</b></td>
@@ -198,7 +198,7 @@ export default function LogWindow({
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
               {data && !data.groups?.length && (
                 <tr><td className="hint" style={{ fontSize: 12 }}>{t('logs.nothing')}</td></tr>

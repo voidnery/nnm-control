@@ -80,7 +80,7 @@ authRouter.get('/me', requireAuth, async (req, res) => {
 
 // Self-service: update own UI preferences.
 authRouter.put('/me/preferences', requireAuth, async (req, res) => {
-  const { theme, lang, functionModalWidth } = req.body || {};
+  const { theme, lang, functionModalWidth, dashboard } = req.body || {};
   const p = req.user.preferences || {};
   if (theme !== undefined) {
     if (!['system', 'dark', 'light'].includes(theme)) return res.status(400).json({ error: 'bad theme' });
@@ -94,6 +94,42 @@ authRouter.put('/me/preferences', requireAuth, async (req, res) => {
     if (!['narrow', 'default', 'wide', 'xwide'].includes(functionModalWidth)) return res.status(400).json({ error: 'bad width' });
     p.functionModalWidth = functionModalWidth;
   }
+  // iter15 m5 — how this operator wants the dashboard laid out.
+  //
+  // Per user, not per panel: one person watches the network on a wall display
+  // and another is chasing a memory leak, and they should not be fighting over
+  // the same screen. Validated by allow-list like everything else here — these
+  // values drive queries and a range of "999999" would be a way to ask the
+  // database for everything it has.
+  if (dashboard !== undefined && dashboard !== null) {
+    const d = p.dashboard || {};
+    const CHARTS = ['cpu', 'mem', 'net', 'streams'];
+    if (Array.isArray(dashboard.charts)) {
+      d.charts = CHARTS.filter(c => dashboard.charts.includes(c));
+    }
+    if (dashboard.range !== undefined) {
+      if (!['15m', '1h', '6h', '24h'].includes(dashboard.range)) return res.status(400).json({ error: 'bad range' });
+      d.range = dashboard.range;
+    }
+    if (dashboard.columns !== undefined) {
+      if (!['1', '2', '3'].includes(String(dashboard.columns))) return res.status(400).json({ error: 'bad columns' });
+      d.columns = String(dashboard.columns);
+    }
+    if (dashboard.refreshSec !== undefined) {
+      // 0 means manual. The floor is the sampling interval — refreshing faster
+      // than the agents report just redraws the same points.
+      const n = Number(dashboard.refreshSec);
+      if (![0, 10, 15, 30, 60, 300].includes(n)) return res.status(400).json({ error: 'bad refresh' });
+      d.refreshSec = n;
+    }
+    if (dashboard.streamLimit !== undefined) {
+      const n = Number(dashboard.streamLimit);
+      if (![3, 6, 12, 24].includes(n)) return res.status(400).json({ error: 'bad stream limit' });
+      d.streamLimit = n;
+    }
+    p.dashboard = d;
+  }
+
   req.user.preferences = p;
   req.user.markModified('preferences');
   await req.user.save();

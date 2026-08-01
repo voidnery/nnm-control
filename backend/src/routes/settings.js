@@ -35,6 +35,10 @@ const pub = (s) => ({
   // log collection on was a route no screen called. The Logs page told the
   // operator to enable it "in Settings", where there was nothing.
   publicUrl: s.publicUrl || '',
+  host: {
+    enabled: Boolean(s.host?.enabled),
+    intervalSec: Number(s.host?.intervalSec) || 10,
+  },
   logs: {
     enabled: Boolean(s.logs?.enabled),
     files: s.logs?.files?.length ? s.logs.files : ['nimble.log'],
@@ -50,7 +54,13 @@ settingsRouter.get('/', async (_req, res) => res.json(pub(await Settings.load())
 
 settingsRouter.put('/', async (req, res) => {
   const s = await Settings.load();
-  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs, publicUrl: pub } = req.body || {};
+  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs, publicUrl: pub, host } = req.body || {};
+  if (host !== undefined) {
+    s.host = s.host || {};
+    if (host.enabled !== undefined) s.host.enabled = Boolean(host.enabled);
+    if (host.intervalSec !== undefined) s.host.intervalSec = Math.min(300, Math.max(2, Number(host.intervalSec) || 10));
+    s.markModified('host');
+  }
   if (pub !== undefined) {
     const v = String(pub).trim().replace(/\/+$/, '');
     if (v && !/^https?:\/\/[^\s/]+$/i.test(v)) {

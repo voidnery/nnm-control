@@ -75,7 +75,7 @@ window.__RENDER_ALL = async () => {
   return out;
 };
 `;
-const res = await build({ stdin:{contents:entry,resolveDir:SRC,loader:'jsx'}, bundle:true, format:'iife', write:false, jsx:'automatic', loader:{'.js':'jsx'}, logLevel:'silent', define:{'process.env.NODE_ENV':'"development"'} });
+const res = await build({ stdin:{contents:entry,resolveDir:SRC,loader:'jsx'}, bundle:true, format:'iife', write:false, jsx:'automatic', loader:{'.js':'jsx','.css':'empty'}, logLevel:'silent', define:{'process.env.NODE_ENV':'"development"'} });
 const code = res.outputFiles[0].text;
 
 const dom = new JSDOM('<!doctype html><body></body>', { runScripts:'dangerously', pretendToBeVisual:true, url:'http://localhost/' });

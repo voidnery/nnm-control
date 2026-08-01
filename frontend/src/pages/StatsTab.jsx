@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import Select from '../components/Select.jsx';
 import SearchInput from '../components/SearchInput.jsx';
-import TimeChart from '../components/TimeChart.jsx';
+import Plot from '../components/Plot.jsx';
 
 const RANGES = [15, 60, 360, 1440, 4320];   // minutes; the last matches 3-day retention
 const GROUP_ORDER = ['streams', 'republish', 'srt', 'server'];
@@ -127,14 +127,14 @@ export default function StatsTab({ serverId }) {
               {health.error && <div className="error-box" style={{ marginTop: 6 }}>{health.error}</div>}
               <div className="kv-grid" style={{ marginTop: 6 }}>
                 {Object.entries(health.report || {}).map(([ep, r]) => (
-                  <>
+                  <Fragment key={ep}>
                     <div className="kv-k" key={ep + 'k'}>{ep}</div>
                     <div className="kv-v" key={ep + 'v'}>
                       {r.status === 'ok' && <span><span className="lamp on" />{t('stats.hOk', { n: r.count })}</span>}
                       {r.status === 'empty' && <span className="hint">— {r.hint}</span>}
                       {r.status === 'error' && <span><span className="lamp off" />{r.error}</span>}
                     </div>
-                  </>
+                  </Fragment>
                 ))}
               </div>
               <div className="hint" style={{ marginTop: 6 }}>{t('stats.healthHint')}</div>
@@ -189,8 +189,8 @@ export default function StatsTab({ serverId }) {
                 <div className="hint" style={{ fontSize: 12, marginBottom: 2 }}>
                   {m}{kind === 'counter' ? ` · ${t('stats.asRate')}` : ''}
                 </div>
-                <TimeChart points={pts} series={[m]} unit={unitFor(m)}
-                           height={metrics.length > 2 ? 150 : 220} emptyText={t('stats.noPoints')} />
+                <Plot points={pts} series={[m]} unit={unitFor(m)}
+                      height={metrics.length > 2 ? 150 : 220} emptyText={t('stats.noPoints')} />
               </div>
             );
           })}

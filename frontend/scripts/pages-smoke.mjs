@@ -57,6 +57,8 @@ window.__EDITOR = async () => {
 // is reported. Handlers are harmless here: fetch is mocked and nothing leaves
 // the jsdom sandbox.
 window.__CLICKS = async (name, path) => {
+  // So a render warning names the page that produced it.
+  window.__page = name;
   const host = document.createElement('div'); document.body.appendChild(host);
   const Comp = PAGES[name];
   const root = createRoot(host);
@@ -79,13 +81,26 @@ window.__CLICKS = async (name, path) => {
                 React.createElement(Routes,null,
                   React.createElement(Route,{ path: path.includes('S1') ? '/servers/:id' : path, element: React.createElement(Comp) })))))))));
     await new Promise(r=>setTimeout(r,400));
-    const btns = Array.from(host.querySelectorAll('button')).filter(b => !b.disabled);
-    for (const b of btns) {
-      try { b.dispatchEvent(new window.MouseEvent('click',{bubbles:true})); }
-      catch (e) { onErr(e); }
-      await new Promise(r=>setTimeout(r,5));
+    // Buttons were collected once, before any click — so anything a click
+    // revealed (a dialog, an expanded row) was never exercised. Rescanning
+    // after each click covers those, and a seen-set keeps it from looping on
+    // a toggle that puts the same button back.
+    const seen = new WeakSet();
+    let clicked = 0;
+    for (let pass = 0; pass < 6; pass++) {
+      const btns = Array.from(host.querySelectorAll('button'))
+        .filter(b => !b.disabled && !seen.has(b));
+      if (!btns.length) break;
+      for (const b of btns) {
+        seen.add(b);
+        try { b.dispatchEvent(new window.MouseEvent('click',{bubbles:true})); }
+        catch (e) { onErr(e); }
+        clicked++;
+        await new Promise(r=>setTimeout(r,5));
+      }
+      await new Promise(r=>setTimeout(r,40));   // let the render settle
     }
-    return { ok:true, clicked: btns.length, faults };
+    return { ok:true, clicked, faults };
   } catch (e) {
     return { ok:false, clicked:0, faults:[String(e && e.message || e)] };
   } finally {
@@ -120,12 +135,15 @@ window.__PAGE = async (name, path) => {
 `;
 
 const res = await build({ stdin:{contents:entry,resolveDir:SRC,loader:'jsx'}, bundle:true, format:'iife',
-  write:false, jsx:'automatic', logLevel:'silent', define:{'process.env.NODE_ENV':'"development"'} });
+  // This harness checks that pages render and that their buttons are bound,
+  // not how they look; a stylesheet import has no output path here.
+  write:false, jsx:'automatic', loader:{'.css':'empty'}, logLevel:'silent',
+  define:{'process.env.NODE_ENV':'"development"'} });
 
 const dom = new JSDOM('<!doctype html><body></body>',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://localhost/'});
 const { window } = dom;
 const errors = [];
-window.console.error = (...a) => errors.push(a.map(String).join(' '));
+window.console.error = (...a) => errors.push(`${window.__page || '?'}: ` + a.map(String).join(' '));
 window.fetch = (u) => {
   const s = String(u);
   let body = { status:'Ok' };
@@ -188,7 +206,32 @@ window.fetch = (u) => {
     { id:'E1', serverId:'S2', serverName:'NimbleRU-4', code:'stopped-polling', kind:'fault', severity:'error',
       evidence:'last contact was 300s ago', detail:null, createdAt:new Date().toISOString(),
       acknowledgedAt:null, acknowledgedBy:'' }]), text:()=>Promise.resolve('{}') });
-  if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'] };
+  if (s.includes('/stats/streams')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    minutes:60, servers:[
+      { id:'S1', name:'NimbleFIN-1', total:9, shown:2, streams:[
+        { subject:'stream:cct/feed1', label:'cct/feed1', metric:'bandwidth', latest:6100000, last:new Date().toISOString(),
+          points:[{ ts:new Date(Date.now()-60000).toISOString(), v:[6000000] }, { ts:new Date().toISOString(), v:[6100000] }] },
+        // Deliberately on a different timeline, to exercise the alignment.
+        { subject:'stream:cct/feed2', label:'cct/feed2', metric:'bandwidth', latest:4200000, last:new Date().toISOString(),
+          points:[{ ts:new Date(Date.now()-30000).toISOString(), v:[4200000] }] },
+        // And one Nimble reports without any bitrate field at all.
+        { subject:'stream:cct/feed3', label:'cct/feed3', metric:'', latest:null, last:new Date().toISOString(), points:[] }] },
+      { id:'S2', name:'NimbleRU-4', total:0, shown:0, streams:[] },
+      { id:'S3', name:'mediaserver', total:0, shown:0, streams:[] }] }),
+    text:()=>Promise.resolve('{}') });
+  if (s.includes('/stats/host')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    minutes:60, metrics:['cpu_pct','cpu_steal_pct','cpu_iowait_pct','mem_used_pct','swap_used_pct','net_rx_bps','net_tx_bps'],
+    servers:[
+      { id:'S1', name:'NimbleFIN-1', host:'194.34.236.205', agent:true, lastContactAt:new Date().toISOString(),
+        bucketMs:0, latest:[12,0.5,1,44,0,120000000,340000000],
+        points:[{ ts:new Date(Date.now()-60000).toISOString(), v:[10,0.4,1,43,0,1.1e8,3.3e8] },
+                { ts:new Date().toISOString(), v:[12,0.5,1,44,0,1.2e8,3.4e8] }] },
+      { id:'S2', name:'NimbleRU-4', host:'95.181.213.127', agent:true,
+        lastContactAt:new Date(Date.now()-400000).toISOString(), bucketMs:0, latest:null, points:[] },
+      { id:'S3', name:'mediaserver', host:'192.168.200.129', agent:false, lastContactAt:null, bucketMs:0, latest:null, points:[] }] }),
+    text:()=>Promise.resolve('{}') });
+  if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'],
+    preferences:{ dashboard:{ charts:['cpu','mem','net','streams'], range:'1h', columns:'2', refreshSec:15, streamLimit:6 } } };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
   else if (s.includes('/stream-tags/')) body = { map:{} };
   // Two rows on purpose: with a single server both reorder buttons render
@@ -249,10 +292,23 @@ for (const [name, path] of PAGES) {
 }
 if (!bad) console.log(`  ✓ ${clicks} buttons clicked, every handler bound`);
 
-const real = errors.filter(e => /is not defined|Cannot read|is not a function|undefined/.test(e));
+// A crash and a React warning are different findings and were being counted
+// as one: the `undefined` in the filter matched any warning whose formatted
+// text happened to end that way, so a duplicate key was reported as a render
+// error. Both stay visible; only the first fails the gate.
+const isWarning = (e) => /^\S*:? ?Warning:/.test(e) || e.includes('Warning:');
+const real = errors.filter(e => !isWarning(e) && /is not defined|Cannot read|is not a function/.test(e));
+const warnings = [...new Set(errors.filter(isWarning).map(e => e.split('.')[0]))];
+
 if (real.length) {
   console.log('\nRENDER ERRORS:');
-  real.slice(0,6).forEach(e => console.log('  !', e.slice(0,200)));
+  real.slice(0, 6).forEach(e => console.log('  !', e.slice(0, 200)));
   bad += real.length;
+}
+if (warnings.length) {
+  // Reported, attributed, and not fatal. A duplicate key makes React reuse the
+  // wrong node — worth fixing, not worth blocking a release over.
+  console.log('\nREACT WARNINGS (not fatal, but real):');
+  warnings.slice(0, 6).forEach(w => console.log('  ~', w.slice(0, 160)));
 }
 process.exit(bad ? 1 : 0);

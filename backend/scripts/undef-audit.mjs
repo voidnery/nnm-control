@@ -114,7 +114,19 @@ function usedAsCalls(src) {
   const out = new Map();
   const lines = src.split('\n');
   lines.forEach((line, i) => {
+    // Direct calls: foo(...)
     for (const m of line.matchAll(/(^|[^.\w$'"`])([A-Za-z_$][\w$]*)\s*\(/g)) {
+      const name = m[2];
+      if (!out.has(name)) out.set(name, i + 1);
+    }
+    // Member calls on a capitalised receiver: NimbleServer.find(...).
+    //
+    // This shape is the most common one in the codebase — every model is used
+    // this way — and the first version of this audit missed it entirely,
+    // letting a missing `import { NimbleServer }` through into a route. Only
+    // capitalised receivers, because a lowercase one is nearly always a local
+    // object rather than an import.
+    for (const m of line.matchAll(/(^|[^.\w$'"`])([A-Z][\w$]*)\s*\.\s*[\w$]+\s*\(/g)) {
       const name = m[2];
       if (!out.has(name)) out.set(name, i + 1);
     }

@@ -8,6 +8,7 @@ import { RESTART_WINDOW_MS } from '../services/agentDiagnosis.js';
 import { agentRelease } from '../services/agentRelease.js';
 import { ingestBatch } from '../services/logCollector.js';
 import { MediaTransfer } from '../models/MediaTransfer.js';
+import { StatSample } from '../models/StatSample.js';
 import { readSpooled, discardSpooled } from '../services/mediaSpool.js';
 
 // iter12 m1 — everything an agent talks to, and nothing else.
@@ -94,7 +95,16 @@ agentGatewayRouter.post('/poll', authAgent, async (req, res) => {
   // iter12 m2 — the agent has nothing to configure on the box: what to tail,
   // and whether to tail at all, rides along on the poll response.
   const s = await Settings.load();
-  const config = { logs: { enabled: Boolean(s.logs?.enabled), files: s.logs?.files?.length ? s.logs.files : ['nimble.log'] } };
+  const config = {
+    logs: { enabled: Boolean(s.logs?.enabled), files: s.logs?.files?.length ? s.logs.files : ['nimble.log'] },
+    host: {
+      enabled: Boolean(s.host?.enabled),
+      intervalSec: Number(s.host?.intervalSec) || 10,
+      // Empty means "every physical interface", decided on the box where the
+      // list is actually known.
+      interfaces: Array.isArray(server.agent?.interfaces) ? server.agent.interfaces : [],
+    },
+  };
 
   if (!task) return res.json({ task: null, config, pollAgainMs: 0 });
   res.json({
@@ -128,6 +138,39 @@ agentGatewayRouter.get('/agent-source', authAgent, async (_req, res) => {
   res.setHeader('content-type', 'text/plain; charset=utf-8');
   res.setHeader('x-nnm-agent-version', String(rel.version));
   res.send(rel.body);
+});
+
+// iter15 m1 — host metrics. They land in the same store as the stream metrics
+// under group 'host', so one query serves both and retention is already
+// governed by the TTL that was there.
+agentGatewayRouter.post('/metrics', authAgent, async (req, res) => {
+  const { ts, metrics } = req.body || {};
+  if (!metrics || typeof metrics !== 'object') return res.status(400).json({ error: 'metrics required' });
+
+  const clean = {};
+  for (const [k, v] of Object.entries(metrics)) {
+    // Only finite numbers, and only names that can be a metric key. A sample
+    // is written unattended and read as a graph; anything else here becomes a
+    // line that cannot be plotted or a key that cannot be queried.
+    if (!/^[a-z0-9_]{1,64}$/i.test(k)) continue;
+    const n = Number(v);
+    if (Number.isFinite(n)) clean[k] = n;
+  }
+  if (!Object.keys(clean).length) return res.status(400).json({ error: 'no usable metrics' });
+
+  const when = ts ? new Date(ts) : new Date();
+  await StatSample.create({
+    serverId: String(req.srv._id),
+    subject: 'host',
+    group: 'host',
+    label: req.srv.name,
+    ts: Number.isNaN(when.getTime()) ? new Date() : when,
+    metrics: clean,
+  });
+
+  req.srv.agent.lastContactAt = new Date();
+  await req.srv.save();
+  res.json({ ok: true, stored: Object.keys(clean).length });
 });
 
 // iter12 m3 — the file itself. Streamed from the spool; the panel never holds

@@ -1,5 +1,162 @@
 # Changelog
 
+## iter15 — dashboard of charts
+### v0.22.4 (m5) — the dashboard is configurable, and the click gate grew teeth
+- Which charts to show, the range, the column count, the refresh interval
+  (including manual) and how many streams per server — all set from one dialog
+- **Saved on the account, not on the panel.** One person watches the network on
+  a wall display while another chases a memory leak; they should not be
+  fighting over one screen. The existing `user.preferences` mechanism was
+  reused rather than a second one invented, and every value is validated by
+  allow-list like the rest of it — these drive queries, and a range of "999999"
+  would be a way to ask the database for everything it has
+- The range stays in the toolbar because it is reached for constantly;
+  everything set once and left alone is behind the button. Defaults show
+  everything: a dashboard whose defaults hide things is one where a fault is
+  missed by whoever never opened the settings
+- **The click gate was checking less than half the interface.** It collected
+  buttons once, before any click, so nothing a click revealed — a dialog, an
+  expanded row — was ever exercised. It rescans after each click now:
+  **126 → 319 buttons**, and everything newly reached passed
+- It also conflated two findings: the render-error filter matched any warning
+  whose formatted text ended in "undefined", so a React key warning was
+  reported as a crash. Crashes fail the gate; warnings are listed separately,
+  attributed to their page, and do not
+- **Three real defects the widened gate found**, all predating this milestone:
+  transcoder tags keyed by their own value (WMSPanel returns duplicates), graph
+  nodes keyed by an optional id, and three lists returning bare fragments — a
+  fragment cannot carry a key, so React had nothing to identify those rows by
+- 6 new checks on the settings
+
+**Open finding:** one duplicate-key warning on the transcoder page survives the
+fixes above and is not yet located. It is visible and attributed in the gate
+output. Not fatal — React reuses the wrong node on reorder — and not from this
+milestone, but it is real and still open.
+
+
+## iter15 — dashboard of charts
+### v0.22.3 (m4) — streams on the dashboard
+- Each card now shows the streams that server is carrying, over the same range
+  as its host charts
+- **The metric name is discovered, never assumed.** `flattenNumbers` stores
+  whatever numeric fields Nimble reported and those differ between builds —
+  which is the reason `StatSample` keeps a free-form map in the first place. A
+  hardcoded `bandwidth` would work on one fleet and silently plot nothing on
+  another, so the rate field is found per subject by the same pattern the
+  graphs tab already uses, preferring the plainest name
+- **One chart per card, streams as series.** Six charts per card would have
+  been seventy-eight more uPlot instances on a page already carrying
+  thirty-nine — and separate axes make the comparison an operator actually
+  wants, which stream dropped while the others held, impossible
+- Streams report on their own timelines, so they are aligned onto the union of
+  their timestamps. A stream that was not reporting at a moment is **null**
+  there, never 0: a stopped stream and a stream at zero bitrate are different
+  events, and drawing them alike hides the one that matters
+- The busiest streams get the space, capped per server, with the total shown —
+  a box with two hundred streams must not draw two hundred lines
+- A stream Nimble reports without any bitrate field is **counted and named**
+  rather than dropped. It exists; it just cannot be plotted
+- Two requests for the whole page, not two per card, and a failure of the
+  streams half leaves the host charts standing
+- New `npm run audit:align` (5 checks) plus 7 backend checks. One assertion
+  from m3 needed correcting rather than the code: it pinned "exactly one
+  `/stats/` call site", which m4 legitimately makes two
+
+
+## iter15 — dashboard of charts
+### v0.22.2 (m3) — a card of charts per server
+- The dashboard listed servers, which the Servers page does better. What an
+  operator opens a dashboard for is "is anything wrong right now", and a number
+  that has been the same for an hour cannot answer that — only its shape over
+  time can. It is a wall of charts now: CPU with steal and iowait beside it,
+  memory with swap, network in and out, and the current values above them
+- **The card is the link.** The list was also the navigation, so the header
+  goes to the server and nothing has to be found again
+- **One request serves the whole fleet.** Thirteen cards asking for themselves
+  would be thirteen round trips and a page that paints in thirteen jerks
+- The bucketing that thins a series is now written once and shared by the
+  per-subject and the fleet endpoints: two implementations of the same
+  averaging would eventually draw two different pictures of the same minute.
+  A card gets 240 points rather than 600, because six hundred points in three
+  hundred pixels is work nobody can see
+- **Three empty states, told apart.** No agent, an agent that has gone silent,
+  and an agent that has simply not sent anything yet all look like an empty
+  chart otherwise, and only one of them is an outage
+- Range and column count are remembered, and the last view goes up in the first
+  frame while the refresh runs behind it
+- **The undefined-reference audit missed a real defect and was widened.** A
+  missing `import { NimbleServer }` slipped through because the identifier is
+  used as `NimbleServer.find(...)` — a member call, not a direct one — which is
+  the most common shape in this codebase. It catches capitalised receivers now,
+  and was verified against the exact miss
+- 7 new checks
+
+
+## iter15 — dashboard of charts
+### v0.22.1 (m2) — uPlot, proven on the existing stats tab first
+- A `Plot` wrapper around uPlot, put to work on the Graphs tab before anything
+  is built on it. uPlot 1.6.32, zero dependencies
+- **uPlot is imported dynamically, and not as a size optimisation.** It touches
+  browser globals — `matchMedia`, `devicePixelRatio` — at module load rather
+  than at construction, so a static import ran that code everywhere the module
+  was pulled in and crashed the render harness before a single component had
+  rendered. Loading it behind the same guard that decides whether a canvas can
+  be drawn keeps it out of those environments entirely
+- The bonus is real though: it lands in its own chunk, 52 KB plus 1.6 KB of
+  CSS, fetched only when a chart is actually shown. The main bundle barely
+  moved
+- Without a canvas the chart renders the latest value instead of throwing — the
+  harness needs that, and so does any browser with canvas disabled
+- The instance is created once and fed with `setData`; a new one per tick would
+  discard the operator's zoom and redraw from scratch. It IS rebuilt when the
+  series list, unit or height change, because uPlot cannot add or remove a
+  series after construction — and that shape is **derived** from what is drawn
+  rather than signalled by a flag someone must remember to set
+- Size follows the container through a `ResizeObserver`, and colours come from
+  the stylesheet, so the light theme needs no second code path
+- **A gap is `null`, never `0`.** A missing reading drawn as zero is how a
+  restarted server looks like an idle one, and those call for opposite
+  reactions
+- New `npm run audit:plot`: 11 checks on the data transform, the rebuild rule
+  and the import guard. One of them was wrong on the first run — it matched the
+  word "rebuild" in a comment, which is testing prose; narrowed to the
+  component's props
+- The render harnesses now ignore stylesheet imports: they check that pages
+  render and their buttons are bound, not how they look
+
+
+## iter15 — dashboard of charts
+### v0.22.0 (m1) — agents report the host
+- Agents sample CPU, memory, swap and network straight from `/proc` — no
+  dependency, no privilege the agent did not already have — and push them on
+  the same path the logs use. Agent protocol version 8
+- **No new storage.** `StatSample` was already a generic series
+  (`serverId, subject, group, ts, metrics`), so host samples land in it under
+  `group: 'host'` and inherit the retention that was already there. One query
+  serves host and stream charts alike
+- **Rates are computed on the agent, not the panel.** Everything in `/proc` is
+  cumulative and a reboot resets it; only the agent can tell a restart from a
+  spike, by watching its own uptime go backwards. The first read after a start
+  or a reboot returns nothing at all — a gap is honest, an invented peak gets
+  investigated
+- An interface recreated between samples is skipped for that round rather than
+  reported as an enormous positive rate
+- **Memory is measured by `MemAvailable`.** `MemTotal - MemFree` counts page
+  cache as used and is wrong in both directions depending on how warm the box
+  is. Verified against `free -m` on a live machine: both say 269 MB
+- **Steal and iowait are their own series.** On a shared VM "CPU is fine but
+  steal is 30%" is the diagnosis, and it disappears the moment it is folded
+  into one number. Busy therefore excludes idle *and* iowait
+- Which interfaces to watch is chosen per server, because the machines differ,
+  and delivered on the poll response — nothing to configure on the box. Only
+  real NICs are offered: a device directory under `/sys/class/net` is what
+  separates a card from `docker0`, a bridge or a veth pair, which would
+  double-count
+- New `npm run test:host`: 12 checks, driven against a synthetic `/proc` so the
+  reboot and counter-reset paths can actually be exercised, and run against the
+  agent's own source rather than a copy of it
+
+
 ### v0.21.6 — swept the rest of the app for the same flicker
 - Checked every component that empties state before fetching: 39 places. **One
   was the defect** — the category member picker blanked its table before

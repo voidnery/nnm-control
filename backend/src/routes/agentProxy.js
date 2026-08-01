@@ -27,12 +27,24 @@ const wrap = (fn) => async (req, res) => {
 // --- connection management ---
 agentRouter.get('/:id/agent', requirePerm('servers.view'), loadServer, (req, res) => {
   const a = req.srv.agent || {};
-  res.json({ enabled: Boolean(a.enabled), hasToken: Boolean(a.token),
-             lastContactAt: a.lastContactAt || null, version: a.version || 0 });
+  res.json({
+    enabled: Boolean(a.enabled), hasToken: Boolean(a.token),
+    lastContactAt: a.lastContactAt || null, version: a.version || 0,
+    interfaces: a.interfaces || [],
+    // What the agent last reported it has, so the operator picks from a real
+    // list rather than typing a name that may not exist on that box.
+    availableInterfaces: a.lastHealth?.interfaces || [],
+  });
 });
 
 agentRouter.put('/:id/agent', requirePerm('servers.manage'), loadServer, wrap(async (req) => {
-  const { enabled, token } = req.body || {};
+  const { enabled, token, interfaces } = req.body || {};
+  if (Array.isArray(interfaces)) {
+    req.srv.agent.interfaces = interfaces
+      .map(x => String(x).trim())
+      .filter(x => /^[A-Za-z0-9_.@:-]{1,32}$/.test(x))
+      .slice(0, 12);
+  }
   req.srv.agent = req.srv.agent || {};
   if (enabled !== undefined) req.srv.agent.enabled = Boolean(enabled);
   if (token) req.srv.agent.token = String(token);   // empty means "keep current"

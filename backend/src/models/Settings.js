@@ -34,6 +34,13 @@ const settingsSchema = new mongoose.Schema({
       server: { type: Boolean, default: true },      // server-level counters
     },
   },
+  // iter15 m1 — host metrics from the agents. Same interval and the same
+  // store as the stream metrics: an operator reading two charts side by side
+  // should not have to hold two different sampling rates in their head.
+  host: {
+    enabled: { type: Boolean, default: false },
+    intervalSec: { type: Number, default: 10 },
+  },
   // iter10 m1 — Nimble log ingestion. Off by default: it needs the agent
   // installed, and on a fleet at debug level it moves ~14 GB/day, which is
   // not something to switch itself on after an upgrade.

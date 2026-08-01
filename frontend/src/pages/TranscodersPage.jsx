@@ -155,7 +155,7 @@ export default function TranscodersPage() {
                   );
                 })()}</td>
                 <td className="mono">{serverName(t.server_id)}</td>
-                <td>{(t.tags || []).map(x => <span key={x} className="badge" style={{ marginRight: 3 }}>{x}</span>)}</td>
+                <td>{(t.tags || []).map((x, i) => <span key={`${i}:${x}`} className="badge" style={{ marginRight: 3 }}>{x}</span>)}</td>
                 <td><span className={'lamp ' + (t.paused ? 'off' : 'on')} />{t.paused ? 'paused' : 'running'}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button onClick={() => openDetail(t)}>{tt('action.details')}</button>{' '}
@@ -249,7 +249,7 @@ export default function TranscodersPage() {
                     <div className="kv-k">{tt('tcp.description')}</div><div className="kv-v">{tr.description || <span className="hint">—</span>}</div>
                     <div className="kv-k">{tt('tcp.server')}</div><div className="kv-v mono">{serverName(tr.server_id)}</div>
                     <div className="kv-k">{tt('tcp.state')}</div><div className="kv-v"><span className={'lamp ' + (tr.paused ? 'off' : 'on')} />{tr.paused ? 'paused' : 'running'}</div>
-                    <div className="kv-k">{tt('tcp.tags')}</div><div className="kv-v">{(tr.tags || []).map(x => <span key={x} className="badge" style={{ marginRight: 3 }}>{x}</span>) || '—'}</div>
+                    <div className="kv-k">{tt('tcp.tags')}</div><div className="kv-v">{(tr.tags || []).map((x, i) => <span key={`${i}:${x}`} className="badge" style={{ marginRight: 3 }}>{x}</span>) || '—'}</div>
                     {tr.id && <><div className="kv-k">ID</div><div className="kv-v mono hint">{tr.id}</div></>}
                   </div>
                   {Array.isArray(pipelines) && pipelines.length > 0 && (

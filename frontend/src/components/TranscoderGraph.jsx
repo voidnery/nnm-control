@@ -42,7 +42,7 @@ function Pipeline({ pl, live, kind }) {
       <div className="gcol">
         <div className="gcol-h">{t('tg.source')}</div>
         {L.inputs.map((i, n) => (
-          <Node key={i.id || n} kind="in" title={ioLabel(i)} sub={i.type || ''}
+          <Node key={`in${n}:${i.id || ''}`} kind="in" title={ioLabel(i)} sub={i.type || ''}
                 live={live} path={i.app && i.stream ? `${i.app}/${i.stream}` : null} />
         ))}
         {!L.inputs.length && <div className="hint">—</div>}
@@ -52,12 +52,12 @@ function Pipeline({ pl, live, kind }) {
 
       <div className="gcol wide">
         <div className="gcol-h">{t('tg.processing')}</div>
-        {L.pre.map((f, n) => <Node key={n} kind="flt" title={filterLabel(f)} />)}
+        {L.pre.map((f, n) => <Node key={`pre${n}`} kind="flt" title={filterLabel(f)} />)}
         {L.split && <Node kind="split" title={filterLabel(L.split)} sub={t('tg.fanOut', { n: L.outputs.length })} />}
         {L.post.length > 0 && (
           <div className="gbranchbox">
             <div className="gbranch-h">{t('tg.perBranch')}</div>
-            {L.post.map((f, n) => <Node key={n} kind="flt" title={filterLabel(f)} />)}
+            {L.post.map((f, n) => <Node key={`post${n}`} kind="flt" title={filterLabel(f)} />)}
             <div className="hint gbranch-note">{t('tg.branchUnknown')}</div>
           </div>
         )}
@@ -69,7 +69,7 @@ function Pipeline({ pl, live, kind }) {
       <div className="gcol">
         <div className="gcol-h">{t('tg.encoders')}</div>
         {L.outputs.map((o, n) => (
-          <Node key={o.id || n} kind={kind === 'audio' ? 'out audio' : 'out'}
+          <Node key={`out${n}:${o.id || ''}`} kind={kind === 'audio' ? 'out audio' : 'out'}
                 title={ioLabel(o)} sub={codecLabel(o)}
                 extra={configuredBitrate(o) ? t('tg.configured', { v: configuredBitrate(o) }) : null}
                 live={live} path={o.app && o.stream ? `${o.app}/${o.stream}` : null} />
@@ -132,9 +132,9 @@ export default function TranscoderGraph({ transcoderId }) {
       )}
 
       {video.length > 0 && <div className="gsection">{t('tg.video')}</div>}
-      {video.map(pl => <Pipeline key={pl.id} pl={pl} live={data.live} kind="video" />)}
+      {video.map((pl, n) => <Pipeline key={`v${n}:${pl.id || ''}`} pl={pl} live={data.live} kind="video" />)}
       {audio.length > 0 && <div className="gsection">{t('tg.audio')}</div>}
-      {audio.map(pl => <Pipeline key={pl.id} pl={pl} live={data.live} kind="audio" />)}
+      {audio.map((pl, n) => <Pipeline key={`a${n}:${pl.id || ''}`} pl={pl} live={data.live} kind="audio" />)}
 
       {video.length === 0 && audio.length === 0 && (
         <div className="panel hint">{filter ? t('tg.noMatch') : t('tc.noPipelines')}</div>

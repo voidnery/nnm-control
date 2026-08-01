@@ -48,7 +48,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 7;
+const AGENT_VERSION = 8;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -151,6 +151,8 @@ const routes = {
       try { await fs.access(LOG_DIR); disk.logExists = true; }
       catch { disk.logExists = false; }
     }
+    // Offered so the panel can let an operator choose which to graph.
+    try { disk.interfaces = await physicalInterfaces(); } catch { disk.interfaces = []; }
     disk.selfPath = SELF_PATH;
     disk.selfUpdate = await canSelfUpdate();
     return { ok: true, agent: 'nnm-agent', version: AGENT_VERSION, logs: LOG_ENABLED,
@@ -419,6 +421,154 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// ---- iter15 m1: host metrics -----------------------------------------------
+//
+// CPU, memory, swap and network read straight from /proc — no dependency, and
+// nothing here needs privileges the agent does not already have.
+//
+// Everything in /proc is CUMULATIVE, so the useful numbers are differences
+// between two reads. Those differences are computed HERE rather than on the
+// panel, for one reason: a reboot resets the counters, and only this process
+// can tell a reboot from a spike by watching its own uptime go backwards. A
+// panel differencing blindly would draw a hundred-gigabit peak every time a
+// server restarted.
+let hostPrev = null;
+let hostCfg = { enabled: false, intervalSec: 10, interfaces: [] };
+
+async function readCpu() {
+  const line = (await fs.readFile('/proc/stat', 'utf8')).split('\n')[0];
+  const n = line.trim().split(/\s+/).slice(1).map(Number);
+  // user nice system idle iowait irq softirq steal guest guest_nice
+  return {
+    total: n.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0),
+    idle: n[3] || 0, iowait: n[4] || 0,
+    system: (n[2] || 0) + (n[5] || 0) + (n[6] || 0),
+    user: (n[0] || 0) + (n[1] || 0),
+    steal: n[7] || 0,
+  };
+}
+
+async function readMem() {
+  const m = {};
+  for (const l of (await fs.readFile('/proc/meminfo', 'utf8')).split('\n')) {
+    const mm = /^(\w+):\s+(\d+) kB/.exec(l);
+    if (mm) m[mm[1]] = Number(mm[2]);
+  }
+  return m;
+}
+
+async function readNet() {
+  const out = {};
+  for (const l of (await fs.readFile('/proc/net/dev', 'utf8')).split('\n').slice(2)) {
+    const mm = /^\s*([^:]+):\s*(.*)$/.exec(l);
+    if (!mm) continue;
+    const f = mm[2].trim().split(/\s+/).map(Number);
+    out[mm[1].trim()] = { rx: f[0] || 0, tx: f[8] || 0 };
+  }
+  return out;
+}
+
+// Which interfaces are real. A device directory under /sys/class/net is what
+// separates a NIC from docker0, a bridge or a veth pair — summing those would
+// count the same traffic twice.
+export async function physicalInterfaces() {
+  const out = [];
+  let names = [];
+  try { names = await fs.readdir('/sys/class/net'); } catch { return out; }
+  for (const n of names) {
+    if (n === 'lo') continue;
+    try { await fs.access(`/sys/class/net/${n}/device`); out.push(n); }
+    catch { /* virtual */ }
+  }
+  return out.sort();
+}
+
+async function uptimeSeconds() {
+  try { return Number((await fs.readFile('/proc/uptime', 'utf8')).split(' ')[0]) || 0; }
+  catch { return 0; }
+}
+
+/**
+ * One host sample, as rates.
+ *
+ * Returns null on the very first read and after a reboot: there is no honest
+ * rate without a previous point, and inventing one is how a graph acquires a
+ * spike that never happened.
+ */
+export async function sampleHost(want = []) {
+  const now = Date.now();
+  const [cpu, mem, net, up] = await Promise.all([readCpu(), readMem(), readNet(), uptimeSeconds()]);
+  const prev = hostPrev;
+  hostPrev = { at: now, cpu, net, up };
+
+  if (!prev) return null;
+  // Counters reset on reboot. Uptime going backwards is the reliable tell;
+  // a counter going backwards on its own can also mean an interface was
+  // recreated, which is the same problem and the same answer.
+  if (up < prev.up || cpu.total <= prev.cpu.total) return null;
+
+  const secs = (now - prev.at) / 1000;
+  if (secs <= 0) return null;
+
+  const dTotal = cpu.total - prev.cpu.total;
+  const pct = (a, b) => Math.max(0, Math.min(100, (100 * (a - b)) / dTotal));
+  const metrics = {
+    // Busy excludes idle AND iowait: a server waiting on disk is not a server
+    // short of CPU, and merging them hides which one it is.
+    cpu_pct: Math.max(0, Math.min(100, 100 * (dTotal - (cpu.idle - prev.cpu.idle) - (cpu.iowait - prev.cpu.iowait)) / dTotal)),
+    cpu_user_pct: pct(cpu.user, prev.cpu.user),
+    cpu_system_pct: pct(cpu.system, prev.cpu.system),
+    cpu_iowait_pct: pct(cpu.iowait, prev.cpu.iowait),
+    // On a shared VM "CPU is fine but steal is 30%" IS the diagnosis, and it
+    // is invisible once folded into a single number.
+    cpu_steal_pct: pct(cpu.steal, prev.cpu.steal),
+    // MemAvailable, not MemTotal-MemFree: the latter counts page cache as
+    // used and is wrong in both directions depending on how warm the box is.
+    mem_total_mb: Math.round((mem.MemTotal || 0) / 1024),
+    mem_used_mb: Math.round(((mem.MemTotal || 0) - (mem.MemAvailable || 0)) / 1024),
+    mem_used_pct: mem.MemTotal ? (100 * (1 - (mem.MemAvailable || 0) / mem.MemTotal)) : 0,
+    swap_total_mb: Math.round((mem.SwapTotal || 0) / 1024),
+    swap_used_mb: Math.round(((mem.SwapTotal || 0) - (mem.SwapFree || 0)) / 1024),
+    swap_used_pct: mem.SwapTotal ? (100 * (1 - (mem.SwapFree || 0) / mem.SwapTotal)) : 0,
+  };
+
+  const chosen = want.length ? want : await physicalInterfaces();
+  let rxTotal = 0, txTotal = 0;
+  for (const iface of chosen) {
+    const a = net[iface], b = prev.net[iface];
+    if (!a || !b) continue;
+    // An interface recreated between samples restarts at zero; skip rather
+    // than report a negative rate as an enormous positive one.
+    if (a.rx < b.rx || a.tx < b.tx) continue;
+    const rx = (a.rx - b.rx) / secs;
+    const tx = (a.tx - b.tx) / secs;
+    metrics[`net_${iface}_rx_bps`] = rx * 8;
+    metrics[`net_${iface}_tx_bps`] = tx * 8;
+    rxTotal += rx; txTotal += tx;
+  }
+  metrics.net_rx_bps = rxTotal * 8;
+  metrics.net_tx_bps = txTotal * 8;
+
+  return { ts: new Date(now).toISOString(), metrics, interfaces: chosen };
+}
+
+async function hostLoop() {
+  for (;;) {
+    const wait = Math.max(2, Number(hostCfg.intervalSec) || 10) * 1000;
+    try {
+      if (hostCfg.enabled) {
+        const s = await sampleHost(hostCfg.interfaces || []);
+        // The first read after a start or a reboot yields nothing; that is the
+        // correct answer, not a gap to paper over.
+        if (s) await panelFetch('/metrics', s, { timeoutMs: 15_000 });
+      }
+    } catch (e) {
+      console.error(`[nnm-agent] host metrics failed: ${e && e.message || e}`);
+    }
+    await new Promise(r => setTimeout(r, wait));
+  }
+}
+
 // ---- iter12 m2: log tailer ------------------------------------------------
 
 let logState = {};                 // file -> { offset, ino }
@@ -573,6 +723,13 @@ async function pollLoop() {
       // the poll response means there is nothing to configure on the box and
       // no second channel to keep alive.
       if (config?.logs) logCfg = { enabled: Boolean(config.logs.enabled), files: config.logs.files || [] };
+      // Which interfaces to watch is the panel's decision, carried on the same
+      // response — nothing to configure on the box.
+      if (config?.host) hostCfg = {
+        enabled: Boolean(config.host.enabled),
+        intervalSec: Number(config.host.intervalSec) || 10,
+        interfaces: Array.isArray(config.host.interfaces) ? config.host.interfaces : [],
+      };
       backoff = 1000;
       if (!task) continue;
       try {
@@ -602,6 +759,7 @@ server.listen(PORT, BIND, () => {
     console.log(`[nnm-agent] panel=${PANEL_URL} server=${SERVER_ID} instance=${INSTANCE_ID}`);
     pollLoop();
     if (LOG_ENABLED) logLoop();
+    hostLoop();
   } else {
     console.log('[nnm-agent] panel polling disabled (NNM_AGENT_PANEL_URL / NNM_AGENT_SERVER_ID not set)');
   }
