@@ -80,11 +80,16 @@ export function joinLive(entries = [], objects = []) {
   for (let i = 0; i < NATIVE_KEYS.length; i++) {
     const nk = NATIVE_KEYS[i];
     const wk = WMS_KEYS[i];
+    // Several entries can belong to one object: an SRT Out setting reports one
+    // socket per connected client, all sharing a setting_id. Keeping the last
+    // one showed a single viewer's rate where the egress total was meant.
     const index = new Map();
     for (const e of entries) {
       const k = nk.of(e);
       // An empty key matches everything and therefore identifies nothing.
-      if (k) index.set(k, e);
+      if (!k) continue;
+      if (!index.has(k)) index.set(k, []);
+      index.get(k).push(e);
     }
     const pairs = [];
     for (const o of objects) {
@@ -98,7 +103,7 @@ export function joinLive(entries = [], objects = []) {
   }
 
   const byObjectId = Object.fromEntries(best?.pairs || []);
-  const used = new Set(Object.values(byObjectId));
+  const used = new Set(Object.values(byObjectId).flat());
 
   return {
     byObjectId,
@@ -137,7 +142,38 @@ const num = (...vals) => {
 // audio-only streams would need it lower.
 const NO_MEDIA_MBPS = Number(process.env.NNM_NO_MEDIA_MBPS || 0.2);
 
-export function liveSummary(entry) {
+/**
+ * One row's numbers, from however many sockets belong to it.
+ *
+ * An SRT Out setting with five viewers is five sockets. The rate that matters
+ * for the row is the sum — that is what is leaving the server — while RTT and
+ * loss are worst-case, because one bad client is the one worth noticing. The
+ * client count is itself information WMSPanel shows and we did not.
+ */
+export function liveSummary(entryOrList) {
+  if (!entryOrList) return null;
+  const list = Array.isArray(entryOrList) ? entryOrList : [entryOrList];
+  if (!list.length) return null;
+  if (list.length > 1) {
+    const parts = list.map(e => summariseOne(e)).filter(Boolean);
+    if (!parts.length) return null;
+    const rates = parts.map(p => p.bps).filter(v => v != null);
+    return {
+      bps: rates.length ? rates.reduce((a, b) => a + b, 0) : null,
+      online: parts.some(p => p.online),
+      // Idle only when EVERY socket is: one client pulling nothing while four
+      // others work is not an idle stream.
+      idle: parts.every(p => p.idle),
+      rtt: Math.max(...parts.map(p => p.rtt ?? 0)) || null,
+      loss: Math.max(...parts.map(p => p.loss ?? 0)) || null,
+      retries: parts.reduce((a, p) => a + (p.retries || 0), 0),
+      clients: parts.length,
+    };
+  }
+  return summariseOne(list[0]);
+}
+
+function summariseOne(entry) {
   if (!entry) return null;
   const st = entry.stats || {};
   const dir = st.recv || st.send || {};      // receiver on SRT In, sender on SRT Out
@@ -172,5 +208,6 @@ export function liveSummary(entry) {
     // climbs is a link that keeps dropping, which no instantaneous reading
     // shows.
     retries: num(entry.retryCount),
+    clients: 1,
   };
 }

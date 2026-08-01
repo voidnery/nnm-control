@@ -412,5 +412,66 @@ check('a socket appearing in both lists is counted once', () => {
   assert.ok(proxySrc.includes('`${e.setting_id ?? \'\'}|${e.id ?? \'\'}`'));
 });
 
+console.log('\nSEVERAL SOCKETS, ONE STREAM (v0.25.6):');
+
+const client = (mbps, rtt) => ({
+  state: 'connected', retryCount: 3,
+  stats: { link: { rtt }, send: { mbpsRate: mbps, packetsSent: 100, packetsLost: 1 } },
+});
+
+check('the rate of an SRT Out is the sum of its clients', () => {
+  // One setting reports one socket per connected client — five entries sharing
+  // a setting_id in the live capture. Keeping the last showed one viewer's
+  // rate where the egress total was meant.
+  const s = liveSummary([client(2, 9), client(2, 11), client(2, 40), client(2, 10), client(2, 9)]);
+  assert.equal(s.bps, 10e6);
+  assert.equal(s.clients, 5);
+});
+
+check('RTT and loss are worst-case, not averaged', () => {
+  // One bad client is the one worth noticing, and an average hides it.
+  const s = liveSummary([client(2, 9), client(2, 40)]);
+  assert.equal(s.rtt, 40);
+});
+
+check('idle only when every client is', () => {
+  // One viewer pulling nothing while four others work is not an idle stream.
+  assert.equal(liveSummary([client(0, 9), client(0, 9)]).idle, true);
+  assert.equal(liveSummary([client(0, 9), client(6, 9)]).idle, false);
+});
+
+check('a single socket is unchanged', () => {
+  const s = liveSummary(client(2, 9));
+  assert.equal(s.bps, 2e6);
+  assert.equal(s.clients, 1);
+});
+
+check('every entry is accounted for as used', () => {
+  // With the pairing holding lists, the leftover calculation has to flatten
+  // them or every extra socket looks unmatched.
+  const objects = [{ id: 'w1', name: 'a', port: 100 }];
+  const entries = [
+    { name: 'a', id: 'x:1->y:100', stats: { send: { mbpsRate: 1 } } },
+    { name: 'a', id: 'x:2->y:100', stats: { send: { mbpsRate: 1 } } },
+  ];
+  const r = joinLive(entries, objects);
+  assert.equal(r.matched, 1, 'one object');
+  assert.equal(r.unmatchedEntries.length, 0, 'and both sockets belong to it');
+});
+
+console.log('\nDIFFERENT STREAMS IS NOT A FAILED MATCH:');
+
+check('no port overlap is reported as its own case', () => {
+  // On SRT In not one of 61 live sockets shares a port with the 76 objects.
+  // "Could not be matched" reads as a fault; there was never anything to
+  // match.
+  const proxy = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+  assert.ok(proxy.includes('const portOverlap ='));
+  assert.ok(proxy.includes('portOverlap,'));
+  const tabs = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+  assert.ok(tabs.includes('live.portOverlap === 0'));
+  assert.ok(tabs.includes("t('wo.liveElsewhere'"));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

@@ -197,6 +197,9 @@ function JoinNote({ live, t }) {
     <div className="hint" style={{ marginBottom: 6, color: 'var(--warn)' }}>
       {empty
         ? t('wo.liveEmpty', { objects: live.objects, endpoint: d.endpoint || '' })
+        : (live.matched === 0 && live.portOverlap === 0)
+          // Not a failure to match: nothing here was ever the same stream.
+          ? t('wo.liveElsewhere', { entries: live.entries })
         : live.matched > 0
           ? t('wo.livePartial', { matched: live.matched, unmatched: live.unmatched })
           : t('wo.liveNoMatch', { entries: live.entries, objects: live.objects })}
@@ -344,8 +347,16 @@ export function UdpTab({ serverId }) {
                 <td>
                   <span className={'lamp ' + (o.paused ? 'off' : live?.live?.[o.id]?.idle ? 'warn' : 'on')} />
                   {o.paused ? 'paused' : live?.live?.[o.id]?.idle ? t('wo.idle') : 'active'}
+                  {/* Several sockets on one setting means several clients
+                      pulling it — a number WMSPanel shows and we did not. */}
+                  {live?.live?.[o.id]?.clients > 1 && (
+                    <span className="hint" style={{ marginLeft: 6 }}>{t('wo.clients', { n: live.live[o.id].clients })}</span>
+                  )}
                   {live?.live?.[o.id]?.rtt != null && (
-                    <span className="hint" style={{ marginLeft: 6 }}>RTT {live.live[o.id].rtt.toFixed(0)}ms</span>
+                    <span className="hint" style={{ marginLeft: 6 }}
+                          title={live.live[o.id].clients > 1 ? t('wo.worstOf') : ''}>
+                      RTT {live.live[o.id].rtt.toFixed(0)}ms
+                    </span>
                   )}
                 </td>
                 <td><TagChips st={st} kind="udp" objId={o.id} /></td>

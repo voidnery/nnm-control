@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.25.6 — several sockets, one stream
+- The diagnostics settled both questions. **SRT Out matches** — its objects are
+  the 35001+ family, five paired. **SRT In genuinely has no live counterpart**:
+  not one of 61 live sockets shares a port with those 76 objects
+- **And it exposed a third thing, which was producing wrong numbers rather than
+  missing ones.** An SRT Out setting reports one socket *per connected client*
+  — five entries sharing a `setting_id` in the capture — and the join kept the
+  last, so the row showed one viewer's rate where the egress total was meant
+- Entries are aggregated per object now: **the rate is the sum**, because that
+  is what is leaving the server; **RTT and loss are worst-case**, because one
+  bad client is the one worth noticing and an average hides it; and idle only
+  when *every* client is, since one viewer pulling nothing while four others
+  work is not an idle stream. The client count is shown — WMSPanel has it and
+  we did not
+- **"Could not be matched" reads as a fault**, and on SRT In it isn't one. When
+  the two port sets do not overlap at all, the sides describe different streams
+  configured on other tabs, and the note now says exactly that
+- 6 new checks
+
+
 ### v0.25.5 — live values on SRT Out, where those streams actually live
 - Ports 35001+ are configured through WMSPanel's UDP Streaming — **SRT Out** in
   this panel — and Nimble reports them under `srt_receiver_stats`. My mapping

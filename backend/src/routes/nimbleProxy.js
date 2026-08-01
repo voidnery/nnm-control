@@ -180,11 +180,20 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   const objects = wmsRes.status === 'fulfilled' ? src.pick(wmsRes.value) : [];
   const joined = joinLive(entries, objects);
 
+  // Ports that overlap mean the two sides describe the same sockets and a
+  // failure to pair is a naming problem. No overlap at all means they describe
+  // different streams — for which "could not be matched" is misleading: there
+  // was never anything to match, and nothing is wrong.
+  const nPorts = new Set(entries.map(e => (localPort(e.id) || '').replace('port:', '')).filter(Boolean));
+  const wPorts = new Set(objects.map(o => String(o.port || '')).filter(Boolean));
+  const portOverlap = [...wPorts].filter(p => nPorts.has(p)).length;
+
   res.json({
     kind,
     available: true,
     strategy: joined.strategy,
     matched: joined.matched,
+    portOverlap,
     objects: objects.length,
     entries: entries.length,
     live: Object.fromEntries(Object.entries(joined.byObjectId).map(([id, e]) => [id, liveSummary(e)])),
