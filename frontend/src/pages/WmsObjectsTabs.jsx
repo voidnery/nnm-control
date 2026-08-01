@@ -37,6 +37,59 @@ const SyncNote = () => (
 );
 
 // ---------------------------------------------------------------- UDP / SRT
+// iter16 m1 — live values for objects WMSPanel configured.
+//
+// The panel has been polling Nimble's native stats for its charts all along;
+// what was missing was the pairing, and the columns for it were already drawn
+// and always empty. The join happens server-side, so a row here just reads a
+// number.
+//
+// Failing to match is reported rather than rendered as dashes: an unmatched
+// object and an offline stream look identical in a table, and only one of them
+// is a problem with the panel.
+function useLive(serverId, kind, deps = []) {
+  const [live, setLive] = useState(null);
+  useEffect(() => {
+    if (!serverId) return undefined;
+    let dead = false;
+    const tick = () => api(`/nimble/${serverId}/live-objects/${kind}`)
+      .then(d => { if (!dead) setLive(d); })
+      .catch(() => { if (!dead) setLive(null); });
+    tick();
+    // Nimble's own numbers move in seconds; slower than that and the column is
+    // a memory rather than a reading.
+    const id = setInterval(tick, 10_000);
+    return () => { dead = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverId, kind, ...deps]);
+  return live;
+}
+
+const fmtBps = (v) => {
+  if (!Number.isFinite(v) || v <= 0) return '—';
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)} Gb/s`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)} Mb/s`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(0)} kb/s`;
+  return `${v.toFixed(0)} b/s`;
+};
+
+// Shown once above a table when the join found nothing: the field names differ
+// between Nimble builds and were never documented, so the evidence goes on
+// screen instead of into a guess.
+function JoinNote({ live, t }) {
+  if (!live) return null;
+  if (live.available === false) {
+    return <div className="hint" style={{ marginBottom: 6 }}>{t('wo.liveUnavailable', { why: live.reason || '' })}</div>;
+  }
+  if (live.matched > 0 || !live.objects) return null;
+  return (
+    <div className="hint" style={{ marginBottom: 6, color: 'var(--warn)' }}
+         title={JSON.stringify(live.diagnostics?.sampleEntries?.[0] || {}, null, 1)}>
+      {t('wo.liveNoMatch', { entries: live.entries, objects: live.objects })}
+    </div>
+  );
+}
+
 export function UdpTab({ serverId }) {
   const st = useStreamTags(serverId, 'udp');
   const cp = useStreamCopy(serverId, 'udp');
@@ -680,6 +733,7 @@ const codecsOf = (o) => {
 };
 
 export function MpegtsInTab({ serverId }) {
+  const live = useLive(serverId, 'incoming');
   const st = useStreamTags(serverId, 'incoming');
   const cp = useStreamCopy(serverId, 'incoming');
   const { t } = useI18n();
@@ -737,6 +791,7 @@ export function MpegtsInTab({ serverId }) {
       <TagFilterBar st={st} />
       <CopySelectionBar cp={cp} visibleIds={streams.map(o => o.id)} />
       <div className="panel">
+        <JoinNote live={live} t={t} />
         <table>
           <thead><tr><th></th><th>{t('wo.name')}</th><th>{t('wo.proto')}</th><th>{t('wo.endpoint')}</th><th>{t('wo.mode')}</th><th>{t('wo.codecs')}</th><th>{t('wo.bitrate')}</th><th>{t('wo.status')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
@@ -748,8 +803,25 @@ export function MpegtsInTab({ serverId }) {
                 <td className="mono">{o.ip}:{o.port}</td>
                 <td>{o.receive_mode}</td>
                 <td className="hint">{codecsOf(o) || '—'}</td>
-                <td className="mono">{fmtMbps(o.bandwidth)}</td>
-                <td><span className={'lamp ' + (o.status === 'online' ? 'on' : o.status === 'paused' ? 'warn' : 'off')} />{o.status}</td>
+                {/* The live reading wins: `o.bandwidth` and `o.status` come
+                    from the WMSPanel object, which describes how the stream is
+                    configured and never what it is doing. */}
+                <td className="mono">{live?.live?.[o.id] ? fmtBps(live.live[o.id].bps) : fmtMbps(o.bandwidth)}</td>
+                <td>
+                  {(() => {
+                    const l = live?.live?.[o.id];
+                    const on = l ? l.online : o.status === 'online';
+                    const label = l ? (l.online ? t('wo.online') : t('wo.offline')) : (o.status || '—');
+                    return (
+                      <>
+                        <span className={'lamp ' + (on ? 'on' : o.status === 'paused' ? 'warn' : 'off')} />
+                        {label}
+                        {l?.rtt != null && <span className="hint" style={{ marginLeft: 6 }}>RTT {l.rtt.toFixed(0)}ms</span>}
+                        {l?.loss ? <span className="hint" style={{ marginLeft: 6, color: 'var(--warn)' }}>{l.loss.toFixed(1)}%</span> : null}
+                      </>
+                    );
+                  })()}
+                </td>
                 <td><TagChips st={st} kind="incoming" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>

@@ -3,6 +3,15 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
+import { wmspanel } from '../services/wmspanelClient.js';
+import { joinLive, liveSummary } from '../services/streamJoin.js';
+
+// Nimble returns its stats under a different key per endpoint, and an array
+// directly on some builds. Same tolerance the collector already uses.
+const asList = (d) => {
+  for (const k of ['streams', 'sockets', 'stats', 'rules']) if (Array.isArray(d?.[k])) return d[k];
+  return Array.isArray(d) ? d : [];
+};
 
 // Permission-gated proxy of Nimble native API per managed server.
 export const nimbleRouter = Router();
@@ -62,3 +71,57 @@ r.get('/:id/playlist',         requirePerm('playlist.view'),    loadServer, prox
 r.post('/:id/control/reload-config', requirePerm('control.manage'), loadServer, proxy(rq => nimble.reloadConfig(rq.nimbleServer)));
 r.post('/:id/control/reload-ssl',    requirePerm('control.manage'), loadServer, proxy(rq => nimble.reloadSsl(rq.nimbleServer)));
 r.post('/:id/control/sync-panel',    requirePerm('control.manage'), loadServer, proxy(rq => nimble.syncPanel(rq.nimbleServer)));
+
+// iter16 m1 — live values for the objects WMSPanel holds.
+//
+// The stats come from Nimble's native API, which the panel already polls for
+// its charts; what was missing was the pairing. Both halves are fetched here so
+// the join happens once, server-side, instead of every table row guessing.
+nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+  const kind = String(req.params.kind);
+
+  const SOURCES = {
+    incoming: { native: 'srtReceiverStats', wms: 'incomingList', pick: (d) => d.streams || d.settings || [] },
+    outgoing: { native: 'srtSenderStats', wms: 'outgoingList', pick: (d) => d.streams || d.settings || [] },
+    republish: { native: 'republishStats', wms: 'republishList', pick: (d) => d.rules || d.republish_rules || [] },
+  };
+  const src = SOURCES[kind];
+  if (!src) return res.status(400).json({ error: `unknown kind "${kind}"` });
+
+  const settings = await Settings.load();
+  // Independent on purpose: native stats are worth having even when WMSPanel
+  // is unreachable, and the object list is worth having when a server is.
+  const [nativeRes, wmsRes] = await Promise.allSettled([
+    nimble[src.native](server),
+    wmspanel[src.wms](settings.wmspanel, server.wmspanelServerId),
+  ]);
+
+  if (nativeRes.status !== 'fulfilled') {
+    return res.json({
+      kind, available: false,
+      reason: String(nativeRes.reason?.message || nativeRes.reason).slice(0, 200),
+    });
+  }
+
+  const entries = asList(nativeRes.value);
+  const objects = wmsRes.status === 'fulfilled' ? src.pick(wmsRes.value) : [];
+  const joined = joinLive(entries, objects);
+
+  res.json({
+    kind,
+    available: true,
+    strategy: joined.strategy,
+    matched: joined.matched,
+    objects: objects.length,
+    entries: entries.length,
+    live: Object.fromEntries(Object.entries(joined.byObjectId).map(([id, e]) => [id, liveSummary(e)])),
+    // Returned so a fleet that matches on nothing shows WHY, rather than
+    // thirteen tables of dashes. This is the evidence the field names have
+    // never been documented for.
+    diagnostics: joined.matched === 0
+      ? { candidates: joined.candidates, sampleEntries: joined.unmatchedEntries }
+      : null,
+  });
+});

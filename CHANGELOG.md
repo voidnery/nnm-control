@@ -1,5 +1,39 @@
 # Changelog
 
+## iter16 — stream statistics
+### v0.24.0 (m1) — the bitrate and status columns finally have values
+- Those columns have been drawn and empty since they were added: the rows come
+  from WMSPanel objects, which describe how a stream is **configured** and
+  never what it is doing. The live numbers were already being polled from
+  Nimble's native API for the charts — what was missing was the pairing
+- **The join discovers its own key.** Nimble and WMSPanel name the same stream
+  differently and the field names differ between builds; guessing them has cost
+  this project twice already. So it tries name, stream, id, local socket,
+  remote socket and URL in that order, takes the first that matches anything,
+  and reports which one it used. A listener is identified by its port alone,
+  because `0.0.0.0:21041` and `:21041` are the same socket
+- **When nothing matches, it says so and keeps the evidence.** An unmatched
+  object and an offline stream look identical in a table, and only one of them
+  is a problem with the panel — so the note gives the counts on each side and
+  carries a sample of what Nimble actually returned. That sample is the
+  documentation these field names have never had
+- Rates are read out of whatever shape the entry has: under a thousand is Mbps,
+  above it is bps, because six bits per second is not a video stream. A missing
+  rate stays null rather than becoming zero, which would read as "carrying
+  nothing" — a different fact from "did not report"
+- RTT and packet loss ride along in the status cell where Nimble reports them
+- New `npm run test:join`: 11 checks, most of them about the failure path
+- The native stats fetch and the WMSPanel list are independent, so each is
+  still useful when the other is unreachable
+
+**Not verified against a live server.** I asked for a real
+`/manage/srt_receiver_stats` response and built without it, so which key
+actually matches is still unknown to me — but the panel will now answer that on
+its first run rather than me guessing. If the columns stay empty, the note
+above the table will name the counts and show a sample; that is the thing to
+send.
+
+
 ### v0.23.1 — the budget readout is switchable, and the limit is editable
 - A **WMSPanel budget readout** section in system settings: show it or not
 - **The daily limit moved out of the environment.** It is a property of the

@@ -235,6 +235,10 @@ window.fetch = (u) => {
         lastContactAt:new Date(Date.now()-400000).toISOString(), bucketMs:0, latest:null, points:[] },
       { id:'S3', name:'mediaserver', host:'192.168.200.129', agent:false, lastContactAt:null, bucketMs:0, latest:null, points:[] }] }),
     text:()=>Promise.resolve('{}') });
+  if (s.includes('/live-objects/')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    kind:'incoming', available:true, strategy:'name', matched:1, objects:2, entries:1,
+    live:{ 'o1': { bps:6200000, online:true, rtt:12.4, loss:0.2 } }, diagnostics:null }),
+    text:()=>Promise.resolve('{}') });
   if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'],
     preferences:{ dashboard:{ charts:['cpu','mem','net','streams'], range:'1h', columns:'2', refreshSec:15, streamLimit:6 } } };
   else if (s.includes('/settings/public')) body = { controlPlane:'wmspanel', wmspanelConfigured:true };
