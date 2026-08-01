@@ -19,7 +19,18 @@ nimbleRouter.use(requireAuth);
 
 // Hard gate: while the control plane is WMSPanel API, the native API is fully
 // disabled — no calls leave the panel through this router.
-nimbleRouter.use(async (_req, res, next) => {
+// Read-only endpoints that stay available whatever the control plane is.
+//
+// The block below exists so that CONTROL does not go two ways at once: with
+// WMSPanel as the control plane, a change made through the native API is
+// silently overwritten on its next sync. Reading a counter is not a change,
+// and the stats collector has been polling this same API in this same mode all
+// along — so blocking reads here made the panel refuse itself data it was
+// already collecting.
+const READ_ONLY = [/^\/[^/]+\/live-objects\//];
+
+nimbleRouter.use(async (req, res, next) => {
+  if (READ_ONLY.some(re => re.test(req.path))) return next();
   const s = await Settings.load();
   if (s.controlPlane === 'wmspanel') {
     return res.status(409).json({ error: 'Native Nimble API is disabled: control plane is WMSPanel API (see Settings)' });

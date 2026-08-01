@@ -52,9 +52,12 @@ function useLive(serverId, kind, deps = []) {
   useEffect(() => {
     if (!serverId) return undefined;
     let dead = false;
+    // Swallowing the error left the table with neither values nor a reason —
+    // which is how a 409 from the control-plane guard looked like "this stream
+    // is offline" for a whole release.
     const tick = () => api(`/nimble/${serverId}/live-objects/${kind}`)
       .then(d => { if (!dead) setLive(d); })
-      .catch(() => { if (!dead) setLive(null); });
+      .catch(e => { if (!dead) setLive({ available: false, reason: e.message }); });
     tick();
     // Nimble's own numbers move in seconds; slower than that and the column is
     // a memory rather than a reading.

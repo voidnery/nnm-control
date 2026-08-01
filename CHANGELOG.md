@@ -1,5 +1,21 @@
 # Changelog
 
+### v0.24.1 — the live columns were blocked, and the block was invisible
+- **The whole native router is gated on the control plane**, so in WMSPanel
+  mode the new endpoint was refused with a 409 before its handler ran. The gate
+  exists so that *control* does not go two ways at once — a change made
+  natively is overwritten on WMSPanel's next sync — but reading a counter is
+  not a change, and the stats collector has been polling this same API in this
+  same mode all along. The panel was refusing itself data it already had
+- Read-only stat endpoints pass; everything that changes anything stays blocked
+- **The failure was silent, which is worse than the failure.** The hook caught
+  the error and set the state to null, and the note only renders when it has
+  something to say — so a 409 looked exactly like "every stream is offline".
+  It now reports the reason, which is what would have made this one refresh
+  long instead of one release long
+- 2 new checks
+
+
 ## iter16 — stream statistics
 ### v0.24.0 (m1) — the bitrate and status columns finally have values
 - Those columns have been drawn and empty since they were added: the rows come

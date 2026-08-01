@@ -99,5 +99,31 @@ check('a missing rate is null, not zero', () => {
   assert.equal(liveSummary(null), null);
 });
 
+console.log('\nREADING STATS IS NOT CONTROLLING:');
+
+const { readFileSync } = await import('node:fs');
+const routeSrc = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+const tabsSrc = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+
+check('the control-plane guard no longer blocks reading counters', () => {
+  // The guard exists so control does not go two ways at once — a native change
+  // is overwritten on WMSPanel's next sync. Reading a counter is not a change,
+  // and the stats collector has polled this same API in this same mode all
+  // along, so the block made the panel refuse itself data it already had.
+  const RO = [/^\/[^/]+\/live-objects\//];
+  const allowed = (p) => RO.some(re => re.test(p));
+  assert.equal(allowed('/S1/live-objects/incoming'), true);
+  assert.equal(allowed('/S1/manage/reload_config'), false, 'control stays blocked');
+  assert.equal(allowed('/S1/sessions'), false);
+  assert.ok(routeSrc.includes('const READ_ONLY = ['), 'and the rule is in the route, not only here');
+});
+
+check('a failed request shows why instead of blanking the table', () => {
+  // With the error swallowed, a 409 from that guard was indistinguishable from
+  // "every stream is offline" — for a whole release.
+  assert.ok(tabsSrc.includes('setLive({ available: false, reason: e.message })'));
+  assert.ok(!/catch\(\(\) => \{ if \(!dead\) setLive\(null\)/.test(tabsSrc));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);
