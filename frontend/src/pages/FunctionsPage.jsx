@@ -344,6 +344,12 @@ function VariantStepFields({ step, override, onChange }) {
 function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...step, [k]: v });
+  // Two set() calls in one handler both read the same `step` prop — React has
+  // not re-rendered between them — so the second silently discards the first.
+  // That is how picking an object stored its label and lost its id, leaving
+  // "SELECTED cct_feeds/feed1" on screen next to an empty targetId and a
+  // function that failed preflight on every step.
+  const setMany = (patch) => onChange({ ...step, ...patch });
   const [patchText, setPatchText] = useState(JSON.stringify(step.patch || {}, null, 0));
   const [patchErr, setPatchErr] = useState('');
   const [live, setLive] = useState(null);        // { streams, source }
@@ -445,7 +451,7 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
           <div className="hint" style={{ marginTop: 8, marginBottom: 2 }}><b>{t('fn.whatToChange')}</b></div>
           <label>{t('fn.targetId')}</label>
           <input className="mono" value={step.targetId || ''} onChange={e => set('targetId', e.target.value)} />
-          <ObjectPicker servers={servers} step={step} onPick={(o, label) => { set('targetId', String(o.id)); set('targetLabel', label); }} />
+          <ObjectPicker servers={servers} step={step} onPick={(o, label) => setMany({ targetId: String(o.id), targetLabel: label })} />
           {step.targetLabel && (
             <div className="picked-row">
               <span className="picked-tag">{t('fn.selected')}</span>

@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.22.6 — picking an object lost its id
+- **The function never had a target on any step, and the panel said otherwise.**
+  Picking an object called `set('targetId', …)` and then `set('targetLabel', …)`
+  in one handler. Both reads take the same `step` prop — React has not
+  re-rendered between them — so the second write discarded the first. The label
+  stuck, the id did not: the editor showed "SELECTED cct_feeds/feed1" beside an
+  empty id, the function saved cleanly, and every run failed preflight on every
+  step
+- Both fields are written in one update now. The v0.22.5 diagnostics are what
+  made this findable: "this step has no outgoing object selected" pointed
+  straight at the data instead of at WMSPanel
+- New `npm run audit:setter`: flags two consecutive calls to the same
+  single-field setter inside one handler, across all 51 components. Narrow on
+  purpose — a setter taking a whole patch, or two different setters, is fine —
+  and verified against the exact line that shipped
+- The lost-write itself is reproduced in a check rather than asserted about, so
+  the shape is pinned and not just the current code
+
+
 ### v0.22.5 — preflight says which fault it hit; variants show when they drift
 - **"outgoing object not found" covered three different faults.** The object
   was deleted, or the list came back empty (a server mapping or an API key that

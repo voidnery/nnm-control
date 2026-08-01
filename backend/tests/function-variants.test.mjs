@@ -581,5 +581,32 @@ check('the step\'s own value is shown beside the override', () => {
   assert.ok(uiSrc.includes("t('fn.variantBaseIs')"), 'the comparison is made where it is edited');
 });
 
+console.log('\nPICKING AN OBJECT KEEPS ITS ID:');
+
+check('the id and the label are written in one update', () => {
+  // Two set() calls in one handler both read the same `step` prop, so the
+  // second discarded the first: the label stuck, the id did not, and the panel
+  // showed "SELECTED cct_feeds/feed1" beside an empty targetId while every run
+  // failed preflight on every step.
+  assert.ok(uiSrc.includes('const setMany'));
+  assert.ok(uiSrc.includes('setMany({ targetId: String(o.id), targetLabel: label })'));
+  assert.ok(!/set\('targetId'[^)]*\);\s*set\('targetLabel'/.test(uiSrc), 'the paired write must be gone');
+});
+
+check('the lost-write shape is what actually loses data', () => {
+  // Reproduced rather than asserted: two writes off one stale value.
+  let step = { targetId: '', targetLabel: '' };
+  const stale = { ...step };
+  const set = (k, v) => { step = { ...stale, [k]: v }; };
+  set('targetId', 'X'); set('targetLabel', 'L');
+  assert.equal(step.targetId, '', 'this is the bug');
+  assert.equal(step.targetLabel, 'L');
+
+  const setMany = (patch) => { step = { ...stale, ...patch }; };
+  setMany({ targetId: 'X', targetLabel: 'L' });
+  assert.equal(step.targetId, 'X', 'and this is the fix');
+  assert.equal(step.targetLabel, 'L');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);
