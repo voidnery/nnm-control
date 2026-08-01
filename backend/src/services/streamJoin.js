@@ -25,6 +25,11 @@ function addrKey(ip, port) {
 
 // How a native stats entry might be identified, best first.
 const NATIVE_KEYS = [
+  // Confirmed against a live server: Nimble's SRT stats carry `setting_id`,
+  // which IS the WMSPanel object id. Its `id` field is a socket pair
+  // ("31.28.6.149:60317->0.0.0.0:35001") and identifies a connection, not a
+  // configured stream — matching on it would pair nothing.
+  { name: 'setting_id', of: (e) => clean(e.setting_id ?? e.settingId) },
   { name: 'name', of: (e) => clean(e.name) },
   { name: 'stream', of: (e) => clean(e.stream) },
   { name: 'id', of: (e) => clean(e.id) },
@@ -37,6 +42,7 @@ const NATIVE_KEYS = [
 
 // How a WMSPanel object might be identified, in the same order.
 const WMS_KEYS = [
+  { name: 'setting_id', of: (o) => clean(o.id) },
   { name: 'name', of: (o) => clean(o.name) },
   { name: 'stream', of: (o) => clean(o.stream ?? o.src_stream) },
   { name: 'id', of: (o) => clean(o.id) },
@@ -102,19 +108,36 @@ const num = (...vals) => {
 // stored series, which is what the per-stream charts will read.
 export function liveSummary(entry) {
   if (!entry) return null;
-  // Nimble reports SRT rates in Mbps on some builds and bps on others. A value
-  // under a thousand can only be Mbps for a video stream; above it, bps.
-  const raw = num(entry.bandwidth, entry.bitrate, entry.mbpsRate, entry.mbps_rate, entry.rate);
-  const bps = raw == null ? null : (raw > 0 && raw < 1000 ? raw * 1e6 : raw);
+  const st = entry.stats || {};
+  const dir = st.recv || st.send || {};      // receiver on SRT In, sender on SRT Out
+
+  // `stats.recv.mbpsRate` is the stream. `stats.link.mbpsBandwidth` is the
+  // link's estimated capacity — 2444 Mbps on a live 8 Mbps feed — and putting
+  // that in a bitrate column would have been badly wrong in a way that looks
+  // plausible. Named explicitly rather than swept up by a "bandwidth" guess.
+  const mbps = num(dir.mbpsRate, entry.mbpsRate, entry.bitrate_mbps);
+  const rawBps = num(entry.bitrate, entry.bandwidth_bps);
+  const bps = mbps != null ? mbps * 1e6 : rawBps;
+
+  const state = clean(entry.state ?? entry.status);
+  const connected = entry.connected === true || ['connected', 'active', 'online'].includes(state);
+
+  const received = num(dir.packetsReceived, dir.packetsSent);
+  const lost = num(dir.packetsLost);
+  const loss = received && lost != null ? (100 * lost) / (received + lost) : null;
+
   return {
     bps,
-    // "Is it live" is not always a field of its own; a stream moving data is
-    // live whatever it calls itself.
-    online: entry.connected === true
-      || ['connected', 'active', 'online'].includes(clean(entry.state))
-      || ['connected', 'active', 'online'].includes(clean(entry.status))
-      || (bps != null && bps > 0),
-    rtt: num(entry.rtt, entry.msRTT, entry.ms_rtt),
-    loss: num(entry.pktLossRate, entry.loss, entry.pkt_loss_rate),
+    // Connected with nothing flowing is its own state and worth seeing: two of
+    // seven live sockets were in it. Collapsing it into "offline" would hide a
+    // stream that is up but silent — the one an operator most wants to catch.
+    online: connected || (bps != null && bps > 0),
+    idle: connected && bps === 0,
+    rtt: num(st.link?.rtt, entry.rtt, entry.msRTT),
+    loss,
+    // How many times Nimble has re-established this socket. A number that
+    // climbs is a link that keeps dropping, which no instantaneous reading
+    // shows.
+    retries: num(entry.retryCount),
   };
 }

@@ -79,17 +79,18 @@ check('empty input is not an error', () => {
 
 console.log('\nREADING A VALUE OUT OF WHATEVER SHAPE IT HAS:');
 
-check('a rate under a thousand is Mbps, above it is bps', () => {
-  // Nimble reports one or the other depending on the build, and 6.2 bits per
-  // second is not a video stream.
-  assert.equal(liveSummary({ bandwidth: 6.2 }).bps, 6_200_000);
-  assert.equal(liveSummary({ bitrate: 6_200_000 }).bps, 6_200_000);
+check('the rate is read from where Nimble actually puts it', () => {
+  // stats.recv.mbpsRate for a receiver, stats.send.mbpsRate for a sender.
+  // These were guesses at flat fields until a live capture settled it.
+  assert.equal(liveSummary({ stats: { recv: { mbpsRate: 6.2 } } }).bps, 6_200_000);
+  assert.equal(liveSummary({ stats: { send: { mbpsRate: 6.2 } } }).bps, 6_200_000);
+  assert.equal(liveSummary({ bitrate: 6_200_000 }).bps, 6_200_000, 'a flat bps field still works');
 });
 
-check('a stream moving data is online whatever it calls itself', () => {
-  assert.equal(liveSummary({ bandwidth: 6 }).online, true);
-  assert.equal(liveSummary({ state: 'connected', bandwidth: 0 }).online, true);
-  assert.equal(liveSummary({ bandwidth: 0 }).online, false);
+check('online follows the socket state, and data implies it', () => {
+  assert.equal(liveSummary({ state: 'connected' }).online, true);
+  assert.equal(liveSummary({ state: 'disconnected' }).online, false);
+  assert.equal(liveSummary({ stats: { recv: { mbpsRate: 6 } } }).online, true, 'data means live');
 });
 
 check('a missing rate is null, not zero', () => {
@@ -176,6 +177,68 @@ check('the shape carries names and types, never values', () => {
   const body = routeSrc.slice(from, routeSrc.indexOf('};', routeSrc.indexOf('return { type: typeof v }', from)));
   assert.ok(body.includes('Object.keys(v)'));
   assert.ok(!/Object\.values\(v\)\.slice/.test(body), 'values must not be copied into the shape');
+});
+
+// Everything above reasons about shapes I guessed at. This part runs against a
+// response captured from a live server, which is the only thing that settles
+// what the fields are called.
+console.log('\nAGAINST A REAL NIMBLE RESPONSE:');
+
+const real = JSON.parse(readFileSync(new URL('./fixtures/srt-receiver-stats.json', import.meta.url), 'utf8'));
+
+check('the key is setting_id, and it is the WMSPanel object id', () => {
+  // Nimble's own `id` field is a socket pair — "31.28.6.149:60317->0.0.0.0:35001"
+  // — which identifies a connection, not a configured stream. Matching on it
+  // would have paired nothing, and that is what "0 matched of 76" was.
+  const objects = real.map(e => ({ id: e.setting_id, name: 'x' }));
+  const r = joinLive(real, objects);
+  assert.equal(r.strategy, 'setting_id');
+  assert.equal(r.matched, real.length, 'every entry pairs');
+  assert.match(real[0].id, /^[\d.]+:\d+/, 'the id field really is a socket pair');
+});
+
+check('the bitrate is the stream, not the link', () => {
+  // stats.link.mbpsBandwidth is the link's estimated capacity: 2444 Mbps on an
+  // 8 Mbps feed. Putting that in a bitrate column would be wrong in a way that
+  // looks entirely plausible.
+  const live = real.find(e => e.stats?.recv?.mbpsRate > 0);
+  const s = liveSummary(live);
+  assert.ok(Math.abs(s.bps - live.stats.recv.mbpsRate * 1e6) < 1);
+  assert.ok(s.bps < 20e6, `read ${(s.bps / 1e6).toFixed(1)} Mbps, not the ${live.stats.link.mbpsBandwidth} Mbps link`);
+});
+
+check('connected-but-silent is its own state', () => {
+  // Two of the seven connected sockets carry nothing. Folding that into
+  // "offline" would hide a stream that is up and not delivering — the case an
+  // operator most wants to catch.
+  const idle = real.filter(e => e.state === 'connected' && e.stats?.recv?.mbpsRate === 0);
+  assert.ok(idle.length > 0, 'the capture contains this case');
+  const s = liveSummary(idle[0]);
+  assert.equal(s.idle, true);
+  assert.equal(s.online, true, 'the socket is up');
+  assert.equal(s.bps, 0, 'and carrying nothing');
+});
+
+check('a disconnected entry reads as offline with no invented numbers', () => {
+  const down = real.find(e => e.state === 'disconnected');
+  const s = liveSummary(down);
+  assert.equal(s.online, false);
+  assert.equal(s.bps, null, 'null, not zero — it did not report, which is not the same as reporting nothing');
+  assert.equal(s.rtt, null);
+});
+
+check('loss is a ratio of what arrived, not a raw count', () => {
+  const live = real.find(e => e.stats?.recv?.packetsLost > 0);
+  const s = liveSummary(live);
+  const { packetsReceived: got, packetsLost: lost } = live.stats.recv;
+  assert.ok(Math.abs(s.loss - (100 * lost) / (got + lost)) < 1e-9);
+  assert.ok(s.loss < 5, 'and lands in a plausible range for a working feed');
+});
+
+check('the retry count comes through', () => {
+  // A count that climbs is a link that keeps dropping, which no instantaneous
+  // reading shows.
+  assert.equal(liveSummary(real[0]).retries, real[0].retryCount);
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

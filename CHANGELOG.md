@@ -1,5 +1,30 @@
 # Changelog
 
+### v0.24.3 — the real response settled it
+- **The join key is `setting_id`**, which is the WMSPanel object id. Nimble's
+  own `id` field is a socket pair — `31.28.6.149:60317->0.0.0.0:35001` — and
+  identifies a connection rather than a configured stream, so matching on it
+  paired nothing. That was "0 matched of 76". All ten entries in the capture
+  now pair
+- **The bitrate is `stats.recv.mbpsRate`, and this one mattered.**
+  `stats.link.mbpsBandwidth` is the link's estimated capacity: 2444 Mbps on an
+  8 Mbps feed. A "bandwidth" guess would have put gigabits in a bitrate column
+  — wrong in a way that looks entirely plausible. The field is named
+  explicitly rather than swept up by a pattern
+- **Connected-but-silent is its own state**, and two of the seven live sockets
+  were in it. Folding it into "offline" would hide a stream that is up and
+  delivering nothing, which is the case an operator most wants to catch — it
+  shows an amber `0` rather than a dash, since a dash means "no reading"
+- A disconnected entry reads null, not zero: it did not report, which is not
+  the same as reporting nothing
+- Packet loss is a ratio of what arrived, and the retry count comes through —
+  a count that climbs is a link that keeps dropping, which no instantaneous
+  reading shows
+- The captured response is now a fixture, so this is pinned against reality
+  rather than against my reading of it. Three checks failed on first run and
+  all three were the checks, written against flat fields I had guessed at
+
+
 ### v0.24.2 — "0 live streams" against 76 configured
 - **The list was being looked for under four fixed key names.** Nimble keys its
   stats differently per endpoint and again between builds, so a name we had not

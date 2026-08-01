@@ -1,0 +1,237 @@
+[
+ {
+  "setting_id": "6a1963109aac8647b52d1448",
+  "id": "31.28.6.149:60317->0.0.0.0:35001",
+  "state": "disconnected",
+  "retryCount": 26
+ },
+ {
+  "setting_id": "6a19632373856944212d14a7",
+  "id": "31.28.6.149:39874->0.0.0.0:35003",
+  "state": "disconnected",
+  "retryCount": 7
+ },
+ {
+  "setting_id": "6a19632573856944212d14aa",
+  "id": "31.28.6.149:59091->0.0.0.0:35002",
+  "state": "connected",
+  "retryCount": 39,
+  "stats": {
+   "time": 8858008,
+   "window": {
+    "flow": 8192,
+    "congestion": 8192,
+    "flight": 0
+   },
+   "link": {
+    "rtt": 9.811,
+    "mbpsBandwidth": 2444.45,
+    "mbpsMaxBandwidth": 24
+   },
+   "recv": {
+    "packetsReceived": 6615184,
+    "packetsReceivedRetransmitted": 7870,
+    "packetsLost": 53877,
+    "packetsDropped": 31116,
+    "packetsBelated": 6476,
+    "NAKsSent": 1967,
+    "bytesReceived": 8996650240,
+    "bytesLost": 73272720,
+    "bytesDropped": 42317760,
+    "mbpsRate": 8.12521
+   }
+  }
+ },
+ {
+  "setting_id": "6a1963279aac8647b52d144d",
+  "id": "31.28.6.149:57269->0.0.0.0:35004",
+  "state": "disconnected",
+  "retryCount": 21
+ },
+ {
+  "setting_id": "6a1963289aac8647b52d144f",
+  "id": "31.28.6.149:50883->0.0.0.0:35005",
+  "state": "connected",
+  "retryCount": 24,
+  "stats": {
+   "time": 18805991,
+   "window": {
+    "flow": 8192,
+    "congestion": 8192,
+    "flight": 0
+   },
+   "link": {
+    "rtt": 10.099,
+    "mbpsBandwidth": 2115.4,
+    "mbpsMaxBandwidth": 24
+   },
+   "recv": {
+    "packetsReceived": 15159593,
+    "packetsReceivedRetransmitted": 16461,
+    "packetsLost": 55447,
+    "packetsDropped": 0,
+    "packetsBelated": 13854,
+    "NAKsSent": 4273,
+    "bytesReceived": 20617046480,
+    "bytesLost": 75407920,
+    "bytesDropped": 0,
+    "mbpsRate": 8.77042
+   }
+  }
+ },
+ {
+  "setting_id": "6a4249ea1585975e79bcae13",
+  "id": "79.98.187.66:22213",
+  "state": "connected",
+  "retryCount": 42414,
+  "stats": {
+   "time": 19101949,
+   "window": {
+    "flow": 8192,
+    "congestion": 8192,
+    "flight": 0
+   },
+   "link": {
+    "rtt": 10.284,
+    "mbpsBandwidth": 1009.18,
+    "mbpsMaxBandwidth": 1000
+   },
+   "recv": {
+    "packetsReceived": 24185442,
+    "packetsReceivedRetransmitted": 3026,
+    "packetsLost": 10878,
+    "packetsDropped": 8142,
+    "packetsBelated": 200,
+    "NAKsSent": 402,
+    "bytesReceived": 32892201120,
+    "bytesLost": 14794080,
+    "bytesDropped": 11073120,
+    "mbpsRate": 13.7754
+   }
+  }
+ },
+ {
+  "setting_id": "6a424bf91585975e79bcae23",
+  "id": "79.98.187.66:22216",
+  "state": "connected",
+  "retryCount": 51427,
+  "stats": {
+   "time": 32957,
+   "window": {
+    "flow": 8192,
+    "congestion": 8192,
+    "flight": 0
+   },
+   "link": {
+    "rtt": 9.339,
+    "mbpsBandwidth": 12,
+    "mbpsMaxBandwidth": 1000
+   },
+   "recv": {
+    "packetsReceived": 0,
+    "packetsReceivedRetransmitted": 0,
+    "packetsLost": 0,
+    "packetsDropped": 0,
+    "packetsBelated": 0,
+    "NAKsSent": 0,
+    "bytesReceived": 0,
+    "bytesLost": 0,
+    "bytesDropped": 0,
+    "mbpsRate": 0
+   }
+  }
+ },
+ {
+  "setting_id": "6a42ba3b1585975e79bcb34f",
+  "id": "79.98.187.66:22201",
+  "state": "connected",
+  "retryCount": 52751,
+  "stats": {
+   "time": 32957,
+   "window": {
+    "flow": 8192,
+    "congestion": 8192,
+    "flight": 0
+   },
+   "link": {
+    "rtt": 9.339,
+    "mbpsBandwidth": 12,
+    "mbpsMaxBandwidth": 1250
+   },
+   "recv": {
+    "packetsReceived": 0,
+    "packetsReceivedRetransmitted": 0,
+    "packetsLost": 0,
+    "packetsDropped": 0,
+    "packetsBelated": 0,
+    "NAKsSent": 0,
+    "bytesReceived": 0,
+    "bytesLost": 0,
+    "bytesDropped": 0,
+    "mbpsRate": 0
+   }
+  }
+ },
+ {
+  "setting_id": "6a42bab21585975e79bcb35f",
+  "id": "79.98.187.66:22203",
+  "state": "connected",
+  "retryCount": 41547,
+  "stats": {
+   "time": 13506995,
+   "window": {
+    "flow": 8192,
+    "congestion": 8192,
+    "flight": 0
+   },
+   "link": {
+    "rtt": 10.491,
+    "mbpsBandwidth": 2219.44,
+    "mbpsMaxBandwidth": 1250
+   },
+   "recv": {
+    "packetsReceived": 17106171,
+    "packetsReceivedRetransmitted": 3198,
+    "packetsLost": 2856,
+    "packetsDropped": 0,
+    "packetsBelated": 294,
+    "NAKsSent": 95,
+    "bytesReceived": 23264392560,
+    "bytesLost": 3884160,
+    "bytesDropped": 0,
+    "mbpsRate": 13.7792
+   }
+  }
+ },
+ {
+  "setting_id": "6a42bab469e58e0d87bcb147",
+  "id": "79.98.187.66:22204",
+  "state": "connected",
+  "retryCount": 44158,
+  "stats": {
+   "time": 13501960,
+   "window": {
+    "flow": 8192,
+    "congestion": 8192,
+    "flight": 0
+   },
+   "link": {
+    "rtt": 10.335,
+    "mbpsBandwidth": 2316.61,
+    "mbpsMaxBandwidth": 1250
+   },
+   "recv": {
+    "packetsReceived": 17106912,
+    "packetsReceivedRetransmitted": 6492,
+    "packetsLost": 5775,
+    "packetsDropped": 0,
+    "packetsBelated": 621,
+    "NAKsSent": 157,
+    "bytesReceived": 23265400320,
+    "bytesLost": 7854000,
+    "bytesDropped": 0,
+    "mbpsRate": 13.7849
+   }
+  }
+ }
+]

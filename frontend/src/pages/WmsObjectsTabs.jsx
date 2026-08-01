@@ -824,7 +824,15 @@ export function MpegtsInTab({ serverId }) {
                 {/* The live reading wins: `o.bandwidth` and `o.status` come
                     from the WMSPanel object, which describes how the stream is
                     configured and never what it is doing. */}
-                <td className="mono">{live?.live?.[o.id] ? fmtBps(live.live[o.id].bps) : fmtMbps(o.bandwidth)}</td>
+                {/* A connected socket carrying nothing reads 0, not a dash: a
+                    dash means "no reading", and those are different faults. */}
+                <td className="mono">
+                  {live?.live?.[o.id]
+                    ? (live.live[o.id].idle
+                      ? <span style={{ color: 'var(--warn)' }}>0</span>
+                      : fmtBps(live.live[o.id].bps))
+                    : fmtMbps(o.bandwidth)}
+                </td>
                 <td>
                   {(() => {
                     const l = live?.live?.[o.id];
@@ -832,10 +840,13 @@ export function MpegtsInTab({ serverId }) {
                     const label = l ? (l.online ? t('wo.online') : t('wo.offline')) : (o.status || '—');
                     return (
                       <>
-                        <span className={'lamp ' + (on ? 'on' : o.status === 'paused' ? 'warn' : 'off')} />
-                        {label}
+                        <span className={'lamp ' + (l?.idle ? 'warn' : on ? 'on' : o.status === 'paused' ? 'warn' : 'off')} />
+                        {l?.idle ? t('wo.idle') : label}
                         {l?.rtt != null && <span className="hint" style={{ marginLeft: 6 }}>RTT {l.rtt.toFixed(0)}ms</span>}
-                        {l?.loss ? <span className="hint" style={{ marginLeft: 6, color: 'var(--warn)' }}>{l.loss.toFixed(1)}%</span> : null}
+                        {l?.loss ? <span className="hint" style={{ marginLeft: 6, color: 'var(--warn)' }}>{l.loss.toFixed(2)}%</span> : null}
+                        {/* A retry count that climbs is a link that keeps
+                            dropping — invisible in any instantaneous reading. */}
+                        {l?.retries > 100 ? <span className="hint" style={{ marginLeft: 6 }}>×{l.retries}</span> : null}
                       </>
                     );
                   })()}

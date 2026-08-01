@@ -237,7 +237,7 @@ window.fetch = (u) => {
     text:()=>Promise.resolve('{}') });
   if (s.includes('/live-objects/')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     kind:'incoming', available:true, strategy:'name', matched:1, objects:2, entries:1,
-    live:{ 'o1': { bps:6200000, online:true, rtt:12.4, loss:0.2 } }, diagnostics:null }),
+    live:{ 'o1': { bps:6200000, online:true, idle:false, rtt:9.8, loss:0.81, retries:39 }, 'o2': { bps:0, online:true, idle:true, rtt:9.3, loss:null, retries:51427 } }, diagnostics:null }),
     text:()=>Promise.resolve('{}') });
   if (s.includes('/auth/me')) body = { id:'U1', username:'smoke', permissions:['*'],
     preferences:{ dashboard:{ charts:['cpu','mem','net','streams'], range:'1h', columns:'2', refreshSec:15, streamLimit:6 } } };
