@@ -232,6 +232,26 @@ check('the button that cannot succeed is not offered', () => {
   assert.ok(centreSrc2.includes("t('ac.updateStuck')"), 'the way out is named instead');
 });
 
+check('the deadlock flag clears once it is no longer true', () => {
+  // Derived from task history alone, it kept firing after a reinstall had
+  // fixed it — the panel telling an operator to fix what they had just fixed.
+  const versionState = (r, sh) => { const n = Number(r); return !n ? 'unknown' : n === sh ? 'current' : n < sh ? 'outdated' : 'ahead'; };
+  const stuck = (agentVer, shipped, tasks) => {
+    if (versionState(agentVer, shipped) !== 'outdated') return false;
+    const t = tasks.find(x => x.status === 'failed' && Number(x.body?.version || 0) > Number(agentVer || 0));
+    return Boolean(t) && /does not look like the agent/i.test(t?.error || '');
+  };
+  const history = [{ status: 'failed', body: { version: 9 }, error: 'the downloaded file does not look like the agent' }];
+  assert.equal(stuck(8, 9, history), true, 'while it is true');
+  assert.equal(stuck(9, 9, history), false, 'and not after the reinstall');
+  assert.equal(stuck(9, 10, history), false, 'nor for a failure aimed at a version already running');
+});
+
+check('the panel-side rule matches that', () => {
+  assert.ok(fleetSrc3.includes("if (versionState(a.version, rel.version) !== 'outdated') return false"));
+  assert.ok(fleetSrc3.includes('Number(x.body?.version || 0) > Number(a.version || 0)'));
+});
+
 check('reinstalling really is the way out', () => {
   // Worth asserting rather than assuming: it must replace the binary and keep
   // the token, or the advice costs the operator their enrollment.

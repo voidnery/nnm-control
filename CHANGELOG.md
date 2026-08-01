@@ -1,5 +1,22 @@
 # Changelog
 
+### v0.22.11 — the warning outlived the fault
+- **A resolved problem kept being reported.** The self-update deadlock flag was
+  derived from the task history alone, so the failed task from before a
+  reinstall went on firing after the reinstall had fixed it — the panel telling
+  an operator to fix something they had already fixed, and hiding the update
+  button while it did
+- It is now a statement about the present: the agent must still be behind, and
+  the failure must have aimed at a version newer than the one running. A
+  failure overtaken by events is history, not state — the same applies to the
+  "last update failed" note
+- **The state column carried sentences at 110px.** The update notes lived in
+  the version column, which holds a number; a paragraph in that width came out
+  as a vertical ribbon. They sit with the state now, and the two columns are
+  sized for what they actually contain
+- 2 new checks, covering both the "still true" and the "no longer true" side
+
+
 ### v0.22.10 — a broken updater cannot fix itself
 - The v0.22.9 fix is in the new agent, and the agent that needs it is the one
   that refuses to accept it: **the code doing the checking is the code being

@@ -144,8 +144,11 @@ export default function AgentCentreModal({ onClose, onChanged }) {
           <table>
             <thead><tr>
               <th>{t('logs.server')}</th>
-              <th style={{ width: 150 }}>{t('ac.state')}</th>
-              <th style={{ width: 110 }}>{t('ac.version')}</th>
+              {/* The state column carries sentences; the version column
+                  carries a number. Sizing them alike is what put a paragraph
+                  into a 110px ribbon. */}
+              <th style={{ minWidth: 260 }}>{t('ac.state')}</th>
+              <th style={{ width: 90 }}>{t('ac.version')}</th>
               <th style={{ width: 90 }}>{t('ac.contact')}</th>
               <th style={{ width: 210 }}></th>
             </tr></thead>
@@ -166,21 +169,6 @@ export default function AgentCentreModal({ onClose, onChanged }) {
                           {s.code !== 'healthy' && s.evidence && (
                             <div className="hint" style={{ fontSize: 11, marginTop: 2 }}>{s.evidence}</div>
                           )}
-                        </>}
-                  </td>
-                  <td className="mono" style={{ fontSize: 12 }}>
-                    {s.enabled ? (s.version || '—') : ''}
-                    {s.enabled && s.versionState === 'outdated' && (
-                      <span className="badge" style={{ marginLeft: 4 }}>→ {shipped.version}</span>
-                    )}
-                    {s.enabled && s.versionState === 'ahead' && (
-                      <div className="hint" style={{ fontSize: 11 }}>{t('ac.ahead')}</div>
-                    )}
-                    {s.enabled && s.selfUpdate === false && (
-                      <div className="hint" style={{ fontSize: 11 }}>{t('ac.readOnly')}</div>
-                    )}
-                    {/* An update that was asked for and refused looked exactly
-                        like one nobody had asked for. */}
                     {/* Retrying is pointless here: the code doing the checking
                         is the code that needs replacing. Say what does work. */}
                     {s.updateStuck ? (
@@ -196,6 +184,22 @@ export default function AgentCentreModal({ onClose, onChanged }) {
                     {s.lastUpdate?.status === 'expired' && (
                       <div className="hint" style={{ fontSize: 11, color: 'var(--warn)' }}>{t('ac.updateExpired')}</div>
                     )}
+
+                        </>}
+                  </td>
+                  <td className="mono" style={{ fontSize: 12 }}>
+                    {s.enabled ? (s.version || '—') : ''}
+                    {s.enabled && s.versionState === 'outdated' && (
+                      <span className="badge" style={{ marginLeft: 4 }}>→ {shipped.version}</span>
+                    )}
+                    {s.enabled && s.versionState === 'ahead' && (
+                      <div className="hint" style={{ fontSize: 11 }}>{t('ac.ahead')}</div>
+                    )}
+                    {s.enabled && s.selfUpdate === false && (
+                      <div className="hint" style={{ fontSize: 11 }}>{t('ac.readOnly')}</div>
+                    )}
+                    {/* An update that was asked for and refused looked exactly
+                        like one nobody had asked for. */}
                   </td>
                   <td className="mono" style={{ fontSize: 12 }}>{s.enabled ? ago(s.sinceContactMs) : ''}</td>
                   <td>

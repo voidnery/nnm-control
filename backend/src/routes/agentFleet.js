@@ -65,13 +65,21 @@ agentFleetRouter.get('/overview', requirePerm('servers.view'), async (req, res) 
       // pass, so the panel names the way out instead of offering the button
       // that will fail again.
       updateStuck: (() => {
-        const t = tasks.find(x => x.route === 'POST /self-update' && x.status === 'failed');
-        if (!t) return false;
-        return /does not look like the agent/i.test(t.error || '');
+        // Only while it is still true. The flag was derived from the task
+        // history alone, so a failure that had since been resolved by a
+        // reinstall kept being reported — the panel telling an operator to fix
+        // something they had already fixed.
+        if (versionState(a.version, rel.version) !== 'outdated') return false;
+        const t = tasks.find(x => x.route === 'POST /self-update' && x.status === 'failed'
+          && Number(x.body?.version || 0) > Number(a.version || 0));
+        return Boolean(t) && /does not look like the agent/i.test(t.error || '');
       })(),
       lastUpdate: (() => {
         const t = tasks.find(x => x.route === 'POST /self-update' && ['done', 'failed', 'expired'].includes(x.status));
         if (!t) return null;
+        // A failure that aimed at a version the agent is already running has
+        // been overtaken by events; reporting it is reporting the past.
+        if (t.status !== 'done' && Number(t.body?.version || 0) <= Number(a.version || 0)) return null;
         return {
           status: t.status,
           at: t.finishedAt || t.createdAt,
