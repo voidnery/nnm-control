@@ -151,11 +151,63 @@ export default function ServerAgentsPage() {
                 </div>
               </div>
             )}
+            {/* Which NICs to graph. The agent reports what it has, so this is a
+                choice from a real list rather than a name typed from memory —
+                and empty means every physical interface, which is the right
+                default on a box with one. */}
+            {r.enabled && (r.availableInterfaces || []).length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <label>{t('agent.interfaces')}</label>
+                <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                  {(r.availableInterfaces || []).map(iface => (
+                    <label key={iface} style={{ display: 'flex', gap: 5, alignItems: 'center', margin: 0 }}>
+                      <input type="checkbox"
+                             checked={(r.interfaces || []).includes(iface)}
+                             onChange={e => set(s.id, {
+                               interfaces: e.target.checked
+                                 ? [...(r.interfaces || []), iface]
+                                 : (r.interfaces || []).filter(x => x !== iface),
+                             })} />
+                      <span className="mono">{iface}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="hint">
+                  {(r.interfaces || []).length ? t('agent.interfacesSome') : t('agent.interfacesAll')}
+                </div>
+              </div>
+            )}
             {r.enabled && diag[s.id] && diag[s.id].code !== 'healthy' && diag[s.id].code !== 'not-configured' && (
               <div className="error-box" style={{ marginTop: 8 }}>
                 <b>{t(`agent.diag.${diag[s.id].code}`)}</b>
                 <div className="hint" style={{ marginTop: 2 }}>{diag[s.id].evidence}</div>
                 {diag[s.id].hint && <div style={{ marginTop: 4 }}>{t(diag[s.id].hint)}</div>}
+              </div>
+            )}
+            {/* Which NICs to graph. The agent reports what it has, so this is a
+                choice from a real list rather than a name typed from memory —
+                and empty means every physical interface, which is the right
+                default on a box with one. */}
+            {r.enabled && (r.availableInterfaces || []).length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <label>{t('agent.interfaces')}</label>
+                <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                  {(r.availableInterfaces || []).map(iface => (
+                    <label key={iface} style={{ display: 'flex', gap: 5, alignItems: 'center', margin: 0 }}>
+                      <input type="checkbox"
+                             checked={(r.interfaces || []).includes(iface)}
+                             onChange={e => set(s.id, {
+                               interfaces: e.target.checked
+                                 ? [...(r.interfaces || []), iface]
+                                 : (r.interfaces || []).filter(x => x !== iface),
+                             })} />
+                      <span className="mono">{iface}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="hint">
+                  {(r.interfaces || []).length ? t('agent.interfacesSome') : t('agent.interfacesAll')}
+                </div>
               </div>
             )}
             {r.enabled && diag[s.id]?.code === 'healthy' && (

@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [controlPlane, setControlPlane] = useState('native');
   const [srtHelperEnabled, setSrtHelperEnabled] = useState(true);
   const [publicUrl, setPublicUrl] = useState('');
+  const [host, setHost] = useState({ enabled: false, intervalSec: 10 });
   const [logs, setLogs] = useState({ enabled: false, files: ['nimble.log'] });
   const [logStatus, setLogStatus] = useState(null);
   const [stats, setStats] = useState({ enabled: false, intervalSec: 10, retentionDays: 3,
@@ -41,6 +42,7 @@ export default function SettingsPage() {
     setSrtHelperEnabled(s.srtHelperEnabled !== false);
     if (s.stats) setStats(s.stats);
     setPublicUrl(s.publicUrl || '');
+    if (s.host) setHost({ enabled: Boolean(s.host.enabled), intervalSec: Number(s.host.intervalSec) || 10 });
     if (s.logs) setLogs({ enabled: Boolean(s.logs.enabled), files: s.logs.files?.length ? s.logs.files : ['nimble.log'] });
     // Status alongside the switch, because "is it on" and "is anything
     // arriving" are different questions and only the second one is useful
@@ -52,7 +54,7 @@ export default function SettingsPage() {
   const save = async () => {
     setBusy(true); setMsg(null);
     try {
-      const body = { controlPlane, srtHelperEnabled, stats, logs, publicUrl, wmspanel: { baseUrl, clientId } };
+      const body = { controlPlane, srtHelperEnabled, stats, logs, host, publicUrl, wmspanel: { baseUrl, clientId } };
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
       push({ type: 'ok', message: 'Settings saved' });
@@ -155,6 +157,29 @@ export default function SettingsPage() {
             ? t('settings.public.set')
             : t('settings.public.derived', { url: window.location.origin })}
         </div>
+      </div>
+
+      {/* Host metrics. The setting, the gateway delivery and the agent side all
+          shipped in iter15 m1 — and nothing turned it on, so every agent
+          dutifully collected nothing and the dashboard showed empty cards.
+          Exactly the omission the log collector had, repeated. */}
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>{t('settings.host')}</h2>
+        <p className="hint">{t('settings.host.desc')}</p>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="checkbox" checked={Boolean(host.enabled)}
+                 onChange={e => setHost(v => ({ ...v, enabled: e.target.checked }))} />
+          {t('settings.host.enabled')}
+        </label>
+        {host.enabled && (
+          <>
+            <label style={{ marginTop: 8 }}>{t('settings.host.interval')}</label>
+            <input type="number" min={2} max={300} value={host.intervalSec}
+                   onChange={e => setHost(v => ({ ...v, intervalSec: Number(e.target.value) }))} />
+            <div className="hint">{t('settings.host.intervalHint')}</div>
+            <div className="hint" style={{ marginTop: 6 }}>{t('settings.host.applyHint')}</div>
+          </>
+        )}
       </div>
 
       {/* Log collection. The setting has existed since iter10 m1 and the agents

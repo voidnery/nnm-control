@@ -1,5 +1,28 @@
 # Changelog
 
+### v0.22.12 — host metrics had no switch, for the second time
+- **The whole chain shipped in iter15 m1 except the way to turn it on.** The
+  setting existed, the gateway delivered it, the agent honoured it — and it
+  defaults to off, so every agent faithfully collected nothing and the
+  dashboard drew empty cards. This is exactly the omission log collection had
+  in iter10, repeated
+- New **Host metrics** section in Settings: the switch and the sampling
+  interval, which matches the stream metrics by default so two charts read side
+  by side share one timebase
+- **The per-server interface picker was also missing.** The agent has reported
+  which physical NICs it has since m1 and nothing displayed them. They are
+  tickboxes on the Agents page now — a choice from a real list rather than a
+  name typed from memory — and none ticked still means every physical
+  interface, which is right on a box with one
+- New `npm run audit:settings`: every block the settings route serves must be
+  mentioned by the settings page. Blunt on purpose — it cannot tell a real
+  control from a stray string, but it catches a block with no UI at all, which
+  is the failure that has now happened twice. Verified against the real defect
+- Its own first version read the wrong part of the route, found nothing and
+  reported OK; it now refuses to pass if it cannot parse the shape at all,
+  because an audit that examines the wrong thing is worse than none
+
+
 ### v0.22.11 — the warning outlived the fault
 - **A resolved problem kept being reported.** The self-update deadlock flag was
   derived from the task history alone, so the failed task from before a
