@@ -348,5 +348,44 @@ check('a WMSPanel-sourced value is marked as such', () => {
   assert.ok(tabsSrc2.includes('<sup className="hint">wp</sup>'));
 });
 
+console.log('\nMATCHING ON THE SOCKET, NOT THE NAME (v0.25.4):');
+
+const { localPort } = await import('../src/services/streamJoin.js');
+
+check('the local port is pulled out of a socket pair', () => {
+  // "31.28.6.149:60317->0.0.0.0:35001" — the right-hand side is ours. The
+  // left-hand port is ephemeral and means nothing.
+  assert.equal(localPort('31.28.6.149:60317->0.0.0.0:35001'), 'port:35001');
+  assert.equal(localPort('79.98.187.66:22213'), 'port:22213', 'a listener has no arrow');
+  assert.equal(localPort(''), '');
+  assert.equal(localPort('nonsense'), '');
+});
+
+check('a stream joins by port when no identifier lines up', () => {
+  // Two systems can name the same stream differently and still be talking
+  // about the same socket. The port is what the operator configured, so it
+  // means the same on both sides.
+  const objects = [{ id: 'w1', name: 'unrelated name', ip: '0.0.0.0', port: 35002 }];
+  const r = joinLive(real, objects);
+  assert.equal(r.strategy, 'localPort');
+  assert.equal(r.matched, 1);
+});
+
+check('a name still wins over a port', () => {
+  // A port can be reused after a stream is deleted; a name identifies.
+  const objects = [{ id: 'w1', name: 'feed', port: 35002 }];
+  const entries = [{ name: 'feed', id: 'a:1->b:9999', stats: { recv: { mbpsRate: 5 } } }];
+  assert.equal(joinLive(entries, objects).strategy, 'name');
+});
+
+check('the diagnostics compare ports, not only identifiers', () => {
+  // When the two port lists do not overlap, the sides are describing
+  // different streams and no key would ever have joined them — which is a
+  // different conclusion from "the field names differ".
+  const routeSrc2 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+  assert.ok(routeSrc2.includes('nimblePorts:'));
+  assert.ok(routeSrc2.includes('wmspanelPorts:'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

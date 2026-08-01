@@ -16,6 +16,16 @@ const clean = (v) => String(v ?? '').trim().toLowerCase();
 
 // A socket address, normalised. `0.0.0.0:21041` and `:21041` describe the same
 // listener, so a listen-mode object is identified by its port alone.
+// The local side of a socket pair. "a:1->b:2" gives 2; "b:2" alone is a
+// listener and gives 2 as well.
+export function localPort(id) {
+  const str = String(id ?? '');
+  if (!str) return '';
+  const local = str.includes('->') ? str.split('->').pop() : str;
+  const m = /:(\d+)\s*$/.exec(local.trim());
+  return m ? `port:${m[1]}` : '';
+}
+
 function addrKey(ip, port) {
   const p = String(port ?? '').trim();
   if (!p) return '';
@@ -32,6 +42,11 @@ const NATIVE_KEYS = [
   { name: 'setting_id', of: (e) => clean(e.setting_id ?? e.settingId) },
   { name: 'name', of: (e) => clean(e.name) },
   { name: 'stream', of: (e) => clean(e.stream) },
+  // Nimble's `id` is a socket pair: "31.28.6.149:60317->0.0.0.0:35001", or
+  // just "79.98.187.66:22213" for a listener. The LOCAL port is the one thing
+  // that means the same on both sides — it is what the operator configured —
+  // so it is worth trying even when no identifier lines up.
+  { name: 'localPort', of: (e) => localPort(e.id) },
   { name: 'id', of: (e) => clean(e.id) },
   // Nimble reports the socket it uses; the field name varies by build, which
   // is exactly why several are tried rather than one assumed.
@@ -45,6 +60,7 @@ const WMS_KEYS = [
   { name: 'setting_id', of: (o) => clean(o.id) },
   { name: 'name', of: (o) => clean(o.name) },
   { name: 'stream', of: (o) => clean(o.stream ?? o.src_stream) },
+  { name: 'localPort', of: (o) => (o.port ? `port:${o.port}` : '') },
   { name: 'id', of: (o) => clean(o.id) },
   { name: 'address', of: (o) => addrKey(o.ip ?? o.local_ip, o.port ?? o.local_port) },
   { name: 'remote', of: (o) => addrKey(o.ip, o.port) },

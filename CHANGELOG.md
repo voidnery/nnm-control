@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.25.4 — matching on the socket
+- The identifiers do not overlap at all: Nimble's `setting_id` values
+  (`6a1963…`) and the SRT In objects' ids (`6a1805…`, `6a18bf…`) come from
+  different families. Neither does the **ports** — Nimble is receiving on
+  35001-35005 and 22201-22216 while the tab lists 40001-40005 and 17801-17806
+- Added a join on the **local port**, parsed out of Nimble's socket pair
+  (`31.28.6.149:60317->0.0.0.0:35001` → 35001; the left-hand port is ephemeral
+  and means nothing). Two systems can name the same stream differently and
+  still be talking about the same socket, and the port is what the operator
+  configured, so it means the same on both sides. A name still wins over it,
+  since a port can be reused after a stream is deleted
+- The diagnostics now list the ports from both sides, because that is the
+  comparison that settles it. When the two port lists do not overlap, the sides
+  are describing **different streams** — which is a different conclusion from
+  "the field names differ", and no key would ever have joined them
+- 4 new checks
+
+
 ### v0.25.3 — settings could not be saved, and the join failed quietly
 - **"Internal server error" on every settings save.** The handler destructured
   `publicUrl` into `pub`, which is the name of the function that builds the

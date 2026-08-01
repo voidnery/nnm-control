@@ -207,6 +207,10 @@ function JoinNote({ live, t }) {
               and this is the thing worth sending on. */}
           <pre className="mono" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto' }}>
             {JSON.stringify(d.responseShape || {
+              // Ports first: when these two lists do not overlap, the two
+              // sides are describing different streams, and no key would ever
+              // have joined them.
+              nimblePorts: d.nimblePorts, wmspanelPorts: d.wmspanelPorts,
               nimble: d.sampleEntryIds, wmspanel: d.sampleObjectIds,
             }, null, 1)}
           </pre>

@@ -4,7 +4,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
 import { wmspanel } from '../services/wmspanelClient.js';
-import { joinLive, liveSummary } from '../services/streamJoin.js';
+import { joinLive, liveSummary, localPort } from '../services/streamJoin.js';
 
 // Nimble returns its stats under a different key per endpoint, and an array
 // directly on some builds. Same tolerance the collector already uses.
@@ -183,10 +183,17 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
         endpoint: src.native,
         // The identifiers on each side, so a mismatch is visible as a
         // mismatch rather than as an absence. Ids only — no addresses.
+        // Ports, not just ids. Two systems can name the same stream
+        // differently and still be talking about the same socket — and when
+        // the ports do not overlap either, they are not the same streams at
+        // all, which is a different conclusion entirely.
+        nimblePorts: [...new Set(entries.map(e => localPort(e.id)).filter(Boolean))].slice(0, 20),
+        wmspanelPorts: [...new Set(objects.map(o => o.port).filter(Boolean))].slice(0, 20),
         sampleEntryIds: entries.slice(0, 5).map(e => ({
-          setting_id: e.setting_id ?? null, name: e.name ?? null, hasStats: Boolean(e.stats),
+          setting_id: e.setting_id ?? null, name: e.name ?? null,
+          localPort: localPort(e.id), hasStats: Boolean(e.stats),
         })),
-        sampleObjectIds: objects.slice(0, 5).map(o => ({ id: String(o.id), name: o.name })),
+        sampleObjectIds: objects.slice(0, 5).map(o => ({ id: String(o.id), name: o.name, port: o.port })),
       }
       : null,
   });
