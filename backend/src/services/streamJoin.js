@@ -106,6 +106,21 @@ const num = (...vals) => {
 
 // The few numbers worth putting in a table row. Everything else stays in the
 // stored series, which is what the per-stream charts will read.
+// Below this, a socket is connected but carrying no media.
+//
+// A threshold is unavoidable here and so it is stated rather than buried. An
+// SRT socket with nothing flowing still costs a few tens of kbit/s in
+// handshake and keepalive traffic — observed at 0.03 Mbps across a fleet — and
+// the lowest real video feed on these servers runs at 6.5. The capture used to
+// build this shows the same gap from the other side: every entry is either
+// exactly 0 or above 8 Mbps, with nothing in between.
+//
+// 0.2 Mbps sits an order of magnitude above the overhead and an order below
+// the quietest real stream, so no plausible feed is misread as empty and no
+// empty socket is misread as a feed. Overridable, because a fleet carrying
+// audio-only streams would need it lower.
+const NO_MEDIA_MBPS = Number(process.env.NNM_NO_MEDIA_MBPS || 0.2);
+
 export function liveSummary(entry) {
   if (!entry) return null;
   const st = entry.stats || {};
@@ -132,7 +147,9 @@ export function liveSummary(entry) {
     // seven live sockets were in it. Collapsing it into "offline" would hide a
     // stream that is up but silent — the one an operator most wants to catch.
     online: connected || (bps != null && bps > 0),
-    idle: connected && bps === 0,
+    // "Connected" and "delivering" are different claims, and a green lamp
+    // beside 0.03 Mbps makes the first look like the second.
+    idle: connected && bps != null && bps < NO_MEDIA_MBPS * 1e6,
     rtt: num(st.link?.rtt, entry.rtt, entry.msRTT),
     loss,
     // How many times Nimble has re-established this socket. A number that

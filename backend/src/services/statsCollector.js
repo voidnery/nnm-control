@@ -76,8 +76,20 @@ export async function collectServer(server, groups, ts = new Date()) {
       }
     } else if (kind === 'srt-sender' || kind === 'srt-receiver') {
       for (const so of asList(d, 'streams', 'sockets', 'stats')) {
-        const id = so.id ?? so.socket_id ?? so.name ?? so.stream ?? 'unknown';
-        add('srt', `${kind}:${id}`, `${kind} ${id}`, flattenNumbers(so));
+        // `so.id` is a SOCKET PAIR — "31.28.6.149:60317->0.0.0.0:35001" — and
+        // its source port changes on every reconnect. Keying the series on it
+        // meant a stream with 52 751 retries produced up to 52 751 separate
+        // subjects, each holding a few seconds of history, all of them
+        // crowding a capped collection shared by the whole fleet. There was no
+        // usable history and there was no way to see that there wasn't.
+        //
+        // `setting_id` is the WMSPanel object id: one stream, one series,
+        // across any number of reconnects.
+        const id = so.setting_id ?? so.settingId ?? so.name ?? so.stream ?? so.id ?? 'unknown';
+        // The socket pair is worth keeping as a reading — a changed peer is
+        // real information — just not as an identity.
+        const metrics = flattenNumbers(so);
+        add('srt', `${kind}:${id}`, `${kind} ${id}`, metrics);
       }
     } else if (kind === 'mpegts') {
       for (const key of ['incoming', 'outgoing', 'streams', 'udp']) {

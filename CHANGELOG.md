@@ -1,5 +1,50 @@
 # Changelog
 
+### v0.25.0 (iter16 m2) — per-stream history, and the history was being shredded
+- **The SRT series was keyed on the socket pair.** `so.id` is
+  `31.28.6.149:60317->0.0.0.0:35001`, and its source port changes on every
+  reconnect — so a stream showing 52 751 retries in the capture produced up to
+  52 751 separate subjects, each holding a few seconds, all of them crowding a
+  capped collection shared by the whole fleet. There was no usable history, and
+  nothing said so. Keyed on `setting_id` now: one stream, one series, across
+  any number of reconnects
+- Old subjects are left alone; they age out on the existing TTL
+- **History opens from the row that raises the question.** Bitrate, round-trip
+  time and reconnects, over a range picked in the dialog. Three charts rather
+  than one because they answer different questions: loss without RTT reads as a
+  bad source, RTT without loss reads as a slow path
+- Reconnects are drawn as the counter they are. It only climbs, and the shape
+  of the climb is the point — a steady slope is a link dropping continuously, a
+  step is one bad minute
+- "No samples in this range" is said plainly: a stream added minutes ago has no
+  history and that is not a fault
+- 3 new checks. One failed first time and it was the check —
+  `indexOf('so.id')` also matches inside `so.setting_id`
+
+**Coverage gap, stated:** the click gate does not reach the SRT In tab, so the
+history dialog is exercised only by hand. The series key, which is the part
+that was actually broken, is covered against the real capture.
+
+
+### v0.24.4 — 0.03 Mbps is not a stream
+- The live columns work, and the first thing they showed was worth acting on:
+  dozens of sockets sitting at exactly **0.03 Mbps with no codecs detected**,
+  beside real feeds at 6.5. That is an SRT socket's handshake and keepalive
+  traffic — connected, carrying no media — and a green "online" lamp next to it
+  makes "connected" look like "working"
+- The no-media test was an exact zero and so missed all of them. It is a
+  threshold now, and the threshold is **stated rather than buried**: 0.2 Mbps,
+  an order of magnitude above the observed overhead and an order below the
+  quietest real feed. The capture shows the same gap from the other side —
+  every entry in it is either exactly 0 or above 8 Mbps, with nothing between —
+  and a check asserts the threshold lands in that gap. Overridable via
+  `NNM_NO_MEDIA_MBPS`, because an audio-only fleet would need it lower
+- The rate stays visible when it is only overhead. Hiding it would erase the
+  difference between "socket up, nothing flowing" and "socket down", which need
+  different things looked at
+- 3 new checks
+
+
 ### v0.24.3 — the real response settled it
 - **The join key is `setting_id`**, which is the WMSPanel object id. Nimble's
   own `id` field is a socket pair — `31.28.6.149:60317->0.0.0.0:35001` — and

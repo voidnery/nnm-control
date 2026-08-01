@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
-import { backdropClose } from '../components/Modal.jsx';
+import Modal, { backdropClose } from '../components/Modal.jsx';
+import Plot from '../components/Plot.jsx';
 import Select from '../components/Select.jsx';
 import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
@@ -75,6 +76,83 @@ const fmtBps = (v) => {
   if (v >= 1e3) return `${(v / 1e3).toFixed(0)} kb/s`;
   return `${v.toFixed(0)} b/s`;
 };
+
+// iter16 m2 — one stream's history.
+//
+// The series has been accumulating since iter9; what it lacked was a way in
+// from the row that raises the question. The subject is `srt-receiver:<id>`
+// where the id is now `setting_id`, which is the same id the row already has.
+function StreamHistory({ serverId, objectId, name, kind, onClose }) {
+  const { t } = useI18n();
+  const [range, setRange] = useState('1h');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+
+  const subject = `${kind === 'outgoing' ? 'srt-sender' : 'srt-receiver'}:${objectId}`;
+  // Rate, link quality and reconnects: the three questions asked of a feed
+  // that misbehaved, and they answer different ones. Loss without RTT reads as
+  // a bad source; RTT without loss reads as a slow path.
+  const METRICS = ['stats.recv.mbpsRate', 'stats.send.mbpsRate', 'stats.link.rtt', 'retryCount'];
+
+  useEffect(() => {
+    let dead = false;
+    const mins = { '15m': 15, '1h': 60, '6h': 360, '24h': 1440 }[range] || 60;
+    api(`/stats/${serverId}/series?subject=${encodeURIComponent(subject)}&metrics=${METRICS.join(',')}&minutes=${mins}`)
+      .then(d => { if (!dead) { setData(d); setError(''); } })
+      .catch(e => { if (!dead) setError(e.message); });
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverId, subject, range]);
+
+  const points = data?.points || [];
+  // Nimble reports the rate under recv for a receiver and send for a sender;
+  // whichever is absent is null all the way down, so they collapse into one
+  // line without the caller having to know which direction this stream is.
+  const rate = points.map(p => ({ ts: p.ts, v: [p.v[0] ?? p.v[1]] }));
+  const link = points.map(p => ({ ts: p.ts, v: [p.v[2]] }));
+  const retries = points.map(p => ({ ts: p.ts, v: [p.v[3]] }));
+
+  return (
+    <Modal onClose={onClose} size="wide">
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0 }}>{name}</h3>
+        <div className="row pair" style={{ gap: 6, flexShrink: 0 }}>
+          <span className="hint">{t('db.range')}</span>
+          <Select value={range} onChange={setRange} style={{ width: 130 }}
+                  options={['15m', '1h', '6h', '24h'].map(k => ({ value: k, label: t(`logs.range.${k}`) }))} />
+        </div>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+      {!error && points.length === 0 && (
+        // Said plainly: a stream added minutes ago has no history and that is
+        // not a fault.
+        <div className="hint" style={{ marginTop: 10 }}>{t('wo.noHistory')}</div>
+      )}
+
+      {points.length > 0 && (
+        <>
+          <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>{t('wo.histRate')}</div>
+          <Plot points={rate} series={[t('wo.histRate')]} unit="Mbps" height={140} />
+          <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>{t('wo.histRtt')}</div>
+          <Plot points={link} series={['RTT']} unit="ms" height={110} />
+          {/* A counter, not a rate: it only ever climbs, and the shape of the
+              climb is the point — a straight run means a link dropping
+              steadily, a step means one bad minute. */}
+          <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>{t('wo.histRetries')}</div>
+          <Plot points={retries} series={[t('wo.histRetries')]} unit="" height={100} />
+          <div className="hint" style={{ marginTop: 6 }}>
+            {t('wo.histNote', { n: points.length, bucket: data.bucketMs ? Math.round(data.bucketMs / 1000) : 0 })}
+          </div>
+        </>
+      )}
+
+      <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+        <button onClick={onClose}>{t('action.close')}</button>
+      </div>
+    </Modal>
+  );
+}
 
 // Shown once above a table when the join found nothing: the field names differ
 // between Nimble builds and were never documented, so the evidence goes on
@@ -752,6 +830,7 @@ const codecsOf = (o) => {
 
 export function MpegtsInTab({ serverId }) {
   const live = useLive(serverId, 'incoming');
+  const [history, setHistory] = useState(null);
   const st = useStreamTags(serverId, 'incoming');
   const cp = useStreamCopy(serverId, 'incoming');
   const { t } = useI18n();
@@ -829,7 +908,9 @@ export function MpegtsInTab({ serverId }) {
                 <td className="mono">
                   {live?.live?.[o.id]
                     ? (live.live[o.id].idle
-                      ? <span style={{ color: 'var(--warn)' }}>0</span>
+                      ? <span style={{ color: 'var(--warn)' }} title={t('wo.idleHint')}>
+                          {fmtBps(live.live[o.id].bps)}
+                        </span>
                       : fmtBps(live.live[o.id].bps))
                     : fmtMbps(o.bandwidth)}
                 </td>
@@ -869,6 +950,10 @@ export function MpegtsInTab({ serverId }) {
           </tbody>
         </table>
       </div>
+      {history && (
+        <StreamHistory serverId={serverId} objectId={history.id} name={history.name}
+                       kind="incoming" onClose={() => setHistory(null)} />
+      )}
       {modal && (
         <div className="modal-back" {...backdropClose(() => setModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>

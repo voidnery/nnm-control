@@ -207,6 +207,36 @@ check('the bitrate is the stream, not the link', () => {
   assert.ok(s.bps < 20e6, `read ${(s.bps / 1e6).toFixed(1)} Mbps, not the ${live.stats.link.mbpsBandwidth} Mbps link`);
 });
 
+check('an SRT socket carrying only overhead is not "delivering"', () => {
+  // Observed on a live fleet: dozens of sockets at exactly 0.03 Mbps with no
+  // codecs detected, beside real feeds at 6.5. A green lamp next to 0.03 makes
+  // "connected" look like "working", which is the wrong end of the two
+  // questions an operator is asking.
+  const at = (mbps) => liveSummary({ state: 'connected', stats: { recv: { mbpsRate: mbps, packetsReceived: 1 } } });
+  assert.equal(at(0.03).idle, true, 'handshake and keepalive only');
+  assert.equal(at(0).idle, true);
+  assert.equal(at(6.5).idle, false, 'the quietest real feed on these servers');
+  assert.equal(at(13.78).idle, false);
+});
+
+check('the threshold sits in the gap the data actually shows', () => {
+  // Every entry in the capture is either exactly 0 or above 8 Mbps. The
+  // threshold has to land in that gap and be nowhere near either side.
+  const rates = real
+    .map(e => e.stats?.recv?.mbpsRate)
+    .filter(v => typeof v === 'number');
+  const carrying = rates.filter(v => v > 0);
+  assert.ok(Math.min(...carrying) > 1, 'nothing real is anywhere near the threshold');
+  assert.ok(rates.filter(v => v > 0 && v < 1).length === 0, 'and the gap is empty');
+});
+
+check('a disconnected socket is not "no media" — it is not there at all', () => {
+  // Two different faults: one needs the source looked at, the other the link.
+  const s = liveSummary({ state: 'disconnected' });
+  assert.equal(s.idle, false);
+  assert.equal(s.online, false);
+});
+
 check('connected-but-silent is its own state', () => {
   // Two of the seven connected sockets carry nothing. Folding that into
   // "offline" would hide a stream that is up and not delivering — the case an
@@ -239,6 +269,52 @@ check('the retry count comes through', () => {
   // A count that climbs is a link that keeps dropping, which no instantaneous
   // reading shows.
   assert.equal(liveSummary(real[0]).retries, real[0].retryCount);
+});
+
+console.log('\nONE STREAM, ONE SERIES (iter16 m2):');
+
+const collectorSrc = readFileSync(new URL('../src/services/statsCollector.js', import.meta.url), 'utf8');
+
+check('the series is keyed on setting_id, not on the socket pair', () => {
+  // `so.id` is "31.28.6.149:60317->0.0.0.0:35001" and its source port changes
+  // on every reconnect. A stream in the capture shows 52 751 retries — keyed
+  // that way it produced up to 52 751 separate subjects, each holding seconds
+  // of history, all of them crowding a capped collection shared by the fleet.
+  // There was no usable history and no way to see that there wasn't.
+  assert.ok(collectorSrc.includes('so.setting_id ?? so.settingId'));
+  // `indexOf('so.id')` also matches inside `so.setting_id`, so the order is
+  // asserted on the fallback chain itself rather than on raw positions.
+  const chain = /const id = ([^;]+);/.exec(collectorSrc.slice(collectorSrc.indexOf("kind === 'srt-sender'")))[1];
+  const order = chain.split('??').map(x => x.trim());
+  assert.equal(order[0], 'so.setting_id', 'it is tried first');
+  assert.ok(order.indexOf('so.id') > order.indexOf('so.setting_id'), 'and the socket pair is only a last resort');
+});
+
+check('one subject per stream across the whole capture', () => {
+  const subjects = new Set(real.map(e => `srt-receiver:${e.setting_id ?? e.id}`));
+  assert.equal(subjects.size, real.length);
+  // And keyed the old way, the same capture would have produced ids that
+  // change on reconnect.
+  const ephemeral = real.filter(e => /^[\d.]+:\d+->/.test(e.id));
+  assert.ok(ephemeral.length > 0, 'the capture contains socket-pair ids');
+});
+
+check('the metrics the charts need are already stored', () => {
+  // The series has been accumulating since iter9; m2 adds a way in, not a new
+  // collection path.
+  const flat = (o, p = '', out = {}, d = 0) => {
+    if (!o || typeof o !== 'object' || d > 4) return out;
+    for (const [k, v] of Object.entries(o)) {
+      const key = p ? `${p}.${k}` : k;
+      if (typeof v === 'number' && Number.isFinite(v)) out[key] = v;
+      else if (v && typeof v === 'object' && !Array.isArray(v)) flat(v, key, out, d + 1);
+    }
+    return out;
+  };
+  const m = flat(real.find(e => e.stats?.recv?.mbpsRate > 0));
+  for (const k of ['stats.recv.mbpsRate', 'stats.link.rtt', 'retryCount']) {
+    assert.ok(k in m, `${k} is stored`);
+  }
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

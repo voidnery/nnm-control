@@ -235,6 +235,15 @@ window.fetch = (u) => {
         lastContactAt:new Date(Date.now()-400000).toISOString(), bucketMs:0, latest:null, points:[] },
       { id:'S3', name:'mediaserver', host:'192.168.200.129', agent:false, lastContactAt:null, bucketMs:0, latest:null, points:[] }] }),
     text:()=>Promise.resolve('{}') });
+  if (/wmspanel\/server\/[^/]+\/mpegts\/incoming/.test(s)) return Promise.resolve({ ok:true, status:200,
+    json:()=>Promise.resolve({ streams:[
+      { id:'o1', name:'CCT_FEED2_FIN_Net', description:'CCT_FEED2_FIN', protocol:'srt', ip:'0.0.0.0', port:40002, receive_mode:'listen', pmts:[] },
+      { id:'o2', name:'CCT_FEED1_FIN_NET', description:'CCT_FEED1_FIN', protocol:'srt', ip:'0.0.0.0', port:40001, receive_mode:'listen', pmts:[] }] }),
+    text:()=>Promise.resolve('{}') });
+  if (s.includes('/stats/') && s.includes('series')) return Promise.resolve({ ok:true, status:200,
+    json:()=>Promise.resolve({ subject:'srt-receiver:o1', metrics:[], bucketMs:0, points:[
+      { ts:new Date(Date.now()-60000).toISOString(), v:[6.4,null,9.8,39] },
+      { ts:new Date().toISOString(), v:[6.5,null,10.1,39] }] }), text:()=>Promise.resolve('{}') });
   if (s.includes('/live-objects/')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     kind:'incoming', available:true, strategy:'name', matched:1, objects:2, entries:1,
     live:{ 'o1': { bps:6200000, online:true, idle:false, rtt:9.8, loss:0.81, retries:39 }, 'o2': { bps:0, online:true, idle:true, rtt:9.3, loss:null, retries:51427 } }, diagnostics:null }),
