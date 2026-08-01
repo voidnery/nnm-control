@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.25.1 — the History button was never there
+- The state and the dialog shipped; the button did not. A string replacement
+  matched nothing and said nothing, so v0.25.0 went out with a feature that had
+  no way in. Every other gate passed: it compiled, rendered, and the click gate
+  does not reach that tab
+- New `npm run audit:wired`: a state initialised to `null` or `false` whose
+  setter is **only ever called with a falsy value** gates something that can
+  never appear. `setHistory(null)` was present in the dialog's own onClose, so
+  the thing could be closed and never opened — which is why a plainer "is the
+  setter used at all" check missed it on the first try, as it did here
+- Setters passed by reference (`.then(setFleet)`) are uses like any other.
+  Missing that produced two false positives, and a gate that cries twice for
+  one real finding gets ignored — the same judgement that led to deleting the
+  flicker audit
+- Verified both ways: clean now, and it names exactly the missing button when
+  the button is taken back out
+
+
 ### v0.25.0 (iter16 m2) — per-stream history, and the history was being shredded
 - **The SRT series was keyed on the socket pair.** `so.id` is
   `31.28.6.149:60317->0.0.0.0:35001`, and its source port changes on every

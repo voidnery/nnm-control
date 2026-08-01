@@ -934,6 +934,10 @@ export function MpegtsInTab({ serverId }) {
                 </td>
                 <td><TagChips st={st} kind="incoming" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {/* Asked from the row that raises the question, and available to
+                      anyone who can see the stream — reading its past is not a
+                      change to it. */}
+                  <button onClick={() => setHistory({ id: o.id, name: o.name })}>{t('wo.history')}</button>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => setModal({
                       id: o.id, name: o.name, description: o.description || '',
