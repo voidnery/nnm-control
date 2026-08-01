@@ -109,10 +109,20 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   if (!server) return res.status(404).json({ error: 'Server not found' });
   const kind = String(req.params.kind);
 
+  // Which native endpoint holds which family is not something to assume.
+  // Ports 35001+ turned up under srt_receiver_stats while being configured as
+  // UDP Streaming — SRT Out in this panel — so a fixed endpoint-per-tab map
+  // was wrong, and wrong in a way that produced an empty column and a
+  // plausible-looking explanation.
+  //
+  // Both SRT endpoints are asked and their entries merged. The join then
+  // decides by identifier or by port, which is what actually ties an entry to
+  // an object; nothing depends on my reading of Nimble's naming.
   const SOURCES = {
-    incoming: { native: 'srtReceiverStats', wms: 'incomingList', pick: (d) => d.streams || d.settings || [] },
-    outgoing: { native: 'srtSenderStats', wms: 'outgoingList', pick: (d) => d.streams || d.settings || [] },
-    republish: { native: 'republishStats', wms: 'republishList', pick: (d) => d.rules || d.republish_rules || [] },
+    incoming: { native: ['srtReceiverStats', 'srtSenderStats'], wms: 'incomingList', pick: (d) => d.streams || d.settings || [] },
+    outgoing: { native: ['srtSenderStats', 'srtReceiverStats'], wms: 'outgoingList', pick: (d) => d.streams || d.settings || [] },
+    udp: { native: ['srtSenderStats', 'srtReceiverStats'], wms: 'udpList', pick: (d) => d.settings || [] },
+    republish: { native: ['republishStats'], wms: 'republishList', pick: (d) => d.rules || d.republish_rules || [] },
   };
   const src = SOURCES[kind];
   if (!src) return res.status(400).json({ error: `unknown kind "${kind}"` });
@@ -120,19 +130,32 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   const settings = await Settings.load();
   // Independent on purpose: native stats are worth having even when WMSPanel
   // is unreachable, and the object list is worth having when a server is.
-  const [nativeRes, wmsRes] = await Promise.allSettled([
-    nimble[src.native](server),
+  const [wmsRes, ...nativeRes] = await Promise.allSettled([
     wmspanel[src.wms](settings.wmspanel, server.wmspanelServerId),
+    ...src.native.map(fn => nimble[fn](server)),
   ]);
 
-  if (nativeRes.status !== 'fulfilled') {
+  // One endpoint failing is not a reason to lose the other: they cover
+  // different sockets and either alone is worth having.
+  const ok = nativeRes.filter(r => r.status === 'fulfilled');
+  if (!ok.length) {
     return res.json({
       kind, available: false,
-      reason: String(nativeRes.reason?.message || nativeRes.reason).slice(0, 200),
+      reason: String(nativeRes[0]?.reason?.message || nativeRes[0]?.reason).slice(0, 200),
     });
   }
 
-  const entries = asList(nativeRes.value);
+  // A socket can appear in both lists; the local port identifies it.
+  const seen = new Set();
+  const entries = [];
+  for (const r of ok) {
+    for (const e of asList(r.value)) {
+      const key = `${e.setting_id ?? ''}|${e.id ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push(e);
+    }
+  }
 
   // When the list comes out empty, the question is whether Nimble reported
   // nothing or whether we looked in the wrong place — and those need opposite

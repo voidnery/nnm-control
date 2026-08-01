@@ -1,5 +1,22 @@
 # Changelog
 
+### v0.25.5 — live values on SRT Out, where those streams actually live
+- Ports 35001+ are configured through WMSPanel's UDP Streaming — **SRT Out** in
+  this panel — and Nimble reports them under `srt_receiver_stats`. My mapping
+  of endpoint to tab was an assumption, and a wrong one: it produced an empty
+  column on SRT In with a plausible explanation attached to it
+- The assumption is gone rather than corrected. **Both SRT endpoints are asked
+  for every SRT tab** and their entries merged; the join then decides by
+  identifier or by local port, which is what actually ties an entry to an
+  object. A socket appearing in both lists is counted once, and one endpoint
+  failing no longer loses the other — they cover different sockets and either
+  alone is worth having
+- SRT Out gains a bitrate column, the no-media marking, RTT, and a History
+  button. `paused` is the configured intent; the rate is what the socket is
+  doing, and the two disagree often enough to be worth showing both
+- 3 new checks
+
+
 ### v0.25.4 — matching on the socket
 - The identifiers do not overlap at all: Nimble's `setting_id` values
   (`6a1963…`) and the SRT In objects' ids (`6a1805…`, `6a18bf…`) come from

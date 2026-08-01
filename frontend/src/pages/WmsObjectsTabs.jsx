@@ -221,6 +221,8 @@ function JoinNote({ live, t }) {
 }
 
 export function UdpTab({ serverId }) {
+  const live = useLive(serverId, 'udp');
+  const [history, setHistory] = useState(null);
   const st = useStreamTags(serverId, 'udp');
   const cp = useStreamCopy(serverId, 'udp');
   const { t } = useI18n();
@@ -312,8 +314,9 @@ export function UdpTab({ serverId }) {
       <TagFilterBar st={st} />
       <CopySelectionBar cp={cp} visibleIds={settings.filter(o => st.matches('udp', o.id)).map(o => o.id)} />
       <div className="panel">
+        <JoinNote live={live} t={t} />
         <table>
-          <thead><tr><th></th><th>{t('wo.name')}</th><th>{t('wo.proto')}</th><th>{t('wo.destination')}</th><th>{t('wo.source')}</th><th>{t('wo.state')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          <thead><tr><th></th><th>{t('wo.name')}</th><th>{t('wo.proto')}</th><th>{t('wo.destination')}</th><th>{t('wo.source')}</th><th>{t('wo.bitrate')}</th><th>{t('wo.state')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
             {settings.filter(o => st.matches('udp', o.id)).map(o => (
               <tr key={o.id}>
@@ -328,9 +331,26 @@ export function UdpTab({ serverId }) {
                       ? (o.source_streams || []).map((ss, i) => <div key={i}>{ss.application}/{ss.stream}</div>)
                       : <span className="hint">— no source —</span>}
                 </td>
-                <td><span className={'lamp ' + (o.paused ? 'off' : 'on')} />{o.paused ? 'paused' : 'active'}</td>
+                {/* `paused` is the configured intent; the rate is what the
+                    socket is actually doing, and the two disagree often
+                    enough to be worth both. */}
+                <td className="mono">
+                  {live?.live?.[o.id]
+                    ? (live.live[o.id].idle
+                      ? <span style={{ color: 'var(--warn)' }} title={t('wo.idleHint')}>{fmtBps(live.live[o.id].bps)}</span>
+                      : fmtBps(live.live[o.id].bps))
+                    : <span className="hint">—</span>}
+                </td>
+                <td>
+                  <span className={'lamp ' + (o.paused ? 'off' : live?.live?.[o.id]?.idle ? 'warn' : 'on')} />
+                  {o.paused ? 'paused' : live?.live?.[o.id]?.idle ? t('wo.idle') : 'active'}
+                  {live?.live?.[o.id]?.rtt != null && (
+                    <span className="hint" style={{ marginLeft: 6 }}>RTT {live.live[o.id].rtt.toFixed(0)}ms</span>
+                  )}
+                </td>
                 <td><TagChips st={st} kind="udp" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button onClick={() => setHistory({ id: o.id, name: o.name })}>{t('wo.history')}</button>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => openEdit(o)}>{t('wo.editSourceBtn')}</button>{' '}
                     <button disabled={busy} onClick={() => openCfg(o)}>{t('wo.settingsBtn')}</button>{' '}
@@ -429,6 +449,10 @@ export function UdpTab({ serverId }) {
         </div>
       )}
       <CopyModal cp={cp} currentServerId={serverId} />
+      {history && (
+        <StreamHistory serverId={serverId} objectId={history.id} name={history.name}
+                       kind="outgoing" onClose={() => setHistory(null)} />
+      )}
     </div>
   );
 }

@@ -387,5 +387,30 @@ check('the diagnostics compare ports, not only identifiers', () => {
   assert.ok(routeSrc2.includes('wmspanelPorts:'));
 });
 
+console.log('\nWHICH ENDPOINT HOLDS WHAT IS NOT ASSUMED (v0.25.5):');
+
+const proxySrc = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+
+check('both SRT endpoints are asked, for every SRT tab', () => {
+  // Ports 35001+ turned up under srt_receiver_stats while being configured as
+  // UDP Streaming — SRT Out here. A fixed endpoint-per-tab map was wrong, and
+  // wrong in a way that produced an empty column with a plausible explanation
+  // attached to it.
+  assert.ok(proxySrc.includes("native: ['srtReceiverStats', 'srtSenderStats']"));
+  assert.ok(proxySrc.includes("native: ['srtSenderStats', 'srtReceiverStats']"));
+  assert.ok(proxySrc.includes('udp:'), 'SRT Out has its own entry now');
+});
+
+check('one endpoint failing does not lose the other', () => {
+  // They cover different sockets; either alone is worth having.
+  assert.ok(proxySrc.includes("const ok = nativeRes.filter(r => r.status === 'fulfilled')"));
+  assert.ok(proxySrc.includes('if (!ok.length)'));
+});
+
+check('a socket appearing in both lists is counted once', () => {
+  assert.ok(proxySrc.includes('const seen = new Set()'));
+  assert.ok(proxySrc.includes('`${e.setting_id ?? \'\'}|${e.id ?? \'\'}`'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);
