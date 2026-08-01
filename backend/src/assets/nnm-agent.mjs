@@ -48,7 +48,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 8;
+const AGENT_VERSION = 9;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -305,8 +305,17 @@ const routes = {
     if (digest !== expected) {
       throw new Error(`checksum mismatch: got ${digest.slice(0, 12)}…, expected ${String(expected).slice(0, 12)}…`);
     }
-    if (!body.subarray(0, 200).toString('utf8').includes('nnm-agent')) {
-      throw new Error('the downloaded file does not look like the agent');
+    // A sanity check on the downloaded bytes, in case the panel is fronted by
+    // something that returns an HTML error page with a 200.
+    //
+    // The first version looked for 'nnm-agent' in the leading 200 bytes, where
+    // the file has a shebang and a title in capitals — so it never matched and
+    // self-update failed on every agent with a message that sounded like
+    // tampering. Check for what the file actually contains, and check the
+    // whole of it.
+    const text = body.toString('utf8');
+    if (!text.startsWith('#!') || !text.includes('AGENT_VERSION')) {
+      throw new Error('the downloaded file does not look like the agent (no shebang or version marker)');
     }
 
     const tmp = `${SELF_PATH}.new`;

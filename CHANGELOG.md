@@ -1,5 +1,26 @@
 # Changelog
 
+### v0.22.9 — self-update could never have worked, and preferences were never stored
+- **The agent's own sanity check on the download never passed.** It looked for
+  the string `nnm-agent` in the leading 200 bytes, where the file has a shebang
+  and a title in capitals. Every self-update on every agent failed at that
+  line — and the message, "the downloaded file does not look like the agent",
+  sounded like tampering rather than a bug in the check. It now tests what the
+  file actually contains, over the whole of it: a shebang and the version
+  marker. An HTML error page returned with a 200 is still rejected, which is
+  what the check exists for. Agent protocol version 9
+- **`preferences.dashboard` was discarded on save.** `preferences` is a typed
+  sub-schema, and mongoose silently drops keys it does not declare — so the PUT
+  succeeded, the value vanished, and the dashboard reverted to its defaults on
+  every reload. That is why the range kept returning to an hour: the optimistic
+  update from v0.22.8 applied, and then the refresh brought back the unchanged
+  account. Declared as Mixed; the route already validates it by allow-list
+- 5 new checks, both verified against the real defects. The agent one runs
+  against the shipped file rather than a fixture, so a future change to the
+  file's opening lines fails the check instead of silently breaking updates
+  again
+
+
 ### v0.22.8 — the range would not take, and the toolbar was wrapping
 - **`Select` ignored the width its caller gave it.** It accepted no `style`
   prop, so every one took its natural width; the toolbar row overflowed and

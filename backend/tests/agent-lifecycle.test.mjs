@@ -178,5 +178,41 @@ check('the recovery commands are a fixed list, not a shell', () => {
   assert.ok(fleetSrc.includes('grep -v TOKEN'), 'the env file is read without its secret');
 });
 
+console.log('\nTHE SANITY CHECK MUST PASS THE REAL AGENT:');
+
+await acheck('the shipped agent satisfies its own download check', async () => {
+  // The first version looked for 'nnm-agent' in the leading 200 bytes, where
+  // the file has a shebang and a title in capitals. It never matched, so
+  // self-update failed on every agent — with a message that sounded like the
+  // download had been tampered with.
+  const rel = await agentRelease();
+  const text = rel.body.toString('utf8');
+  assert.ok(text.startsWith('#!'), 'the agent is executable and starts with a shebang');
+  assert.ok(text.includes('AGENT_VERSION'), 'and carries its version marker');
+});
+
+check('the check is written against the whole file, not a prefix', () => {
+  const from = agentSrc.indexOf("'POST /self-update'");
+  const handler = agentSrc.slice(from, agentSrc.indexOf("'POST /media/fetch'", from));
+  assert.ok(!handler.includes('subarray(0, 200)'), 'a prefix window is how the marker was missed');
+  assert.ok(handler.includes("text.startsWith('#!')"));
+});
+
+check('an HTML error page returned with a 200 is still rejected', () => {
+  const looksLikeAgent = (t) => t.startsWith('#!') && t.includes('AGENT_VERSION');
+  assert.equal(looksLikeAgent('<!doctype html><title>502 Bad Gateway</title>'), false);
+  assert.equal(looksLikeAgent('#!/usr/bin/env node\nconst AGENT_VERSION = 9;'), true);
+});
+
+console.log('\nPREFERENCES ARE ACTUALLY STORED:');
+
+check('the dashboard block is declared on the user schema', () => {
+  // `preferences` is a TYPED sub-schema, so mongoose discards any key it does
+  // not declare — silently. The write appeared to succeed, vanished on save,
+  // and the dashboard reverted to its defaults on every reload.
+  const userSrc = readFileSync(new URL('../src/models/User.js', import.meta.url), 'utf8');
+  assert.ok(userSrc.includes('dashboard: { type: mongoose.Schema.Types.Mixed'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-lifecycle checks passed');
 process.exit(fail ? 1 : 0);

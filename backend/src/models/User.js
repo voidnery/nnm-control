@@ -22,6 +22,14 @@ const userSchema = new mongoose.Schema({
     theme: { type: String, enum: ['system', 'dark', 'light'], default: 'system' },
     lang: { type: String, enum: ['en', 'ru'], default: 'en' },
     functionModalWidth: { type: String, enum: ['narrow', 'default', 'wide', 'xwide'], default: 'default' },
+    // iter15 m5 — dashboard layout.
+    //
+    // This block is a TYPED sub-schema, so mongoose discards any key it does
+    // not declare — silently. Writing `preferences.dashboard` therefore
+    // appeared to succeed and vanished on save, and the dashboard reverted to
+    // its defaults on every reload. Declared as Mixed because the shape is a
+    // UI concern and the route validates it by allow-list before it gets here.
+    dashboard: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },
 }, { timestamps: true });
 
