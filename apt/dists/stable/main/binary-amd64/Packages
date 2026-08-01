@@ -1,13 +1,13 @@
 Package: nnm-control
-Version: 1.0.8
+Version: 1.0.9
 Architecture: all
 Maintainer: voidnery <opensource@voidnery.pro>
 Depends: debconf, docker.io | docker-ce, docker-compose-v2 | docker-compose-plugin
-Filename: pool/main/nnm-control_1.0.8_all.deb
-Size: 10022
-MD5sum: 1a0904dce80ff7e84264f29d9757fc7b
-SHA1: 59d546c754242503ff7e23a837d50deed668c2e1
-SHA256: ed8f9b83fee394e20d51e3ccf1ca8478d1cb2f0c21b20d4fa857d58c6758a99e
+Filename: pool/main/nnm-control_1.0.9_all.deb
+Size: 10026
+MD5sum: 4c307a09ae4dac5f6e2a1d524662065f
+SHA1: 18f07807486b3da98958c9ca2949651ba2981279
+SHA256: e9598aa1a79adb6ebbe26f334a764ccc6597073dca0830d9730b599383ad8c4a
 Section: net
 Priority: optional
 Homepage: https://github.com/voidnery/nnm-control
