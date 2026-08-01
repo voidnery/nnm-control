@@ -97,9 +97,16 @@ export function joinLive(entries = [], objects = []) {
       if (k && index.has(k)) pairs.push([String(o.id), index.get(k)]);
     }
     candidates.push({ key: nk.name, matched: pairs.length });
-    // First key to match anything wins; the order encodes how strongly each
-    // identifies a stream, so a weaker key never overrides a stronger one.
-    if (!best && pairs.length) best = { key: nk.name, pairs };
+    // The key that pairs the MOST objects wins, ties broken by order.
+    //
+    // It used to be the first key to match anything, on the theory that the
+    // order encoded how strongly each identifies a stream — which was another
+    // assumption of mine. One accidental match on an earlier key then blocked
+    // a later one that would have paired dozens, and the result looked exactly
+    // like "these are different streams".
+    if (pairs.length && (!best || pairs.length > best.pairs.length)) {
+      best = { key: nk.name, pairs };
+    }
   }
 
   const byObjectId = Object.fromEntries(best?.pairs || []);

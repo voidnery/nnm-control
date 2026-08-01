@@ -473,5 +473,47 @@ check('no port overlap is reported as its own case', () => {
   assert.ok(tabs.includes("t('wo.liveElsewhere'"));
 });
 
+console.log('\nTHE KEY THAT PAIRS THE MOST WINS (v0.25.7):');
+
+check('one accidental match no longer blocks a better key', () => {
+  // It used to be the first key to match anything, on my theory that the order
+  // encoded how strongly each identifies a stream. One stray name match then
+  // stopped the port key from ever being tried — and the result looked exactly
+  // like "these are different streams", which is what I concluded from it.
+  const objects = [
+    { id: 'w0', name: 'odd', port: 9999 },
+    ...[17801, 17802, 17803, 17804].map((p, i) => ({ id: `w${i + 1}`, name: `feed${i}`, ip: '72.56.79.88', port: p })),
+  ];
+  const entries = [
+    { name: 'odd', id: 'x:1->y:9999' },
+    ...[17801, 17802, 17803, 17804].map(p => ({ id: `72.56.79.88:${p}`, stats: { recv: { mbpsRate: 6.5 } } })),
+  ];
+  const r = joinLive(entries, objects);
+  assert.equal(r.strategy, 'localPort');
+  assert.equal(r.matched, 5, 'the stray name match is included by the port key too');
+  assert.deepEqual(r.candidates.filter(c => c.matched).map(c => `${c.key}:${c.matched}`), ['name:1', 'localPort:5']);
+});
+
+check('a tie is broken by order, so the stronger key still wins', () => {
+  const objects = [{ id: 'w1', name: 'feed', port: 100 }];
+  const entries = [{ name: 'feed', id: 'a:1->b:100', stats: { recv: { mbpsRate: 5 } } }];
+  const r = joinLive(entries, objects);
+  assert.equal(r.strategy, 'name', 'a name identifies; a port can be reused');
+});
+
+check('a caller socket is identified by the address it dialled', () => {
+  // WMSPanel shows SRT stats for "72.56.79.88:17802" against an SRT In pull
+  // object at that same address — no arrow, so the whole id is the peer.
+  assert.equal(localPort('72.56.79.88:17802'), 'port:17802');
+});
+
+check('the diagnostics lead with counts, not with a truncated sample', () => {
+  // A 20-item slice of 61 ports reads as the whole set. That is how a wrong
+  // conclusion got drawn from one.
+  const proxy = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+  assert.ok(proxy.includes('nimblePortCount:'));
+  assert.ok(proxy.includes('overlappingPorts:'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

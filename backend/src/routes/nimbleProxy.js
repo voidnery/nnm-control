@@ -219,6 +219,13 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
         // differently and still be talking about the same socket — and when
         // the ports do not overlap either, they are not the same streams at
         // all, which is a different conclusion entirely.
+        // Counts and the overlap first. The truncated lists below read as the
+        // whole picture and are not — a 20-item slice of 61 ports is how I
+        // concluded "no overlap" from a sample that simply had not reached it.
+        nimblePortCount: nPorts.size,
+        wmspanelPortCount: wPorts.size,
+        portOverlap,
+        overlappingPorts: [...wPorts].filter(p => nPorts.has(p)).slice(0, 20),
         nimblePorts: [...new Set(entries.map(e => localPort(e.id)).filter(Boolean))].slice(0, 20),
         wmspanelPorts: [...new Set(objects.map(o => o.port).filter(Boolean))].slice(0, 20),
         sampleEntryIds: entries.slice(0, 5).map(e => ({

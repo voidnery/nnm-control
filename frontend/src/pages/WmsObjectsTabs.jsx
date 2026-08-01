@@ -213,7 +213,11 @@ function JoinNote({ live, t }) {
               // Ports first: when these two lists do not overlap, the two
               // sides are describing different streams, and no key would ever
               // have joined them.
-              nimblePorts: d.nimblePorts, wmspanelPorts: d.wmspanelPorts,
+              // Counts before samples: a truncated list looks like the whole
+              // set and is the reason a wrong conclusion got drawn from one.
+              nimblePortCount: d.nimblePortCount, wmspanelPortCount: d.wmspanelPortCount,
+              portOverlap: d.portOverlap, overlappingPorts: d.overlappingPorts,
+              nimblePortsSample: d.nimblePorts, wmspanelPortsSample: d.wmspanelPorts,
               nimble: d.sampleEntryIds, wmspanel: d.sampleObjectIds,
             }, null, 1)}
           </pre>

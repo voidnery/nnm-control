@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.25.7 — the key that pairs the most wins
+- WMSPanel's own SRT stats for `72.56.79.88:17802` prove Nimble holds readings
+  for an SRT In object at exactly that address, so the data was there and the
+  join was not finding it
+- **The rule was "first key to match anything wins"**, on my theory that the
+  order encoded how strongly each key identifies a stream. One stray match on
+  an earlier key then stopped a later one from ever being tried — and the
+  result was indistinguishable from "these are different streams", which is the
+  conclusion I drew from it. The key that pairs the **most** objects wins now,
+  ties broken by order so a name still beats a port
+- **The diagnostics misled me too.** The port lists were truncated to twenty of
+  sixty-one, which reads as the whole set — and that is how "no overlap" got
+  concluded from a sample that had not reached the overlap. They lead with
+  counts and the actual overlapping ports now; the samples are labelled as
+  samples
+- 4 new checks
+
+
 ### v0.25.6 — several sockets, one stream
 - The diagnostics settled both questions. **SRT Out matches** — its objects are
   the 35001+ family, five paired. **SRT In genuinely has no live counterpart**:
