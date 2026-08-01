@@ -56,6 +56,19 @@ agentFleetRouter.get('/overview', requirePerm('servers.view'), async (req, res) 
       selfUpdate: a.lastHealth?.selfUpdate !== false,
       selfPath: a.lastHealth?.selfPath || '',
       pendingUpdate: tasks.some(t => t.route === 'POST /self-update' && ['queued', 'claimed'].includes(t.status)),
+      // A self-update that failed left a task saying exactly why — and nothing
+      // showed it, so an agent that refused to update looked identical to one
+      // nobody had asked. The last attempt is reported either way.
+      lastUpdate: (() => {
+        const t = tasks.find(x => x.route === 'POST /self-update' && ['done', 'failed', 'expired'].includes(x.status));
+        if (!t) return null;
+        return {
+          status: t.status,
+          at: t.finishedAt || t.createdAt,
+          error: t.error || '',
+          toVersion: t.body?.version || null,
+        };
+      })(),
     });
   }
 

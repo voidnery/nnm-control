@@ -1,5 +1,27 @@
 # Changelog
 
+### v0.22.7 — a step that cannot run says so, and a refused update stops hiding
+- **Steps with no object are caught on save**, per step and by index, instead
+  of on a live fleet at preflight. Reported rather than refused — building a
+  function over two sittings is normal, running one that cannot work is not —
+  and the same rule runs live in the builder, with the offending step marked so
+  it is findable in a long list
+- **An update that failed was invisible.** The agent reported exactly why, the
+  task recorded it, and the panel showed nothing: an agent that refused to
+  update looked identical to one nobody had asked. The last attempt is now
+  reported whatever its outcome, with the agent's own reason, and "nobody
+  picked it up" is its own case — that one means the agent was not polling, not
+  that it refused
+- 7 new checks
+
+**Note on the agent stuck at v7:** the most likely cause is an agent installed
+before iter14 under `/usr/local/bin`, which `ProtectSystem=strict` makes
+read-only — it cannot rewrite itself and says so, and that message was the one
+being swallowed. Reinstalling from the panel moves it to `/var/lib/nnm-agent`,
+keeps the token, and makes future updates work. After this release the panel
+will state which of the two it is.
+
+
 ### v0.22.6 — picking an object lost its id
 - **The function never had a target on any step, and the panel said otherwise.**
   Picking an object called `set('targetId', …)` and then `set('targetLabel', …)`

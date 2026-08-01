@@ -11,6 +11,25 @@ import { logEvent } from '../services/audit.js';
 // A rejected shape is the operator's problem to fix and must say what is wrong.
 // Letting a mongoose ValidationError reach the async guard turned "this step
 // has no server" into "Internal server error", which tells nobody anything.
+/**
+ * Steps that cannot possibly run, named so they can be fixed.
+ *
+ * A step whose object was never picked saves cleanly and then fails preflight
+ * on a live fleet — which is the worst place to learn it, and exactly what
+ * happened when a lost write dropped every targetId. Checked on save instead,
+ * and reported per step so the operator knows which ones to re-pick rather
+ * than being told the function is "invalid".
+ */
+export function incompleteSteps(steps) {
+  const out = [];
+  (steps || []).forEach((st, i) => {
+    if (st.type === 'delay') return;              // nothing to target
+    if (!st.serverId) out.push({ index: i, label: st.label || '', reason: 'noServer' });
+    else if (!String(st.targetId || '').trim()) out.push({ index: i, label: st.label || '', reason: 'noTarget' });
+  });
+  return out;
+}
+
 function asBadRequest(e, res) {
   if (e?.name === 'ValidationError') {
     const first = Object.values(e.errors || {})[0];
@@ -61,7 +80,9 @@ functionsRouter.post('/', requirePerm('functions.manage'), async (req, res) => {
   try {
     fn = await FunctionDef.create({ name, description, steps, variants: cleanVariants(variants), createdBy: req.user.username });
   } catch (e) { if (asBadRequest(e, res)) return; throw e; }
-  res.status(201).json(fn);
+  // Reported, not refused: building a function over two sittings is normal.
+  // Running one that cannot work is not.
+  res.status(201).json({ ...fn.toObject(), incomplete: incompleteSteps(steps) });
 });
 
 functionsRouter.put('/:id', requirePerm('functions.manage'), async (req, res) => {
@@ -74,7 +95,7 @@ functionsRouter.put('/:id', requirePerm('functions.manage'), async (req, res) =>
   if (variants !== undefined) fn.variants = cleanVariants(variants);
   try { await fn.save(); }
   catch (e) { if (asBadRequest(e, res)) return; throw e; }
-  res.json(fn);
+  res.json({ ...fn.toObject(), incomplete: incompleteSteps(fn.steps) });
 });
 
 // Declared BEFORE '/:id', and that ordering is load-bearing: Express matches

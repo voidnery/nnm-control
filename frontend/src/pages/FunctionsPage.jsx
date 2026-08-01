@@ -411,6 +411,9 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
                onChange={e => set('label', e.target.value)} />
         <div className="row" style={{ gap: 8, flexShrink: 0 }}>
           <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
+          {step.type !== 'delay' && !String(step.targetId || '').trim() && (
+            <span className="badge err" title={t('fn.incompleteNoTarget')}>{t('fn.needsPick')}</span>
+          )}
           {onDuplicate && <button onClick={onDuplicate}>{t('fn.duplicate')}</button>}
           <button className="danger" onClick={onRemove}>{t('fn.remove')}</button>
         </div>
@@ -658,6 +661,14 @@ function Builder({ initial, servers, onClose, onSaved }) {
 
   const addPreset = (preset) => setSteps(st => [...st, { serverId: '', targetId: '', waitSec: 0, ...JSON.parse(JSON.stringify(preset.step)) }]);
 
+  // The same rule the backend applies on save, run as the operator edits: a
+  // step whose object was never picked saves cleanly and then fails preflight
+  // on a live fleet, which is the worst place to find out.
+  const incomplete = useMemo(() => steps
+    .map((st, i) => ({ st, i }))
+    .filter(({ st }) => st.type !== 'delay' && (!st.serverId || !String(st.targetId || '').trim())),
+  [steps]);
+
   const drift = useMemo(() => Object.fromEntries(
     variants.map(v => [v.id, variantDrift(steps, v)]),
   ), [steps, variants]);
@@ -800,6 +811,20 @@ function Builder({ initial, servers, onClose, onSaved }) {
           </div>
         </div>
 
+        {incomplete.length > 0 && (
+          <div className="error-box" style={{ marginTop: 10 }}>
+            {t('fn.incompleteWarn')}
+            <div className="mono" style={{ fontSize: 12, marginTop: 4 }}>
+              {incomplete.map(({ st, i }) => (
+                <div key={i}>
+                  {t('fn.stepN', { n: i + 1 })}: {st.label || st.objectKind || st.type}
+                  {' — '}
+                  {!st.serverId ? t('fn.incompleteNoServer') : t('fn.incompleteNoTarget')}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {error && <div className="error-box">{error}</div>}
         <div className="row" style={{ marginTop: 14, justifyContent: 'flex-end' }}>
           <button onClick={onClose}>{t('action.cancel')}</button>

@@ -164,6 +164,7 @@ check('a variant with no overrides is the base steps under a name', () => {
 console.log('\nOBJECT KINDS (one list, three consumers):');
 
 const { OBJECT_KINDS } = await import('../src/objectKinds.js');
+const { incompleteSteps } = await import('../src/routes/functions.js');
 const { KIND_OPS } = await import('../src/services/functionRunner.js');
 const { readFileSync } = await import('node:fs');
 const routeSrc = readFileSync(new URL('../src/routes/functions.js', import.meta.url), 'utf8');
@@ -606,6 +607,61 @@ check('the lost-write shape is what actually loses data', () => {
   setMany({ targetId: 'X', targetLabel: 'L' });
   assert.equal(step.targetId, 'X', 'and this is the fix');
   assert.equal(step.targetLabel, 'L');
+});
+
+console.log('\nA STEP THAT CANNOT RUN IS CAUGHT ON SAVE:');
+
+check('a step with no object is named, with its index', () => {
+  // It saved cleanly and failed preflight on the live fleet — the worst place
+  // to learn it, and exactly what happened when a lost write dropped every
+  // targetId.
+  const bad = incompleteSteps([
+    { type: 'patch', serverId: 'S1', targetId: 'abc', label: 'ok' },
+    { type: 'patch', serverId: 'S1', targetId: '', label: 'Switch sources' },
+    { type: 'action', serverId: '', targetId: 'x', label: 'no server' },
+  ]);
+  assert.deepEqual(bad, [
+    { index: 1, label: 'Switch sources', reason: 'noTarget' },
+    { index: 2, label: 'no server', reason: 'noServer' },
+  ]);
+});
+
+check('whitespace is not an object id', () => {
+  assert.equal(incompleteSteps([{ type: 'patch', serverId: 'S1', targetId: '   ' }])[0].reason, 'noTarget');
+});
+
+check('a delay step needs neither', () => {
+  assert.deepEqual(incompleteSteps([{ type: 'delay', waitSec: 5 }]), []);
+});
+
+check('it reports rather than refuses', () => {
+  // Building a function over two sittings is normal; running one that cannot
+  // work is not. The save succeeds and says what is missing.
+  assert.ok(routeSrc.includes('incomplete: incompleteSteps('));
+  assert.ok(!/return res\.status\(400\)[^;]*incomplete/.test(routeSrc));
+});
+
+check('the builder applies the same rule live', () => {
+  assert.ok(uiSrc.includes("st.type !== 'delay' && (!st.serverId || !String(st.targetId || '').trim())"));
+  assert.ok(uiSrc.includes("t('fn.needsPick')"), 'and marks the step itself, findable in a long list');
+});
+
+console.log('\nAN UPDATE THAT FAILED IS VISIBLE:');
+
+const fleetSrc2 = readFileSync(new URL('../src/routes/agentFleet.js', import.meta.url), 'utf8');
+const centreSrc = readFileSync(new URL('../../frontend/src/components/AgentCentreModal.jsx', import.meta.url), 'utf8');
+
+check('the last update attempt is reported, whatever its outcome', () => {
+  // A refused update looked identical to one nobody had asked for: the agent
+  // simply stayed on its old version with no explanation.
+  assert.ok(fleetSrc2.includes('lastUpdate:'));
+  assert.ok(fleetSrc2.includes("['done', 'failed', 'expired'].includes(x.status)"));
+});
+
+check('the reason the agent gave is shown', () => {
+  assert.ok(centreSrc.includes("s.lastUpdate?.status === 'failed'"));
+  assert.ok(centreSrc.includes('s.lastUpdate.error'));
+  assert.ok(centreSrc.includes("s.lastUpdate?.status === 'expired'"), 'and "nobody picked it up" is its own case');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');

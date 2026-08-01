@@ -179,6 +179,17 @@ export default function AgentCentreModal({ onClose, onChanged }) {
                     {s.enabled && s.selfUpdate === false && (
                       <div className="hint" style={{ fontSize: 11 }}>{t('ac.readOnly')}</div>
                     )}
+                    {/* An update that was asked for and refused looked exactly
+                        like one nobody had asked for. */}
+                    {s.lastUpdate?.status === 'failed' && (
+                      <div className="hint" style={{ fontSize: 11, color: 'var(--warn)' }}
+                           title={s.lastUpdate.error}>
+                        {t('ac.updateFailed')}: {String(s.lastUpdate.error).slice(0, 90)}
+                      </div>
+                    )}
+                    {s.lastUpdate?.status === 'expired' && (
+                      <div className="hint" style={{ fontSize: 11, color: 'var(--warn)' }}>{t('ac.updateExpired')}</div>
+                    )}
                   </td>
                   <td className="mono" style={{ fontSize: 12 }}>{s.enabled ? ago(s.sinceContactMs) : ''}</td>
                   <td>
