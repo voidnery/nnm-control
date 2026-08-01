@@ -147,6 +147,52 @@ function StreamsSection({ card, t }) {
   );
 }
 
+// What is left of the WMSPanel daily budget.
+//
+// Deliberately not a bare number: "11 200 left" is reassuring at 09:00 and
+// alarming at 23:00, and only the rate tells them apart. So the bar shows what
+// is spent, and the line under it says where the day is heading at the current
+// rate — which is the question actually being asked.
+function QuotaBox({ q, t }) {
+  if (!q) return null;
+  const pct = Math.min(100, q.pctUsed);
+  // Amber once the projection would overrun; red once it already has.
+  const over = q.projected != null && q.projected > q.limit;
+  const spent = q.remaining === 0;
+  const tone = spent ? 'var(--err, #e04545)' : over ? 'var(--warn)' : 'var(--accent)';
+  const hours = Math.floor(q.resetsInMs / 3_600_000);
+  const mins = Math.round((q.resetsInMs % 3_600_000) / 60_000);
+
+  return (
+    <div className="panel quota" title={q.top.map(x => `${x.path}: ${x.calls}`).join('\n')}
+         style={{ padding: '8px 12px', minWidth: 230 }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+        <span className="hint" style={{ fontSize: 11 }}>{t('db.quota')}</span>
+        <span className="mono" style={{ fontSize: 15, color: tone }}>
+          {new Intl.NumberFormat().format(q.remaining)}
+        </span>
+      </div>
+      <div style={{ height: 4, borderRadius: 2, background: 'var(--line)', margin: '5px 0 4px' }}>
+        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: tone, transition: 'width .3s' }} />
+      </div>
+      <div className="hint" style={{ fontSize: 10.5, lineHeight: 1.35 }}>
+        {t('db.quotaUsed', { used: new Intl.NumberFormat().format(q.used), limit: new Intl.NumberFormat().format(q.limit) })}
+        {' · '}{t('db.quotaResets', { h: hours, m: mins })}
+        {q.projected != null && (
+          <div style={{ color: over ? 'var(--warn)' : 'inherit' }}>
+            {over
+              ? t('db.quotaOver', { n: new Intl.NumberFormat().format(q.projected) })
+              : t('db.quotaProjected', { n: new Intl.NumberFormat().format(q.projected) })}
+          </div>
+        )}
+        {/* A floor, not a balance — WMSPanel reports no remaining quota, and
+            the account is shared. Better said than assumed. */}
+        <div style={{ opacity: .8 }}>{t('db.quotaPanelOnly')}</div>
+      </div>
+    </div>
+  );
+}
+
 function ServerCard({ s, streams, t, charts }) {
   const latest = s.latest || [];
   const silent = isSilent(s);
@@ -298,6 +344,7 @@ export default function DashboardPage() {
   const cfg = useMemo(() => ({ ...saved, ...(pending || {}) }), [saved, pending]);
 
   const [settings, setSettings] = useState(false);
+  const [quota, setQuota] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -329,10 +376,14 @@ export default function DashboardPage() {
     try {
       // Two requests, not two per card: the fleet answers both questions in
       // one pass each.
-      const [d, st] = await Promise.all([
+      const [d, st, q] = await Promise.all([
         api(`/stats/host?minutes=${mins}&metrics=${METRICS.join(',')}`),
         api(`/stats/streams?minutes=${mins}&limit=${cfg.streamLimit}`).catch(() => null),
+        // Never allowed to break the dashboard: it is a readout, not the point
+        // of the page.
+        api('/stats/api-quota').catch(() => null),
       ]);
+      setQuota(q && q.enabled !== false ? q : null);
       const merged = { ...d, streamsByServer: Object.fromEntries((st?.servers || []).map(x => [x.id, x])) };
       setData(merged);
       cacheSet(cacheKey('dash', { range: cfg.range, limit: cfg.streamLimit }), merged);
@@ -368,6 +419,7 @@ export default function DashboardPage() {
           <div className="sub">{t('db.sub')}</div>
         </div>
         <div className="row" style={{ gap: 16, flexShrink: 0 }}>
+          <QuotaBox q={quota} t={t} />
           {/* The range is reached for constantly, so it stays in the toolbar;
               everything set once and left alone is behind the button. */}
           <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>

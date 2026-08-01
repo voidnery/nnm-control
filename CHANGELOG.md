@@ -1,5 +1,46 @@
 # Changelog
 
+### v0.23.1 — the budget readout is switchable, and the limit is editable
+- A **WMSPanel budget readout** section in system settings: show it or not
+- **The daily limit moved out of the environment.** It is a property of the
+  account's plan, and the person who knows which plan that is cannot edit the
+  container's environment. Validated between 100 and 10 000 000 — zero would
+  make every reading "over budget" and an unbounded one would make the readout
+  meaningless — with the environment variable kept as the fallback
+- Switched off, the endpoint returns nothing to render rather than a number the
+  dashboard then has to decide to ignore
+- The settings audit added in v0.22.12 already covers the new block: it counts
+  eight now and confirms each is reachable from the page
+- 2 new checks
+
+
+### v0.23.0 — WMSPanel budget on the dashboard
+- The remaining daily API budget sits left of the range picker: what is left,
+  a bar for what is spent, when it resets, and where the day is heading at the
+  current rate
+- **The rate is the point.** "11 200 left" is reassuring at 09:00 and alarming
+  at 23:00, and only the projection tells them apart — so the box says which,
+  and turns amber when the day is on course to overrun. It stays quiet in the
+  first quarter-hour of the day, where a rate computed from minutes means
+  nothing
+- **It is a floor, not a balance, and says so.** WMSPanel reports no remaining
+  quota — no header, no endpoint — so the only number available is what this
+  panel spent. The account is shared: another panel, a script or someone in the
+  WMSPanel web UI spends from the same budget and is invisible here
+- Calls are counted **before** they are attempted, because a failed call has
+  still left the account, and counting successes would under-report exactly
+  when something is failing and being retried
+- Counting is accumulated in memory and flushed on a timer rather than written
+  per call — solving a budget problem by spending a different budget is no
+  solution — but it is persisted, because a restart at midday would otherwise
+  report a fraction of the truth
+- Object ids are collapsed in the breakdown so paths group rather than
+  fragmenting, which is what makes a spike attributable; the top five are in
+  the tooltip
+- The readout cannot break the page: it is a readout, not the point of it
+- 7 new checks
+
+
 ### v0.22.12 — host metrics had no switch, for the second time
 - **The whole chain shipped in iter15 m1 except the way to turn it on.** The
   setting existed, the gateway delivered it, the agent honoured it — and it

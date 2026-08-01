@@ -34,6 +34,15 @@ const settingsSchema = new mongoose.Schema({
       server: { type: Boolean, default: true },      // server-level counters
     },
   },
+  // The WMSPanel budget readout on the dashboard.
+  //
+  // `dailyLimit` lives here rather than only in an environment variable
+  // because it is a property of the account's plan, and the person who knows
+  // it is the operator — who cannot edit the container's environment.
+  apiQuota: {
+    enabled: { type: Boolean, default: true },
+    dailyLimit: { type: Number, default: 15000 },
+  },
   // iter15 m1 — host metrics from the agents. Same interval and the same
   // store as the stream metrics: an operator reading two charts side by side
   // should not have to hold two different sampling rates in their head.

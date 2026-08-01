@@ -111,6 +111,10 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
    the label on its own line above its control, which reads as a broken
    toolbar. The row containing such groups may still wrap — the group may not. */
 .row .row.pair { flex-wrap: nowrap; white-space: nowrap; }
+/* The quota readout sits in a toolbar, not in the page body: no outer margin,
+   and a tighter border than a content panel so it reads as an instrument
+   rather than as a section. */
+.panel.quota { margin: 0; border-color: var(--line); background: var(--bg); }
 .grid { display: grid; gap: 12px; }
 .grid.cols3 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 

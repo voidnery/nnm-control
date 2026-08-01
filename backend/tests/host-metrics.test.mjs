@@ -375,5 +375,77 @@ check('a label and its control cannot wrap apart', () => {
   assert.ok(css.includes('.row .row.pair'), 'and there is a house rule for the next one');
 });
 
+console.log('\nWMSPANEL BUDGET READOUT:');
+
+const clientSrc = readFileSync(new URL('../src/services/wmspanelClient.js', import.meta.url), 'utf8');
+
+check('a call is counted before it is attempted', () => {
+  // Counting successes would under-report exactly when something is failing
+  // and being retried — and a failed call has still left the account.
+  const from = clientSrc.indexOf('countCall(path);');
+  const fetchAt = clientSrc.indexOf('await fetch(');
+  assert.ok(from > 0 && from < fetchAt);
+});
+
+check('counting does not itself cost a write per call', () => {
+  // Solving a budget problem by spending a different budget.
+  assert.ok(clientSrc.includes('const pending ='));
+  assert.ok(clientSrc.includes('setTimeout'), 'accumulated and flushed on a timer');
+  assert.ok(clientSrc.includes('$inc'), 'and merged atomically when it lands');
+});
+
+check('the count survives a restart', () => {
+  // In memory only, a restart at midday would report a fraction of what had
+  // really been spent — the number most worth trusting and least able to be.
+  assert.ok(clientSrc.includes('ApiUsage.updateOne'));
+  assert.ok(clientSrc.includes('upsert: true'));
+});
+
+check('ids are collapsed so paths group instead of fragmenting', () => {
+  const key = (p) => String(p).split('?')[0].replace(/\/[0-9a-f]{16,}/gi, '/:id');
+  assert.equal(key('/server/6a172131c7e706df9da4f1e0/rtmp/republish'), '/server/:id/rtmp/republish');
+  assert.equal(key('/server/6a172131c7e706df9da4f1e0/mpegts/outgoing?x=1'), '/server/:id/mpegts/outgoing');
+});
+
+check('the projection answers "will I run out", and stays quiet when it cannot', () => {
+  const project = (used, hUTC) => {
+    const now = new Date(Date.UTC(2026, 6, 31, hUTC, 0, 0));
+    const end = Date.UTC(2026, 6, 32);
+    const elapsed = 24 - (end - now.getTime()) / 3_600_000;
+    return elapsed > 0.25 ? Math.round((used / elapsed) * 24) : null;
+  };
+  assert.equal(project(3000, 12), 6000, 'half a day at 3000 lands at 6000');
+  assert.equal(project(3000, 0), null, 'and it says nothing in the first minutes, where a rate means nothing');
+});
+
+check('the number is presented as a floor, not a balance', () => {
+  // WMSPanel reports no remaining quota and the account is shared, so anything
+  // else spending it is invisible here. Said in the payload and on screen.
+  assert.ok(statsSrc.includes("note: 'panel-only'"));
+  assert.ok(dashSrc.includes("t('db.quotaPanelOnly')"));
+});
+
+check('the readout can be switched off, and then returns nothing to render', () => {
+  // Off means off: the dashboard is handed nothing rather than a number it
+  // then has to decide to ignore.
+  assert.ok(statsSrc.includes("if (settings.apiQuota?.enabled === false) return res.json({ enabled: false })"));
+  assert.ok(dashSrc.includes("q.enabled !== false ? q : null"));
+});
+
+check('the daily limit is the operator\'s to set', () => {
+  // It is a property of the account's plan, and the person who knows it cannot
+  // edit the container's environment.
+  const settingsSrc = readFileSync(new URL('../src/routes/settings.js', import.meta.url), 'utf8');
+  assert.ok(settingsSrc.includes('s.apiQuota.dailyLimit = Math.round(n)'));
+  assert.ok(settingsSrc.includes('n < 100 || n > 10_000_000'),
+    'zero would make every reading over budget; unbounded would make it meaningless');
+  assert.ok(statsSrc.includes('Number(settings.apiQuota?.dailyLimit) || DAILY_LIMIT'),
+    'and the environment variable stays as the fallback');
+});
+
+check('the readout cannot break the page it sits on', () => {
+  assert.ok(/api\('\/stats\/api-quota'\)\.catch\(\(\) => null\)/.test(dashSrc));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall host-metric checks passed');
 process.exit(fail ? 1 : 0);

@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { StatSample } from '../models/StatSample.js';
 import { NimbleServer } from '../models/NimbleServer.js';
+import { Settings } from '../models/Settings.js';
+import { ApiUsage, utcDay, DAILY_LIMIT } from '../models/ApiUsage.js';
+import { flushUsage } from '../services/wmspanelClient.js';
 import { getCollectionHealth } from '../services/statsCollector.js';
 
 export const statsRouter = Router();
@@ -61,6 +64,49 @@ async function seriesFor({ serverId, subject, metrics, from, minutes, targetPoin
 // itself, and the page would paint in thirteen jerks. Fewer points per card
 // than the graphs tab, because a card is a fraction of its width and drawing
 // six hundred points into three hundred pixels is work nobody can see.
+// What is left of the WMSPanel daily budget, as far as this panel can know.
+statsRouter.get('/api-quota', requirePerm('streams.view'), async (_req, res) => {
+  const settings = await Settings.load();
+  // Off means off: the dashboard asks for nothing to render, rather than
+  // being handed a number it then has to decide to ignore.
+  if (settings.apiQuota?.enabled === false) return res.json({ enabled: false });
+
+  await flushUsage().catch(() => {});          // so the answer includes this minute
+  const day = utcDay();
+  const doc = await ApiUsage.findOne({ day }).lean();
+  const used = doc?.calls || 0;
+  // The account's plan, as the operator entered it; the environment variable
+  // remains the fallback for a deployment that prefers to fix it there.
+  const limit = Number(settings.apiQuota?.dailyLimit) || DAILY_LIMIT;
+
+  const now = new Date();
+  const endOfDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  const msLeft = endOfDay - now.getTime();
+  const elapsedH = 24 - msLeft / 3_600_000;
+
+  // Where the day ends at this rate. Useful precisely because it answers the
+  // question an operator is really asking — "will I run out?" — instead of
+  // only the one the number answers.
+  const projected = elapsedH > 0.25 ? Math.round((used / elapsedH) * 24) : null;
+
+  const top = Object.entries(doc?.byPath || {})
+    .sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([path, calls]) => ({ path: path.replace(/·/g, '.'), calls }));
+
+  res.json({
+    enabled: true,
+    day, used, limit,
+    remaining: Math.max(0, limit - used),
+    pctUsed: limit ? Math.min(100, (100 * used) / limit) : 0,
+    resetsInMs: msLeft,
+    projected,
+    top,
+    // Said in the payload, not only in the UI: whoever reads this number next
+    // needs to know it is a floor.
+    note: 'panel-only',
+  });
+});
+
 statsRouter.get('/host', requirePerm('streams.view'), async (req, res) => {
   const minutes = Math.min(4320, Math.max(1, Number(req.query.minutes) || 30));
   const from = new Date(Date.now() - minutes * 60 * 1000);

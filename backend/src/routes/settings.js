@@ -35,6 +35,10 @@ const pub = (s) => ({
   // log collection on was a route no screen called. The Logs page told the
   // operator to enable it "in Settings", where there was nothing.
   publicUrl: s.publicUrl || '',
+  apiQuota: {
+    enabled: s.apiQuota?.enabled !== false,
+    dailyLimit: Number(s.apiQuota?.dailyLimit) || 15000,
+  },
   host: {
     enabled: Boolean(s.host?.enabled),
     intervalSec: Number(s.host?.intervalSec) || 10,
@@ -55,6 +59,22 @@ settingsRouter.get('/', async (_req, res) => res.json(pub(await Settings.load())
 settingsRouter.put('/', async (req, res) => {
   const s = await Settings.load();
   const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs, publicUrl: pub, host } = req.body || {};
+  if (req.body?.apiQuota !== undefined) {
+    const q = req.body.apiQuota;
+    s.apiQuota = s.apiQuota || {};
+    if (q.enabled !== undefined) s.apiQuota.enabled = Boolean(q.enabled);
+    if (q.dailyLimit !== undefined) {
+      // A limit of zero would make every reading "over budget", and an
+      // unbounded one would make the readout meaningless.
+      const n = Number(q.dailyLimit);
+      if (!Number.isFinite(n) || n < 100 || n > 10_000_000) {
+        return res.status(400).json({ error: 'dailyLimit must be between 100 and 10000000' });
+      }
+      s.apiQuota.dailyLimit = Math.round(n);
+    }
+    s.markModified('apiQuota');
+  }
+
   if (host !== undefined) {
     s.host = s.host || {};
     if (host.enabled !== undefined) s.host.enabled = Boolean(host.enabled);

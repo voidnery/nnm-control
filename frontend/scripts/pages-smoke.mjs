@@ -206,6 +206,11 @@ window.fetch = (u) => {
     { id:'E1', serverId:'S2', serverName:'NimbleRU-4', code:'stopped-polling', kind:'fault', severity:'error',
       evidence:'last contact was 300s ago', detail:null, createdAt:new Date().toISOString(),
       acknowledgedAt:null, acknowledgedBy:'' }]), text:()=>Promise.resolve('{}') });
+  if (s.includes('/stats/api-quota')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    day:'2026-07-31', used:11840, limit:15000, remaining:3160, pctUsed:78.9,
+    resetsInMs:5*3600*1000, projected:16400,
+    top:[{path:'/server/:id/rtmp/republish',calls:5200},{path:'/server/:id/mpegts/outgoing',calls:3100}],
+    note:'panel-only' }), text:()=>Promise.resolve('{}') });
   if (s.includes('/stats/streams')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     minutes:60, servers:[
       { id:'S1', name:'NimbleFIN-1', total:9, shown:2, streams:[

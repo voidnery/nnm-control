@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [srtHelperEnabled, setSrtHelperEnabled] = useState(true);
   const [publicUrl, setPublicUrl] = useState('');
   const [host, setHost] = useState({ enabled: false, intervalSec: 10 });
+  const [apiQuota, setApiQuota] = useState({ enabled: true, dailyLimit: 15000 });
   const [logs, setLogs] = useState({ enabled: false, files: ['nimble.log'] });
   const [logStatus, setLogStatus] = useState(null);
   const [stats, setStats] = useState({ enabled: false, intervalSec: 10, retentionDays: 3,
@@ -43,6 +44,7 @@ export default function SettingsPage() {
     if (s.stats) setStats(s.stats);
     setPublicUrl(s.publicUrl || '');
     if (s.host) setHost({ enabled: Boolean(s.host.enabled), intervalSec: Number(s.host.intervalSec) || 10 });
+    if (s.apiQuota) setApiQuota({ enabled: s.apiQuota.enabled !== false, dailyLimit: Number(s.apiQuota.dailyLimit) || 15000 });
     if (s.logs) setLogs({ enabled: Boolean(s.logs.enabled), files: s.logs.files?.length ? s.logs.files : ['nimble.log'] });
     // Status alongside the switch, because "is it on" and "is anything
     // arriving" are different questions and only the second one is useful
@@ -54,7 +56,7 @@ export default function SettingsPage() {
   const save = async () => {
     setBusy(true); setMsg(null);
     try {
-      const body = { controlPlane, srtHelperEnabled, stats, logs, host, publicUrl, wmspanel: { baseUrl, clientId } };
+      const body = { controlPlane, srtHelperEnabled, stats, logs, host, apiQuota, publicUrl, wmspanel: { baseUrl, clientId } };
       if (apiKey !== '') body.wmspanel.apiKey = apiKey;
       const s = await api('/settings', { method: 'PUT', body });
       push({ type: 'ok', message: 'Settings saved' });
@@ -157,6 +159,25 @@ export default function SettingsPage() {
             ? t('settings.public.set')
             : t('settings.public.derived', { url: window.location.origin })}
         </div>
+      </div>
+
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>{t('settings.quota')}</h2>
+        <p className="hint">{t('settings.quota.desc')}</p>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="checkbox" checked={Boolean(apiQuota.enabled)}
+                 onChange={e => setApiQuota(v => ({ ...v, enabled: e.target.checked }))} />
+          {t('settings.quota.enabled')}
+        </label>
+        {apiQuota.enabled && (
+          <>
+            <label style={{ marginTop: 8 }}>{t('settings.quota.limit')}</label>
+            <input type="number" min={100} value={apiQuota.dailyLimit}
+                   onChange={e => setApiQuota(v => ({ ...v, dailyLimit: Number(e.target.value) }))} />
+            {/* The plan is the operator's to know; only they can correct it. */}
+            <div className="hint">{t('settings.quota.limitHint')}</div>
+          </>
+        )}
       </div>
 
       {/* Host metrics. The setting, the gateway delivery and the agent side all

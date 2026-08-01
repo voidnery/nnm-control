@@ -10,6 +10,42 @@
 // modeled on the same family. Exact field names get pinned on first live call
 // (raw upstream responses are passed through to the UI for that reason).
 
+// Usage is accumulated in memory and flushed on a timer, because incrementing
+// a document per API call would add a database write to every call the panel
+// makes — solving a budget problem by spending a different budget.
+import { ApiUsage, utcDay } from '../models/ApiUsage.js';
+
+const pending = { day: null, calls: 0, byPath: {} };
+let flushTimer = null;
+
+function countCall(path) {
+  const day = utcDay();
+  if (pending.day && pending.day !== day) flushUsage().catch(() => {});
+  pending.day = day;
+  pending.calls += 1;
+  // The endpoint, without ids, so paths group instead of fragmenting.
+  const key = String(path).split('?')[0].replace(/\/[0-9a-f]{16,}/gi, '/:id').slice(0, 80);
+  pending.byPath[key] = (pending.byPath[key] || 0) + 1;
+  if (!flushTimer) {
+    flushTimer = setTimeout(() => { flushTimer = null; flushUsage().catch(() => {}); }, 10_000);
+    if (flushTimer.unref) flushTimer.unref();
+  }
+}
+
+export async function flushUsage() {
+  if (!pending.day || !pending.calls) return;
+  const { day, calls, byPath } = pending;
+  pending.calls = 0;
+  pending.byPath = {};
+  const inc = { calls };
+  for (const [k, v] of Object.entries(byPath)) inc[`byPath.${k.replace(/\./g, '·')}`] = v;
+  await ApiUsage.updateOne(
+    { day },
+    { $inc: inc, $set: { lastAt: new Date() }, $setOnInsert: { firstAt: new Date() } },
+    { upsert: true },
+  );
+}
+
 const TIMEOUT_MS = 12000;
 
 function buildUrl(cfg, path, extraQuery = '') {
@@ -28,6 +64,10 @@ async function call(cfg, path, { method = 'GET', body } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
+    // Counted before the attempt, not after: a call that failed still left the
+    // account. Counting successes would quietly under-report exactly when
+    // something is going wrong and being retried.
+    countCall(path);
     let res;
     try {
       res = await fetch(buildUrl(cfg, path), {
