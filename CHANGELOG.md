@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.25.3 — settings could not be saved, and the join failed quietly
+- **"Internal server error" on every settings save.** The handler destructured
+  `publicUrl` into `pub`, which is the name of the function that builds the
+  response — so everything saved correctly and then the last line called a
+  string. The settings were written and the operator saw a failure, retried,
+  and saw it again. It survived several releases because it only fires when the
+  request carries a non-empty publicUrl, and that field was empty until it was
+  set
+- New `npm run audit:shadow`, ahead of the test suite: a destructuring rename
+  whose target is a function declared in the same module. Narrow on purpose —
+  that much is decidable from the text, unlike shadowing in general — and it is
+  the shape that bites. Verified against the line that shipped
+- **A partial join said nothing at all.** The note only appeared when *nothing*
+  matched, so streams falling back to WMSPanel values were marked `wp` with no
+  explanation anywhere. It now reports whenever anything is unmatched, and
+  shows the identifiers from both sides — `setting_id` from Nimble against the
+  object id from WMSPanel — so a mismatch is visible as a mismatch rather than
+  as an absence
+
+
 ### v0.25.2 — why the history is empty, and where a number came from
 - **The empty-history message listed possibilities and made the operator work
   through them.** The panel knows which one applies, so it says it: collection

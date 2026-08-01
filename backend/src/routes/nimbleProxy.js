@@ -168,7 +168,11 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     // Returned so a fleet that matches on nothing shows WHY, rather than
     // thirteen tables of dashes. This is the evidence the field names have
     // never been documented for.
-    diagnostics: joined.matched === 0
+    // A partial match is its own story: some streams paired and some did not,
+    // and the ones that did not are exactly the interesting ones. Reported
+    // whenever anything is unmatched, not only when everything is.
+    unmatched: joined.unmatchedObjects.length,
+    diagnostics: joined.matched < objects.length
       ? {
         candidates: joined.candidates,
         sampleEntries: joined.unmatchedEntries,
@@ -177,6 +181,12 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
         // supposed to read the list out of".
         responseShape: entries.length === 0 ? shapeOf(nativeRes.value) : undefined,
         endpoint: src.native,
+        // The identifiers on each side, so a mismatch is visible as a
+        // mismatch rather than as an absence. Ids only — no addresses.
+        sampleEntryIds: entries.slice(0, 5).map(e => ({
+          setting_id: e.setting_id ?? null, name: e.name ?? null, hasStats: Boolean(e.stats),
+        })),
+        sampleObjectIds: objects.slice(0, 5).map(o => ({ id: String(o.id), name: o.name })),
       }
       : null,
   });

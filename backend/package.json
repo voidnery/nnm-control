@@ -1,13 +1,13 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.25.2",
+  "version": "0.25.3",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "test:functions": "node tests/function-actions.test.mjs",
     "test:stats": "node tests/stats-collector.test.mjs",
-    "test": "npm run audit:routes && npm run audit:undef && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl && npm run test:lifecycle && npm run test:host && npm run test:join",
+    "test": "npm run audit:shadow && npm run audit:routes && npm run audit:undef && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl && npm run test:lifecycle && npm run test:host && npm run test:join",
     "test:template": "node tests/transcoder-template.test.mjs",
     "test:fleet": "node tests/transcoder-fleet.test.mjs",
     "test:playback": "node tests/playback-endpoints.test.mjs",
@@ -25,7 +25,8 @@
     "test:lifecycle": "node tests/agent-lifecycle.test.mjs",
     "audit:routes": "node scripts/route-order-audit.mjs",
     "test:host": "node tests/host-metrics.test.mjs",
-    "test:join": "node tests/stream-join.test.mjs"
+    "test:join": "node tests/stream-join.test.mjs",
+    "audit:shadow": "node scripts/shadow-audit.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

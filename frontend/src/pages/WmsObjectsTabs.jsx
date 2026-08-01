@@ -186,7 +186,9 @@ function JoinNote({ live, t }) {
   if (live.available === false) {
     return <div className="hint" style={{ marginBottom: 6 }}>{t('wo.liveUnavailable', { why: live.reason || '' })}</div>;
   }
-  if (live.matched > 0 || !live.objects) return null;
+  // A partial match used to say nothing at all, leaving every unmatched row
+  // marked "wp" with no explanation anywhere.
+  if (!live.objects || !live.unmatched) return null;
   const d = live.diagnostics || {};
   // Nothing at all came back is a different fault from "came back and did not
   // line up", and only the first one is answered by the shape of the response.
@@ -195,14 +197,18 @@ function JoinNote({ live, t }) {
     <div className="hint" style={{ marginBottom: 6, color: 'var(--warn)' }}>
       {empty
         ? t('wo.liveEmpty', { objects: live.objects, endpoint: d.endpoint || '' })
-        : t('wo.liveNoMatch', { entries: live.entries, objects: live.objects })}
+        : live.matched > 0
+          ? t('wo.livePartial', { matched: live.matched, unmatched: live.unmatched })
+          : t('wo.liveNoMatch', { entries: live.entries, objects: live.objects })}
       {(d.responseShape || d.sampleEntries?.length > 0) && (
         <details style={{ marginTop: 4 }}>
           <summary style={{ cursor: 'pointer' }}>{t('wo.liveShape')}</summary>
           {/* On screen rather than in a tooltip: a tooltip cannot be copied,
               and this is the thing worth sending on. */}
           <pre className="mono" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto' }}>
-            {JSON.stringify(d.responseShape || d.sampleEntries, null, 1)}
+            {JSON.stringify(d.responseShape || {
+              nimble: d.sampleEntryIds, wmspanel: d.sampleObjectIds,
+            }, null, 1)}
           </pre>
         </details>
       )}

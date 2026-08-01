@@ -58,7 +58,12 @@ settingsRouter.get('/', async (_req, res) => res.json(pub(await Settings.load())
 
 settingsRouter.put('/', async (req, res) => {
   const s = await Settings.load();
-  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs, publicUrl: pub, host } = req.body || {};
+  // NOT `publicUrl: pub` — that shadowed the `pub()` builder declared above,
+  // so the handler saved everything correctly and then threw calling a string,
+  // surfacing as "Internal server error" with the settings already written.
+  // It only fired when the request carried a non-empty publicUrl, which is why
+  // it survived several releases.
+  const { controlPlane, wmspanel: wp, srtHelperEnabled, stats, logs, publicUrl: publicUrlIn, host } = req.body || {};
   if (req.body?.apiQuota !== undefined) {
     const q = req.body.apiQuota;
     s.apiQuota = s.apiQuota || {};
@@ -81,8 +86,8 @@ settingsRouter.put('/', async (req, res) => {
     if (host.intervalSec !== undefined) s.host.intervalSec = Math.min(300, Math.max(2, Number(host.intervalSec) || 10));
     s.markModified('host');
   }
-  if (pub !== undefined) {
-    const v = String(pub).trim().replace(/\/+$/, '');
+  if (publicUrlIn !== undefined) {
+    const v = String(publicUrlIn).trim().replace(/\/+$/, '');
     if (v && !/^https?:\/\/[^\s/]+$/i.test(v)) {
       return res.status(400).json({ error: 'publicUrl must look like http://host[:port] with no path' });
     }
