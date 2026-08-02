@@ -1,5 +1,21 @@
 # Changelog
 
+### v0.27.3 — that a socket exists is a measurement
+- Both of the previous run's contradictions are gone: `healthy`, and reads go
+  through the agent. What remained was two subjects with no stored series —
+  **the same two ids in four consecutive runs**, so not a timing artefact
+- `add` skips a sample whose metric set is empty, and these two sockets report
+  nothing numeric at all: no stats block, not even a retry counter. So they had
+  no series whatever. The panel could see them and the history said "this
+  stream has never appeared" — both statements true, and useless together
+- Every socket now records `present`, and `connected` where the state says so.
+  The absence of readings becomes a reading, which is what makes the difference
+  between "the collector never saw this" and "it is watched and nothing has
+  flowed through it" — sentences an operator acts on differently, and the
+  History dialog now uses both
+- 3 new checks
+
+
 ### v0.27.2 — a busy agent is not an unclaimed one
 - `end to end is intact`, 85 points with 85 rates. The pipeline is healthy —
   and the run surfaced two things that disagreed with it

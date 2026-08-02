@@ -111,6 +111,17 @@ export async function collectServer(server, groups, ts = new Date()) {
         // The socket pair is worth keeping as a reading — a changed peer is
         // real information — just not as an identity.
         const metrics = flattenNumbers(so);
+        // That a socket EXISTS is a measurement.
+        //
+        // Two sockets on this fleet reported nothing numeric at all — no
+        // stats block, not even a retry counter — so `add` skipped them and
+        // they had no series whatever. The panel could see them, the history
+        // said "this stream has never appeared", and both statements were
+        // true and useless together. `present` makes the absence of readings
+        // itself a reading, and `connected` says which kind of absence.
+        metrics.present = 1;
+        const state = String(so.state ?? '').toLowerCase();
+        if (state) metrics.connected = state === 'connected' ? 1 : 0;
         add('srt', `${kind}:${id}`, `${kind} ${id}`, metrics);
       }
     } else if (kind === 'mpegts') {

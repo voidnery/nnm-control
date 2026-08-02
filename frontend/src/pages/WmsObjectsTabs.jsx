@@ -152,6 +152,16 @@ function StreamHistory({ serverId, subject, name, onClose }) {
         if (!c.subjectLastSampleAt) {
           return <div className="hint" style={{ marginTop: 10 }}>{t('wo.histNeverSeen')}</div>;
         }
+        // A series exists and holds nothing worth drawing. That is a different
+        // sentence from "never seen", and the operator acts on it differently:
+        // the socket is being watched and has carried nothing.
+        if (data?.points?.length === 0 && c.subjectLastSampleAt) {
+          return (
+            <div className="hint" style={{ marginTop: 10 }}>
+              {t('wo.histPresentOnly', { when: new Date(c.subjectLastSampleAt).toLocaleString() })}
+            </div>
+          );
+        }
         // It has reported, just not inside the window asked for.
         return (
           <div className="hint" style={{ marginTop: 10 }}>

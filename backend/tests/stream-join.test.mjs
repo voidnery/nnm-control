@@ -960,5 +960,42 @@ check('the guard says which half it is refusing', () => {
   assert.ok(!proxy7.includes('Native Nimble API is disabled'));
 });
 
+console.log('\nEXISTING IS A MEASUREMENT (v0.27.3):');
+
+const collector4 = readFileSync(new URL('../src/services/statsCollector.js', import.meta.url), 'utf8');
+const tabs4 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+
+check('a socket with nothing numeric still gets a series', () => {
+  // Two sockets on this fleet reported no stats block and not even a retry
+  // counter, so `add` — which skips an empty metric set — gave them no series
+  // at all. The panel could see them and the history said "never appeared":
+  // both true, and useless together. Same two ids in four consecutive runs.
+  const withPresence = (e) => {
+    const m = flattenNumbers(e);
+    m.present = 1;
+    const st = String(e.state ?? '').toLowerCase();
+    if (st) m.connected = st === 'connected' ? 1 : 0;
+    return m;
+  };
+  assert.equal(Object.keys(flattenNumbers({ setting_id: 'C', state: 'connecting' })).length, 0);
+  assert.deepEqual(withPresence({ setting_id: 'C', state: 'connecting' }), { present: 1, connected: 0 });
+  assert.ok(collector4.includes('metrics.present = 1'));
+});
+
+check('presence does not disturb a socket that has readings', () => {
+  const conn = real.find(e => e.stats?.recv?.mbpsRate > 0);
+  const m = flattenNumbers(conn);
+  m.present = 1;
+  assert.equal(m.stats_recv_mbpsRate, conn.stats.recv.mbpsRate, 'the rate is untouched');
+  assert.equal(m.present, 1);
+});
+
+check('"no series" and "a series with nothing in it" are different sentences', () => {
+  // The operator acts on them differently: one means the collector never saw
+  // the socket, the other that it is watched and has carried nothing.
+  assert.ok(tabs4.includes("t('wo.histNeverSeen')"));
+  assert.ok(tabs4.includes("t('wo.histPresentOnly'"));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);
