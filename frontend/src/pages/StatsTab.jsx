@@ -17,7 +17,18 @@ export const classify = (m) =>
   IDENT.test(m) ? 'ident' : CUMULATIVE.test(m) ? 'counter' : 'gauge';
 
 const isRate = (m) => /bandwidth|bitrate|bps/i.test(m);
-const unitFor = (m) => (isRate(m) ? 'bps' : classify(m) === 'counter' ? '/s' : '');
+// What a metric is measured in. The fallback was an empty string for anything
+// that was not a rate or a counter, so RTT read "9.81" and a byte total read
+// "29,000,000,000" — figures the reader has to guess the unit of.
+const unitFor = (m) => {
+  if (/mbpsRate|mbpsBandwidth/i.test(m)) return 'Mbps';   // Nimble reports these in megabits already
+  if (/rtt|msRTT|_ms$/i.test(m)) return 'ms';
+  if (/bytes/i.test(m)) return 'B';
+  if (/packets|NAKs|_flow$|_congestion$|_flight$/i.test(m)) return 'pkt';
+  if (/_pct$|percent/i.test(m)) return '%';
+  if (isRate(m)) return 'bps';
+  return classify(m) === 'counter' ? '/s' : '';
+};
 
 // A total is only useful as "how fast is it moving"; convert to per-second and
 // drop the step where a counter resets (restart) instead of drawing a cliff.

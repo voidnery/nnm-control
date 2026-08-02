@@ -11,16 +11,42 @@ const niceStep = (span, target = 4) => {
   return [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw) || mag * 10;
 };
 
+// A number on an axis without its unit is a number the reader has to guess at:
+// 9.8 could be milliseconds or megabits, and 6435 could be packets or bytes.
+// Only `bps` was handled here, so everything else fell through to a bare
+// figure.
 export function formatValue(v, unit) {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  const n = Math.abs(v);
+
   if (unit === 'bps') {
-    if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(2) + ' Gbps';
-    if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + ' Mbps';
-    if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + ' kbps';
-    return v.toFixed(0) + ' bps';
+    if (n >= 1e9) return `${(v / 1e9).toFixed(2)} Gbps`;
+    if (n >= 1e6) return `${(v / 1e6).toFixed(2)} Mbps`;
+    if (n >= 1e3) return `${(v / 1e3).toFixed(1)} kbps`;
+    return `${v.toFixed(0)} bps`;
   }
-  if (Math.abs(v) >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  return String(Math.round(v * 100) / 100);
+  // Already in megabits: Nimble reports SRT rates that way, and converting
+  // would only invite the confusion this function exists to prevent.
+  if (unit === 'Mbps') return `${v.toFixed(v < 10 ? 2 : 1)} Mbps`;
+  if (unit === 'ms') return `${v.toFixed(v < 10 ? 2 : 1)} ms`;
+  if (unit === 'B') {
+    // Bytes, in the units the counter reaches: 12.9 GB is legible, 12 900 000 000 is not.
+    if (n >= 1e12) return `${(v / 1e12).toFixed(2)} TB`;
+    if (n >= 1e9) return `${(v / 1e9).toFixed(2)} GB`;
+    if (n >= 1e6) return `${(v / 1e6).toFixed(1)} MB`;
+    if (n >= 1e3) return `${(v / 1e3).toFixed(0)} KB`;
+    return `${v.toFixed(0)} B`;
+  }
+  if (unit === 'pkt') {
+    return n >= 1e6
+      ? `${(v / 1e6).toFixed(2)}M ${unit}`
+      : `${v.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${unit}`;
+  }
+  if (unit === '%') return `${v.toFixed(v < 10 ? 2 : 1)}%`;
+
+  if (n >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const plain = String(Math.round(v * 100) / 100);
+  return unit ? `${plain} ${unit}` : plain;
 }
 
 export default function TimeChart({ points, series, unit = '', height = 240, emptyText = 'No data' }) {

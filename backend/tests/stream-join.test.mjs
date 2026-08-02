@@ -1046,5 +1046,50 @@ check('a chart says what is under the cursor', () => {
   assert.ok(plotSrc2.includes('u.over.clientWidth'), 'flipping at the edge so it stays inside');
 });
 
+console.log('\nUNITS (v0.28.1):');
+
+const timeChart = readFileSync(new URL('../../frontend/src/components/TimeChart.jsx', import.meta.url), 'utf8');
+const fmt = new Function(
+  `${timeChart.slice(timeChart.indexOf('export function formatValue'), timeChart.indexOf('export default function TimeChart'))
+    .replace('export function', 'function')}; return formatValue;`)();
+
+check('every unit these charts use is formatted, not left bare', () => {
+  // Only `bps` was handled, so RTT read "9.81" and a byte total read
+  // "29,000,000,000" — figures whose unit the reader has to guess.
+  assert.equal(fmt(9.811, 'ms'), '9.81 ms');
+  assert.equal(fmt(81.3, 'Mbps'), '81.3 Mbps');
+  assert.equal(fmt(6435, 'pkt'), '6,435 pkt');
+  assert.equal(fmt(29e9, 'B'), '29.00 GB');
+  assert.equal(fmt(0.03, '%'), '0.03%');
+  assert.equal(fmt(6.2e6, 'bps'), '6.20 Mbps', 'the original behaviour is unchanged');
+});
+
+check('a large count stays legible', () => {
+  // 22 890 894 packets is a number nobody reads; 22.89M is.
+  assert.equal(fmt(22890894, 'pkt'), '22.89M pkt');
+  assert.equal(fmt(8.3e6, 'B'), '8.3 MB');
+});
+
+check('no unit still means no unit', () => {
+  assert.equal(fmt(8192, ''), '8,192');
+  assert.equal(fmt(null, 'ms'), '—');
+});
+
+check('SRT windows are measured in packets, and rates arrive in megabits', () => {
+  // Converting Nimble's Mbps to bits would invite exactly the confusion this
+  // change is fixing.
+  const tabs = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+  assert.ok(/key: 'window', unit: 'pkt'/.test(tabs));
+  assert.ok(/key: 'rate', unit: 'Mbps'/.test(tabs));
+});
+
+check('a counter that only climbs is labelled as one', () => {
+  // A rising line means "it has happened", not "it is happening". The slope is
+  // the reading; the height is not.
+  const tabs = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+  assert.ok(tabs.includes('cumulative: true'));
+  assert.ok(tabs.includes("t('wo.cumulative')") && tabs.includes("t('wo.cumulativeHint')"));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

@@ -93,15 +93,24 @@ const fmtBps = (v) => {
 // Grouped by question rather than by where Nimble happens to put the field: a
 // tile that mixes packets lost with packets belated is answering "how is the
 // link" once, where two tiles would ask it twice.
+// `unit` is what the axis and the cursor label say. `cumulative` marks the
+// counters SRT reports since the connection opened rather than per interval —
+// they only ever climb, and a rising line means "it has happened", not "it is
+// happening". Saying which is which is the difference between reading the
+// chart and guessing at it.
 const HIST_TILES = [
   { key: 'rate', unit: 'Mbps', metrics: ['stats_recv_mbpsRate', 'stats_send_mbpsRate'], merge: true },
   { key: 'rtt', unit: 'ms', metrics: ['stats_link_rtt'] },
-  { key: 'loss', unit: '', metrics: ['stats_recv_packetsLost', 'stats_recv_packetsDropped', 'stats_recv_packetsBelated'] },
-  { key: 'retrans', unit: '', metrics: ['stats_recv_packetsReceivedRetransmitted', 'stats_recv_NAKsSent'] },
+  { key: 'loss', unit: 'pkt', cumulative: true,
+    metrics: ['stats_recv_packetsLost', 'stats_recv_packetsDropped', 'stats_recv_packetsBelated'] },
+  { key: 'retrans', unit: 'pkt', cumulative: true,
+    metrics: ['stats_recv_packetsReceivedRetransmitted', 'stats_recv_NAKsSent'] },
   { key: 'bandwidth', unit: 'Mbps', metrics: ['stats_link_mbpsBandwidth', 'stats_link_mbpsMaxBandwidth'] },
-  { key: 'window', unit: '', metrics: ['stats_window_flow', 'stats_window_congestion', 'stats_window_flight'] },
-  { key: 'bytes', unit: 'B', metrics: ['stats_recv_bytesReceived', 'stats_recv_bytesLost', 'stats_recv_bytesDropped'] },
-  { key: 'retries', unit: '', metrics: ['retryCount'] },
+  // SRT measures its windows in packets, not bytes.
+  { key: 'window', unit: 'pkt', metrics: ['stats_window_flow', 'stats_window_congestion', 'stats_window_flight'] },
+  { key: 'bytes', unit: 'B', cumulative: true,
+    metrics: ['stats_recv_bytesReceived', 'stats_recv_bytesLost', 'stats_recv_bytesDropped'] },
+  { key: 'retries', unit: '', cumulative: true, metrics: ['retryCount'] },
 ];
 
 function StreamHistory({ serverId, subject, name, onClose }) {
@@ -227,7 +236,13 @@ function StreamHistory({ serverId, subject, name, onClose }) {
                 <div key={tile.key} className="panel" style={{ padding: 8, minWidth: 0, cursor: 'zoom-in' }}
                      onClick={() => setZoom(tile)}>
                   <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
-                    <span className="hint" style={{ fontSize: 11 }}>{t(`wo.tile.${tile.key}`)}</span>
+                    <span className="hint" style={{ fontSize: 11 }}>
+                      {t(`wo.tile.${tile.key}`)}
+                      {tile.unit && <span style={{ opacity: .7 }}>, {tile.unit}</span>}
+                      {/* A counter that only climbs is read differently from a
+                          reading that moves both ways. */}
+                      {tile.cumulative && <span style={{ opacity: .7 }}> · {t('wo.cumulative')}</span>}
+                    </span>
                     <span className="mono" style={{ fontSize: 12 }}>
                       {last == null ? '—' : formatValue(last, tile.unit)}
                     </span>
@@ -249,7 +264,9 @@ function StreamHistory({ serverId, subject, name, onClose }) {
         return (
           <Modal onClose={() => setZoom(null)} size="wide">
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>{name} — {t(`wo.tile.${zoom.key}`)}</h3>
+              <h3 style={{ margin: 0 }}>
+                {name} — {t(`wo.tile.${zoom.key}`)}{zoom.unit ? `, ${zoom.unit}` : ''}
+              </h3>
               <button onClick={() => setZoom(null)}>{t('action.close')}</button>
             </div>
             <div className="hint" style={{ fontSize: 11, marginTop: 4 }}>
@@ -258,6 +275,9 @@ function StreamHistory({ serverId, subject, name, onClose }) {
               ))}
             </div>
             <Plot points={d.points} series={d.series} unit={zoom.unit} height={340} />
+            {zoom.cumulative && (
+              <div className="hint" style={{ marginTop: 6 }}>{t('wo.cumulativeHint')}</div>
+            )}
           </Modal>
         );
       })()}

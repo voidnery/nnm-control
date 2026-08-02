@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.28.1 — units on the charts
+- `formatValue` only ever knew `bps`, so everything else fell through to a bare
+  figure: RTT read "9.81", a byte total read "29,000,000,000", and the reader
+  had to guess which. It handles milliseconds, megabits, bytes, packets and
+  percentages now, in the magnitude the counter has reached — 12.9 GB is
+  legible, 12 900 000 000 is not; 22.89M packets is, 22 890 894 is not
+- Every tile carries its unit in the heading, and the single-metric view
+  derives one from the metric name rather than falling back to an empty string
+- **Nimble's rates stay in megabits.** It reports them that way and converting
+  would invite exactly the confusion this change is fixing. SRT windows are
+  labelled in packets, which is what SRT measures them in
+- **Counters that only climb are marked as such.** `packetsLost` and
+  `bytesReceived` run from the moment the socket connected, so a rising line
+  means "it has happened", not "it is happening" — the slope is the reading and
+  the height is not. The expanded view says what the shapes mean: flat is
+  almost no loss, a step is one bad minute, a drop to zero is a reconnect
+- 5 new checks
+
+
 ## iter17 — the full SRT picture
 ### v0.28.0 — tiles, and a chart that says what it is showing
 - **All seventeen columns WMSPanel shows have been in the series all along.**
