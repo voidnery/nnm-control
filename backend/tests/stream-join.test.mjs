@@ -1091,5 +1091,36 @@ check('a counter that only climbs is labelled as one', () => {
   assert.ok(tabs.includes("t('wo.cumulative')") && tabs.includes("t('wo.cumulativeHint')"));
 });
 
+console.log('\nAXIS LABELS FIT (v0.28.2):');
+
+const plot3 = readFileSync(new URL('../../frontend/src/components/Plot.jsx', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+
+check('the axis gutter is measured, not fixed', () => {
+  // A fixed 58px fitted bare numbers and stopped fitting the moment the labels
+  // carried units. A clipped label reads as a DIFFERENT number rather than as
+  // a truncated one — "06 Mbps" where "0.06 Mbps" was drawn — which is worse
+  // than no label at all.
+  assert.ok(plot3.includes('size: (u, values)'));
+  assert.ok(plot3.includes('measureText'));
+  assert.ok(!/size: 58/.test(plot3), 'the constant is gone');
+});
+
+check('the sizing follows the labels and stays bounded', () => {
+  const size = (vals, measure = (x) => x.length * 6.2) =>
+    (vals.length ? Math.min(120, Math.ceil(Math.max(...vals.map(measure))) + 14) : 44);
+  assert.ok(size(['0.06 Mbps']) > 58, 'the case that was clipped now fits');
+  assert.ok(size(['22.89M pkt']) > size(['0%', '100%']), 'wider labels get a wider gutter');
+  assert.equal(size([]), 44, 'and no labels means no measurement to make');
+  assert.ok(size(['x'.repeat(200)]) <= 120, 'one enormous label cannot eat the chart');
+});
+
+check('a chart modal is wide but never wider than the screen', () => {
+  assert.ok(css.includes('.modal.w-chart'));
+  assert.ok(css.includes('min(1240px, calc(100vw - 48px))'));
+  // The existing sizes were unbounded, which on a laptop ran off the side.
+  assert.ok(css.includes('min(760px, calc(100vw - 48px))'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

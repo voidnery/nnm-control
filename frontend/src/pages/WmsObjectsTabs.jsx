@@ -168,7 +168,7 @@ function StreamHistory({ serverId, subject, name, onClose }) {
   });
 
   return (
-    <Modal onClose={onClose} size="wide">
+    <Modal onClose={onClose} size="chart">
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ margin: 0 }}>{name}</h3>
         <div className="row pair" style={{ gap: 6, flexShrink: 0 }}>
@@ -262,7 +262,7 @@ function StreamHistory({ serverId, subject, name, onClose }) {
       {zoom && (() => {
         const d = tileData(zoom);
         return (
-          <Modal onClose={() => setZoom(null)} size="wide">
+          <Modal onClose={() => setZoom(null)} size="chart">
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0 }}>
                 {name} — {t(`wo.tile.${zoom.key}`)}{zoom.unit ? `, ${zoom.unit}` : ''}

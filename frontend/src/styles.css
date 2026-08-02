@@ -252,8 +252,12 @@ select {
 .modal-back { animation: fade-in .12s ease; }
 .modal { animation: modal-pop .14s ease; }
 .modal.w-narrow { width: 380px; }
-.modal.w-wide   { width: 760px; }
-.modal.w-xwide  { width: 1000px; }
+.modal.w-wide   { width: min(760px, calc(100vw - 48px)); }
+.modal.w-xwide  { width: min(1000px, calc(100vw - 48px)); }
+/* A chart wants the width it can get: the axis gutter, the plot and a legend
+   do not fit comfortably in 760px, and a wide screen has the room to spare.
+   Bounded by the viewport so it never runs off the side of a laptop. */
+.modal.w-chart  { width: min(1240px, calc(100vw - 48px)); }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes modal-pop { from { opacity: 0; transform: translateY(6px) scale(.99); } }
 

@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.28.2 — the axis labels fit
+- The clipping was not the window's width: the labels were being cut **inside**
+  the chart. The y-axis gutter was a fixed 58px, which fitted bare numbers and
+  stopped fitting the moment v0.28.1 gave the labels units — "0.06 Mbps" and
+  "22.89M pkt" do not. Widening the modal would have widened the plot and left
+  the gutter exactly as short
+- A clipped label is worse than a missing one: "06 Mbps" reads as a different
+  number rather than as a truncated one
+- The gutter is measured from the labels uPlot is about to draw, per redraw, so
+  it follows the data instead of a guess about it — narrow for percentages,
+  wide for packet counts — and is capped so one enormous label cannot eat the
+  chart it belongs to
+- The chart dialogs are wider too, as asked, and now bounded by the viewport.
+  The existing wide sizes were fixed pixel widths that ran off the side of a
+  laptop
+- 3 new checks
+
+
 ### v0.28.1 — units on the charts
 - `formatValue` only ever knew `bps`, so everything else fell through to a bare
   figure: RTT read "9.81", a byte total read "29,000,000,000", and the reader

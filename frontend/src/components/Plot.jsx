@@ -125,7 +125,26 @@ export default function Plot({
             stroke: text,
             grid: { stroke: line, width: 1 },
             ticks: { stroke: line },
-            size: 58,
+            // Measured, not guessed. A fixed 58px fitted bare numbers and
+            // stopped fitting the moment the labels carried units: "22.89M
+            // pkt" and "0.06 Mbps" were clipped, and a clipped axis reads as a
+            // different number rather than as a truncated one — which is worse
+            // than no label at all.
+            //
+            // uPlot calls this per redraw with the values it is about to
+            // draw, so the gutter follows the data instead of a guess about
+            // it.
+            size: (u, values) => {
+              if (!values?.length) return 44;
+              const ctx = u.ctx;
+              ctx.save();
+              ctx.font = u.axes[1].font?.[0] || '12px system-ui';
+              const widest = Math.max(...values.map(v => ctx.measureText(String(v)).width));
+              ctx.restore();
+              // Ticks and a little breathing room; capped so one enormous
+              // label cannot eat the chart it belongs to.
+              return Math.min(120, Math.ceil(widest) + 14);
+            },
             values: (_u, vals) => vals.map(v => formatValue(v, unit)),
           },
         ],
