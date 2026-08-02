@@ -149,10 +149,15 @@ if (missing.length) {
 
 // ── 6. one carrying socket, end to end ──────────────────────────────────────
 console.log('\n5. A CARRYING SOCKET, END TO END');
+// A socket carrying MEDIA, not merely bytes. An idle SRT socket still costs a
+// few tens of kbit/s in handshake traffic, and picking one of those meant
+// following a stream that has nothing to draw and then reporting on it as
+// though it did. Same threshold the panel uses.
+const NO_MEDIA_BPS = 200_000;
 let subject = null;
 for (const d of Object.values(live)) {
   for (const v of Object.values(d?.live || {})) {
-    if (v?.subject && v.bps > 0) { subject = v.subject; break; }
+    if (v?.subject && v.bps > NO_MEDIA_BPS) { subject = v.subject; break; }
   }
   if (subject) break;
 }
@@ -173,12 +178,18 @@ if (!subject) {
     line('note', 'none of them looks like a rate — the shape Nimble returns may have changed');
   }
 
-  const wanted = (rateKeys.length ? rateKeys : held).slice(0, 4);
+  // No fallback to "whatever is there". Counting points where retryCount is
+  // present and calling the result "with a rate" is how this tool reported
+  // "end to end is intact" about a socket that had no rate at all.
+  const wanted = rateKeys.slice(0, 4);
   const series = wanted.length
     ? await api(`/stats/${SERVER}/series?subject=${encodeURIComponent(subject)}` +
         `&metrics=${wanted.join(',')}&minutes=15`).catch(e => ({ error: e.message }))
-    : { points: [] };
-  if (series.error) { line('series', `FAILED: ${series.error.slice(0, 140)}`); }
+    : null;
+  if (!series) {
+    line('VERDICT', 'this subject holds no rate metric at all — the socket is up but carries no media, '
+      + 'or the shape Nimble returns for it changed');
+  } else if (series.error) { line('series', `FAILED: ${series.error.slice(0, 140)}`); }
   else {
     const pts = series.points || [];
     const withRate = pts.filter(p => p.v.some(x => x != null)).length;

@@ -844,6 +844,24 @@ check('the reader asks for the names that are actually stored', () => {
   assert.ok(!tabs.includes("'stats.recv.mbpsRate'"), 'the dotted names would silently match nothing');
 });
 
+check('the diagnostic follows a socket carrying media, not merely bytes', () => {
+  // An idle SRT socket still costs a few tens of kbit/s in handshake traffic.
+  // Picking one meant following a stream with nothing to draw and then
+  // reporting on it as though it had.
+  const diag = readFileSync(new URL('../../tools/nnm-diag.mjs', import.meta.url), 'utf8');
+  assert.ok(diag.includes('const NO_MEDIA_BPS = 200_000'));
+  assert.ok(diag.includes('v.bps > NO_MEDIA_BPS'));
+});
+
+check('it will not count a counter and call it a rate', () => {
+  // Falling back to "whatever is there" is how it reported "end to end is
+  // intact" about a subject whose only metric was retryCount.
+  const diag = readFileSync(new URL('../../tools/nnm-diag.mjs', import.meta.url), 'utf8');
+  assert.ok(diag.includes('const wanted = rateKeys.slice(0, 4)'));
+  assert.ok(!diag.includes('rateKeys.length ? rateKeys : held'), 'the fallback is gone');
+  assert.ok(diag.includes('holds no rate metric at all'), 'and it says so instead');
+});
+
 check('the diagnostic asks what a subject holds, rather than assuming', () => {
   // It hardcoded the dotted names and then reported "no rate in any point"
   // against a panel that was storing rates perfectly well. A diagnostic that

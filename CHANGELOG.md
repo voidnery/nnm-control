@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.26.6 — the diagnostic contradicted itself
+- **iter16 m2 is done**: `end to end is intact`, 64 points with 60 carrying a
+  rate, and the per-stream charts draw
+- The second run showed the tool disagreeing with itself — "metrics on record:
+  1 — retryCount", "none of them looks like a rate", and then "with a rate: 85"
+- Two defects, both mine. It picked a socket on `bps > 0`, which an idle SRT
+  socket satisfies with a few tens of kbit/s of handshake traffic, so it
+  followed a stream with nothing to draw. And when the subject held no rate
+  metric it fell back to counting whatever was there — a retry counter — and
+  labelled the result "with a rate"
+- It uses the same no-media threshold the panel does, and when a subject holds
+  no rate metric it says exactly that instead of counting something else
+- 2 new checks
+
+**Still open, small:** two live sockets have no stored series, both senders and
+one no longer carrying. Everything else pairs. Worth a look, not worth holding
+the milestone for.
+
+
 ### v0.26.5 — the last two gaps
 - The dot fix worked: **70 subjects stored, 50 of them with 18 metrics**, up
   from none. Bitrate, RTT and reconnects draw
