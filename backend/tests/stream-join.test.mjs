@@ -162,22 +162,15 @@ check('a status envelope is not mistaken for data', () => {
   assert.deepEqual(asList({ streams: [] }), []);
 });
 
-check('"nothing came back" is reported apart from "did not line up"', () => {
-  // Only the first is answered by the shape of the response; conflating them
-  // sends the operator looking in the wrong place.
+check('"nothing came back" is still reported apart from "did not line up"', () => {
+  // Four situations, four sentences. The payload behind them moved to tools/;
+  // the distinction an operator acts on stayed.
   const tabs = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
-  assert.ok(tabs.includes('const empty = live.entries === 0'));
-  assert.ok(tabs.includes("t('wo.liveEmpty'") && tabs.includes("t('wo.liveNoMatch'"));
-  assert.ok(routeSrc.includes('responseShape: entries.length === 0'));
+  for (const k of ['wo.liveEmpty', 'wo.liveNoMatch', 'wo.livePartial', 'wo.liveElsewhere']) {
+    assert.ok(tabs.includes(k), k);
+  }
 });
 
-check('the shape carries names and types, never values', () => {
-  // It crosses a screen, and a stats response can carry addresses.
-  const from = routeSrc.indexOf('const shapeOf =');
-  const body = routeSrc.slice(from, routeSrc.indexOf('};', routeSrc.indexOf('return { type: typeof v }', from)));
-  assert.ok(body.includes('Object.keys(v)'));
-  assert.ok(!/Object\.values\(v\)\.slice/.test(body), 'values must not be copied into the shape');
-});
 
 // Everything above reasons about shapes I guessed at. This part runs against a
 // response captured from a live server, which is the only thing that settles
@@ -376,14 +369,6 @@ check('a name still wins over a port', () => {
   assert.equal(joinLive(entries, objects).strategy, 'name');
 });
 
-check('the diagnostics compare ports, not only identifiers', () => {
-  // When the two port lists do not overlap, the sides are describing
-  // different streams and no key would ever have joined them — which is a
-  // different conclusion from "the field names differ".
-  const routeSrc2 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
-  assert.ok(routeSrc2.includes('nimblePorts:'));
-  assert.ok(routeSrc2.includes('wmspanelPorts:'));
-});
 
 console.log('\nWHICH ENDPOINT HOLDS WHAT IS NOT ASSUMED (v0.25.5):');
 
@@ -505,13 +490,6 @@ check('a caller socket is identified by the address it dialled', () => {
   assert.equal(localPort('72.56.79.88:17802'), 'port:17802');
 });
 
-check('the diagnostics lead with counts, not with a truncated sample', () => {
-  // A 20-item slice of 61 ports reads as the whole set. That is how a wrong
-  // conclusion got drawn from one.
-  const proxy = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
-  assert.ok(proxy.includes('nimblePortCount:'));
-  assert.ok(proxy.includes('overlappingPorts:'));
-});
 
 console.log('\nONE ANSWER TO "WHICH STREAM IS THIS" (v0.25.8):');
 
@@ -605,13 +583,6 @@ console.log('\nMEASURING INSTEAD OF SAMPLING (v0.25.11):');
 const proxySrc4 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
 const statsSrc4 = readFileSync(new URL('../src/routes/stats.js', import.meta.url), 'utf8');
 
-check('the identifier overlap is computed over the full sets', () => {
-  // Two five-entry samples failing to overlap is what sent this down a wrong
-  // path for several rounds. A sample answers nothing; a set answers exactly.
-  assert.ok(proxySrc4.includes('const idOverlap ='));
-  assert.ok(proxySrc4.includes('settingIdCount:'));
-  assert.ok(proxySrc4.includes('overlappingIds:'));
-});
 
 check('the join does pair the real data', () => {
   // Run against the probe's entries and the objects the panel holds, so a zero
@@ -651,25 +622,31 @@ console.log('\nWHICH MACHINE ANSWERED (v0.25.12):');
 
 const proxySrc5 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
 
-check('the diagnostics name the instance that replied', () => {
-  // A probe run on the box and the panel returned two disjoint sets of sockets
-  // for the same endpoint — 6a18bf52/ports 18001-18006 against 6a1963/ports
-  // 35001+. Two different Nimble instances is the only thing that explains it,
-  // and nothing in the panel said which one it was reaching.
-  assert.ok(proxySrc5.includes('answeredBy:'));
-  assert.ok(proxySrc5.includes('cores:') && proxySrc5.includes('gpu:'));
+check('investigation lives in tools, not in the response', () => {
+  // It cost bytes on a request polled every ten seconds and put server
+  // internals on a screen, for a question asked twice a year.
+  for (const gone of ['diagnostics:', 'answeredBy:', 'responseShape', 'sampleEntryIds']) {
+    assert.ok(!proxySrc5.includes(gone), `${gone} must not be in the live response`);
+  }
+  const tool = readFileSync(new URL('../tools/join-report.mjs', import.meta.url), 'utf8');
+  assert.ok(tool.includes('idOverlap:') && tool.includes('answeredBy:'), 'and it is all still available');
 });
 
-check('the fingerprint identifies a machine and nothing else', () => {
-  // It goes on a screen: core count, RAM and GPU model tell two servers apart
-  // and say nothing about a person or a stream.
-  const from = proxySrc5.indexOf('answeredBy: (() => {');
-  const body = proxySrc5.slice(from, proxySrc5.indexOf('})(),', from));
-  assert.ok(!/publisher|ip\b|addr/i.test(body));
+check('the report measures sets, never samples', () => {
+  // Two five-entry samples failing to overlap is what sent this down a wrong
+  // path for several rounds. Counting the sets answers it exactly.
+  const tool = readFileSync(new URL('../tools/join-report.mjs', import.meta.url), 'utf8');
+  assert.ok(tool.includes('settingIds: nIds.size'));
+  assert.ok(tool.includes('idOverlap:') && tool.includes('portOverlap:'));
+  assert.ok(tool.includes('overlappingIds:'), 'and names which ones, so a zero can be checked');
 });
 
-check('a failed status call does not take the readings with it', () => {
-  assert.ok(proxySrc5.includes('nimble.serverStatus(server).catch(() => null)'));
+check('the report still names the machine that answered', () => {
+  // Two disjoint socket sets from one endpoint can only mean two Nimble
+  // instances, and that is the first thing to rule out.
+  const tool = readFileSync(new URL('../tools/join-report.mjs', import.meta.url), 'utf8');
+  assert.ok(tool.includes('cores:') && tool.includes('gpu:'));
+  assert.ok(tool.includes('maskIp'), 'with addresses reduced before they are printed');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

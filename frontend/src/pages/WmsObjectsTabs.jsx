@@ -189,60 +189,23 @@ function JoinNote({ live, t }) {
   if (live.available === false) {
     return <div className="hint" style={{ marginBottom: 6 }}>{t('wo.liveUnavailable', { why: live.reason || '' })}</div>;
   }
-  // A partial match used to say nothing at all, leaving every unmatched row
+  // A partial match said nothing at all once, leaving every unmatched row
   // marked "wp" with no explanation anywhere.
   if (!live.objects || !live.unmatched) return null;
-  const d = live.diagnostics || {};
-  // Nothing at all came back is a different fault from "came back and did not
-  // line up", and only the first one is answered by the shape of the response.
-  const empty = live.entries === 0;
-  return (
-    <div className="hint" style={{ marginBottom: 6, color: 'var(--warn)' }}>
-      {empty
-        ? t('wo.liveEmpty', { objects: live.objects, endpoint: d.endpoint || '' })
-        : (live.matched === 0 && live.portOverlap === 0)
-          // Not a failure to match: nothing here was ever the same stream.
-          ? <>
-              {t('wo.liveElsewhere', { entries: live.entries })}
-              {live.answeredBy && (
-                <div style={{ marginTop: 2 }}>
-                  {t('wo.answeredBy', {
-                    url: live.answeredBy.url,
-                    cores: live.answeredBy.cores ?? '?',
-                    gpu: live.answeredBy.gpu || '—',
-                  })}
-                </div>
-              )}
-            </>
-        : live.matched > 0
-          ? t('wo.livePartial', { matched: live.matched, unmatched: live.unmatched })
-          : t('wo.liveNoMatch', { entries: live.entries, objects: live.objects })}
-      {(d.responseShape || d.sampleEntries?.length > 0) && (
-        <details style={{ marginTop: 4 }}>
-          <summary style={{ cursor: 'pointer' }}>{t('wo.liveShape')}</summary>
-          {/* On screen rather than in a tooltip: a tooltip cannot be copied,
-              and this is the thing worth sending on. */}
-          <pre className="mono" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto' }}>
-            {JSON.stringify(d.responseShape || {
-              // Ports first: when these two lists do not overlap, the two
-              // sides are describing different streams, and no key would ever
-              // have joined them.
-              // Counts before samples: a truncated list looks like the whole
-              // set and is the reason a wrong conclusion got drawn from one.
-              // First, because it is the question everything else depends on.
-              answeredBy: live.answeredBy,
-              settingIdCount: d.settingIdCount, objectIdCount: d.objectIdCount,
-              idOverlap: d.idOverlap, overlappingIds: d.overlappingIds,
-              nimblePortCount: d.nimblePortCount, wmspanelPortCount: d.wmspanelPortCount,
-              portOverlap: d.portOverlap, overlappingPorts: d.overlappingPorts,
-              nimblePortsSample: d.nimblePorts, wmspanelPortsSample: d.wmspanelPorts,
-              nimble: d.sampleEntryIds, wmspanel: d.sampleObjectIds,
-            }, null, 1)}
-          </pre>
-        </details>
-      )}
-    </div>
-  );
+
+  // Three situations, three sentences, and no raw payload behind them: when
+  // the shapes and identifiers are what is wanted, that is a job for
+  // tools/nimble-probe.mjs, run deliberately.
+  const text = live.entries === 0
+    ? t('wo.liveEmpty', { objects: live.objects, endpoint: '' })
+    : (live.matched === 0 && live.portOverlap === 0)
+      // Not a failure to match: nothing here was ever the same stream.
+      ? t('wo.liveElsewhere', { entries: live.entries })
+      : live.matched > 0
+        ? t('wo.livePartial', { matched: live.matched, unmatched: live.unmatched })
+        : t('wo.liveNoMatch', { entries: live.entries, objects: live.objects });
+
+  return <div className="hint" style={{ marginBottom: 6, color: 'var(--warn)' }}>{text}</div>;
 }
 
 export function UdpTab({ serverId }) {

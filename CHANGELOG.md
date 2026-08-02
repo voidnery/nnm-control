@@ -1,5 +1,27 @@
 # Changelog
 
+### v0.25.13 — the release tag, and diagnostics out of production
+- **`v.1.3.5` broke the release.** A Docker tag may not begin with a separator,
+  so stripping only the leading `v` left `.1.3.5` — and it failed on the very
+  last step, after everything before it had run. The workflow strips the `v`
+  and any separator after it, and **refuses a tag that still does not yield a
+  usable version, on the first step** rather than the last
+- **The investigation is out of the production path.** Shapes, samples,
+  identifier sets and hardware fingerprints were being shipped inside a
+  response polled every ten seconds and rendered into the page. They cost bytes
+  on every poll and put server internals on a screen, for a question asked
+  twice a year
+- It is all still available, and better: `backend/tools/join-report.mjs`, run
+  inside the API container where the database and the WMSPanel credentials
+  already are. It reports which machine answered, each endpoint's count, the
+  full-set overlaps of identifiers and ports, what the join chose and why, and
+  five entries from each side — with addresses reduced before printing
+- The panel keeps the four sentences an operator acts on: nothing came back,
+  came back and did not line up, partially matched, or these are different
+  streams entirely
+- Five checks retired because their subject moved; three added on the tool
+
+
 ### v0.25.12 — which machine answered
 - The measurement settled it, and not where I was looking. **The panel and the
   probe see different sockets.** Run on the box, the probe returned

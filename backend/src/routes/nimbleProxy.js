@@ -93,15 +93,10 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   if (!server) return res.status(404).json({ error: 'Server not found' });
   const kind = String(req.params.kind);
 
-  // Which native endpoint holds which family is not something to assume.
-  // Ports 35001+ turned up under srt_receiver_stats while being configured as
-  // UDP Streaming — SRT Out in this panel — so a fixed endpoint-per-tab map
-  // was wrong, and wrong in a way that produced an empty column and a
-  // plausible-looking explanation.
-  //
-  // Both SRT endpoints are asked and their entries merged. The join then
-  // decides by identifier or by port, which is what actually ties an entry to
-  // an object; nothing depends on my reading of Nimble's naming.
+  // Which native endpoint holds which family is not something to assume: ports
+  // 35001+ turned up under srt_receiver_stats while being configured as UDP
+  // Streaming. Both SRT endpoints are asked and their entries merged; the join
+  // decides by identifier or by local port.
   const SOURCES = {
     incoming: { native: ['srtReceiverStats', 'srtSenderStats'], wms: 'incomingList', pick: (d) => d.streams || d.settings || [] },
     outgoing: { native: ['srtSenderStats', 'srtReceiverStats'], wms: 'outgoingList', pick: (d) => d.streams || d.settings || [] },
@@ -114,14 +109,8 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   const settings = await Settings.load();
   // Independent on purpose: native stats are worth having even when WMSPanel
   // is unreachable, and the object list is worth having when a server is.
-  const [wmsRes, statusRes, ...nativeRes] = await Promise.allSettled([
+  const [wmsRes, ...nativeRes] = await Promise.allSettled([
     wmspanel[src.wms](settings.wmspanel, server.wmspanelServerId),
-    // Which machine answered. The panel and a probe run on the box returned
-    // two disjoint sets of sockets for the same endpoint, which can only mean
-    // two different Nimble instances — and nothing in the panel said which one
-    // it was talking to. A fingerprint settles that on screen instead of by
-    // correspondence.
-    nimble.serverStatus(server).catch(() => null),
     ...src.native.map(fn => nimble[fn](server)),
   ]);
 
@@ -135,7 +124,6 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     });
   }
 
-  // A socket can appear in both lists; the local port identifies it.
   const seen = new Set();
   const entries = [];
   nativeRes.forEach((r, i) => {
@@ -152,71 +140,31 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     }
   });
 
-  // When the list comes out empty, the question is whether Nimble reported
-  // nothing or whether we looked in the wrong place — and those need opposite
-  // fixes. The shape of the response answers it, so the shape is returned:
-  // key names, their types and their sizes. Names and types only, never
-  // values, because this crosses a screen and a response can carry addresses.
-  const shapeOf = (v, depth = 0) => {
-    if (Array.isArray(v)) {
-      return { type: 'array', length: v.length, of: v.length && depth < 2 ? shapeOf(v[0], depth + 1) : undefined };
-    }
-    if (v && typeof v === 'object') {
-      return {
-        type: 'object',
-        keys: Object.keys(v).slice(0, 40),
-        children: depth < 2
-          ? Object.fromEntries(Object.entries(v).slice(0, 12).map(([k, x]) => [k, shapeOf(x, depth + 1)]))
-          : undefined,
-      };
-    }
-    return { type: typeof v };
-  };
   const objects = wmsRes.status === 'fulfilled' ? src.pick(wmsRes.value) : [];
   const joined = joinLive(entries, objects);
 
   // Ports that overlap mean the two sides describe the same sockets and a
   // failure to pair is a naming problem. No overlap at all means they describe
-  // different streams — for which "could not be matched" is misleading: there
-  // was never anything to match, and nothing is wrong.
+  // different streams, for which "could not be matched" would be misleading.
   const nPorts = new Set(entries.map(e => (localPort(e.id) || '').replace('port:', '')).filter(Boolean));
   const wPorts = new Set(objects.map(o => String(o.port || '')).filter(Boolean));
   const portOverlap = [...wPorts].filter(p => nPorts.has(p)).length;
 
-  // The same measurement for identifiers, over the FULL sets. Two five-entry
-  // samples failing to overlap is what sent this epic down a wrong path for
-  // several rounds — samples answer nothing, sets answer it exactly.
-  const nIds = new Set(entries.map(e => String(e.setting_id ?? e.settingId ?? '').toLowerCase()).filter(Boolean));
-  const wIds = new Set(objects.map(o => String(o.id ?? '').toLowerCase()).filter(Boolean));
-  const idOverlap = [...wIds].filter(id => nIds.has(id)).length;
-
+  // No investigative payload here. Shapes, samples, id sets and hardware
+  // fingerprints belong in tools/, run deliberately — not shipped in a
+  // response that is polled every ten seconds, and not putting server
+  // internals on a screen. What remains is what an operator acts on.
   res.json({
     kind,
     available: true,
     strategy: joined.strategy,
     matched: joined.matched,
+    unmatched: joined.unmatchedObjects.length,
     portOverlap,
-    idOverlap,
-    // Which machine answered. The panel and a probe run on the box returned
-    // two disjoint sets of sockets for the same endpoint, which can only mean
-    // two different Nimble instances — and nothing in the panel said which one
-    // it was reaching. Core count, RAM and GPU tell two servers apart and say
-    // nothing about a person or a stream.
-    answeredBy: (() => {
-      const si = statusRes.status === 'fulfilled' ? statusRes.value?.SysInfo : null;
-      if (!si) return null;
-      return {
-        url: server.baseUrl || server.host || '',
-        cores: si.ap ?? null,
-        ramGb: si.tpms ? Math.round(si.tpms / 1e9) : null,
-        gpu: si.nvml?.[0]?.name || null,
-      };
-    })(),
     objects: objects.length,
     entries: entries.length,
-    // The subject travels with the reading. The history dialog then asks for
-    // the series this row's data is actually in, instead of deriving a subject
-    // from an id space the collector never used.
+    // The subject travels with the reading, so the history dialog asks for the
+    // series this row's data is actually in rather than deriving one.
     live: Object.fromEntries(Object.entries(joined.byObjectId).map(([id, list]) => {
       const first = Array.isArray(list) ? list[0] : list;
       const ident = entryIdentity(first);
@@ -225,48 +173,5 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
         subject: ident ? `${first.__series || 'srt-receiver'}:${ident}` : null,
       }];
     })),
-    // Returned so a fleet that matches on nothing shows WHY, rather than
-    // thirteen tables of dashes. This is the evidence the field names have
-    // never been documented for.
-    // A partial match is its own story: some streams paired and some did not,
-    // and the ones that did not are exactly the interesting ones. Reported
-    // whenever anything is unmatched, not only when everything is.
-    unmatched: joined.unmatchedObjects.length,
-    diagnostics: joined.matched < objects.length
-      ? {
-        candidates: joined.candidates,
-        sampleEntries: joined.unmatchedEntries,
-        // Only when the list itself came out empty: that is when the useful
-        // question stops being "which key" and becomes "which key was I
-        // supposed to read the list out of".
-        responseShape: entries.length === 0 ? shapeOf(nativeRes.value) : undefined,
-        endpoint: src.native,
-        // The identifiers on each side, so a mismatch is visible as a
-        // mismatch rather than as an absence. Ids only — no addresses.
-        // Ports, not just ids. Two systems can name the same stream
-        // differently and still be talking about the same socket — and when
-        // the ports do not overlap either, they are not the same streams at
-        // all, which is a different conclusion entirely.
-        // Counts and the overlap first. The truncated lists below read as the
-        // whole picture and are not — a 20-item slice of 61 ports is how I
-        // concluded "no overlap" from a sample that simply had not reached it.
-        // Sets, not samples.
-        settingIdCount: nIds.size,
-        objectIdCount: wIds.size,
-        idOverlap,
-        overlappingIds: [...wIds].filter(id => nIds.has(id)).slice(0, 10),
-        nimblePortCount: nPorts.size,
-        wmspanelPortCount: wPorts.size,
-        portOverlap,
-        overlappingPorts: [...wPorts].filter(p => nPorts.has(p)).slice(0, 20),
-        nimblePorts: [...new Set(entries.map(e => localPort(e.id)).filter(Boolean))].slice(0, 20),
-        wmspanelPorts: [...new Set(objects.map(o => o.port).filter(Boolean))].slice(0, 20),
-        sampleEntryIds: entries.slice(0, 5).map(e => ({
-          setting_id: e.setting_id ?? null, name: e.name ?? null,
-          localPort: localPort(e.id), hasStats: Boolean(e.stats),
-        })),
-        sampleObjectIds: objects.slice(0, 5).map(o => ({ id: String(o.id), name: o.name, port: o.port })),
-      }
-      : null,
   });
 });
