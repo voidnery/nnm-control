@@ -160,8 +160,24 @@ if (!subject) {
   line('', 'no matched socket is carrying data right now — nothing to follow through');
 } else {
   line('subject', subject);
-  const series = await api(`/stats/${SERVER}/series?subject=${encodeURIComponent(subject)}` +
-    '&metrics=stats.recv.mbpsRate,stats.send.mbpsRate,stats.link.rtt&minutes=15').catch(e => ({ error: e.message }));
+
+  // The metric names are not hardcoded here. They were once — with dots, from
+  // before the collector had to stop using them — and the tool then reported
+  // "no rate in any point" against a panel that was storing rates perfectly
+  // well. A diagnostic that can be wrong about the thing it is diagnosing is
+  // worse than none, so it asks what this subject actually holds.
+  const held = (srt.find(x => x.subject === subject)?.metrics) || [];
+  const rateKeys = held.filter(k => /rate|bitrate|bandwidth/i.test(k) && !/max/i.test(k));
+  line('metrics on record', held.length ? `${held.length} — ${held.slice(0, 4).join(', ')}${held.length > 4 ? ' …' : ''}` : 'none');
+  if (held.length && !rateKeys.length) {
+    line('note', 'none of them looks like a rate — the shape Nimble returns may have changed');
+  }
+
+  const wanted = (rateKeys.length ? rateKeys : held).slice(0, 4);
+  const series = wanted.length
+    ? await api(`/stats/${SERVER}/series?subject=${encodeURIComponent(subject)}` +
+        `&metrics=${wanted.join(',')}&minutes=15`).catch(e => ({ error: e.message }))
+    : { points: [] };
   if (series.error) { line('series', `FAILED: ${series.error.slice(0, 140)}`); }
   else {
     const pts = series.points || [];
@@ -171,7 +187,7 @@ if (!subject) {
     line('VERDICT', pts.length === 0
       ? 'live now and nothing stored — the collector is not seeing what the reader sees'
       : withRate === 0
-        ? 'stored, but no rate in any point — the metric name or the shape changed'
+        ? `stored, but ${wanted.join('/')} is null in every point — the shape Nimble returns changed`
         : 'end to end is intact');
   }
 }

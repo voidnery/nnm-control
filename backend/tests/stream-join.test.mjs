@@ -375,14 +375,25 @@ console.log('\nWHICH ENDPOINT HOLDS WHAT IS NOT ASSUMED (v0.25.5):');
 
 const proxySrc = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
 
+check('the SRT endpoints are asked in the same order on every tab', () => {
+  // The dedupe keeps whichever list arrived first, so a per-tab order made one
+  // socket into `srt-receiver:X` on one tab and `srt-sender:X` on the other —
+  // two subjects for one socket, and which tab you opened decided whether the
+  // history was there. The collector asks receiver then sender, always; so
+  // must this.
+  assert.ok(proxySrc.includes("const SRT_BOTH = ['srtReceiverStats', 'srtSenderStats']"));
+  const orders = [...proxySrc.matchAll(/native: \[([^\]]+)\]/g)].map(m => m[1].trim());
+  const srtOrders = orders.filter(o => o.includes('srt'));
+  assert.equal(new Set(srtOrders).size, 0, 'no tab may spell its own order');
+});
+
 check('both SRT endpoints are asked, for every SRT tab', () => {
   // Ports 35001+ turned up under srt_receiver_stats while being configured as
   // UDP Streaming — SRT Out here. A fixed endpoint-per-tab map was wrong, and
   // wrong in a way that produced an empty column with a plausible explanation
   // attached to it.
-  assert.ok(proxySrc.includes("native: ['srtReceiverStats', 'srtSenderStats']"));
-  assert.ok(proxySrc.includes("native: ['srtSenderStats', 'srtReceiverStats']"));
-  assert.ok(proxySrc.includes('udp:'), 'SRT Out has its own entry now');
+  assert.equal([...proxySrc.matchAll(/native: SRT_BOTH/g)].length, 3, 'incoming, outgoing and udp');
+  assert.ok(proxySrc.includes('udp:'), 'SRT Out has its own entry');
 });
 
 check('one endpoint failing does not lose the other', () => {
@@ -831,6 +842,20 @@ check('the reader asks for the names that are actually stored', () => {
   const tabs = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
   assert.ok(tabs.includes("'stats_recv_mbpsRate'"));
   assert.ok(!tabs.includes("'stats.recv.mbpsRate'"), 'the dotted names would silently match nothing');
+});
+
+check('the diagnostic asks what a subject holds, rather than assuming', () => {
+  // It hardcoded the dotted names and then reported "no rate in any point"
+  // against a panel that was storing rates perfectly well. A diagnostic that
+  // can be wrong about the thing it diagnoses is worse than none.
+  const diag = readFileSync(new URL('../../tools/nnm-diag.mjs', import.meta.url), 'utf8');
+  assert.ok(!diag.includes('stats.recv.mbpsRate'), 'no hardcoded metric names');
+  assert.ok(diag.includes('const held ='));
+  assert.ok(diag.includes('/rate|bitrate|bandwidth/i'));
+  // A configured ceiling is not a reading.
+  const pick = (ks) => ks.filter(k => /rate|bitrate|bandwidth/i.test(k) && !/max/i.test(k));
+  assert.deepEqual(pick(['retryCount', 'stats_link_mbpsMaxBandwidth', 'stats_recv_mbpsRate']),
+    ['stats_recv_mbpsRate']);
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

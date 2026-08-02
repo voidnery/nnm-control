@@ -143,10 +143,19 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   // 35001+ turned up under srt_receiver_stats while being configured as UDP
   // Streaming. Both SRT endpoints are asked and their entries merged; the join
   // decides by identifier or by local port.
+  // The SRT endpoints are asked in the SAME ORDER for every tab.
+  //
+  // They used to be ordered per tab — receiver first for SRT In, sender first
+  // for SRT Out — and the dedupe keeps whichever arrived first. A socket
+  // present in both lists therefore became `srt-receiver:X` on one tab and
+  // `srt-sender:X` on the other: two subjects for one socket, and only one of
+  // them matching what the collector stored. Which tab you opened decided
+  // whether the history was there.
+  const SRT_BOTH = ['srtReceiverStats', 'srtSenderStats'];
   const SOURCES = {
-    incoming: { native: ['srtReceiverStats', 'srtSenderStats'], wms: 'incomingList', pick: (d) => d.streams || d.settings || [] },
-    outgoing: { native: ['srtSenderStats', 'srtReceiverStats'], wms: 'outgoingList', pick: (d) => d.streams || d.settings || [] },
-    udp: { native: ['srtSenderStats', 'srtReceiverStats'], wms: 'udpList', pick: (d) => d.settings || [] },
+    incoming: { native: SRT_BOTH, wms: 'incomingList', pick: (d) => d.streams || d.settings || [] },
+    outgoing: { native: SRT_BOTH, wms: 'outgoingList', pick: (d) => d.streams || d.settings || [] },
+    udp: { native: SRT_BOTH, wms: 'udpList', pick: (d) => d.settings || [] },
     republish: { native: ['republishStats'], wms: 'republishList', pick: (d) => d.rules || d.republish_rules || [] },
   };
   const src = SOURCES[kind];

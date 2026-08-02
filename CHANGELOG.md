@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.26.5 — the last two gaps
+- The dot fix worked: **70 subjects stored, 50 of them with 18 metrics**, up
+  from none. Bitrate, RTT and reconnects draw
+- **The diagnostic was lying.** It hardcoded the dotted metric names and so
+  reported "no rate in any point" against a panel that was storing rates
+  perfectly well. It asks the panel what a subject actually holds now and
+  picks the rate from that — a tool that can be wrong about the thing it
+  diagnoses is worse than no tool. A configured ceiling like
+  `mbpsMaxBandwidth` is excluded: it is a setting, not a reading
+- **The SRT endpoints are asked in the same order on every tab.** They were
+  ordered per tab — receiver first for SRT In, sender first for SRT Out — and
+  the dedupe keeps whichever arrived first, so a socket present in both lists
+  became `srt-receiver:X` on one tab and `srt-sender:X` on the other. Two
+  subjects for one socket, and which tab you opened decided whether its history
+  was there. The collector asks receiver then sender, always; now so does the
+  route
+- 2 new checks
+
+
 ### v0.26.4 — a metric key with a dot in it cannot be stored
 - The diagnostic named it in one run: 42 subjects stored, **none** with
   anything but `retryCount`, and 33 live sockets with no series at all — the
