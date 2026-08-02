@@ -4,7 +4,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
 import { wmspanel } from '../services/wmspanelClient.js';
-import { joinLive, liveSummary, localPort, entryIdentity } from '../services/streamJoin.js';
+import { joinLive, liveSummary, localPort, entryIdentity, entryList as asList } from '../services/streamJoin.js';
 
 // The collector labels a series by the endpoint the entry came from, so that
 // label must be the same here. Inferring it from the presence of a `recv`
@@ -12,28 +12,6 @@ import { joinLive, liveSummary, localPort, entryIdentity } from '../services/str
 // the code that called it.
 const SERIES_OF = { srtReceiverStats: 'srt-receiver', srtSenderStats: 'srt-sender', republishStats: 'republish' };
 
-// Nimble returns its stats under a different key per endpoint, and an array
-// directly on some builds. Same tolerance the collector already uses.
-// Nimble returns its stats under a different key per endpoint and a different
-// one again between builds. Rather than keep a list of names that goes stale,
-// take the first array of objects at the top level — there is only ever one,
-// and a name we have not seen before is exactly the case that produced "0 live
-// streams" against 76 configured.
-const asList = (d) => {
-  if (Array.isArray(d)) return d;
-  if (!d || typeof d !== 'object') return [];
-  for (const k of ['streams', 'sockets', 'stats', 'rules']) if (Array.isArray(d[k])) return d[k];
-  for (const v of Object.values(d)) {
-    if (Array.isArray(v) && (v.length === 0 || (v[0] && typeof v[0] === 'object'))) return v;
-  }
-  // Some endpoints key an object by stream or port instead of listing it. The
-  // key is worth keeping: it is often the only identifier there is.
-  const vals = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && !Array.isArray(v));
-  if (vals.length && vals.every(([, v]) => Object.values(v).some(x => typeof x === 'number'))) {
-    return vals.map(([k, v]) => ({ ...v, _key: k, name: v.name ?? k }));
-  }
-  return [];
-};
 
 // Permission-gated proxy of Nimble native API per managed server.
 export const nimbleRouter = Router();

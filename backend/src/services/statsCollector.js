@@ -2,7 +2,7 @@ import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { StatSample } from '../models/StatSample.js';
 import { nimble } from './nimbleClient.js';
-import { entryIdentity } from './streamJoin.js';
+import { entryIdentity, entryList } from './streamJoin.js';
 
 // Sampling runs against the NATIVE Nimble API on purpose: WMSPanel allows
 // 15 000 calls/day per account, and a 10s poll of a single server would burn
@@ -23,9 +23,13 @@ export function flattenNumbers(obj, prefix = '', out = {}, depth = 0) {
   return out;
 }
 
+// One extraction, shared with the join. The old one took a list of key names
+// and Nimble's SRT endpoints use `SrtReceivers` / `SrtSenders`, which were not
+// among them — so every SRT sample was silently dropped while the same data
+// reached the table through the route's own, more forgiving, version.
 const asList = (d, ...keys) => {
   for (const k of keys) if (Array.isArray(d?.[k])) return d[k];
-  return Array.isArray(d) ? d : [];
+  return entryList(d);
 };
 
 // Build the samples for one server. Exported for tests.

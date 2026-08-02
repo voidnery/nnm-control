@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.25.10 — the envelope
+- The probe answered it in one run. **Nimble's SRT endpoints reply
+  `{ SrtReceivers: [...] }` and `{ SrtSenders: [...] }`** — and the collector's
+  list extraction matched a fixed set of key names (`streams`, `sockets`,
+  `stats`, `rules`) which did not include them. It therefore recorded **nothing
+  at all** for SRT, silently, while the same data reached the live table
+  through the route's own, more forgiving, copy of that function
+- That is exactly what the history dialog kept saying: the server *is*
+  reporting — other groups — and this stream never appears
+- There is one `entryList()` now, shared. Two implementations of "find the
+  list" disagreeing was the whole defect, and it is the third time in this epic
+  that the same relationship was answered twice in two places
+- **`setting_id` is the WMSPanel object id after all.** The probe shows three
+  overlaps in samples of five apiece. I asserted it, then doubted it on the
+  strength of two non-overlapping five-entry samples, and built a port-based
+  fallback on that doubt. The fallback stays — it is right for entries with no
+  `setting_id` — but the doubt was mine and unfounded
+- 4 new checks, against the probe output kept as a fixture
+
+
 ### v0.25.9 — a probe instead of another guess
 - The live join still does not pair the SRT In rows, and I have now been wrong
   about this four times in a row: which endpoint holds which family, what an id

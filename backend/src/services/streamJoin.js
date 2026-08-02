@@ -15,6 +15,36 @@
 const clean = (v) => String(v ?? '').trim().toLowerCase();
 
 /**
+ * The list of entries in whatever envelope Nimble used.
+ *
+ * There were two of these — the collector's, which matched a fixed list of key
+ * names, and the route's, which fell back to the first array of objects. The
+ * SRT endpoints answer `{ SrtReceivers: [...] }` and `{ SrtSenders: [...] }`,
+ * which the fixed list did not have, so the collector recorded NOTHING for SRT
+ * while the table filled correctly from the route. That is the whole of "the
+ * server is reporting but this stream never appears".
+ *
+ * Preferred names first, because a response can carry more than one array and
+ * `stats` is the data where `rules` might be configuration.
+ */
+export function entryList(d) {
+  if (Array.isArray(d)) return d;
+  if (!d || typeof d !== 'object') return [];
+  for (const k of ['streams', 'sockets', 'stats', 'rules']) if (Array.isArray(d[k])) return d[k];
+  // Anything else: the one array of objects at the top level.
+  for (const v of Object.values(d)) {
+    if (Array.isArray(v) && (v.length === 0 || (v[0] && typeof v[0] === 'object'))) return v;
+  }
+  // Some endpoints key an object by stream or port instead of listing it; the
+  // key is often the only identifier there is.
+  const vals = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && !Array.isArray(v));
+  if (vals.length && vals.every(([, v]) => Object.values(v).some(x => typeof x === 'number'))) {
+    return vals.map(([k, v]) => ({ ...v, _key: k, name: v.name ?? k }));
+  }
+  return [];
+}
+
+/**
  * How one native entry is identified in the stored series.
  *
  * There were two independent answers to "which stream is this" — the

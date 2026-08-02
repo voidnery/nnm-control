@@ -560,5 +560,45 @@ check('a row with no live socket says so instead of showing an empty chart', () 
   assert.ok(tabsSrc3.includes('if (!subject) return undefined'), 'and asks for nothing');
 });
 
+console.log('\nTHE ENVELOPE (v0.25.10):');
+
+const { entryList } = await import('../src/services/streamJoin.js');
+const probe = JSON.parse(readFileSync(new URL('./fixtures/nimble-probe.json', import.meta.url), 'utf8'));
+
+check('the SRT endpoints answer in an envelope the collector did not know', () => {
+  // `{ SrtReceivers: [...] }` and `{ SrtSenders: [...] }`. The collector
+  // matched a fixed list of key names — streams, sockets, stats, rules — so it
+  // recorded NOTHING for SRT, while the same data reached the table through
+  // the route's own, more forgiving, extraction. That is the whole of "the
+  // server is reporting but this stream never appears".
+  assert.deepEqual(probe.endpoints['/manage/srt_receiver_stats'].topLevel, ['SrtReceivers']);
+  assert.deepEqual(probe.endpoints['/manage/srt_sender_stats'].topLevel, ['SrtSenders']);
+  assert.equal(entryList({ SrtReceivers: [{ setting_id: 'a' }] }).length, 1);
+  assert.equal(entryList({ SrtSenders: [{ setting_id: 'a' }] }).length, 1);
+});
+
+check('there is one extraction, used by both', () => {
+  const collectorSrc2 = readFileSync(new URL('../src/services/statsCollector.js', import.meta.url), 'utf8');
+  const proxySrc3 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+  assert.ok(collectorSrc2.includes('entryList(d)'));
+  assert.ok(proxySrc3.includes('entryList as asList'));
+  assert.ok(!/^const asList = \(d\) => \{/m.test(proxySrc3), 'the route keeps no copy of its own');
+});
+
+check('a named list still wins over a stray array', () => {
+  // republish answers { status: 'Ok', stats: [] } — `stats` is the data, and
+  // taking the first array found would be luck rather than intent.
+  assert.deepEqual(entryList({ status: 'Ok', stats: [] }), []);
+  assert.equal(entryList({ rules: [{ a: 1 }], other: [{ b: 2 }] })[0].a, 1);
+});
+
+check('setting_id really is the WMSPanel object id', () => {
+  // Established from the probe against the objects the panel holds — the thing
+  // I asserted, then doubted, then had to be shown.
+  const ids = probe.endpoints['/manage/srt_receiver_stats'].identifiers.map(x => x.setting_id);
+  assert.ok(ids.every(id => /^[0-9a-f]{24}$/.test(id)), 'the same shape as a WMSPanel object id');
+  assert.ok(ids.includes('6a18bf6773856944212d0d76'), 'and one the SRT In tab lists');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

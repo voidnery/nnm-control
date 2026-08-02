@@ -1,0 +1,437 @@
+{
+ "base": "http://127.0.0.x:8082",
+ "at": "2026-08-02T09:16:14.056Z",
+ "endpoints": {
+  "/manage/srt_receiver_stats": {
+   "path": "/manage/srt_receiver_stats",
+   "status": 200,
+   "topLevel": [
+    "SrtReceivers"
+   ],
+   "count": 61,
+   "shape": {
+    "type": "object",
+    "keys": [
+     "setting_id",
+     "id",
+     "state",
+     "retryCount"
+    ],
+    "fields": {
+     "setting_id": {
+      "type": "string",
+      "value": "6a18bf5273856944212d0d70"
+     },
+     "id": {
+      "type": "string",
+      "value": "78.17.115.x:18001"
+     },
+     "state": {
+      "type": "string",
+      "value": "disconnected"
+     },
+     "retryCount": {
+      "type": "number",
+      "value": 11188
+     }
+    }
+   },
+   "identifiers": [
+    {
+     "setting_id": "6a18bf5273856944212d0d70",
+     "id": "78.17.115.x:18001"
+    },
+    {
+     "setting_id": "6a18bf649aac8647b52d0cc6",
+     "id": "78.17.115.x:18002"
+    },
+    {
+     "setting_id": "6a18bf6673856944212d0d74",
+     "id": "78.17.115.x:18003"
+    },
+    {
+     "setting_id": "6a18bf6773856944212d0d76",
+     "id": "78.17.115.x:18004"
+    },
+    {
+     "setting_id": "6a18bf6973856944212d0d78",
+     "id": "78.17.115.x:18005"
+    },
+    {
+     "setting_id": "6a18bf6c73856944212d0d7a",
+     "id": "78.17.115.x:18006"
+    },
+    {
+     "setting_id": "6a18c61a9aac8647b52d0cf0",
+     "id": "72.56.79.x:17801"
+    },
+    {
+     "setting_id": "6a18c63c73856944212d0d9e",
+     "id": "72.56.79.x:17804"
+    }
+   ]
+  },
+  "/manage/srt_sender_stats": {
+   "path": "/manage/srt_sender_stats",
+   "status": 200,
+   "topLevel": [
+    "SrtSenders"
+   ],
+   "count": 15,
+   "shape": {
+    "type": "object",
+    "keys": [
+     "id",
+     "setting_id",
+     "state",
+     "source_streams"
+    ],
+    "fields": {
+     "id": {
+      "type": "string",
+      "value": "79.98.187.x:17801"
+     },
+     "setting_id": {
+      "type": "string",
+      "value": "6a18d4ad9aac8647b52d0e13"
+     },
+     "state": {
+      "type": "string",
+      "value": "disconnected"
+     },
+     "source_streams": {
+      "type": "array",
+      "length": 1,
+      "first": {
+       "type": "object",
+       "keys": [
+        "app",
+        "stream"
+       ],
+       "fields": {
+        "app": {
+         "type": "string",
+         "value": "cct_feed"
+        },
+        "stream": {
+         "type": "string",
+         "value": "feed1_cf_logo"
+        }
+       }
+      }
+     }
+    }
+   },
+   "identifiers": [
+    {
+     "id": "79.98.187.x:17801",
+     "setting_id": "6a18d4ad9aac8647b52d0e13"
+    },
+    {
+     "id": "79.98.187.x:17802",
+     "setting_id": "6a18f13e9aac8647b52d1277"
+    },
+    {
+     "id": "79.98.187.x:17805",
+     "setting_id": "6a18f1429aac8647b52d127f"
+    },
+    {
+     "id": "31.130.135.x:35001",
+     "setting_id": "6a1971439aac8647b52d1492"
+    },
+    {
+     "id": "31.130.135.x:35002",
+     "setting_id": "6a19715873856944212d14e6"
+    },
+    {
+     "id": "31.130.135.x:35005",
+     "setting_id": "6a19715d73856944212d14f2"
+    },
+    {
+     "id": "45.88.14.x:19801",
+     "setting_id": "6a1976bc9aac8647b52d14c8"
+    },
+    {
+     "id": "45.88.14.x:19802",
+     "setting_id": "6a1977019aac8647b52d14d0"
+    }
+   ]
+  },
+  "/manage/rtmp/republish/stats": {
+   "path": "/manage/rtmp/republish/stats",
+   "status": 200,
+   "topLevel": [
+    "status",
+    "stats"
+   ],
+   "count": 0,
+   "shape": {
+    "type": "object",
+    "keys": [
+     "status",
+     "stats"
+    ],
+    "fields": {
+     "status": {
+      "type": "string",
+      "value": "Ok"
+     },
+     "stats": {
+      "type": "array",
+      "length": 0
+     }
+    }
+   },
+   "identifiers": []
+  },
+  "/manage/live_streams_status": {
+   "path": "/manage/live_streams_status",
+   "status": 200,
+   "topLevel": "array",
+   "count": 4,
+   "shape": {
+    "type": "object",
+    "keys": [
+     "app",
+     "streams"
+    ],
+    "fields": {
+     "app": {
+      "type": "string",
+      "value": "Sport_tv_obs"
+     },
+     "streams": {
+      "type": "array",
+      "length": 1,
+      "first": {
+       "type": "object",
+       "keys": [
+        "strm",
+        "publish_time",
+        "bandwidth",
+        "resolution",
+        "vcodec",
+        "acodec",
+        "protocol",
+        "publisher_ip",
+        "publisher_port"
+       ],
+       "fields": {
+        "strm": {
+         "type": "string",
+         "value": "feed5"
+        },
+        "publish_time": {
+         "type": "string",
+         "value": "1785643303"
+        },
+        "bandwidth": {
+         "type": "string",
+         "value": "6002514"
+        },
+        "resolution": {
+         "type": "string",
+         "value": "1280x720"
+        },
+        "vcodec": {
+         "type": "string",
+         "value": "avc1.64001f"
+        },
+        "acodec": {
+         "type": "string",
+         "value": "mp4a.40.2"
+        },
+        "protocol": {
+         "type": "string",
+         "value": "MPEGTS"
+        },
+        "publisher_ip": {
+         "type": "string",
+         "value": "192.168.200.x"
+        },
+        "publisher_port": {
+         "type": "number",
+         "value": 52693
+        }
+       }
+      }
+     }
+    }
+   },
+   "identifiers": [
+    {},
+    {},
+    {},
+    {}
+   ]
+  },
+  "/manage/mpegts_status": {
+   "path": "/manage/mpegts_status",
+   "status": 404,
+   "body": "<html><head><title>Not found</title></head><body>Not found</body></html>"
+  },
+  "/manage/mpegts/incoming": {
+   "path": "/manage/mpegts/incoming",
+   "status": 404,
+   "body": "<html><head><title>Not found</title></head><body>Not found</body></html>"
+  },
+  "/manage/mpegts/outgoing": {
+   "path": "/manage/mpegts/outgoing",
+   "status": 404,
+   "body": "<html><head><title>Not found</title></head><body>Not found</body></html>"
+  },
+  "/manage/server_status": {
+   "path": "/manage/server_status",
+   "status": 200,
+   "topLevel": [
+    "Connections",
+    "OutRate",
+    "SysInfo",
+    "RamCacheSize",
+    "FileCacheSize",
+    "MaxRamCacheSize",
+    "MaxFileCacheSize"
+   ],
+   "count": 0,
+   "shape": {
+    "type": "object",
+    "keys": [
+     "Connections",
+     "OutRate",
+     "SysInfo",
+     "RamCacheSize",
+     "FileCacheSize",
+     "MaxRamCacheSize",
+     "MaxFileCacheSize"
+    ],
+    "fields": {
+     "Connections": {
+      "type": "number",
+      "value": 0
+     },
+     "OutRate": {
+      "type": "number",
+      "value": 0
+     },
+     "SysInfo": {
+      "type": "object",
+      "keys": [
+       "ap",
+       "scl",
+       "tpms",
+       "fpms",
+       "tsss",
+       "fsss",
+       "nvml"
+      ],
+      "fields": {
+       "ap": {
+        "type": "number",
+        "value": 128
+       },
+       "scl": {
+        "type": "string",
+        "value": "0.0075"
+       },
+       "tpms": {
+        "type": "number",
+        "value": 67153604608
+       },
+       "fpms": {
+        "type": "number",
+        "value": 61391659008
+       },
+       "tsss": {
+        "type": "number",
+        "value": 8589930496
+       },
+       "fsss": {
+        "type": "number",
+        "value": 8552968192
+       },
+       "nvml": {
+        "type": "array",
+        "length": 1,
+        "first": {
+         "type": "object",
+         "keys": [
+          "gpu",
+          "name",
+          "gu",
+          "mu",
+          "tms",
+          "ums",
+          "du",
+          "eu"
+         ],
+         "fields": {
+          "gpu": {
+           "type": "number",
+           "value": 0
+          },
+          "name": {
+           "type": "string",
+           "value": "NVIDIA RTX PRO 4000 Blackwell"
+          },
+          "gu": {
+           "type": "number",
+           "value": 0
+          },
+          "mu": {
+           "type": "number",
+           "value": 0
+          },
+          "tms": {
+           "type": "number",
+           "value": 25655508992
+          },
+          "ums": {
+           "type": "number",
+           "value": 744947712
+          },
+          "du": {
+           "type": "number",
+           "value": 0
+          },
+          "eu": {
+           "type": "number",
+           "value": 0
+          }
+         }
+        }
+       }
+      }
+     },
+     "RamCacheSize": {
+      "type": "number",
+      "value": 128
+     },
+     "FileCacheSize": {
+      "type": "number",
+      "value": 0
+     },
+     "MaxRamCacheSize": {
+      "type": "number",
+      "value": 8096
+     },
+     "MaxFileCacheSize": {
+      "type": "number",
+      "value": 8096
+     }
+    }
+   },
+   "identifiers": []
+  },
+  "/manage/sessions": {
+   "path": "/manage/sessions",
+   "status": 200,
+   "topLevel": "array",
+   "count": 0,
+   "shape": {
+    "type": "array",
+    "length": 0
+   },
+   "identifiers": []
+  }
+ }
+}
