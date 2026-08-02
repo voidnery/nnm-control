@@ -64,7 +64,72 @@ die() { echo "nnm-agent install: $1" >&2; exit 1; }
 
 [ "$(id -u)" = "0" ] || die "must run as root (try: sudo sh -)"
 command -v curl >/dev/null 2>&1 || die "curl is required"
-command -v node >/dev/null 2>&1 || die "node is required (Node 18+); install it and re-run"
+# ---- Node, if the box has none -----------------------------------------
+#
+# Refusing to install because a dependency is missing puts the work back on
+# the operator for something the installer can do itself. But installing Node
+# system-wide on a live broadcast server is worse: it can collide with
+# whatever is already there, and nothing about this agent justifies changing
+# the machine's own toolchain.
+#
+# So Node is fetched into the agent's own directory. Official build, checksum
+# verified against the release manifest, unpacked beside the agent and used
+# only by it. Nothing outside $STATE_DIR is touched, and removing the agent
+# removes it.
+NODE_VERSION=v22.20.0
+NODE_BIN=""
+
+node_ok() {
+  command -v "$1" >/dev/null 2>&1 || return 1
+  # 18 is the floor: the agent uses fetch and AbortSignal.timeout.
+  v=$("$1" -e 'process.stdout.write(String(process.versions.node.split(".")[0]))' 2>/dev/null) || return 1
+  [ -n "$v" ] && [ "$v" -ge 18 ] 2>/dev/null
+}
+
+if node_ok node; then
+  NODE_BIN=$(command -v node)
+  echo "using the system node: $NODE_BIN"
+elif node_ok "$STATE_DIR/node/bin/node"; then
+  NODE_BIN="$STATE_DIR/node/bin/node"
+  echo "using the node installed earlier by this agent"
+else
+  case "$(uname -m)" in
+    x86_64|amd64) NARCH=x64 ;;
+    aarch64|arm64) NARCH=arm64 ;;
+    armv7l) NARCH=armv7l ;;
+    *) die "no Node on this machine and no official build for $(uname -m) — install Node 18+ and re-run" ;;
+  esac
+  TARBALL="node-$NODE_VERSION-linux-$NARCH.tar.xz"
+  BASE="https://nodejs.org/dist/$NODE_VERSION"
+  echo "no usable node found; fetching $TARBALL"
+
+  command -v tar >/dev/null 2>&1 || die "tar is required to unpack node"
+  TMP=$(mktemp -d)
+  trap 'rm -rf "$TMP"' EXIT
+
+  curl -4fsSL "$BASE/$TARBALL" -o "$TMP/$TARBALL" || die "could not download node from $BASE"
+  # The manifest is signed for the release; matching against it is what makes
+  # an interrupted or substituted download fail loudly instead of installing.
+  curl -4fsSL "$BASE/SHASUMS256.txt" -o "$TMP/SHASUMS256.txt" || die "could not download the node checksum manifest"
+  # Exact field match, not a regex. The manifest lists several formats per
+  # architecture, and an anchored grep works here only because a trailing
+  # dollar before a quote happens to be literal in sh — too subtle for
+  # something whose failure mode is installing the wrong file.
+  WANT=$(awk -v f="$TARBALL" '$2 == f { print $1 }' "$TMP/SHASUMS256.txt")
+  [ -n "$WANT" ] || die "node checksum manifest has no entry for $TARBALL"
+  GOT=$(sha256sum "$TMP/$TARBALL" | awk '{print $1}')
+  [ "$WANT" = "$GOT" ] || die "node checksum mismatch — refusing to install"
+
+  install -d -m 0755 "$STATE_DIR"
+  rm -rf "$STATE_DIR/node.new"
+  mkdir -p "$STATE_DIR/node.new"
+  tar -xJf "$TMP/$TARBALL" -C "$STATE_DIR/node.new" --strip-components=1 || die "could not unpack node"
+  rm -rf "$STATE_DIR/node"
+  mv "$STATE_DIR/node.new" "$STATE_DIR/node"
+  NODE_BIN="$STATE_DIR/node/bin/node"
+  node_ok "$NODE_BIN" || die "the node that was installed does not run"
+  echo "node $NODE_VERSION installed under $STATE_DIR/node (nothing outside it was changed)"
+fi
 
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
 [ "$NODE_MAJOR" -ge 18 ] || die "node 18+ required, found $(node -v)"
@@ -129,7 +194,7 @@ EnvironmentFile=$ENV_FILE
 # where it left off instead of at the end of the file. systemd creates it with
 # the right ownership and exports STATE_DIRECTORY.
 StateDirectory=nnm-agent
-ExecStart=$(command -v node) $BIN
+ExecStart=$NODE_BIN $BIN
 # A self-update ends with a deliberate non-zero exit so that systemd starts the
 # new code. Without on-failure the agent would update itself and stay down.
 Restart=on-failure

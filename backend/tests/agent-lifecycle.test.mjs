@@ -296,5 +296,62 @@ check('the diagnostic routes on freshness, as the panel does', () => {
   assert.ok(diag.includes('reads still go through it'), 'and a poor diagnosis is still reported');
 });
 
+console.log('\nTHE INSTALLER BRINGS ITS OWN NODE (v0.29.0):');
+
+const { installScript } = await import('../src/services/agentInstaller.js');
+const sh = installScript({ panelUrl: 'https://panel', ticket: 'a'.repeat(64) });
+
+check('it no longer refuses when Node is absent', () => {
+  // Refusing puts the work back on the operator for something the installer
+  // can do itself — and the SSH install, which exists so nobody has to touch
+  // the server, failed for exactly that.
+  assert.ok(!sh.includes('node is required (Node 18+); install it and re-run'));
+  assert.ok(sh.includes('NODE_VERSION='));
+});
+
+check('it installs into the agent\'s own directory, not the system', () => {
+  // A live broadcast server's toolchain is not this agent's to change, and a
+  // system-wide Node can collide with whatever is already there.
+  assert.ok(sh.includes('"$STATE_DIR/node"'));
+  assert.ok(!/apt-get install|yum install|nodesource/i.test(sh), 'no package manager is invoked');
+  assert.ok(sh.includes('nothing outside it was changed'));
+});
+
+check('a system Node that is new enough is used as it is', () => {
+  // Downloading one anyway would be changing a machine that needed nothing.
+  const order = [sh.indexOf('if node_ok node;'), sh.indexOf('$STATE_DIR/node/bin/node'), sh.indexOf('fetching')];
+  assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], 'system, then a previous install, then fetch');
+});
+
+check('the download is verified against the release manifest', () => {
+  // An interrupted or substituted download must fail loudly rather than
+  // install.
+  assert.ok(sh.includes('SHASUMS256.txt'));
+  assert.ok(sh.includes('sha256sum'));
+  assert.ok(sh.includes('node checksum mismatch — refusing to install'));
+});
+
+check('the checksum lookup cannot match the wrong file', () => {
+  // The manifest lists several formats per architecture.
+  const manifest = ['aa  node-v22.20.0-linux-x64.tar.xz', 'cc  node-v22.20.0-linux-x64.tar.gz'];
+  const pick = (t) => (manifest.find(l => l.endsWith(` ${t}`)) || '').split(/\s+/)[0];
+  assert.equal(pick('node-v22.20.0-linux-x64.tar.xz'), 'aa');
+  assert.equal(pick('node-v22.20.0-linux-s390x.tar.xz'), '', 'and an arch with no build is not silently mismatched');
+  assert.ok(sh.includes("awk -v f=\"$TARBALL\""), 'an exact field match, not a regex');
+  assert.ok(!sh.includes('grep " $TARBALL'), 'the subtle anchored grep is gone');
+});
+
+check('an architecture with no official build says so', () => {
+  assert.ok(sh.includes('no official build for'));
+  assert.ok(sh.includes('x86_64|amd64') && sh.includes('aarch64|arm64'));
+});
+
+check('the unit runs the Node that was settled on', () => {
+  // `command -v node` in the unit would find a different one, or none, once
+  // systemd's PATH differs from the installing shell's.
+  assert.ok(sh.includes('ExecStart=$NODE_BIN $BIN'));
+  assert.ok(!sh.includes('ExecStart=$(command -v node)'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-lifecycle checks passed');
 process.exit(fail ? 1 : 0);

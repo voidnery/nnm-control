@@ -1,5 +1,32 @@
 # Changelog
 
+## iter18 — the installer brings what it needs
+### v0.29.0 — Node is no longer a prerequisite
+- The SSH install exists so nobody has to touch the server, and it failed with
+  "node is required; install it and re-run" — putting the work back on the
+  operator for something the installer can do itself
+- **Node is fetched into the agent's own directory**, not installed
+  system-wide. A live broadcast server's toolchain is not this agent's to
+  change, and a system-wide Node can collide with whatever is already there.
+  Nothing outside `/var/lib/nnm-agent` is touched, and removing the agent
+  removes it
+- A system Node that is new enough is used as it is — downloading one anyway
+  would be changing a machine that needed nothing. Then a Node this agent
+  installed earlier. Only then a download
+- **The download is verified against the release manifest** before it is
+  unpacked: an interrupted or substituted file fails loudly rather than being
+  installed. The lookup is an exact field match rather than an anchored grep —
+  the manifest lists several formats per architecture, and the grep worked only
+  because a trailing dollar before a quote happens to be literal in sh, which
+  is too subtle for something whose failure mode is installing the wrong file
+- An architecture with no official build says so and asks for a manual install,
+  instead of downloading nothing and failing later
+- The systemd unit runs the Node that was settled on. `command -v node` in the
+  unit would find a different one, or none, once systemd's PATH differs from
+  the installing shell's
+- 7 new checks
+
+
 ### v0.28.3 — spacing
 - **Adjacent buttons in a table cell had nothing holding them apart** — only
   the whitespace between JSX elements, which collapses the moment they wrap,
