@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.25.11 — measuring instead of sampling
+- Collection is working: the Charts tab now lists `srt-receiver` subjects that
+  did not exist before. They carry only `retryCount` because that is all a
+  **disconnected** entry has — no `stats` block, nothing else to record
+- **Subjects have readable names now.** `srt-receiver 6a1963109aac8647b52d1448`
+  is not something to act on. The collector cannot resolve it — one WMSPanel
+  call per ten-second sample would spend the daily budget by lunchtime — so it
+  is resolved on read, cached for two minutes, on a page a person opened. The
+  direction is kept, and a failed lookup leaves the list intact
+- **The identifier overlap is measured over the full sets.** Two five-entry
+  samples failing to overlap is what sent this down a wrong path for several
+  rounds; the diagnostics now report how many of the object ids appear as
+  `setting_id`, and which ones, alongside the port figures already there
+- Verified against the probe: the join **does** pair the real data — two of
+  three, on entries and objects taken from the live server. So a zero in the
+  panel is no longer attributable to the algorithm, and the next screenshot
+  will say which set is short
+
+
 ### v0.25.10 — the envelope
 - The probe answered it in one run. **Nimble's SRT endpoints reply
   `{ SrtReceivers: [...] }` and `{ SrtSenders: [...] }`** — and the collector's

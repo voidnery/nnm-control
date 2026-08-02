@@ -218,6 +218,8 @@ function JoinNote({ live, t }) {
               // have joined them.
               // Counts before samples: a truncated list looks like the whole
               // set and is the reason a wrong conclusion got drawn from one.
+              settingIdCount: d.settingIdCount, objectIdCount: d.objectIdCount,
+              idOverlap: d.idOverlap, overlappingIds: d.overlappingIds,
               nimblePortCount: d.nimblePortCount, wmspanelPortCount: d.wmspanelPortCount,
               portOverlap: d.portOverlap, overlappingPorts: d.overlappingPorts,
               nimblePortsSample: d.nimblePorts, wmspanelPortsSample: d.wmspanelPorts,

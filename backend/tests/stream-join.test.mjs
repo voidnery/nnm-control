@@ -600,5 +600,52 @@ check('setting_id really is the WMSPanel object id', () => {
   assert.ok(ids.includes('6a18bf6773856944212d0d76'), 'and one the SRT In tab lists');
 });
 
+console.log('\nMEASURING INSTEAD OF SAMPLING (v0.25.11):');
+
+const proxySrc4 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+const statsSrc4 = readFileSync(new URL('../src/routes/stats.js', import.meta.url), 'utf8');
+
+check('the identifier overlap is computed over the full sets', () => {
+  // Two five-entry samples failing to overlap is what sent this down a wrong
+  // path for several rounds. A sample answers nothing; a set answers exactly.
+  assert.ok(proxySrc4.includes('const idOverlap ='));
+  assert.ok(proxySrc4.includes('settingIdCount:'));
+  assert.ok(proxySrc4.includes('overlappingIds:'));
+});
+
+check('the join does pair the real data', () => {
+  // Run against the probe's entries and the objects the panel holds, so a zero
+  // in the panel cannot be blamed on the algorithm again.
+  const probeIds = probe.endpoints['/manage/srt_receiver_stats'].identifiers
+    .map(x => ({ setting_id: x.setting_id, id: x.id }));
+  const objects = [
+    { id: '6a18bf6773856944212d0d76', name: 'CCT_FEED4_EU_BACKUP', port: 18004 },
+    { id: '6a18bf6973856944212d0d78', name: 'CCT_FEED5_EU_BACKUP', port: 18005 },
+    { id: '6a1805ad73856944212d0793', name: 'unrelated', port: 21041 },
+  ];
+  const r = joinLive(probeIds, objects);
+  assert.equal(r.strategy, 'setting_id');
+  assert.equal(r.matched, 2);
+});
+
+console.log('\nA SUBJECT NEEDS A NAME:');
+
+check('SRT subjects are resolved to their object names on read', () => {
+  // "srt-receiver 6a1963109aac8647b52d1448" is not something to act on. The
+  // collector cannot resolve it — one WMSPanel call per 10s sample would spend
+  // the daily budget by lunchtime — so it happens here, cached, on a page a
+  // person opened.
+  assert.ok(statsSrc4.includes('async function decorateSrtLabels'));
+  assert.ok(statsSrc4.includes('SRT_NAME_TTL_MS'));
+  assert.ok(statsSrc4.includes("r.label = `${name} ·"), 'and the direction is kept');
+});
+
+check('a failed lookup leaves the list intact', () => {
+  const from = statsSrc4.indexOf('async function srtNames');
+  const body = statsSrc4.slice(from, statsSrc4.indexOf('async function decorateSrtLabels'));
+  assert.ok(body.includes('} catch {'), 'a name is a nicety; its absence must not empty the list');
+  assert.ok(body.includes('Promise.allSettled'), 'and one family failing does not lose the others');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

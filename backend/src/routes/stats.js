@@ -4,6 +4,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { StatSample } from '../models/StatSample.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { Settings } from '../models/Settings.js';
+import { wmspanel } from '../services/wmspanelClient.js';
 import { ApiUsage, utcDay, DAILY_LIMIT } from '../models/ApiUsage.js';
 import { flushUsage } from '../services/wmspanelClient.js';
 import { getCollectionHealth } from '../services/statsCollector.js';
@@ -14,6 +15,52 @@ statsRouter.use(requireAuth);
 // What has been sampled for this server recently, and which metrics each
 // subject carries — the catalog is derived from live data, not hardcoded, so
 // counters that differ between Nimble builds still show up.
+// serverId -> { at, map: settingId -> name }
+const srtNameCache = new Map();
+const SRT_NAME_TTL_MS = 120_000;
+
+async function srtNames(serverId) {
+  const hit = srtNameCache.get(serverId);
+  if (hit && Date.now() - hit.at < SRT_NAME_TTL_MS) return hit.map;
+
+  const map = new Map();
+  try {
+    const server = await NimbleServer.findById(serverId);
+    if (server?.wmspanelServerId) {
+      const cfg = (await Settings.load()).wmspanel;
+      // Both families, because an SRT subject can come from either and the
+      // object it names lives in one or the other.
+      const lists = await Promise.allSettled([
+        wmspanel.incomingList(cfg, server.wmspanelServerId),
+        wmspanel.udpList(cfg, server.wmspanelServerId),
+        wmspanel.outgoingList(cfg, server.wmspanelServerId),
+      ]);
+      for (const r of lists) {
+        if (r.status !== 'fulfilled') continue;
+        for (const o of (r.value?.settings || r.value?.streams || [])) {
+          if (o?.id && o?.name) map.set(String(o.id).toLowerCase(), o.name);
+        }
+      }
+    }
+  } catch { /* a name is a nicety; its absence must not empty the list */ }
+
+  srtNameCache.set(serverId, { at: Date.now(), map });
+  return map;
+}
+
+async function decorateSrtLabels(serverId, rows) {
+  const srt = rows.filter(r => r.group === 'srt' && /^srt-(receiver|sender):/.test(r.subject || ''));
+  if (!srt.length) return;
+  const names = await srtNames(serverId);
+  for (const r of srt) {
+    const id = r.subject.split(':').slice(1).join(':').toLowerCase();
+    const name = names.get(id);
+    // The id stays alongside: two objects can share a name, and the id is what
+    // the diagnostics speak in.
+    if (name) r.label = `${name} · ${r.subject.startsWith('srt-sender') ? 'out' : 'in'}`;
+  }
+}
+
 statsRouter.get('/:serverId/subjects', requirePerm('streams.view'), async (req, res) => {
   const since = new Date(Date.now() - 15 * 60 * 1000);
   const rows = await StatSample.aggregate([
@@ -24,6 +71,13 @@ statsRouter.get('/:serverId/subjects', requirePerm('streams.view'), async (req, 
     { $project: { _id: 0, subject: '$_id', group: 1, label: 1, last: 1, metrics: '$metrics.k' } },
     { $sort: { group: 1, subject: 1 } },
   ]);
+
+  // "srt-receiver 6a1963109aac8647b52d1448" is not a name anyone can act on.
+  // The collector cannot resolve it — asking WMSPanel once per 10s sample
+  // would spend the daily budget by lunchtime — so it is resolved here, on
+  // read, and cached: this endpoint is opened by a person, not by a poller.
+  await decorateSrtLabels(String(req.params.serverId), rows);
+
   res.json({ subjects: rows });
 });
 

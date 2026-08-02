@@ -177,6 +177,13 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   const wPorts = new Set(objects.map(o => String(o.port || '')).filter(Boolean));
   const portOverlap = [...wPorts].filter(p => nPorts.has(p)).length;
 
+  // The same measurement for identifiers, over the FULL sets. Two five-entry
+  // samples failing to overlap is what sent this epic down a wrong path for
+  // several rounds — samples answer nothing, sets answer it exactly.
+  const nIds = new Set(entries.map(e => String(e.setting_id ?? e.settingId ?? '').toLowerCase()).filter(Boolean));
+  const wIds = new Set(objects.map(o => String(o.id ?? '').toLowerCase()).filter(Boolean));
+  const idOverlap = [...wIds].filter(id => nIds.has(id)).length;
+
   res.json({
     kind,
     available: true,
@@ -221,6 +228,11 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
         // Counts and the overlap first. The truncated lists below read as the
         // whole picture and are not — a 20-item slice of 61 ports is how I
         // concluded "no overlap" from a sample that simply had not reached it.
+        // Sets, not samples.
+        settingIdCount: nIds.size,
+        objectIdCount: wIds.size,
+        idOverlap,
+        overlappingIds: [...wIds].filter(id => nIds.has(id)).slice(0, 10),
         nimblePortCount: nPorts.size,
         wmspanelPortCount: wPorts.size,
         portOverlap,
