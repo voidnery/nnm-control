@@ -12,10 +12,24 @@ const MAX_DEPTH = 4;
 
 // Flatten an arbitrary response into { 'a.b.c': number }. Booleans become 0/1 so
 // states like "connected" can be charted next to bitrates.
+// A metric name is joined with `_`, not `.`.
+//
+// `metrics` is a mongoose Map, and MongoDB forbids a dot in a map key — so
+// `stats.link.rtt` made the whole sample fail to validate and the write was
+// lost. Only sockets carrying nothing survived, because a disconnected entry
+// flattens to `retryCount` alone and has no dot in it. Every connected socket,
+// which is to say every socket worth charting, was silently discarded.
+//
+// The separator is the fix and not a workaround: a key that cannot be stored
+// is not a key.
+const SEP = '_';
+
 export function flattenNumbers(obj, prefix = '', out = {}, depth = 0) {
   if (!obj || typeof obj !== 'object' || depth > MAX_DEPTH) return out;
   for (const [k, v] of Object.entries(obj)) {
-    const key = prefix ? `${prefix}.${k}` : k;
+    // A source field may itself contain a dot; it cannot survive either.
+    const safe = String(k).replace(/\./g, SEP);
+    const key = prefix ? `${prefix}${SEP}${safe}` : safe;
     if (typeof v === 'number' && Number.isFinite(v)) out[key] = v;
     else if (typeof v === 'boolean') out[key] = v ? 1 : 0;
     else if (v && typeof v === 'object' && !Array.isArray(v)) flattenNumbers(v, key, out, depth + 1);

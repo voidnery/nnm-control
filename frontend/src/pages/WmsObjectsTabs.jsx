@@ -91,7 +91,10 @@ function StreamHistory({ serverId, subject, name, onClose }) {
   // Rate, link quality and reconnects: the three questions asked of a feed
   // that misbehaved, and they answer different ones. Loss without RTT reads as
   // a bad source; RTT without loss reads as a slow path.
-  const METRICS = ['stats.recv.mbpsRate', 'stats.send.mbpsRate', 'stats.link.rtt', 'retryCount'];
+  // Underscores, not dots: a mongoose Map key cannot contain a dot, so that is
+  // how the collector stores them. Asking with dots returned nothing and
+  // looked exactly like a stream that had never reported.
+  const METRICS = ['stats_recv_mbpsRate', 'stats_send_mbpsRate', 'stats_link_rtt', 'retryCount'];
 
   useEffect(() => {
     if (!subject) return undefined;

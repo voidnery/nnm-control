@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.26.4 — a metric key with a dot in it cannot be stored
+- The diagnostic named it in one run: 42 subjects stored, **none** with
+  anything but `retryCount`, and 33 live sockets with no series at all — the
+  ones carrying data
+- `metrics` is a mongoose `Map`, and **MongoDB forbids a dot in a map key**. So
+  `stats.link.rtt` made the whole sample fail to validate and the write was
+  lost. Only sockets carrying nothing survived, because a disconnected entry
+  flattens to `retryCount` alone and has no dot in it. Every socket worth
+  charting was discarded, silently, for as long as SRT collection has existed
+- Metric names are joined with `_`. That is the fix rather than a workaround: a
+  key that cannot be stored is not a key. A source field containing a dot is
+  rewritten too
+- The reader was asking for the dotted names, which matched nothing and looked
+  exactly like a stream that had never reported
+- 3 new checks, and two existing ones updated because their subject changed.
+  One of the new ones needed an async-aware runner: a synchronous `check`
+  handed an async body reports success without having checked anything
+
+
 ### v0.26.3 — a diagnostic that needs nothing to be true first
 - The in-image tool could not be launched: the image had not carried it, and
   then the compose service was not called `api`. A diagnostic that is hard to

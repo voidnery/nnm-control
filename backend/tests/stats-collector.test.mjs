@@ -12,7 +12,9 @@ const flat = flattenNumbers({ bitrate: 5_000_000, ok: true, name: 'x', nested: {
 check('numbers kept', flat.bitrate === 5_000_000);
 check('booleans become 0/1', flat.ok === 1);
 check('strings dropped', !('name' in flat));
-check('nested paths flattened', flat['nested.rtt'] === 12.5 && flat['nested.deep.loss'] === 3, JSON.stringify(flat));
+// Joined with `_`: a mongoose Map key cannot contain a dot, and a sample
+// carrying one fails to validate and is lost.
+check('nested paths flattened', flat['nested_rtt'] === 12.5 && flat['nested_deep_loss'] === 3, JSON.stringify(flat));
 check('arrays skipped', !Object.keys(flat).some(k => k.startsWith('arr')));
 
 console.log('\nCOLLECTION (per group):');
@@ -38,7 +40,7 @@ check('RTMP Push state -> connected 1/0', rp?.metrics.connected === 1);
 check('RTMP Push label is readable', /a\.rtmp\.example/.test(rp?.label || ''), rp?.label);
 const snd = by('srt-sender:s1');
 check('unknown SRT counters harvested', snd?.metrics.msRTT === 18.4 && snd?.metrics.pktRetrans === 42, JSON.stringify(snd?.metrics));
-check('nested SRT block flattened', snd?.metrics['buffer.msSndBuf'] === 120, JSON.stringify(snd?.metrics));
+check('nested SRT block flattened', snd?.metrics['buffer_msSndBuf'] === 120, JSON.stringify(snd?.metrics));
 check('receiver sampled separately', by('srt-receiver:r9')?.metrics.pktLoss === 7);
 check('server counters sampled', by('server')?.metrics.cpu_usage === 12);
 check('groups tagged', by('stream:live/cam1')?.group === 'streams' && snd?.group === 'srt');

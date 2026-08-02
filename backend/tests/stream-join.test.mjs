@@ -14,6 +14,14 @@ const check = (n, f) => {
   catch (e) { console.log(`  ✗ ${n}: ${e.message}`); fail++; }
 };
 
+// A synchronous runner handed an async body reports success without having
+// checked anything: the promise rejects after the try block has already
+// returned.
+const acheck = async (n, f) => {
+  try { await f(); console.log(`  ✓ ${n}`); pass++; }
+  catch (e) { console.log(`  ✗ ${n}: ${e.message}`); fail++; }
+};
+
 const wms = [
   { id: 'w1', name: 'CCT_FEED1_EU_BACKUP', ip: '78.17.115.133', port: 18001 },
   { id: 'w2', name: 'BLAST SLAM VII - KK Feed - Stream A', ip: '0.0.0.0', port: 21041 },
@@ -292,21 +300,13 @@ check('one subject per stream across the whole capture', () => {
 });
 
 check('the metrics the charts need are already stored', () => {
-  // The series has been accumulating since iter9; m2 adds a way in, not a new
-  // collection path.
-  const flat = (o, p = '', out = {}, d = 0) => {
-    if (!o || typeof o !== 'object' || d > 4) return out;
-    for (const [k, v] of Object.entries(o)) {
-      const key = p ? `${p}.${k}` : k;
-      if (typeof v === 'number' && Number.isFinite(v)) out[key] = v;
-      else if (v && typeof v === 'object' && !Array.isArray(v)) flat(v, key, out, d + 1);
-    }
-    return out;
-  };
-  const m = flat(real.find(e => e.stats?.recv?.mbpsRate > 0));
-  for (const k of ['stats.recv.mbpsRate', 'stats.link.rtt', 'retryCount']) {
+  // Against the real flattener, not a copy of it — the copy kept dots and so
+  // agreed with itself while the stored keys had none.
+  const m = flattenNumbers(real.find(e => e.stats?.recv?.mbpsRate > 0));
+  for (const k of ['stats_recv_mbpsRate', 'stats_link_rtt', 'retryCount']) {
     assert.ok(k in m, `${k} is stored`);
   }
+  assert.ok(!Object.keys(m).some(k => k.includes('.')), 'no key may contain a dot');
 });
 
 console.log('\nWHY A SERIES IS EMPTY (v0.25.2):');
@@ -799,6 +799,38 @@ check('there is a tool that walks the links in order', () => {
     assert.ok(tool.includes(step), step);
   }
   assert.ok(tool.includes('VERDICT'), 'and it names the link that is short');
+});
+
+console.log('\nA METRIC KEY MUST BE STORABLE (v0.26.4):');
+
+await acheck('a dotted key makes the whole sample fail to validate', async () => {
+  // MongoDB forbids a dot in a map key. `stats.link.rtt` therefore killed the
+  // write — and only sockets carrying nothing survived, because a disconnected
+  // entry flattens to `retryCount` alone and has no dot in it. Every socket
+  // worth charting was discarded, silently, for as long as this existed.
+  const { StatSample } = await import('../src/models/StatSample.js');
+  const mk = (metrics) => new StatSample({
+    serverId: 'a'.repeat(24), subject: 's', group: 'srt', label: 'l', ts: new Date(), metrics,
+  });
+  let dottedFailed = false;
+  try { await mk({ retryCount: 1, 'stats.link.rtt': 9.8 }).validate(); }
+  catch { dottedFailed = true; }
+  assert.ok(dottedFailed, 'a dot in a key is not storable');
+  await mk({ retryCount: 1, stats_link_rtt: 9.8 }).validate();
+});
+
+check('every key the flattener produces is storable', () => {
+  const conn = real.find(e => e.stats?.recv?.mbpsRate > 0);
+  const keys = Object.keys(flattenNumbers(conn));
+  assert.equal(keys.length, 18);
+  assert.ok(!keys.some(k => k.includes('.')));
+  assert.ok(keys.includes('stats_recv_mbpsRate') && keys.includes('stats_link_rtt'));
+});
+
+check('the reader asks for the names that are actually stored', () => {
+  const tabs = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+  assert.ok(tabs.includes("'stats_recv_mbpsRate'"));
+  assert.ok(!tabs.includes("'stats.recv.mbpsRate'"), 'the dotted names would silently match nothing');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
