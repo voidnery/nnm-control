@@ -249,8 +249,10 @@ window.fetch = (u) => {
     text:()=>Promise.resolve('{}') });
   if (s.includes('/stats/') && s.includes('series')) return Promise.resolve({ ok:true, status:200,
     json:()=>Promise.resolve({ subject:'srt-receiver:o1', metrics:[], bucketMs:0, points:[
-      { ts:new Date(Date.now()-60000).toISOString(), v:[6.4,null,9.8,39] },
-      { ts:new Date().toISOString(), v:[6.5,null,10.1,39] }] }), text:()=>Promise.resolve('{}') });
+      // rate, send-rate, rtt, lost, dropped, belated, retrans, naks, bw, maxbw, flow, cong, flight, bytes×3, retries
+      { ts:new Date(Date.now()-60000).toISOString(), v:[6.4,null,9.8,10,0,3,5,2,81.3,50,8192,8192,0,29e9,8.3e6,0,39] },
+      { ts:new Date().toISOString(),                 v:[6.5,null,10.1,12,0,3,6,2,81.5,50,8192,8192,0,30e9,8.4e6,0,39] }] }),
+    text:()=>Promise.resolve('{}') });
   if (s.includes('/live-objects/')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     kind:'incoming', available:true, strategy:'name', matched:1, objects:2, entries:1,
     live:{ 'o1': { bps:6200000, online:true, idle:false, rtt:9.8, loss:0.81, retries:39 }, 'o2': { bps:0, online:true, idle:true, rtt:9.3, loss:null, retries:51427 } }, diagnostics:null }),

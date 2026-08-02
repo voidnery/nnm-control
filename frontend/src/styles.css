@@ -114,6 +114,16 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
 /* The quota readout sits in a toolbar, not in the page body: no outer margin,
    and a tighter border than a content panel so it reads as an instrument
    rather than as a section. */
+/* The hover readout on a chart. Positioned by the cursor hook, so it must not
+   take part in pointer events or it would chase itself around the plot. */
+.plot-tip {
+  position: absolute; pointer-events: none; z-index: 5;
+  padding: 4px 7px; border-radius: 5px; white-space: nowrap;
+  font-size: 11px; line-height: 1.35;
+  color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+
 .panel.quota { margin: 0; border-color: var(--line); background: var(--bg); }
 .grid { display: grid; gap: 12px; }
 .grid.cols3 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }

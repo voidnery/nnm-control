@@ -1,5 +1,29 @@
 # Changelog
 
+## iter17 — the full SRT picture
+### v0.28.0 — tiles, and a chart that says what it is showing
+- **All seventeen columns WMSPanel shows have been in the series all along.**
+  The gap was never data: the collector stores every numeric field an entry
+  carries, and the History dialog drew three charts out of eighteen metrics.
+  What follows is a display change, not a collection one
+- Eight tiles now, grouped by the question each answers rather than by where
+  Nimble puts the field — packets lost, dropped and belated share one tile
+  because they answer "how is the link" once, where three tiles would ask it
+  three times. Click one and it opens full size
+- Tiles rather than a stack: eight charts one under another is a scroll through
+  everything to reach the one that matters; side by side they are compared at a
+  glance
+- **Every chart in the panel now says what is under the cursor** — the moment
+  and the value, for each series. A reading without its moment is half a
+  reading. uPlot's own legend is a table under the chart, which is too much
+  furniture for a 92px tile, so it is a small label that follows the cursor and
+  flips at the edge to stay inside the plot
+- One request feeds every tile; eight would be eight aggregations over the same
+  documents. A tile with no readings is not drawn — a receiver has no send
+  counters, and empty axes are noise
+- 5 new checks
+
+
 ### v0.27.3 — that a socket exists is a measurement
 - Both of the previous run's contradictions are gone: `healthy`, and reads go
   through the agent. What remained was two subjects with no stored series —

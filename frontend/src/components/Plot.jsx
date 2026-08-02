@@ -70,6 +70,10 @@ export default function Plot({
     let cancelled = false;
     let ro = null;
 
+    const tip = document.createElement('div');
+    tip.className = 'plot-tip';
+    tip.style.display = 'none';
+
     (async () => {
       const [{ default: uPlot }] = await Promise.all([
         import('uplot'),
@@ -83,8 +87,37 @@ export default function Plot({
         width: host.current.clientWidth || 600,
         height,
         padding: [8, 8, 0, 0],
-        cursor: { drag: { x: true, y: false }, points: { size: 5 } },
+        cursor: {
+          drag: { x: true, y: false },
+          points: { size: 5 },
+          // A reading without its moment is half a reading. uPlot's own legend
+          // is a table under the chart, which is too much furniture for a
+          // 90px tile — so the values are lifted into a small floating label
+          // that follows the cursor.
+          bind: {
+            mouseleave: (u, targ, handler) => (e) => { tip.style.display = 'none'; handler(e); },
+          },
+        },
         legend: { show: false },
+        hooks: {
+          setCursor: [(u) => {
+            const { idx, left, top } = u.cursor;
+            if (idx == null || left < 0) { tip.style.display = 'none'; return; }
+            const at = new Date(u.data[0][idx] * 1000);
+            const rows = (series || []).map((name, i) => {
+              const v = u.data[i + 1]?.[idx];
+              return v == null ? null : `${name}: ${formatValue(v, unit)}`;
+            }).filter(Boolean);
+            if (!rows.length) { tip.style.display = 'none'; return; }
+            tip.innerHTML = `<b>${at.toLocaleTimeString()}</b><br>${rows.join('<br>')}`;
+            tip.style.display = 'block';
+            // Flip to the other side near the right edge so the label never
+            // leaves the chart it belongs to.
+            const w = tip.offsetWidth;
+            tip.style.left = `${left + w + 16 > u.over.clientWidth ? left - w - 12 : left + 12}px`;
+            tip.style.top = `${Math.max(0, top - 8)}px`;
+          }],
+        },
         scales: { x: { time: true } },
         axes: [
           { stroke: text, grid: { stroke: line, width: 1 }, ticks: { stroke: line } },
@@ -111,6 +144,8 @@ export default function Plot({
       };
 
       chart.current = new uPlot(opts, data, host.current);
+      // Inside the plotting area, so its coordinates are the cursor's.
+      chart.current.over.appendChild(tip);
 
       ro = typeof ResizeObserver === 'function'
         ? new ResizeObserver(() => {

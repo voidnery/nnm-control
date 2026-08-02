@@ -997,5 +997,54 @@ check('"no series" and "a series with nothing in it" are different sentences', (
   assert.ok(tabs4.includes("t('wo.histPresentOnly'"));
 });
 
+console.log('\nEVERY SRT COLUMN WMSPANEL SHOWS (v0.28.0):');
+
+const tabs5 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+const plotSrc2 = readFileSync(new URL('../../frontend/src/components/Plot.jsx', import.meta.url), 'utf8');
+
+check('all seventeen were already in the series', () => {
+  // The gap was never data. Three charts out of eighteen metrics is a display
+  // decision, and the collector has stored the lot since it was fixed.
+  const stored = Object.keys(flattenNumbers(real.find(e => e.stats?.recv?.mbpsRate > 0)));
+  for (const k of ['stats_time', 'stats_window_flow', 'stats_window_congestion', 'stats_window_flight',
+                   'stats_link_rtt', 'stats_link_mbpsBandwidth', 'stats_link_mbpsMaxBandwidth',
+                   'stats_recv_packetsReceived', 'stats_recv_packetsReceivedRetransmitted',
+                   'stats_recv_packetsLost', 'stats_recv_packetsDropped', 'stats_recv_packetsBelated',
+                   'stats_recv_NAKsSent', 'stats_recv_bytesReceived', 'stats_recv_bytesLost',
+                   'stats_recv_bytesDropped', 'stats_recv_mbpsRate']) {
+    assert.ok(stored.includes(k), k);
+  }
+});
+
+check('the tiles cover them, grouped by question', () => {
+  // A tile mixing lost with belated answers "how is the link" once, where two
+  // tiles would ask it twice.
+  const covered = [...tabs5.matchAll(/'(stats_[a-z_A-Z]+|retryCount)'/g)].map(m => m[1]);
+  for (const k of ['stats_recv_mbpsRate', 'stats_link_rtt', 'stats_recv_packetsLost',
+                   'stats_recv_NAKsSent', 'stats_window_flight', 'stats_recv_bytesDropped']) {
+    assert.ok(covered.includes(k), `${k} is drawn`);
+  }
+});
+
+check('one request feeds every tile', () => {
+  // Eight requests would be eight aggregations over the same documents.
+  assert.ok(tabs5.includes('const METRICS = [...new Set(HIST_TILES.flatMap(x => x.metrics))]'));
+});
+
+check('a tile with no readings is not drawn', () => {
+  // A receiver has no send counters and vice versa; empty axes are noise.
+  assert.ok(tabs5.includes('const liveTiles = HIST_TILES.filter'));
+  assert.ok(tabs5.includes('Number.isFinite(p.v[i])'));
+});
+
+check('a chart says what is under the cursor', () => {
+  // A reading without its moment is half a reading.
+  assert.ok(plotSrc2.includes('setCursor:'));
+  assert.ok(plotSrc2.includes('at.toLocaleTimeString()'));
+  assert.ok(plotSrc2.includes('formatValue(v, unit)'));
+  assert.ok(plotSrc2.includes("tip.style.display = 'none'"), 'and hides when the cursor leaves');
+  assert.ok(plotSrc2.includes('u.over.clientWidth'), 'flipping at the edge so it stays inside');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

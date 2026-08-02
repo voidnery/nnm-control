@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Plot from '../components/Plot.jsx';
+import { formatValue } from '../components/TimeChart.jsx';
 import { Link } from 'react-router-dom';
 import Select from '../components/Select.jsx';
 import SrtHelper from '../components/SrtHelper.jsx';
@@ -83,6 +84,26 @@ const fmtBps = (v) => {
 // The series has been accumulating since iter9; what it lacked was a way in
 // from the row that raises the question. The subject is `srt-receiver:<id>`
 // where the id is now `setting_id`, which is the same id the row already has.
+// What each chart answers, and which stored metric answers it.
+//
+// All seventeen columns WMSPanel shows have been in the series since the
+// collector was fixed; what was missing was drawing them. Three charts out of
+// eighteen metrics is not a shortage of data.
+//
+// Grouped by question rather than by where Nimble happens to put the field: a
+// tile that mixes packets lost with packets belated is answering "how is the
+// link" once, where two tiles would ask it twice.
+const HIST_TILES = [
+  { key: 'rate', unit: 'Mbps', metrics: ['stats_recv_mbpsRate', 'stats_send_mbpsRate'], merge: true },
+  { key: 'rtt', unit: 'ms', metrics: ['stats_link_rtt'] },
+  { key: 'loss', unit: '', metrics: ['stats_recv_packetsLost', 'stats_recv_packetsDropped', 'stats_recv_packetsBelated'] },
+  { key: 'retrans', unit: '', metrics: ['stats_recv_packetsReceivedRetransmitted', 'stats_recv_NAKsSent'] },
+  { key: 'bandwidth', unit: 'Mbps', metrics: ['stats_link_mbpsBandwidth', 'stats_link_mbpsMaxBandwidth'] },
+  { key: 'window', unit: '', metrics: ['stats_window_flow', 'stats_window_congestion', 'stats_window_flight'] },
+  { key: 'bytes', unit: 'B', metrics: ['stats_recv_bytesReceived', 'stats_recv_bytesLost', 'stats_recv_bytesDropped'] },
+  { key: 'retries', unit: '', metrics: ['retryCount'] },
+];
+
 function StreamHistory({ serverId, subject, name, onClose }) {
   const { t } = useI18n();
   const [range, setRange] = useState('1h');
@@ -94,7 +115,10 @@ function StreamHistory({ serverId, subject, name, onClose }) {
   // Underscores, not dots: a mongoose Map key cannot contain a dot, so that is
   // how the collector stores them. Asking with dots returned nothing and
   // looked exactly like a stream that had never reported.
-  const METRICS = ['stats_recv_mbpsRate', 'stats_send_mbpsRate', 'stats_link_rtt', 'retryCount'];
+  const [zoom, setZoom] = useState(null);
+  // One request for every tile: the series endpoint takes a metric list, and
+  // eight requests would be eight aggregations over the same documents.
+  const METRICS = [...new Set(HIST_TILES.flatMap(x => x.metrics))];
 
   useEffect(() => {
     if (!subject) return undefined;
@@ -108,12 +132,31 @@ function StreamHistory({ serverId, subject, name, onClose }) {
   }, [serverId, subject, range]);
 
   const points = data?.points || [];
-  // Nimble reports the rate under recv for a receiver and send for a sender;
-  // whichever is absent is null all the way down, so they collapse into one
-  // line without the caller having to know which direction this stream is.
-  const rate = points.map(p => ({ ts: p.ts, v: [p.v[0] ?? p.v[1]] }));
-  const link = points.map(p => ({ ts: p.ts, v: [p.v[2]] }));
-  const retries = points.map(p => ({ ts: p.ts, v: [p.v[3]] }));
+
+  // Pull one tile's series out of the shared response.
+  const tileData = (tile) => {
+    const idx = tile.metrics.map(m => METRICS.indexOf(m));
+    if (tile.merge) {
+      // Nimble reports the rate under recv for a receiver and send for a
+      // sender; whichever is absent is null all the way down, so they collapse
+      // into one line and the caller need not know the direction.
+      return {
+        points: points.map(p => ({ ts: p.ts, v: [idx.map(i => p.v[i]).find(v => v != null) ?? null] })),
+        series: [t(`wo.tile.${tile.key}`)],
+      };
+    }
+    return {
+      points: points.map(p => ({ ts: p.ts, v: idx.map(i => p.v[i]) })),
+      series: tile.metrics.map(m => t(`wo.metric.${m}`, {}) || m),
+    };
+  };
+
+  // A tile with nothing in it is a tile that answers nothing — a receiver has
+  // no send counters and vice versa, and showing empty axes for them is noise.
+  const liveTiles = HIST_TILES.filter(tile => {
+    const idx = tile.metrics.map(m => METRICS.indexOf(m));
+    return points.some(p => idx.some(i => Number.isFinite(p.v[i])));
+  });
 
   return (
     <Modal onClose={onClose} size="wide">
@@ -172,20 +215,52 @@ function StreamHistory({ serverId, subject, name, onClose }) {
 
       {points.length > 0 && (
         <>
-          <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>{t('wo.histRate')}</div>
-          <Plot points={rate} series={[t('wo.histRate')]} unit="Mbps" height={140} />
-          <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>{t('wo.histRtt')}</div>
-          <Plot points={link} series={['RTT']} unit="ms" height={110} />
-          {/* A counter, not a rate: it only ever climbs, and the shape of the
-              climb is the point — a straight run means a link dropping
-              steadily, a step means one bad minute. */}
-          <div className="hint" style={{ fontSize: 11, marginTop: 8 }}>{t('wo.histRetries')}</div>
-          <Plot points={retries} series={[t('wo.histRetries')]} unit="" height={100} />
+          {/* Tiles, not a stack. Eight charts one under another is a scroll
+              through everything to reach the one that matters; side by side
+              they are compared at a glance, and the one worth studying opens
+              full size on a click. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+            {liveTiles.map(tile => {
+              const d = tileData(tile);
+              const last = d.points.length ? d.points[d.points.length - 1].v.find(v => v != null) : null;
+              return (
+                <div key={tile.key} className="panel" style={{ padding: 8, minWidth: 0, cursor: 'zoom-in' }}
+                     onClick={() => setZoom(tile)}>
+                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                    <span className="hint" style={{ fontSize: 11 }}>{t(`wo.tile.${tile.key}`)}</span>
+                    <span className="mono" style={{ fontSize: 12 }}>
+                      {last == null ? '—' : formatValue(last, tile.unit)}
+                    </span>
+                  </div>
+                  <Plot points={d.points} series={d.series} unit={tile.unit} height={92} />
+                </div>
+              );
+            })}
+          </div>
           <div className="hint" style={{ marginTop: 6 }}>
             {t('wo.histNote', { n: points.length, bucket: data.bucketMs ? Math.round(data.bucketMs / 1000) : 0 })}
           </div>
         </>
       )}
+
+      {/* The same series, given the room to be read. */}
+      {zoom && (() => {
+        const d = tileData(zoom);
+        return (
+          <Modal onClose={() => setZoom(null)} size="wide">
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>{name} — {t(`wo.tile.${zoom.key}`)}</h3>
+              <button onClick={() => setZoom(null)}>{t('action.close')}</button>
+            </div>
+            <div className="hint" style={{ fontSize: 11, marginTop: 4 }}>
+              {d.series.map((nm, i) => (
+                <span key={nm} style={{ color: ['#3fb6a8', '#e0a83c', '#7aa7ff'][i % 3], marginRight: 10 }}>■ {nm}</span>
+              ))}
+            </div>
+            <Plot points={d.points} series={d.series} unit={zoom.unit} height={340} />
+          </Modal>
+        );
+      })()}
 
       <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
         <button onClick={onClose}>{t('action.close')}</button>
