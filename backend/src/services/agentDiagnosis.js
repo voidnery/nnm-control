@@ -101,8 +101,21 @@ export function diagnose({ now = new Date(), agent = {}, tasks = [] } = {}) {
   // poll claims the oldest live task, so this cannot be the agent's fault —
   // the panel failed to hand it over. This is the case that was invisible
   // before, and the one that used to get blamed on the agent.
+  // "Survived a whole poll cycle", not "existed before the last contact".
+  //
+  // The original reading was written for a system where tasks were rare: a
+  // queued task older than the last poll meant the agent had been offered work
+  // and left it. Since iter16 the panel asks the agent for every native read,
+  // so tasks arrive continuously — and at any instant there is a task queued a
+  // moment ago and a contact a moment before that. The rule fired constantly
+  // on a perfectly healthy agent, which is worse than not having it: it makes
+  // the one signal that matters unreadable.
+  //
+  // A task that has outlived a full poll interval was genuinely passed over.
+  const POLL_CYCLE_MS = 25_000;
   const unclaimed = live
-    .filter(x => x.status === 'queued' && contact > ms(x.createdAt))
+    .filter(x => x.status === 'queued'
+      && contact > ms(x.createdAt) + POLL_CYCLE_MS)
     .sort((a, b) => ms(a.createdAt) - ms(b.createdAt))[0];
   if (unclaimed) {
     return out(CODES.NOT_CLAIMED, 'error', {

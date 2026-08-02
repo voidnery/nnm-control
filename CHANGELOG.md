@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.27.2 — a busy agent is not an unclaimed one
+- `end to end is intact`, 85 points with 85 rates. The pipeline is healthy —
+  and the run surfaced two things that disagreed with it
+- **`polling-not-claimed` fires on every healthy agent.** The rule — a task
+  still queued although the agent has polled since — was written when tasks
+  were rare. Since iter16 the panel asks the agent for every native read, so
+  tasks arrive continuously, and at any instant there is one queued a moment
+  ago and a contact a moment before that. A signal that fires constantly is
+  worse than no signal: it makes the one that matters unreadable. A task now
+  has to outlive a full poll cycle before it counts as passed over
+- **The diagnostic reported "a direct call" for an agent serving every read.**
+  It inferred the transport from the diagnosis code; the panel routes on
+  freshness of contact. Two different questions. It uses the panel's rule now,
+  and reports a poor diagnosis separately rather than conflating the two
+- 5 new checks. Two existing ones needed widening: their gaps were shorter than
+  the new window, and one had to stay inside the polling window or a stronger
+  verdict won and it tested the wrong thing
+
+
 ### v0.27.1 (iter16 m4) — control and collection are different things
 - The control-plane notice sat above **every** tab in WMSPanel mode, including
   the ones where nothing is disabled. So it read as the explanation for

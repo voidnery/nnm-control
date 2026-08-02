@@ -97,7 +97,18 @@ if (settings) {
 const fleet = await api('/agent-fleet/overview').catch(() => null);
 const mine = fleet?.servers?.find(s => s.id === SERVER);
 line('agent', mine ? `v${mine.version || '?'}, ${mine.code}, seen ${Math.round((mine.sinceContactMs || 0) / 1000)}s ago` : 'unknown');
-line('reads go via', mine && mine.code === 'healthy' ? 'the agent (loopback on the server)' : 'a direct call, if the panel can route there');
+// The same rule the panel uses, not a proxy for it. Reading the diagnosis
+// code instead reported "a direct call" for an agent that was serving every
+// read perfectly well — the panel routes on freshness of contact, and a
+// diagnosis is a different question.
+const agentFresh = Boolean(mine && mine.enabled !== false && (mine.sinceContactMs ?? Infinity) < 90_000);
+line('reads go via', agentFresh
+  ? 'the agent (loopback on the server)'
+  : 'a direct call, if the panel can route there');
+if (mine && mine.code && mine.code !== 'healthy' && agentFresh) {
+  // Worth saying, and worth not confusing with the transport.
+  line('agent diagnosis', `${mine.code} — reads still go through it`);
+}
 
 // ── 2-3. what the join sees right now ───────────────────────────────────────
 console.log('\n2. LIVE READINGS (what the panel gets from Nimble now)');

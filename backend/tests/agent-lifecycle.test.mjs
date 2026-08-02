@@ -261,5 +261,40 @@ check('reinstalling really is the way out', () => {
   assert.ok(inst.includes('STATE_DIR=/var/lib/nnm-agent'), 'landing where it can update itself next time');
 });
 
+console.log('\nA BUSY AGENT IS NOT AN UNCLAIMED ONE (v0.27.2):');
+
+check('a task queued moments ago is not "not claimed"', () => {
+  // The rule was written for a system where tasks were rare. Since iter16 the
+  // panel asks the agent for every native read, so tasks arrive continuously —
+  // and at any instant there is one queued a moment ago and a contact a moment
+  // before that. It fired constantly on a healthy agent, which is worse than
+  // not having the signal: it makes the one that matters unreadable.
+  const POLL_CYCLE_MS = 25_000;
+  const fires = (queuedAgo, contactAgo) => {
+    const now = Date.now();
+    return (now - contactAgo) > (now - queuedAgo) + POLL_CYCLE_MS;
+  };
+  assert.equal(fires(200, 100), false, 'a busy agent');
+  assert.equal(fires(5_000, 1_000), false, 'still within a poll cycle');
+  assert.equal(fires(30_000, 1_000), true, 'genuinely passed over');
+});
+
+check('the rule is in the diagnosis, not only here', () => {
+  const src = readFileSync(new URL('../src/services/agentDiagnosis.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('const POLL_CYCLE_MS = 25_000'));
+  assert.ok(src.includes('ms(x.createdAt) + POLL_CYCLE_MS'));
+});
+
+check('the diagnostic routes on freshness, as the panel does', () => {
+  // Reading the diagnosis code instead reported "a direct call" for an agent
+  // serving every read perfectly well. Routing and health are different
+  // questions.
+  const diag = readFileSync(new URL('../../tools/nnm-diag.mjs', import.meta.url), 'utf8');
+  assert.ok(diag.includes('const agentFresh ='));
+  assert.ok(diag.includes('< 90_000'), 'the same 90s the client uses');
+  assert.ok(!diag.includes("mine.code === 'healthy' ?"), 'the proxy for it is gone');
+  assert.ok(diag.includes('reads still go through it'), 'and a poor diagnosis is still reported');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-lifecycle checks passed');
 process.exit(fail ? 1 : 0);

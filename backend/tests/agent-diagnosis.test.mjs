@@ -120,11 +120,26 @@ check('queued, but the agent has not polled since -> not the panel', () => {
 });
 
 check('the comparison is not accidentally inverted', () => {
-  const queuedAt = ago(30_000);
-  const before = diagnose({ now: NOW, agent: { ...ok, lastContactAt: ago(45_000) }, tasks: [task({ createdAt: queuedAt })] });
-  const after = diagnose({ now: NOW, agent: { ...ok, lastContactAt: ago(15_000) }, tasks: [task({ createdAt: queuedAt })] });
-  assert.equal(before.code, CODES.HEALTHY);
-  assert.equal(after.code, CODES.NOT_CLAIMED);
+  // The gap has to clear a poll cycle now: a task queued moments before the
+  // last contact is a busy agent, not a passed-over one.
+  // Contact stays inside the window that counts as polling — beyond it the
+  // stronger verdict wins and this would be testing the wrong thing.
+  const queuedAt = ago(40_000);
+  const before = diagnose({ now: NOW, agent: { ...ok, lastContactAt: ago(50_000) }, tasks: [task({ createdAt: queuedAt })] });
+  const after = diagnose({ now: NOW, agent: { ...ok, lastContactAt: ago(5_000) }, tasks: [task({ createdAt: queuedAt })] });
+  assert.equal(before.code, CODES.HEALTHY, 'contact predates the task');
+  assert.equal(after.code, CODES.NOT_CLAIMED, 'and a full cycle passed after it');
+});
+
+check('a task queued within a poll cycle of the contact is not blamed', () => {
+  // This is the case that fired on every healthy agent once every native read
+  // became a task.
+  const d = diagnose({
+    now: NOW,
+    agent: { ...ok, lastContactAt: ago(1_000) },
+    tasks: [task({ createdAt: ago(3_000) })],
+  });
+  assert.equal(d.code, CODES.HEALTHY);
 });
 
 console.log('\nPRECEDENCE (which answer wins when several are true):');
