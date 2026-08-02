@@ -1,5 +1,27 @@
 # Changelog
 
+### v0.25.15 — ports repeat across machines, ids do not
+- The wiring check added in v0.25.14 stayed silent on the very case it was
+  written for. It counted **ports**, and the machine the panel is reaching has
+  sockets on 35001-35005 while this server's own SRT Out objects use those same
+  numbers — so it found an "overlap" between two unrelated machines and said
+  nothing
+- It compares **WMSPanel object ids** now, which belong to exactly one server.
+  Against the real captures: reaching the wrong machine gives an overlap of
+  zero and the message fires; reaching the right one gives two and it stays
+  quiet
+- A build that reports no `setting_id` at all now gets no verdict rather than a
+  wrong one — with nothing to compare, a zero would accuse a correctly wired
+  server
+- **The message names the address actually being polled.** A server record
+  carries several addresses and the operator has no way to know which one the
+  native calls use — here it was one WMSPanel had assigned rather than the
+  machine's own
+- 3 new checks; two existing ones corrected — one named the old cache, and one
+  bounded its search by a character count just short enough to miss the code it
+  was looking for
+
+
 ### v0.25.14 — two machines behind one server record
 - **The answer was already in the data.** Every subject the panel collects
   appears in the first dump and **not one** appears in the probe run on the

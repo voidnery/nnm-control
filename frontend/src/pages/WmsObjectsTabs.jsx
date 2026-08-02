@@ -205,7 +205,7 @@ function JoinNote({ live, t }) {
   const text = live.entries === 0
     ? t('wo.liveEmpty', { objects: live.objects, endpoint: '' })
     : wrongMachine
-      ? t('wo.wrongMachine', { entries: live.entries })
+      ? t('wo.wrongMachine', { entries: live.entries, host: live.nativeHost || '?' })
     : (live.matched === 0 && live.portOverlap === 0)
       // Not a failure to match: these objects live on another tab.
       ? t('wo.liveElsewhere', { entries: live.entries })

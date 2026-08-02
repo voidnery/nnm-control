@@ -10,18 +10,23 @@ import { joinLive, liveSummary, localPort, entryIdentity, entryList as asList } 
 // label must be the same here. Inferring it from the presence of a `recv`
 // block would be guessing again — and the endpoint is known, because this is
 // the code that called it.
-// serverId -> { at, ports:Set }
-const objectPortCache = new Map();
-const OBJECT_PORT_TTL_MS = 120_000;
+// serverId -> { at, ids:Set }
+const objectIdCache = new Map();
+const OBJECT_ID_TTL_MS = 120_000;
 
-// Every port this server's WMSPanel objects use, across all the families.
-// Cached, because it exists to answer a question asked once per page.
-async function allObjectPorts(server, settings) {
+// Every WMSPanel object id on this server, across all the families.
+//
+// Ids, not ports. The first version of this check counted ports and stayed
+// silent on the very case it was written for: the machine the panel was
+// reaching had sockets on 35001-35005, and this server's SRT Out objects use
+// those same numbers. Ports repeat across machines — that is what makes them a
+// weak key — while a WMSPanel object id belongs to exactly one server.
+async function allObjectIds(server, settings) {
   const key = String(server._id);
-  const hit = objectPortCache.get(key);
-  if (hit && Date.now() - hit.at < OBJECT_PORT_TTL_MS) return hit.ports;
+  const hit = objectIdCache.get(key);
+  if (hit && Date.now() - hit.at < OBJECT_ID_TTL_MS) return hit.ids;
 
-  const ports = new Set();
+  const ids = new Set();
   const lists = await Promise.allSettled([
     wmspanel.incomingList(settings.wmspanel, server.wmspanelServerId),
     wmspanel.udpList(settings.wmspanel, server.wmspanelServerId),
@@ -30,20 +35,24 @@ async function allObjectPorts(server, settings) {
   for (const r of lists) {
     if (r.status !== 'fulfilled') continue;
     for (const o of (r.value?.settings || r.value?.streams || [])) {
-      if (o?.port) ports.add(String(o.port));
+      if (o?.id) ids.add(String(o.id).toLowerCase());
     }
   }
-  objectPortCache.set(key, { at: Date.now(), ports });
-  return ports;
+  objectIdCache.set(key, { at: Date.now(), ids });
+  return ids;
 }
 
 async function serverWideOverlap(server, settings, entries) {
   try {
-    const objectPorts = await allObjectPorts(server, settings);
-    if (!objectPorts.size) return null;
-    const socketPorts = new Set(entries.map(e => (localPort(e.id) || '').replace('port:', '')).filter(Boolean));
-    if (!socketPorts.size) return null;
-    return [...objectPorts].filter(p => socketPorts.has(p)).length;
+    const objectIds = await allObjectIds(server, settings);
+    if (!objectIds.size) return null;
+    const socketIds = new Set(entries
+      .map(e => String(e.setting_id ?? e.settingId ?? '').toLowerCase())
+      .filter(Boolean));
+    // No setting_id anywhere means this build does not report one, and the
+    // question cannot be answered rather than answered wrongly.
+    if (!socketIds.size) return null;
+    return [...objectIds].filter(id => socketIds.has(id)).length;
   } catch { return null; }
 }
 
@@ -212,6 +221,10 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     // what its native API reports. Cheap because the lists are already in
     // memory for the tab being viewed; the rest come from a short cache.
     serverOverlap: await serverWideOverlap(server, settings, entries),
+    // The address actually being polled, so the message can name it. A server
+    // record can carry several addresses and the operator has no way to know
+    // which one the native calls use.
+    nativeHost: `${server.host}${server.port ? `:${server.port}` : ''}`,
     objects: objects.length,
     entries: entries.length,
     // The subject travels with the reading, so the history dialog asks for the

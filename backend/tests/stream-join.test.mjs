@@ -667,6 +667,34 @@ check('the data already showed which machine is which', () => {
   for (const p of ['18004', '18005', '18006']) assert.ok(probePorts.has(p), `port ${p}`);
 });
 
+check('the server-wide check counts ids, not ports', () => {
+  // Its first version counted ports and stayed silent on the very case it was
+  // written for: the machine being reached had sockets on 35001-35005, and
+  // this server's SRT Out objects use those same numbers. Ports repeat across
+  // machines — that is what makes them a weak key — and a WMSPanel object id
+  // belongs to exactly one server.
+  assert.ok(proxy6.includes('async function allObjectIds'));
+  assert.ok(!proxy6.includes('allObjectPorts'), 'the port version is gone');
+  const from = proxy6.indexOf('async function serverWideOverlap');
+  const body = proxy6.slice(from, from + 700);
+  assert.ok(body.includes('setting_id'), 'and it compares setting_id against object ids');
+});
+
+check('a build that reports no setting_id gets no verdict', () => {
+  // Better unanswered than answered wrongly: with nothing to compare, an
+  // overlap of zero would accuse a correctly wired server.
+  const from = proxy6.indexOf('async function serverWideOverlap');
+  assert.ok(proxy6.slice(from, from + 700).includes('if (!socketIds.size) return null'));
+});
+
+check('the message names the address actually being polled', () => {
+  // A server record can carry several addresses — the operator had no way to
+  // know which one the native calls use, and in this case it was one WMSPanel
+  // had assigned rather than the machine's own.
+  assert.ok(proxy6.includes('nativeHost:'));
+  assert.ok(tabs6.includes('host: live.nativeHost'));
+});
+
 check('no overlap anywhere on the server is reported as a wiring fault', () => {
   // Nothing in common on ONE tab is normal — those objects live elsewhere.
   // Nothing in common across the WHOLE server is a different claim, and it is
@@ -680,9 +708,12 @@ check('no overlap anywhere on the server is reported as a wiring fault', () => {
 check('the server-wide check is cached and cannot break the tab', () => {
   // It asks three more WMSPanel lists; on a poll that would be a budget
   // problem, and a failure must not empty a table.
-  assert.ok(proxy6.includes('OBJECT_PORT_TTL_MS'));
+  assert.ok(proxy6.includes('OBJECT_ID_TTL_MS'));
+  // Bounded by the function itself rather than a character count, which was
+  // just short enough to miss the catch.
   const from = proxy6.indexOf('async function serverWideOverlap');
-  assert.ok(proxy6.slice(from, from + 500).includes('catch { return null; }'));
+  const body = proxy6.slice(from, proxy6.indexOf('\nconst SERIES_OF', from));
+  assert.ok(body.includes('catch { return null; }'));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
