@@ -716,5 +716,56 @@ check('the server-wide check is cached and cannot break the tab', () => {
   assert.ok(body.includes('catch { return null; }'));
 });
 
+console.log('\nNATIVE READS GO THROUGH THE AGENT (v0.26.0):');
+
+const clientSrc = readFileSync(new URL('../src/services/nimbleClient.js', import.meta.url), 'utf8');
+const agentSrc2 = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+
+check('the panel asks the agent before dialling the server', () => {
+  // The direct call predates the reverse transport and is the last place the
+  // panel opens a connection TO a server — which simply cannot work for a
+  // server on a studio LAN behind NAT.
+  assert.ok(clientSrc.includes('function agentIsLive'));
+  const preferAt = clientSrc.indexOf('agentIsLive(server)');
+  const directAt = clientSrc.indexOf('const url = buildUrl(server, path, extraQuery);', preferAt);
+  assert.ok(preferAt > 0 && preferAt < directAt, 'the agent is tried first');
+});
+
+check('a silent agent is not waited on', () => {
+  // A poll is due every 25s; waiting on a task nothing will claim is worse
+  // than a direct attempt that fails quickly.
+  assert.ok(clientSrc.includes('90_000'));
+  assert.ok(clientSrc.includes("!a?.enabled || !a?.lastContactAt"));
+});
+
+check('writes stay direct', () => {
+  // Control is rarer and watched: a long-poll cycle between an operator and
+  // the change they are waiting for is a bad trade.
+  assert.ok(clientSrc.includes("method === 'GET' && !body && agentIsLive(server)"));
+});
+
+check('the agent answers only for its own machine', () => {
+  // It fetches loopback. A mismatched server record cost this project a dozen
+  // releases; through the agent it is impossible by construction.
+  assert.ok(agentSrc2.includes("'http://127.0.0.1:8082'"));
+  assert.ok(agentSrc2.includes("async 'POST /nimble'"));
+});
+
+check('the proxy forwards only Nimble management reads', () => {
+  // A proxy that forwards anything is one somebody eventually points
+  // elsewhere, whatever authenticated it.
+  const re = /^\/manage\/[A-Za-z0-9_/-]*$/;
+  assert.equal(re.test('/manage/srt_receiver_stats'), true);
+  assert.equal(re.test('/manage/../../etc/passwd'), false);
+  assert.equal(re.test('http://elsewhere/x'), false);
+  assert.equal(re.test('/admin'), false);
+  assert.ok(agentSrc2.includes('only /manage/... paths are allowed'));
+});
+
+check('there is no import cycle between the client and the bus', () => {
+  const bus = readFileSync(new URL('../src/services/agentBus.js', import.meta.url), 'utf8');
+  assert.ok(!/from '\.\/nimbleClient/.test(bus), 'the bus must not import back');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

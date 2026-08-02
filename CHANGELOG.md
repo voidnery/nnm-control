@@ -1,5 +1,33 @@
 # Changelog
 
+## iter16 m2b — native reads through the agent
+### v0.26.0 — the panel stops dialling servers
+- **The panel was calling Nimble directly.** That predates the reverse
+  transport: the collector was written in iter9, the "agents call the panel,
+  never the reverse" rule arrived in iter12 and was applied to logs, media,
+  tasks and health — and this one path was never revisited. It is why a server
+  on the studio LAN could not work at all: the panel is remote and cannot route
+  to 192.168.200.15
+- Native **reads** now go through the agent, which already talks to the panel.
+  Writes stay direct: control is rarer and watched, and putting a long-poll
+  cycle between an operator and the change they are waiting for is a bad trade
+- **The agent fetches loopback**, and that removes a whole class of confusion
+  for free. A mismatched server record — one address in the record, a different
+  machine behind it — cost this project a dozen releases. Through the agent it
+  is impossible by construction: an agent can only answer for the Nimble it
+  lives with
+- The proxy accepts `/manage/...` and nothing else. The task already comes from
+  an authenticated panel, but a proxy that forwards anything is one somebody
+  eventually points elsewhere
+- A silent agent is not waited on: after ninety seconds without a poll the
+  direct call is tried instead, which fails quickly rather than hanging on a
+  task nothing will claim. Servers without an agent are unaffected
+- Agent protocol version 10
+- 6 new checks. The undefined-reference audit produced a false positive on
+  `AbortSignal` — a Node 22 global it did not know — and was corrected rather
+  than worked around
+
+
 ### v0.25.15 — ports repeat across machines, ids do not
 - The wiring check added in v0.25.14 stayed silent on the very case it was
   written for. It counted **ports**, and the machine the panel is reaching has

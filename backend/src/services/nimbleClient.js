@@ -1,3 +1,4 @@
+import { runTask } from './agentBus.js';
 import crypto from 'node:crypto';
 
 // Client for the Nimble Streamer NATIVE management API.
@@ -23,7 +24,48 @@ function buildUrl(server, path, extraQuery = '') {
   return `${proto}://${server.host}:${server.port}${path}${parts ? sep + parts : ''}`;
 }
 
+// Whether this server's agent can be asked instead of dialling the server.
+//
+// Preferred whenever the agent is alive, because it is the correct direction:
+// the panel opens no connection to a server, which is the rule the whole
+// transport was built on and the reason a studio-LAN server works at all. The
+// direct call stays for servers without an agent.
+function agentIsLive(server) {
+  const a = server?.agent;
+  if (!a?.enabled || !a?.lastContactAt) return false;
+  // A poll is due every 25s; a minute and a half of silence means it is not
+  // there, and waiting on a task it will never claim is worse than a direct
+  // attempt that fails quickly.
+  return Date.now() - new Date(a.lastContactAt).getTime() < 90_000;
+}
+
+async function viaAgent(server, path, extraQuery) {
+  const auth = authQuery(server.token);
+  const query = [extraQuery, auth].filter(Boolean).join('&');
+  const out = await runTask(server, 'POST /nimble', {
+    body: { path, query },
+    // Shorter than the collector's own interval, so a slow answer is dropped
+    // rather than piling up behind the next cycle.
+    timeoutMs: 12_000,
+    createdBy: 'stats',
+  });
+  return out?.json ?? null;
+}
+
 async function call(server, path, { method = 'GET', body, extraQuery } = {}) {
+  // Reads go through the agent when there is one. Writes do not: they are
+  // control, they are rarer, and routing them through a task queue would put a
+  // long-poll cycle between an operator and a change they are watching for.
+  if (method === 'GET' && !body && agentIsLive(server)) {
+    try {
+      return await viaAgent(server, path, extraQuery);
+    } catch (e) {
+      // The agent being unable to answer does not mean the server is
+      // unreachable — fall through and try directly, which is what a server on
+      // a routable address would have done anyway.
+      if (!/timed out|no agent|not enabled/i.test(String(e?.message))) throw e;
+    }
+  }
   const url = buildUrl(server, path, extraQuery);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);

@@ -30,7 +30,7 @@ const GLOBALS = new Set([
   'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'setImmediate', 'queueMicrotask',
   'fetch', 'Promise', 'Object', 'Array', 'String', 'Number', 'Boolean', 'Date', 'Math', 'JSON',
   'Map', 'Set', 'WeakMap', 'WeakSet', 'Symbol', 'RegExp', 'Error', 'TypeError', 'RangeError',
-  'AbortController', 'Intl', 'BigInt', 'isNaN', 'parseInt', 'parseFloat', 'structuredClone',
+  'AbortController', 'AbortSignal', 'Intl', 'BigInt', 'isNaN', 'parseInt', 'parseFloat', 'structuredClone',
   'encodeURIComponent', 'decodeURIComponent', 'encodeURI', 'decodeURI', 'globalThis',
 ]);
 

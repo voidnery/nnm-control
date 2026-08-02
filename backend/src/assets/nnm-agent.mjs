@@ -28,6 +28,11 @@ const MEDIA_DIR = path.resolve(process.env.NNM_AGENT_MEDIA_DIR || '/srv/nimble/m
 // on Linux is /var/log/nimble. This directory is never written to, and it is
 // mounted read-only in the systemd unit, so a bug here cannot damage a log.
 const LOG_DIR = path.resolve(process.env.NNM_AGENT_LOG_DIR || '/var/log/nimble');
+
+// The Nimble this agent lives with. Loopback by default and that is the point:
+// an agent answers for its own machine and no other.
+const NIMBLE_URL = (process.env.NNM_AGENT_NIMBLE_URL || 'http://127.0.0.1:8082').replace(/\/+$/, '');
+const NIMBLE_TIMEOUT_MS = Number(process.env.NNM_AGENT_NIMBLE_TIMEOUT_MS || 8000);
 const LOG_ENABLED = String(process.env.NNM_AGENT_LOGS || '1') !== '0';
 // A single read is capped so one poll can never pull a whole rotated file into
 // memory. At the measured ~13 KB/s per server a 1 MB window covers ~80s of
@@ -48,7 +53,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 9;
+const AGENT_VERSION = 10;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -281,6 +286,38 @@ const routes = {
   // Downloaded to a .part file, hashed while it streams, and only renamed into
   // place once the digest matches what the panel said. A 2 GB transfer cut
   // short must never become a media file Nimble will play half of.
+  // iter16 — read Nimble's native API on the panel's behalf.
+  //
+  // The panel used to call the server directly, which was a leftover from
+  // before the reverse transport existed. It fails outright for a server on a
+  // studio LAN — the panel is remote and cannot route there — and it is the
+  // one place left where the panel opens a connection TO a server, against the
+  // rule the whole transport was built on.
+  //
+  // The agent already talks to the panel, so it asks the Nimble it lives with
+  // instead. That fixes NAT, and it removes a whole class of confusion for
+  // free: the address is 127.0.0.1, so the agent cannot possibly answer for a
+  // different machine. A mismatched server record cost this project a dozen
+  // releases; here it is impossible by construction.
+  async 'POST /nimble'(req, url, task) {
+    const rawPath = String(task?.path || '');
+    // Read-only, and only Nimble's management surface. The task already comes
+    // from an authenticated panel, but a proxy that forwards anything is a
+    // proxy someone will eventually point somewhere else.
+    if (!/^\/manage\/[A-Za-z0-9_\/-]*$/.test(rawPath)) {
+      throw new Error(`refusing to fetch "${rawPath}": only /manage/... paths are allowed`);
+    }
+    const query = String(task?.query || '');
+    if (query && !/^[A-Za-z0-9_=&.%-]*$/.test(query)) throw new Error('bad query string');
+
+    const target = `${NIMBLE_URL}${rawPath}${query ? `?${query}` : ''}`;
+    const res = await fetch(target, { signal: AbortSignal.timeout(NIMBLE_TIMEOUT_MS) });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`nimble returned ${res.status} for ${rawPath}: ${text.slice(0, 160)}`);
+    try { return { status: res.status, json: JSON.parse(text) }; }
+    catch { throw new Error(`nimble returned ${text.length} bytes of non-JSON for ${rawPath}`); }
+  },
+
   // iter14 — fetch the panel's copy of the agent, check it, become it.
   //
   // Ordering matters and is the reason this is safe: verify the digest, write
