@@ -6,6 +6,7 @@
 // prefers the stronger of two, and says so plainly when none does.
 import assert from 'node:assert/strict';
 import { joinLive, liveSummary, entryIdentity } from '../src/services/streamJoin.js';
+import { flattenNumbers } from '../src/services/statsCollector.js';
 
 let pass = 0, fail = 0;
 const check = (n, f) => {
@@ -765,6 +766,39 @@ check('the proxy forwards only Nimble management reads', () => {
 check('there is no import cycle between the client and the bus', () => {
   const bus = readFileSync(new URL('../src/services/agentBus.js', import.meta.url), 'utf8');
   assert.ok(!/from '\.\/nimbleClient/.test(bus), 'the bus must not import back');
+});
+
+console.log('\nWALKING THE PIPELINE (v0.26.1):');
+
+const collectorSrc3 = readFileSync(new URL('../src/services/statsCollector.js', import.meta.url), 'utf8');
+const statsTab = readFileSync(new URL('../../frontend/src/pages/StatsTab.jsx', import.meta.url), 'utf8');
+
+check('a disconnected socket really does hold only a retry counter', () => {
+  // Which means "60 subjects collected" can be entirely true and entirely
+  // useless at the same time, and the charts are then empty for a reason the
+  // health line called fine.
+  const conn = real.find(e => e.stats?.recv?.mbpsRate > 0);
+  const down = real.find(e => e.state === 'disconnected');
+  assert.equal(Object.keys(flattenNumbers(down)).length, 1);
+  assert.deepEqual(Object.keys(flattenNumbers(down)), ['retryCount']);
+  assert.ok(Object.keys(flattenNumbers(conn)).length > 15, 'a connected one carries the rest');
+});
+
+check('the health report separates subjects from subjects with data', () => {
+  assert.ok(collectorSrc3.includes('const withData ='));
+  assert.ok(statsTab.includes("t('stats.hNoData')"), 'and says so when none of them has any');
+});
+
+check('there is a tool that walks the links in order', () => {
+  // Six links between a socket and a point on a chart, and a break in any of
+  // them looks the same from the browser: an empty graph.
+  const tool = readFileSync(new URL('../tools/pipeline-check.mjs', import.meta.url), 'utf8');
+  for (const step of ['1. SETTINGS AND TRANSPORT', '2. WHAT NIMBLE RETURNS', '3. IDENTITY',
+                      '4. WHAT IS STORED', '5. LIVE ENTRIES vs STORED SUBJECTS',
+                      '6. A CARRYING SOCKET, END TO END']) {
+    assert.ok(tool.includes(step), step);
+  }
+  assert.ok(tool.includes('VERDICT'), 'and it names the link that is short');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

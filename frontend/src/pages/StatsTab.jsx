@@ -130,7 +130,23 @@ export default function StatsTab({ serverId }) {
                   <Fragment key={ep}>
                     <div className="kv-k" key={ep + 'k'}>{ep}</div>
                     <div className="kv-v" key={ep + 'v'}>
-                      {r.status === 'ok' && <span><span className="lamp on" />{t('stats.hOk', { n: r.count })}</span>}
+                      {/* A count on its own reads as health. Sixty disconnected
+                          sockets make sixty subjects that hold a retry counter
+                          and nothing to draw — and then the charts are empty
+                          for a reason this line called fine. */}
+                      {r.status === 'ok' && (
+                        <span>
+                          <span className={'lamp ' + (r.withData ? 'on' : 'warn')} />
+                          {t('stats.hOk', { n: r.count })}
+                          {r.withData !== undefined && (
+                            <span className="hint" style={{ marginLeft: 6 }}>
+                              {r.withData
+                                ? t('stats.hWithData', { n: r.withData })
+                                : t('stats.hNoData')}
+                            </span>
+                          )}
+                        </span>
+                      )}
                       {r.status === 'empty' && <span className="hint">— {r.hint}</span>}
                       {r.status === 'error' && <span><span className="lamp off" />{r.error}</span>}
                     </div>

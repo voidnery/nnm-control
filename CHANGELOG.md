@@ -1,5 +1,26 @@
 # Changelog
 
+### v0.26.1 — walking the pipeline instead of guessing at it
+- The agent route works: 63 of 76 streams matched, live columns filled, rates
+  and RTT and loss where a socket carries data
+- **"Only retryCount" is not a bug.** A disconnected socket has no `stats`
+  block at all, so a retry counter is genuinely everything there is to record —
+  and the subjects on the Charts tab showing nothing else are exactly the ones
+  the table marks "нет сигнала". Verified against the capture: connected → 18
+  metrics, disconnected → one
+- **"ok, 60 subjects" reads as health and is not.** Sixty disconnected sockets
+  make sixty subjects that hold a counter and nothing to draw, and the charts
+  are then empty for a reason the summary just called fine. The report counts
+  subjects *with data* separately and says plainly when there are none
+- New `backend/tools/pipeline-check.mjs`. There are six links between a socket
+  on a Nimble box and a point on a chart, and a break in any of them looks
+  identical from the browser. It walks them in order — settings and transport,
+  what Nimble returns, whether each entry yields an identity, what is stored,
+  whether live entries and stored subjects agree, and one carrying socket end
+  to end — and names the link that is short
+- 3 new checks
+
+
 ## iter16 m2b — native reads through the agent
 ### v0.26.0 — the panel stops dialling servers
 - **The panel was calling Nimble directly.** That predates the reverse

@@ -111,8 +111,14 @@ export async function collectServer(server, groups, ts = new Date()) {
       add('server', 'server', server.name, flattenNumbers(d));
     }
     const produced = samples.length - before;
+    // "ok, 60 subjects" reads as health and is not: 60 disconnected sockets
+    // produce 60 subjects carrying nothing but a retry counter, and the charts
+    // are then empty for a reason the summary just said was fine. Count what
+    // actually has something to draw.
+    const made = samples.slice(before);
+    const withData = made.filter(x => Object.keys(x.metrics || {}).length > 1).length;
     report[kind] = produced > 0
-      ? { status: 'ok', count: produced }
+      ? { status: 'ok', count: produced, withData }
       : { status: 'empty', hint: EMPTY_HINT[kind] || 'the server reported nothing of this kind' };
   });
 
