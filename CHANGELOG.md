@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.26.2 — the tools were not in the image
+- The command handed over in v0.26.1 could not have worked: the Dockerfile
+  copies `src` and nothing else, so `tools/` never reached the container.
+  Instructions that are wrong cost more than a missing feature — the person
+  follows them, gets an error, and then doubts the diagnosis as well as the
+  tool
+- `tools/` ships now. It is read-only, unreachable over HTTP, and needs the
+  same database and credentials the service has, so inside the image is the one
+  place it can usefully run
+- New `npm run audit:dockerfile`, ahead of the test suite: a top-level
+  directory in the repository that no `COPY` brings into the image. `tests/`
+  and `scripts/` are named as deliberately absent rather than inferred, so the
+  check stays quiet about them and loud about anything new
+- `pipeline-check.mjs` run without an argument now lists the servers with their
+  ids, instead of printing a usage line and leaving the reader to go and find
+  one
+
+
 ### v0.26.1 — walking the pipeline instead of guessing at it
 - The agent route works: 63 of 76 streams matched, live columns filled, rates
   and RTT and loss where a socket carries data

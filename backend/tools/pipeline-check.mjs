@@ -10,6 +10,11 @@
 //
 //   docker compose exec api node tools/pipeline-check.mjs <serverId>
 //
+// The serverId is the last part of the server page's address in the panel:
+//   .../servers/6a1805ad73856944212d0793
+//                ^^^^^^^^^^^^^^^^^^^^^^^^
+// Run with no argument to be shown the servers this panel knows about.
+//
 // Reads only. Addresses are reduced before printing.
 import mongoose from 'mongoose';
 import { config } from '../src/config.js';
@@ -20,17 +25,29 @@ import { nimble } from '../src/services/nimbleClient.js';
 import { entryList, entryIdentity, liveSummary } from '../src/services/streamJoin.js';
 
 const [serverId] = process.argv.slice(2);
-if (!serverId) {
-  console.error('usage: node tools/pipeline-check.mjs <serverId>');
-  process.exit(2);
-}
 
 const maskIp = (v) => String(v ?? '').replace(/(\d+\.\d+\.\d+)\.\d+/g, '$1.x');
 const line = (label, text) => console.log(`  ${label.padEnd(30)} ${text}`);
 
 await mongoose.connect(config.mongoUrl);
-const server = await NimbleServer.findById(serverId);
-if (!server) { console.error('server not found'); process.exit(1); }
+
+// No argument, or an id that matches nothing: list what there is rather than
+// print a usage line and leave the person to go and find an id.
+if (!serverId) {
+  const all = await NimbleServer.find({}, { name: 1, host: 1 }).sort({ order: 1, name: 1 }).lean();
+  console.log('\nusage: node tools/pipeline-check.mjs <serverId>\n\nservers on this panel:');
+  for (const s of all) console.log(`  ${String(s._id)}  ${s.name}`);
+  console.log('');
+  await mongoose.disconnect();
+  process.exit(2);
+}
+
+const server = await NimbleServer.findById(serverId).catch(() => null);
+if (!server) {
+  console.error(`no server with id ${serverId} — run without an argument to list them`);
+  await mongoose.disconnect();
+  process.exit(1);
+}
 const settings = await Settings.load();
 
 console.log(`\n${server.name} — ${maskIp(server.host)}:${server.port}\n`);
