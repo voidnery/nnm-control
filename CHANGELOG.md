@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.25.9 — a probe instead of another guess
+- The live join still does not pair the SRT In rows, and I have now been wrong
+  about this four times in a row: which endpoint holds which family, what an id
+  looks like, which key is strongest, where the rate lives. Each guess was
+  plausible, each correction cost a round trip, and the last screenshot shows
+  the panel saying "no live socket" beside a stream WMSPanel has full SRT
+  statistics for
+- So: `tools/nimble-probe.mjs`, run on the Nimble box. It asks every endpoint
+  that could carry stream statistics — including ones this build may not have,
+  since knowing what is absent is half the map — and writes down the shape,
+  the counts, every id-ish and port-ish field wherever it sits, and the numbers
+  whole
+- Addresses are reduced to their first three octets before anything is written.
+  Ids, ports and numbers are kept, because they are the point: what comes out
+  is enough to build a join on and not enough to be a leak
+- Verified against the capture already in hand rather than only compiled
+
+
 ### v0.25.8 — one answer to "which stream is this"
 - Stepping back was the right call. **The history could never have worked**,
   however well the live join performed: the collector keyed each series by
