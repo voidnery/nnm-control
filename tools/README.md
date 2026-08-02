@@ -1,48 +1,43 @@
-# Tools
+# Diagnostics
 
+Standalone, read-only, run when something needs explaining. None of this is in
+the request path of the panel: an investigation that ships inside a response
+polled every ten seconds costs bytes forever to answer a question asked twice a
+year.
 
-## wmspanel-transcoder-dump.sh
+## nnm-diag.mjs — the stats pipeline, end to end
 
-Walks the whole WMSPanel **transcoder "Scenario"** API subtree — list →
-scenario → video/audio pipeline → input/filter/output — plus the transcoder
-license view, and emits both raw JSON and a **redacted field-schema summary**
-(`_schema.txt`, values masked) so the pipeline editor can be built from the
-real structure.
+One file, no dependencies, nothing to install. Talks to the panel over the same
+HTTP API the browser uses, so it needs no container, no database access, and
+does not care what the compose services are called.
 
-```
-CLIENT_ID=xxx API_KEY=yyy BASE_URL=https://api.wmspanel.com/v1 \
-  ./wmspanel-transcoder-dump.sh
-# optional: MAX_TRANSCODERS=5
-```
-
-Transcoders live on the **.com** account in this deployment — set BASE_URL
-accordingly. Share `_schema.txt` (safe); keep the raw `*.json` private (outputs
-may carry stream keys / RTMP URLs).
-
-
-### Fix: scenario needs ?details=true
-
-`GET /transcoder/{id}` returns metadata only **unless** `?details=true` is
-passed — then the response includes `video_pipelines[]` and `audio_pipelines[]`
-(each with `inputs[]`/`filters[]`/`outputs[]`; inputs carry a `main` flag).
-The dump script now always requests `details=true` and parses those arrays.
-The earlier "no pipelines" result was this missing parameter, not empty data.
-
-### Finding: pipeline schema needs a populated transcoder
-
-A dump of 5 production transcoders (all "MultiWall*" passthrough) showed
-`GET /transcoder/{id}` returns **metadata only** (id, name, description,
-paused, server_id, tags, out_of_process) — **no `pipelines`**. WMSPanel embeds
-pipeline ids in the scenario response only when pipelines exist, and there is
-no separate "list pipelines" endpoint. So the input/filter/output field schema
-can't be derived from passthrough transcoders.
-
-To build the pipeline editor, dump ONE transcoder that actually transcodes:
-
-```
-CLIENT_ID=xxx API_KEY=yyy BASE_URL=https://api.wmspanel.com/v1 \
-  TRANSCODER_ID=<id-with-pipelines> ./wmspanel-transcoder-dump.sh
+```bash
+node nnm-diag.mjs --url https://panel.example --user superadmin --pass '…'
+node nnm-diag.mjs --url … --user … --pass … --server <serverId>
 ```
 
-The script now prints a per-transcoder pipeline count and says explicitly when
-none of the sampled transcoders have pipelines.
+Without `--server` it lists them. Five sections, in order, ending in a verdict
+that names the link that is short — there are several between a socket on a
+Nimble box and a point on a chart, and a break in any of them looks identical
+from the browser.
+
+Needs Node 18 or newer for `fetch`. An account with two-factor enabled cannot
+be used; the tool says so rather than returning an opaque 401.
+
+## nimble-probe.mjs — what Nimble reports
+
+Run **on the Nimble machine**. Asks every endpoint that could carry stream
+statistics, including ones a given build may not have, and writes down shapes,
+counts and every id-ish and port-ish field. Addresses are reduced to their
+first three octets before anything is written.
+
+```bash
+node nimble-probe.mjs > nimble-probe.json
+```
+
+## In-image tools
+
+`backend/tools/` holds two more that need the database and the WMSPanel
+credentials directly — `join-report.mjs` and `pipeline-check.mjs`. They run
+inside the API container and are the same investigation from the other side.
+Prefer `nnm-diag.mjs`: it needs less to be true before it works.

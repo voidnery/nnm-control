@@ -1,5 +1,26 @@
 # Changelog
 
+### v0.26.3 — a diagnostic that needs nothing to be true first
+- The in-image tool could not be launched: the image had not carried it, and
+  then the compose service was not called `api`. A diagnostic that is hard to
+  start is one nobody runs, and each failed attempt costs more than the answer
+  was worth
+- `tools/nnm-diag.mjs`: one file, no dependencies, nothing to install. It talks
+  to the panel over the same HTTP API the browser uses — no container, no
+  database, no assumptions about service names. Copy it anywhere with Node 18
+  and run it
+- Five sections in order, ending in a verdict that names the link that is
+  short: settings and transport, live readings, what is stored, whether the
+  live sockets and the stored series agree, and one carrying socket followed
+  end to end
+- The comparison in section 4 is the one that matters for the symptom reported:
+  a socket carrying data whose series is absent is printed by name, with
+  "(carrying data)" against it
+- Read-only, and it says plainly that a two-factor account cannot be used
+  rather than returning an opaque 401
+- `tools/README.md` explains all four tools and which to reach for first
+
+
 ### v0.26.2 — the tools were not in the image
 - The command handed over in v0.26.1 could not have worked: the Dockerfile
   copies `src` and nothing else, so `tools/` never reached the container.
