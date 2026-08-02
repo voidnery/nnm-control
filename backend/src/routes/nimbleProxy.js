@@ -10,6 +10,43 @@ import { joinLive, liveSummary, localPort, entryIdentity, entryList as asList } 
 // label must be the same here. Inferring it from the presence of a `recv`
 // block would be guessing again — and the endpoint is known, because this is
 // the code that called it.
+// serverId -> { at, ports:Set }
+const objectPortCache = new Map();
+const OBJECT_PORT_TTL_MS = 120_000;
+
+// Every port this server's WMSPanel objects use, across all the families.
+// Cached, because it exists to answer a question asked once per page.
+async function allObjectPorts(server, settings) {
+  const key = String(server._id);
+  const hit = objectPortCache.get(key);
+  if (hit && Date.now() - hit.at < OBJECT_PORT_TTL_MS) return hit.ports;
+
+  const ports = new Set();
+  const lists = await Promise.allSettled([
+    wmspanel.incomingList(settings.wmspanel, server.wmspanelServerId),
+    wmspanel.udpList(settings.wmspanel, server.wmspanelServerId),
+    wmspanel.outgoingList(settings.wmspanel, server.wmspanelServerId),
+  ]);
+  for (const r of lists) {
+    if (r.status !== 'fulfilled') continue;
+    for (const o of (r.value?.settings || r.value?.streams || [])) {
+      if (o?.port) ports.add(String(o.port));
+    }
+  }
+  objectPortCache.set(key, { at: Date.now(), ports });
+  return ports;
+}
+
+async function serverWideOverlap(server, settings, entries) {
+  try {
+    const objectPorts = await allObjectPorts(server, settings);
+    if (!objectPorts.size) return null;
+    const socketPorts = new Set(entries.map(e => (localPort(e.id) || '').replace('port:', '')).filter(Boolean));
+    if (!socketPorts.size) return null;
+    return [...objectPorts].filter(p => socketPorts.has(p)).length;
+  } catch { return null; }
+}
+
 const SERIES_OF = { srtReceiverStats: 'srt-receiver', srtSenderStats: 'srt-sender', republishStats: 'republish' };
 
 
@@ -144,8 +181,18 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   const joined = joinLive(entries, objects);
 
   // Ports that overlap mean the two sides describe the same sockets and a
-  // failure to pair is a naming problem. No overlap at all means they describe
-  // different streams, for which "could not be matched" would be misleading.
+  // failure to pair is a naming problem. No overlap at all means one of two
+  // things, and they are not the same:
+  //
+  //   * these objects genuinely live on another tab, or
+  //   * the native URL and the WMSPanel server mapping point at DIFFERENT
+  //     MACHINES — which is a misconfiguration, not a fact about streams, and
+  //     it cost this investigation a dozen rounds because nothing said so.
+  //
+  // The second is recognisable: a server that is wired correctly has SOME
+  // socket in common with SOME object across its tabs. If a single tab shows
+  // no overlap the first reading holds; if the whole server does, the wiring
+  // is wrong.
   const nPorts = new Set(entries.map(e => (localPort(e.id) || '').replace('port:', '')).filter(Boolean));
   const wPorts = new Set(objects.map(o => String(o.port || '')).filter(Boolean));
   const portOverlap = [...wPorts].filter(p => nPorts.has(p)).length;
@@ -161,6 +208,10 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     matched: joined.matched,
     unmatched: joined.unmatchedObjects.length,
     portOverlap,
+    // Whether ANY of this server's objects, on any tab, share a socket with
+    // what its native API reports. Cheap because the lists are already in
+    // memory for the tab being viewed; the rest come from a short cache.
+    serverOverlap: await serverWideOverlap(server, settings, entries),
     objects: objects.length,
     entries: entries.length,
     // The subject travels with the reading, so the history dialog asks for the

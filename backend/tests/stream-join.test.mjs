@@ -649,5 +649,41 @@ check('the report still names the machine that answered', () => {
   assert.ok(tool.includes('maskIp'), 'with addresses reduced before they are printed');
 });
 
+console.log('\nTWO MACHINES, ONE SERVER RECORD (v0.25.14):');
+
+const proxy6 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+const tabs6 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+
+check('the data already showed which machine is which', () => {
+  // Every subject the panel collects appears in the first dump and none in the
+  // probe run on the box: the probe ran on the machine WMSPanel calls "Сердце
+  // Пальмиры", and the panel's native URL reaches a different one.
+  const first = new Set(real.map(e => e.setting_id));
+  const probed = new Set(probe.endpoints['/manage/srt_receiver_stats'].identifiers.map(x => x.setting_id));
+  assert.equal([...first].filter(id => probed.has(id)).length, 0, 'the two captures share nothing');
+  // And the probe's ports are the ones the SRT In tab lists.
+  const probePorts = new Set(probe.endpoints['/manage/srt_receiver_stats'].identifiers
+    .map(x => x.id.split(':').pop()));
+  for (const p of ['18004', '18005', '18006']) assert.ok(probePorts.has(p), `port ${p}`);
+});
+
+check('no overlap anywhere on the server is reported as a wiring fault', () => {
+  // Nothing in common on ONE tab is normal — those objects live elsewhere.
+  // Nothing in common across the WHOLE server is a different claim, and it is
+  // the one that cost this investigation a dozen rounds unstated.
+  assert.ok(proxy6.includes('serverOverlap:'));
+  assert.ok(proxy6.includes('async function serverWideOverlap'));
+  assert.ok(tabs6.includes('live.serverOverlap === 0'));
+  assert.ok(tabs6.includes("t('wo.wrongMachine',"));
+});
+
+check('the server-wide check is cached and cannot break the tab', () => {
+  // It asks three more WMSPanel lists; on a poll that would be a budget
+  // problem, and a failure must not empty a table.
+  assert.ok(proxy6.includes('OBJECT_PORT_TTL_MS'));
+  const from = proxy6.indexOf('async function serverWideOverlap');
+  assert.ok(proxy6.slice(from, from + 500).includes('catch { return null; }'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

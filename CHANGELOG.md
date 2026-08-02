@@ -1,5 +1,22 @@
 # Changelog
 
+### v0.25.14 — two machines behind one server record
+- **The answer was already in the data.** Every subject the panel collects
+  appears in the first dump and **not one** appears in the probe run on the
+  box. And the probe's ports — 18001-18006, 17801 — are exactly the ones the
+  SRT In tab lists. So the probe ran on the machine WMSPanel calls "Сердце
+  Пальмиры", and the panel's native URL reaches a different one
+- Nothing was wrong with the join, the identity, the envelope or the key
+  selection. The native API address and the WMSPanel server mapping point at
+  two different machines
+- **The panel says so now.** No overlap on one tab is normal — those objects
+  live elsewhere. No overlap anywhere on the server is a different claim, and
+  that is the one that went unstated for a dozen rounds. It is checked against
+  every family's ports, cached for two minutes, and a failure of that check
+  cannot empty a table
+- 3 new checks, including the deduction itself against both captures
+
+
 ### v0.25.13 — the release tag, and diagnostics out of production
 - **`v.1.3.5` broke the release.** A Docker tag may not begin with a separator,
   so stripping only the leading `v` left `.1.3.5` — and it failed on the very

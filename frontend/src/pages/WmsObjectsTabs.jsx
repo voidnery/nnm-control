@@ -196,10 +196,18 @@ function JoinNote({ live, t }) {
   // Three situations, three sentences, and no raw payload behind them: when
   // the shapes and identifiers are what is wanted, that is a job for
   // tools/nimble-probe.mjs, run deliberately.
+  // Nothing in common on THIS tab is normal — those objects live elsewhere.
+  // Nothing in common across the WHOLE server is a different claim: the native
+  // URL and the WMSPanel mapping are pointing at two different machines, and
+  // no amount of looking at streams will explain it.
+  const wrongMachine = live.matched === 0 && live.portOverlap === 0 && live.serverOverlap === 0;
+
   const text = live.entries === 0
     ? t('wo.liveEmpty', { objects: live.objects, endpoint: '' })
+    : wrongMachine
+      ? t('wo.wrongMachine', { entries: live.entries })
     : (live.matched === 0 && live.portOverlap === 0)
-      // Not a failure to match: nothing here was ever the same stream.
+      // Not a failure to match: these objects live on another tab.
       ? t('wo.liveElsewhere', { entries: live.entries })
       : live.matched > 0
         ? t('wo.livePartial', { matched: live.matched, unmatched: live.unmatched })
