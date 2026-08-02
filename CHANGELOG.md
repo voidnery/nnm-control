@@ -1,5 +1,20 @@
 # Changelog
 
+### v0.25.12 — which machine answered
+- The measurement settled it, and not where I was looking. **The panel and the
+  probe see different sockets.** Run on the box, the probe returned
+  `setting_id: 6a18bf52…` on ports 18001-18006; the panel gets `6a1963…` on
+  ports 35001+ from the same endpoint, and not one id from either list appears
+  in the other
+- Two disjoint sets from one endpoint can only mean two different Nimble
+  instances — and nothing in the panel said which one it was reaching
+- The diagnostics now name it: the URL that answered, its core count, RAM and
+  GPU model. Enough to tell two servers apart at a glance, and nothing that
+  identifies a person or a stream. A failed status call does not take the
+  readings with it
+- 3 new checks
+
+
 ### v0.25.11 — measuring instead of sampling
 - Collection is working: the Charts tab now lists `srt-receiver` subjects that
   did not exist before. They carry only `retryCount` because that is all a

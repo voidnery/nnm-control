@@ -647,5 +647,30 @@ check('a failed lookup leaves the list intact', () => {
   assert.ok(body.includes('Promise.allSettled'), 'and one family failing does not lose the others');
 });
 
+console.log('\nWHICH MACHINE ANSWERED (v0.25.12):');
+
+const proxySrc5 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+
+check('the diagnostics name the instance that replied', () => {
+  // A probe run on the box and the panel returned two disjoint sets of sockets
+  // for the same endpoint — 6a18bf52/ports 18001-18006 against 6a1963/ports
+  // 35001+. Two different Nimble instances is the only thing that explains it,
+  // and nothing in the panel said which one it was reaching.
+  assert.ok(proxySrc5.includes('answeredBy:'));
+  assert.ok(proxySrc5.includes('cores:') && proxySrc5.includes('gpu:'));
+});
+
+check('the fingerprint identifies a machine and nothing else', () => {
+  // It goes on a screen: core count, RAM and GPU model tell two servers apart
+  // and say nothing about a person or a stream.
+  const from = proxySrc5.indexOf('answeredBy: (() => {');
+  const body = proxySrc5.slice(from, proxySrc5.indexOf('})(),', from));
+  assert.ok(!/publisher|ip\b|addr/i.test(body));
+});
+
+check('a failed status call does not take the readings with it', () => {
+  assert.ok(proxySrc5.includes('nimble.serverStatus(server).catch(() => null)'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

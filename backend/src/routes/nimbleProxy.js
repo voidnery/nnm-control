@@ -114,8 +114,14 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
   const settings = await Settings.load();
   // Independent on purpose: native stats are worth having even when WMSPanel
   // is unreachable, and the object list is worth having when a server is.
-  const [wmsRes, ...nativeRes] = await Promise.allSettled([
+  const [wmsRes, statusRes, ...nativeRes] = await Promise.allSettled([
     wmspanel[src.wms](settings.wmspanel, server.wmspanelServerId),
+    // Which machine answered. The panel and a probe run on the box returned
+    // two disjoint sets of sockets for the same endpoint, which can only mean
+    // two different Nimble instances — and nothing in the panel said which one
+    // it was talking to. A fingerprint settles that on screen instead of by
+    // correspondence.
+    nimble.serverStatus(server).catch(() => null),
     ...src.native.map(fn => nimble[fn](server)),
   ]);
 
@@ -190,6 +196,22 @@ nimbleRouter.get('/:id/live-objects/:kind', requirePerm('wmsobjects.view'), asyn
     strategy: joined.strategy,
     matched: joined.matched,
     portOverlap,
+    idOverlap,
+    // Which machine answered. The panel and a probe run on the box returned
+    // two disjoint sets of sockets for the same endpoint, which can only mean
+    // two different Nimble instances — and nothing in the panel said which one
+    // it was reaching. Core count, RAM and GPU tell two servers apart and say
+    // nothing about a person or a stream.
+    answeredBy: (() => {
+      const si = statusRes.status === 'fulfilled' ? statusRes.value?.SysInfo : null;
+      if (!si) return null;
+      return {
+        url: server.baseUrl || server.host || '',
+        cores: si.ap ?? null,
+        ramGb: si.tpms ? Math.round(si.tpms / 1e9) : null,
+        gpu: si.nvml?.[0]?.name || null,
+      };
+    })(),
     objects: objects.length,
     entries: entries.length,
     // The subject travels with the reading. The history dialog then asks for

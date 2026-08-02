@@ -202,7 +202,18 @@ function JoinNote({ live, t }) {
         ? t('wo.liveEmpty', { objects: live.objects, endpoint: d.endpoint || '' })
         : (live.matched === 0 && live.portOverlap === 0)
           // Not a failure to match: nothing here was ever the same stream.
-          ? t('wo.liveElsewhere', { entries: live.entries })
+          ? <>
+              {t('wo.liveElsewhere', { entries: live.entries })}
+              {live.answeredBy && (
+                <div style={{ marginTop: 2 }}>
+                  {t('wo.answeredBy', {
+                    url: live.answeredBy.url,
+                    cores: live.answeredBy.cores ?? '?',
+                    gpu: live.answeredBy.gpu || '—',
+                  })}
+                </div>
+              )}
+            </>
         : live.matched > 0
           ? t('wo.livePartial', { matched: live.matched, unmatched: live.unmatched })
           : t('wo.liveNoMatch', { entries: live.entries, objects: live.objects })}
@@ -218,6 +229,8 @@ function JoinNote({ live, t }) {
               // have joined them.
               // Counts before samples: a truncated list looks like the whole
               // set and is the reason a wrong conclusion got drawn from one.
+              // First, because it is the question everything else depends on.
+              answeredBy: live.answeredBy,
               settingIdCount: d.settingIdCount, objectIdCount: d.objectIdCount,
               idOverlap: d.idOverlap, overlappingIds: d.overlappingIds,
               nimblePortCount: d.nimblePortCount, wmspanelPortCount: d.wmspanelPortCount,
