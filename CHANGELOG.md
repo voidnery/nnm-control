@@ -1,5 +1,23 @@
 # Changelog
 
+### v0.28.3 — spacing
+- **Adjacent buttons in a table cell had nothing holding them apart** — only
+  the whitespace between JSX elements, which collapses the moment they wrap,
+  leaving "Delete" flush against "Edit" and stacked. Found on the Roles and
+  Servers pages; there are nine such cells in the panel, so the fix is a rule
+  rather than two edits
+- Scoped to table cells on purpose: in a `.row` the flex `gap` already spaces
+  them, and a margin there would add to it and give two different spacings on
+  one screen
+- The stream history dialog: the tile grid started immediately under the range
+  picker, so the first row read as part of the toolbar. It has room above and
+  below now, the tiles are a little wider and better padded, and each tile's
+  heading is clear of its chart
+- New `npm run audit:spacing`, verified both ways. It checks the rule exists
+  rather than every call site, because the rule is what makes the next cell
+  right without anyone having to remember
+
+
 ### v0.28.2 — the axis labels fit
 - The clipping was not the window's width: the labels were being cut **inside**
   the chart. The y-axis gutter was a fixed 58px, which fitted bare numbers and

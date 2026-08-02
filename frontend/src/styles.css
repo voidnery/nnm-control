@@ -149,6 +149,20 @@ button, .btn {
   background: var(--bg-raise); color: var(--text); border: 1px solid var(--line);
   border-radius: 6px; padding: 7px 13px; cursor: pointer; font-size: 13px; font-family: var(--sans);
 }
+/* Buttons that sit next to each other need space between them whichever way
+   they end up. Two in a table cell rely on the whitespace between JSX
+   elements, which collapses to nothing the moment they wrap — and then they
+   touch, stacked, with "Delete" flush against "Edit". A margin belongs on the
+   button because that is what is next to the other one, and it does not depend
+   on every caller remembering a gap. */
+/* Scoped to table cells on purpose. In a `.row` the flex `gap` already spaces
+   them, and a margin there would add to it and give two different spacings on
+   one screen. A cell has no gap: the buttons rely on the whitespace between
+   JSX elements, which collapses to nothing the moment they wrap. */
+td > button + button, td > button + .btn, td > .btn + button { margin-left: 6px; }
+/* And when they do wrap, the rows must not touch. */
+td > button, td > .btn { margin-bottom: 4px; }
+
 button:hover { border-color: var(--accent-dim); }
 button.primary { background: var(--accent-dim); border-color: var(--accent-dim); color: #eafffb; }
 button.primary:hover { background: var(--accent); }

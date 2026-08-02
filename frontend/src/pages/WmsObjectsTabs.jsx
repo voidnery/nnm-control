@@ -228,12 +228,16 @@ function StreamHistory({ serverId, subject, name, onClose }) {
               through everything to reach the one that matters; side by side
               they are compared at a glance, and the one worth studying opens
               full size on a click. */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+          {/* Clear of the header above and the note below. The grid used to
+              start immediately under the range picker, so the first row of
+              tiles read as part of the toolbar. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                        gap: 12, marginTop: 12 }}>
             {liveTiles.map(tile => {
               const d = tileData(tile);
               const last = d.points.length ? d.points[d.points.length - 1].v.find(v => v != null) : null;
               return (
-                <div key={tile.key} className="panel" style={{ padding: 8, minWidth: 0, cursor: 'zoom-in' }}
+                <div key={tile.key} className="panel" style={{ padding: 10, minWidth: 0, cursor: 'zoom-in' }}
                      onClick={() => setZoom(tile)}>
                   <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
                     <span className="hint" style={{ fontSize: 11 }}>
@@ -247,12 +251,14 @@ function StreamHistory({ serverId, subject, name, onClose }) {
                       {last == null ? '—' : formatValue(last, tile.unit)}
                     </span>
                   </div>
-                  <Plot points={d.points} series={d.series} unit={tile.unit} height={92} />
+                  <div style={{ marginTop: 6 }}>
+                    <Plot points={d.points} series={d.series} unit={tile.unit} height={92} />
+                  </div>
                 </div>
               );
             })}
           </div>
-          <div className="hint" style={{ marginTop: 6 }}>
+          <div className="hint" style={{ marginTop: 12 }}>
             {t('wo.histNote', { n: points.length, bucket: data.bucketMs ? Math.round(data.bucketMs / 1000) : 0 })}
           </div>
         </>
@@ -269,7 +275,7 @@ function StreamHistory({ serverId, subject, name, onClose }) {
               </h3>
               <button onClick={() => setZoom(null)}>{t('action.close')}</button>
             </div>
-            <div className="hint" style={{ fontSize: 11, marginTop: 4 }}>
+            <div className="hint" style={{ fontSize: 11, margin: '8px 0 6px' }}>
               {d.series.map((nm, i) => (
                 <span key={nm} style={{ color: ['#3fb6a8', '#e0a83c', '#7aa7ff'][i % 3], marginRight: 10 }}>■ {nm}</span>
               ))}
