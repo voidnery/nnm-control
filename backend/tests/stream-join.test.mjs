@@ -876,5 +876,89 @@ check('the diagnostic asks what a subject holds, rather than assuming', () => {
     ['stats_recv_mbpsRate']);
 });
 
+console.log('\nTHE SUMMARY (iter16 m3):');
+
+const statsRoute3 = readFileSync(new URL('../src/routes/stats.js', import.meta.url), 'utf8');
+const statsTab2 = readFileSync(new URL('../../frontend/src/pages/StatsTab.jsx', import.meta.url), 'utf8');
+
+check('many subjects come back in one request', () => {
+  // Per subject would be forty round trips on open and forty more per refresh,
+  // and the page would paint in forty jerks.
+  assert.ok(statsRoute3.includes("statsRouter.get('/:serverId/multi'"));
+  assert.ok(statsTab2.includes('/multi'));
+  // Counting the calls, not pattern-matching around a map: the subject list IS
+  // built with a map, inside the single request, and the first version of this
+  // check flagged that.
+  const summaryFn = statsTab2.slice(statsTab2.indexOf('const loadSummary'),
+    statsTab2.indexOf('useEffect(() => { loadSummary(); })'));
+  assert.equal([...summaryFn.matchAll(/\bapi\(/g)].length, 1, 'exactly one request for the whole summary');
+});
+
+check('one request cannot become a hundred aggregations', () => {
+  assert.ok(statsRoute3.includes('.slice(0, 60)'));
+  assert.ok(statsRoute3.includes('targetPoints: 120'), 'and small charts get fewer points');
+});
+
+check('labels reach the response', () => {
+  // decorateSrtLabels writes onto the objects it is given; a mapped copy takes
+  // the labels with it and the cards show raw ids.
+  assert.ok(statsRoute3.includes('for (const o of out) o.group'));
+  assert.ok(!/decorateSrtLabels\(serverId, out\.map/.test(statsRoute3));
+});
+
+check('the rate metric is discovered, not named', () => {
+  // Naming it has cost a release twice in this epic.
+  assert.ok(statsTab2.includes('const rateKeyOf'));
+  assert.ok(statsTab2.includes('/rate|bitrate|bandwidth/i'));
+  assert.ok(statsTab2.includes('!/max/i.test(k)'), 'a configured ceiling is not a reading');
+});
+
+check('idle subjects are counted, not silently dropped', () => {
+  // Half of a server's seventy SRT subjects are disconnected sockets holding a
+  // retry counter. Drawing them all buries the interesting ones; hiding them
+  // without saying they exist is worse.
+  assert.ok(statsTab2.includes("t('stats.sumShowIdle'"));
+  assert.ok(statsTab2.includes("t('stats.sumCarrying'"));
+});
+
+check('the busiest are drawn first', () => {
+  assert.ok(statsTab2.includes('rows.sort((a, b) => (b.bps ?? -1) - (a.bps ?? -1))'));
+});
+
+console.log('\nCONTROL AND COLLECTION ARE DIFFERENT THINGS (iter16 m4):');
+
+const detail = readFileSync(new URL('../../frontend/src/pages/ServerDetailPage.jsx', import.meta.url), 'utf8');
+const proxy7 = readFileSync(new URL('../src/routes/nimbleProxy.js', import.meta.url), 'utf8');
+const tab3 = readFileSync(new URL('../../frontend/src/pages/StatsTab.jsx', import.meta.url), 'utf8');
+
+check('the notice appears only where something is withheld', () => {
+  // It used to sit above every tab in WMSPanel mode, including the ones where
+  // nothing is disabled — so it read as the explanation for whatever looked
+  // wrong on screen, and for a long stretch of this epic it was taken for
+  // exactly that.
+  assert.ok(detail.includes('const hiddenNative ='));
+  assert.ok(detail.includes('wms && hiddenNative.length > 0'));
+});
+
+check('it names the tabs rather than describing them', () => {
+  // "native sections are disabled" leaves the reader to work out whether the
+  // thing they are missing is one of them.
+  assert.ok(detail.includes("t('server.bannerWms', { tabs: hiddenNative.join(', ') })"));
+  assert.ok(detail.includes(".map(x => x.label)"));
+});
+
+check('and it says collection is unaffected', () => {
+  assert.ok(detail.includes("t('server.bannerWmsStats')"));
+  assert.ok(tab3.includes("t('stats.healthPlane')"), 'again where the collector reports on itself');
+});
+
+check('the guard says which half it is refusing', () => {
+  // "the native API is disabled" was true of control and false of everything
+  // else, and it reached the browser for reads too until v0.24.1.
+  assert.ok(proxy7.includes('Native Nimble control is off'));
+  assert.ok(proxy7.includes('Statistics are unaffected'));
+  assert.ok(!proxy7.includes('Native Nimble API is disabled'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

@@ -271,6 +271,12 @@ export default function ServerDetailPage() {
   const { t } = useI18n();
   const [server, setServer] = useState(null);
   const wms = sys?.controlPlane === 'wmspanel';
+  // Native tabs this mode is hiding, by name. Empty means nothing is being
+  // withheld and there is nothing to announce.
+  const hiddenNative = TABS
+    .filter(x => x.plane === 'native' && can(x.perm))
+    .map(x => x.label);
+
   const visibleTabs = useMemo(() => {
     const shown = TABS.filter(tab => can(tab.perm) && (wms ? tab.plane !== 'native' : tab.plane !== 'wmspanel'));
     return shown
@@ -309,9 +315,20 @@ export default function ServerDetailPage() {
         )}
       </div>
       {server && <div className="sub mono">{server.useSsl ? 'https' : 'http'}://{server.host}:{server.port}</div>}
-      {wms && (
+      {/* Only where something is actually unavailable.
+          It used to sit above every tab in WMSPanel mode, including the ones
+          where nothing is disabled — so it read as the explanation for
+          whatever looked wrong on screen, and for a long stretch of this epic
+          it was taken for exactly that: the reason the live columns were
+          empty. They were empty for unrelated reasons, and statistics were
+          being collected the whole time.
+          The tabs it hides are listed by name rather than described in the
+          abstract, so an operator can tell at a glance whether the thing they
+          are missing is one of them. */}
+      {wms && hiddenNative.length > 0 && (
         <div className="hint" style={{ marginBottom: 10 }}>
-          {t('server.bannerWms')}
+          {t('server.bannerWms', { tabs: hiddenNative.join(', ') })}
+          <div style={{ marginTop: 2 }}>{t('server.bannerWmsStats')}</div>
         </div>
       )}
       <div className="tabs">

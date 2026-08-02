@@ -260,6 +260,47 @@ statsRouter.get('/streams', requirePerm('streams.view'), async (req, res) => {
   res.json({ minutes, servers: out });
 });
 
+// iter16 m3 — many subjects in one request.
+//
+// The summary draws every stream on a server at once. Asking per subject would
+// be forty round trips on open and forty more on every refresh, and the browser
+// would paint them in forty jerks. One request, one pass over the same
+// bucketing the single-subject endpoint uses.
+statsRouter.get('/:serverId/multi', requirePerm('streams.view'), async (req, res) => {
+  const serverId = String(req.params.serverId);
+  const minutes = Math.min(4320, Math.max(1, Number(req.query.minutes) || 60));
+  const from = new Date(Date.now() - minutes * 60 * 1000);
+  const metrics = String(req.query.metrics || '')
+    .split(',').map(m => m.trim()).filter(m => /^[a-z0-9_]{1,64}$/i.test(m));
+  const subjects = String(req.query.subjects || '')
+    .split(',').map(x => x.trim()).filter(Boolean)
+    // A summary of two hundred streams is not a summary; the caller picks
+    // which, and the cap is here so one request cannot become a hundred
+    // aggregations.
+    .slice(0, 60);
+  if (!metrics.length || !subjects.length) {
+    return res.status(400).json({ error: 'subjects and metrics are both required' });
+  }
+
+  // Fewer points than a full-width chart: these are drawn small, and six
+  // hundred points in two hundred pixels is work nobody can see.
+  const out = [];
+  for (const subject of subjects) {
+    const { points, bucketMs } = await seriesFor({
+      serverId, subject, metrics, from, minutes, targetPoints: 120,
+    });
+    out.push({
+      subject, bucketMs, points,
+      latest: points.length ? points[points.length - 1].v : null,
+    });
+  }
+  // It writes `label` onto the objects it is given, so it has to be given the
+  // ones being returned — a mapped copy takes the labels with it.
+  for (const o of out) o.group = 'srt';
+  await decorateSrtLabels(serverId, out).catch(() => {});
+  res.json({ minutes, metrics, series: out });
+});
+
 statsRouter.get('/:serverId/series', requirePerm('streams.view'), async (req, res) => {
   const { serverId } = req.params;
   const subject = String(req.query.subject || '');

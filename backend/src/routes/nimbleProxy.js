@@ -79,7 +79,14 @@ nimbleRouter.use(async (req, res, next) => {
   if (READ_ONLY.some(re => re.test(req.path))) return next();
   const s = await Settings.load();
   if (s.controlPlane === 'wmspanel') {
-    return res.status(409).json({ error: 'Native Nimble API is disabled: control plane is WMSPanel API (see Settings)' });
+    // Says which half is affected. The old wording — "the native API is
+    // disabled" — was true of control and false of everything else, and it
+    // reached the browser for reads too until v0.24.1, where it looked exactly
+    // like an explanation for missing statistics.
+    return res.status(409).json({
+      error: 'Native Nimble control is off while the control plane is WMSPanel API '
+        + '(Settings). Statistics are unaffected and keep being collected.',
+    });
   }
   next();
 });

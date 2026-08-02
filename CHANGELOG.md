@@ -1,5 +1,56 @@
 # Changelog
 
+### v0.27.1 (iter16 m4) — control and collection are different things
+- The control-plane notice sat above **every** tab in WMSPanel mode, including
+  the ones where nothing is disabled. So it read as the explanation for
+  whatever looked wrong on screen — and for a long stretch of this epic it was
+  taken for exactly that: the reason the live columns were empty. They were
+  empty for unrelated reasons, and statistics were being collected the whole
+  time
+- It appears only when native tabs are actually being withheld, and it **names
+  them** instead of describing them in the abstract. "Native sections are
+  disabled" leaves the reader to work out whether the thing they are missing is
+  one of them
+- And it says the other half out loud: this is about control; stream
+  statistics are collected in either mode, and the bitrate columns and History
+  work the same. Repeated where the collector reports on its own health, since
+  that is where the question arises
+- The guard's own message said "the native API is disabled" — true of control,
+  false of everything else, and it reached the browser for reads too until
+  v0.24.1, where it looked exactly like an explanation for missing statistics.
+  It now says which half it is refusing
+- 4 new checks
+
+**iter16 is complete**: live columns (m1), per-stream history (m2), native
+reads through the agent (m2b), Charts as a summary (m3), and this.
+
+
+## iter16 m3 — Charts as a summary
+### v0.27.0 — everything on one screen
+- The Charts tab drew one subject at a time, which answers the follow-up
+  question rather than the opening one. It opens on **Everything**: a card per
+  stream, its current rate, and the shape of the last hour. Picking one stream
+  is still there, one click away, and clicking a card goes straight to it
+- **One request, not forty.** A new `/stats/:id/multi` returns many subjects in
+  a single pass over the same bucketing the single-subject endpoint uses;
+  asking per subject would have been forty round trips on open and forty more
+  on every refresh, with the page painting in forty jerks. Capped at sixty
+  subjects and 120 points each — these are drawn small
+- **Idle sockets are counted, not silently dropped.** Half of this fleet's
+  seventy SRT subjects are disconnected sockets holding a retry counter.
+  Drawing them all buries the ones worth looking at; hiding them without saying
+  they exist is worse, so the line reads "carrying media: 34 of 70" with the
+  rest one click away
+- Busiest first, because a screen that cannot hold everything should hold the
+  traffic
+- The rate metric is discovered from what each subject holds, never named here.
+  Naming it has cost a release twice in this epic, and a configured ceiling
+  like `mbpsMaxBandwidth` is excluded — it is a setting, not a reading
+- 6 new checks. One failed first time and it was the check: it forbade a `map`
+  near the request, and the subject list is legitimately built with one inside
+  it — corrected to count the calls
+
+
 ### v0.26.6 — the diagnostic contradicted itself
 - **iter16 m2 is done**: `end to end is intact`, 64 points with 60 carrying a
   rate, and the per-stream charts draw

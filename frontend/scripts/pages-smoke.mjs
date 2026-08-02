@@ -240,6 +240,13 @@ window.fetch = (u) => {
       { id:'o1', name:'CCT_FEED2_FIN_Net', description:'CCT_FEED2_FIN', protocol:'srt', ip:'0.0.0.0', port:40002, receive_mode:'listen', pmts:[] },
       { id:'o2', name:'CCT_FEED1_FIN_NET', description:'CCT_FEED1_FIN', protocol:'srt', ip:'0.0.0.0', port:40001, receive_mode:'listen', pmts:[] }] }),
     text:()=>Promise.resolve('{}') });
+  if (s.includes('/multi')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    minutes:60, metrics:['stats_recv_mbpsRate'], series:[
+      { subject:'srt-receiver:A', label:'CCT_FEED2_FIN · in', bucketMs:0, latest:[5.54],
+        points:[{ ts:new Date(Date.now()-60000).toISOString(), v:[5.53] }, { ts:new Date().toISOString(), v:[5.54] }] },
+      { subject:'srt-receiver:B', label:'CCT_FEED1_EU_BACKUP · in', bucketMs:0, latest:[0.027],
+        points:[{ ts:new Date().toISOString(), v:[0.027] }] }] }),
+    text:()=>Promise.resolve('{}') });
   if (s.includes('/stats/') && s.includes('series')) return Promise.resolve({ ok:true, status:200,
     json:()=>Promise.resolve({ subject:'srt-receiver:o1', metrics:[], bucketMs:0, points:[
       { ts:new Date(Date.now()-60000).toISOString(), v:[6.4,null,9.8,39] },
