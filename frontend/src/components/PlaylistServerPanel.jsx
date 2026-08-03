@@ -93,6 +93,16 @@ export default function PlaylistServerPanel({ servers }) {
                           ...servers.map(s => ({ value: s.id || s._id, label: s.name }))]} />
         {srvId && <button onClick={load} disabled={!!busy}>{t('action.refresh')}</button>}
         {srvId && <span className="hint mono" style={{ fontSize: 12 }}>{file}</span>}
+        {/* Seeing a playlist without being able to edit it is half a feature.
+            Importing copies it into the panel, where the editor works — and
+            leaves the server untouched until something is deployed. */}
+        {srvId && manage && state?.parsed?.ok && (
+          <button disabled={!!busy} onClick={() => act('import', async () => {
+            const content = await api(`/servers/${srvId}/agent/config?name=${encodeURIComponent(file)}`);
+            const model = JSON.parse(content.content);
+            return api('/playlists', { method: 'POST', body: { name: `${file} (${new Date().toLocaleDateString()})`, model } });
+          })}>{t('pls.import')}</button>
+        )}
       </div>
 
       {error && <div className="error-box" style={{ marginTop: 8 }}>{error}</div>}
@@ -163,7 +173,7 @@ export default function PlaylistServerPanel({ servers }) {
                         <button disabled={!!busy}
                                 onClick={() => confirm({ title: t('pls.stop'), body: t('pls.stopConfirm', { stream: task.stream }) })
                                   .then(ok => ok && act('stop', () => api(`/servers/${srvId}/agent/playlist-stop`, {
-                                    method: 'POST', body: { stream: task.stream },
+                                    method: 'POST', body: { stream: task.stream, filename: file },
                                   })))}>{t('pls.stop')}</button>
                       </div>
                     )}
@@ -202,12 +212,23 @@ export default function PlaylistServerPanel({ servers }) {
                 </div>
               </div>
             )}
+            {/* Not an alarm: these are outside the directory the agent will
+                read, so the panel cannot say either way. Reporting them as
+                broken — which it did — is how a warning stops being read. */}
+            {state.media?.unverifiable?.length > 0 && (
+              <div className="hint">
+                {t('pls.unverifiable', { n: state.media.unverifiable.length, root: state.media.root })}
+                <div className="mono" style={{ fontSize: 11 }}>
+                  {state.media.unverifiable.slice(0, 5).map(m => m.path).join('\n')}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ---- Stopped streams that can be put back ---- */}
           {manage && versions.length > 0 && (
             <StoppedStreams srvId={srvId} running={tasks.map(x => x.stream)} versions={versions}
-                            busy={busy} act={act} />
+                            busy={busy} act={act} filename={file} />
           )}
 
           {/* ---- Media ---- */}
@@ -279,7 +300,7 @@ export default function PlaylistServerPanel({ servers }) {
                           <button disabled={!!busy}
                                   onClick={() => confirm({ title: t('pls.rollback'), body: t('pls.rollbackConfirm', { when: new Date(v.createdAt).toLocaleString() }) })
                                     .then(ok => ok && act('rollback', () => api(`/servers/${srvId}/agent/rollback-playlist`, {
-                                      method: 'POST', body: { versionId: v._id },
+                                      method: 'POST', body: { versionId: v._id, filename: file },
                                     })))}>{t('pls.rollback')}</button>
                         )}
                       </td>
@@ -310,7 +331,7 @@ export default function PlaylistServerPanel({ servers }) {
 // Without this, stopping a stream is a one-way door: the definition is in the
 // history, but finding it there and putting it back by hand is not something
 // anyone would do mid-event.
-function StoppedStreams({ srvId, running, versions, busy, act }) {
+function StoppedStreams({ srvId, running, versions, busy, act, filename }) {
   const { t } = useI18n();
   const [known, setKnown] = useState([]);
 
@@ -345,11 +366,11 @@ function StoppedStreams({ srvId, running, versions, busy, act }) {
                 and the difference is an hour of broadcast. */}
             <button disabled={!!busy}
                     onClick={() => act('start', () => api(`/servers/${srvId}/agent/playlist-start`, {
-                      method: 'POST', body: { stream },
+                      method: 'POST', body: { stream, filename },
                     }))}>{t('pls.startTop')}</button>
             <button disabled={!!busy}
                     onClick={() => act('resume', () => api(`/servers/${srvId}/agent/playlist-start`, {
-                      method: 'POST', body: { stream, resume: true },
+                      method: 'POST', body: { stream, filename, resume: true },
                     }))}>{t('pls.startResume')}</button>
           </div>
         </div>

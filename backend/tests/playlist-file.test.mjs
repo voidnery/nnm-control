@@ -590,8 +590,10 @@ check('start and resume are separate buttons', () => {
   // They do different things and the difference is an hour of broadcast. A
   // checkbox next to one button is a setting people do not read.
   assert.ok(panel.includes("t('pls.startTop')") && panel.includes("t('pls.startResume')"));
-  assert.ok(panel.includes('body: { stream, resume: true }'));
-  assert.ok(panel.includes('body: { stream },'));
+  // The file name joined both calls in v0.39.1; what is asserted is that the
+  // two are still distinct, not their exact spelling.
+  assert.ok(panel.includes('body: { stream, filename, resume: true }'));
+  assert.ok(panel.includes('body: { stream, filename },'));
 });
 
 check('resuming is opt-in on the server side too', () => {
@@ -720,6 +722,66 @@ check('the chosen name travels with the request', () => {
   // file would have changed nothing.
   assert.ok(panel3.includes('playlist-state?name=${encodeURIComponent(file)}'));
   assert.ok(panel3.includes('}, [srvId, file]);'), 'and choosing one reloads');
+});
+
+console.log('\nACTING ON THE FILE BEING LOOKED AT (v0.39.1):');
+
+const panel4 = readFileSync(new URL('../../frontend/src/components/PlaylistServerPanel.jsx', import.meta.url), 'utf8');
+const proxy5 = readFileSync(new URL('../src/routes/agentProxy.js', import.meta.url), 'utf8');
+
+check('every action names the file it acts on', () => {
+  // v0.39.0 passed the chosen name when READING and not when acting. So Stop
+  // read `server-playlist.json`, which does not exist on this fleet, and
+  // reported the stream as absent — while the page displayed it, from a
+  // different file, two lines above.
+  for (const call of ['body: { stream: task.stream, filename: file }',
+                      'body: { versionId: v._id, filename: file }',
+                      'body: { stream, filename }',
+                      'body: { stream, filename, resume: true }']) {
+    assert.ok(panel4.includes(call), call);
+  }
+});
+
+check('the server default is only a default', () => {
+  // It is right for a fresh install and wrong for every server that named its
+  // file something else, which is why the caller has to be able to say.
+  // deploy reads it in `deployHandler`, which is declared above the route that
+  // calls it — so searching from the route name finds nothing.
+  for (const where of ['playlist-stop', 'playlist-start', 'async function deployHandler']) {
+    const at = proxy5.indexOf(where);
+    assert.ok(at > 0, where);
+    assert.ok(proxy5.slice(at, at + 400).includes("req.body?.filename || 'server-playlist.json'"), where);
+  }
+});
+
+check('"cannot check" is not reported as "not there"', () => {
+  // A playlist pointing at /srv/nimble/video — outside the directory the agent
+  // will read — showed as two broken entries on a server where both files
+  // exist. An alarm that is wrong is an alarm that stops being read.
+  const split = (results) => {
+    const failed = results.filter(r => !r.ok);
+    return {
+      missing: failed.filter(r => r.reason === 'missing').length,
+      unverifiable: failed.filter(r => r.reason !== 'missing').length,
+    };
+  };
+  assert.deepEqual(split([
+    { ok: true }, { ok: false, reason: 'missing' },
+    { ok: false, reason: 'outside the media root' },
+  ]), { missing: 1, unverifiable: 1 });
+  assert.ok(proxy5.includes('const unverifiable = failed.filter'));
+  assert.ok(panel4.includes("t('pls.unverifiable'"));
+});
+
+check('a playlist on the server can be brought in to edit', () => {
+  // Seeing one without being able to edit it is half a feature, and the editor
+  // only works on playlists the panel holds.
+  assert.ok(panel4.includes("t('pls.import')"));
+  assert.ok(panel4.includes("api('/playlists', { method: 'POST'"));
+  // And importing must not touch the server.
+  const at = panel4.indexOf("t('pls.import')");
+  const around = panel4.slice(Math.max(0, at - 700), at);
+  assert.ok(!/deploy-playlist|PUT \/config/.test(around));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall playlist-file checks passed');

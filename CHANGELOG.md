@@ -1,5 +1,26 @@
 # Changelog
 
+### v0.39.1 — seeing it was not the same as being able to touch it
+Three faults, all visible on one screen.
+
+- **Every action defaulted to a file name instead of using the chosen one.**
+  v0.39.0 passed the name when reading and not when acting, so Stop read
+  `server-playlist.json` — which does not exist on this fleet — and reported
+  the stream as absent while the page displayed it, from a different file, two
+  lines above
+- **"Cannot check" was reported as "not there."** The playlist points at
+  `/srv/nimble/video`, outside the directory the agent is allowed to read, and
+  two entries showed as broken on a server where both files exist. They are
+  now said as unverifiable, with the reason: an alarm that is wrong is an alarm
+  that stops being read
+- **A playlist on the server could be seen and not edited**, because the editor
+  works on playlists the panel holds. Importing copies it in, and touches
+  nothing on the server — deploying stays a separate act
+- 4 new checks; two existing ones re-aimed, one because `deployHandler` is
+  declared above the route that calls it and searching from the route name
+  found nothing
+
+
 ### v0.39.0 — the file name was a guess, and the guess was wrong
 - The playlist on this fleet is `server_playlist.json`. The panel asked for
   `server-playlist.json`. One character, and it reported "no playlist" about a

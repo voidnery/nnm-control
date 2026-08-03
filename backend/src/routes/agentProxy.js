@@ -205,11 +205,19 @@ agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadS
       const stat = await runTask(req.srv, 'POST /media/stat', {
         body: { paths: parsed.sources }, createdBy: req.user?.username,
       });
-      const missing = (stat.results || []).filter(r => !r.ok);
+      // "Missing" and "could not look" are different facts, and this reported
+      // both as missing. A playlist pointing at /srv/nimble/video — outside
+      // the media root the agent will read — showed as two broken entries on a
+      // server where both files exist. An alarm that is wrong is an alarm that
+      // gets ignored.
+      const failed = (stat.results || []).filter(r => !r.ok);
+      const missing = failed.filter(r => r.reason === 'missing');
+      const unverifiable = failed.filter(r => r.reason !== 'missing');
       media = {
         root: stat.root,
         checked: parsed.sources.length,
         missing: missing.map(r => ({ path: r.path, reason: r.reason })),
+        unverifiable: unverifiable.map(r => ({ path: r.path, reason: r.reason })),
         bytes: (stat.results || []).reduce((a, r) => a + (r.size || 0), 0),
       };
     } catch (e) {
