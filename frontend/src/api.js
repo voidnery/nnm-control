@@ -5,15 +5,18 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
-export async function api(path, { method = 'GET', body } = {}) {
+export async function api(path, { method = 'GET', body, raw = false } = {}) {
   const headers = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // A raw body is sent as it is: a File or Blob JSON-encoded is the string
+  // "{}", which uploads a two-byte file and reports success.
+  if (body !== undefined && !raw) headers['Content-Type'] = 'application/json';
+  else if (raw && body) headers['Content-Type'] = body.type || 'application/octet-stream';
   const res = await fetch(`/api${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body === undefined ? undefined : (raw ? body : JSON.stringify(body)),
   });
   let data = null;
   try { data = await res.json(); } catch { /* empty body */ }

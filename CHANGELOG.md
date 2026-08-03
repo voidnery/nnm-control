@@ -1,5 +1,276 @@
 # Changelog
 
+### v0.38.0 — reviewing iter19, with the fleet in mind
+Three defects, all in the seam between a new panel and agents that are not new.
+
+- **An agent older than v10 would have lost native statistics entirely.** The
+  fallback in `nimbleClient` listed the failures worth falling back from and
+  missed the one that matters: an older agent has no `POST /nimble` and answers
+  "no handler for …", which threw instead of falling back to a direct call. On
+  this fleet that is twelve servers. Inverted: falling back is harmless — a
+  direct call either works or fails quickly — so it is the default, and only an
+  answer that came from **Nimble itself**, directly or relayed, is propagated,
+  because asking the same server the same question again would only reproduce
+  it
+- **The media root was derived from the upload directory.** `dirname(MEDIA_DIR)`
+  is convenient and wrong: with `MEDIA_DIR` at `/srv/nimble/media` it yields
+  `/srv/nimble`, which contains `conf/` and therefore the agent's own token;
+  with `MEDIA_DIR` at `/` it yields the filesystem. A default that widens as
+  someone's configuration gets simpler is the wrong shape for a permission.
+  Fixed default now, and a root that is obviously too broad is narrowed
+- **And the first fix for that was worse than the fault.** Throwing on a bad
+  setting means an agent that will not start — and an agent that will not start
+  cannot self-update to a fix either, on a machine that by design has no
+  inbound route. Someone would have to be sent to it. It refuses the setting
+  loudly and carries on
+- Confirmed on the way: an unknown route fails fast rather than on a 20s
+  timeout, so an old agent makes the panel look old rather than broken; every
+  throw added by iter19 is inside a handler and nothing new can abort start-up;
+  and the new file passes the check a v9 agent applies before becoming it,
+  which is what keeps the fleet able to move forward without a visit
+- 6 new checks. Agent protocol version 15
+
+
+### v0.37.0 (iter19 m8) — all of it reachable
+- m1 to m7 were routes and services, and **none of them was reachable from the
+  panel**. A capability with no way in is a capability nobody has — which is
+  exactly what "I don't see our changes" meant when this epic started. Two of
+  them, the resume and the four checks, had no route either
+- One panel on the playlists page, ordered by the question an operator arrives
+  with: what is running, what is wrong with it, what is available to put in it,
+  and what was there before
+- Running tasks show entries and distinct files, lap length or run length, when
+  the content ends as a **clock time** rather than a duration to add to now,
+  and — where `InactivityTimeout` is 0 — that the stream will stay up empty.
+  Joins that will stutter are counted as boundaries and listed on demand
+- **Start and resume are two buttons.** They do different things and the
+  difference is an hour of broadcast; a checkbox beside one button is a setting
+  people do not read. Resuming is opt-in on the server side too, and the
+  response stops claiming a restart when it resumed
+- Stopped streams are recovered from the version history and offered back,
+  because otherwise stopping is a one-way door: the definition is in the
+  history and nobody digs it out mid-event
+- Media upload with a folder, listing, deletion; deploy history with a viewer
+  and rollback. Both destructive actions ask first
+- **A file body is now sent as a file.** `JSON.stringify` of a Blob is `"{}"` —
+  a gigabyte upload would have become 38 bytes and reported success
+- The four reads are independent: a server whose media cannot be listed can
+  still have its playlist read, and saying "nothing works" when one thing does
+  sends the operator looking in the wrong place
+- 6 new checks; one from m5 rewritten because m6 made its subject conditional
+
+**iter19 is complete.**
+
+
+### v0.36.0 (iter19 m7) — four things the panel can say that nothing else does
+Each of these answers a question currently answered by watching the stream.
+
+- **Changed behind the panel's back.** The next deploy overwrites without
+  asking, and editing the file by hand is how this has always been done here —
+  so the change would be lost silently, and noticed only when it stopped being
+  in effect. Reported with its consequence rather than as a bare "differs"
+- **Joins that will stutter.** Checked at the boundary rather than per file: it
+  is the *change* that shows. A playlist of uniformly odd files is fine; one
+  odd file among twenty produces two bad joins, going in and coming out.
+  Resolution, frame rate, video codec, sample rate, channel count — and a file
+  with no audio among files that have it, which is silence rather than an
+  artefact and audible even when the picture is fine
+- **How long a block runs.** Summed from measured durations, and a partial sum
+  is marked partial: "at least 40 minutes" is useful and pretending it is the
+  whole answer is not
+- **When a stream will fall off air.** A looping block has no end; a finite one
+  does, and `InactivityTimeout` decides how long the output lingers after it.
+  **Zero means never** — the content ends and the stream stays up, empty, which
+  is its own thing worth saying and is what the live file is set to. Tasks
+  already finished sort ahead of tasks about to finish: negative is more
+  urgent than small, not nonsense to be filtered out
+- The probe reads streams and duration in one ffprobe call — the call that
+  measures length is already open, and asking twice would double the cost of
+  the check that catches a stuttering join. Frame rates arrive as ratios like
+  `30000/1001` and are reduced, so two spellings of one rate compare equal
+- 9 new checks, all against the live playlist. Agent protocol version 14
+
+
+### v0.35.0 (iter19 m6) — resuming where it stopped
+- The file cannot say where playback is. Nimble knows and does not expose it,
+  so the position is **reconstructed** from three things the panel does know:
+  when the task started, when it was stopped, and how long each file runs
+- Rebuilt using grammar Nimble already has — entries already played are dropped
+  from the first block and the one being resumed carries an `Offset`. Nothing
+  here depends on a feature that does not exist
+- **The resume lands before the computed point, never after.** Drift is
+  inevitable — a transcoder restart, a container duration disagreeing with its
+  content — and the two errors are not equal: land early and the audience sees
+  a few seconds twice; land late and they miss content that will never be
+  shown. Three seconds of insurance against arithmetic that cannot be exact
+- **One unknown duration disables the resume entirely.** Guessing past it would
+  put the resume in the wrong file, which is worse than not resuming: a restart
+  from the top is at least what the operator expects
+- A block with a `Start` time is a schedule, not a queue, and is left alone —
+  resuming into it would move the schedule. A looping block wraps: 400 minutes
+  of this playlist is three full laps and part of a fourth
+- The result is marked as an estimate. Presenting it as exact is the only real
+  mistake available here
+- **The agent gained its first external process**, and it is narrow because of
+  that: `execFile`, so there is no shell and a file name containing a semicolon
+  is an argument rather than an instruction; a constant command with only paths
+  as arguments; a timeout; and confinement to the media root. A missing
+  ffprobe is told apart from a missing file by errno rather than message text,
+  and reported once rather than once per file
+- 10 new checks. Agent protocol version 13
+
+
+### v0.34.0 (iter19 m5) — stop and start, and what they cannot do
+- **There is no pause in this format**, and Softvelum's own grammar confirms
+  it: a playlist declares what to play and, per block, when to start — `Start`,
+  `Offset`, `Duration`, `InactivityTimeout`, `MaxIterations` — and nothing that
+  means "resume". Playback position lives inside Nimble and is not expressible
+  in the file
+- So stopping is removing the task and starting is putting it back. A stopped
+  stream that is restarted **begins at the top of its block**, and the response
+  says so rather than leaving a Play button to silently rewind an hour of
+  broadcast
+- Stopping removes exactly one task and disturbs nothing else: another
+  operator's tasks, the sync interval and any key this panel does not model all
+  survive. A stop is not an excuse to rewrite the file
+- Starting restores the task **in the position it occupied**, whole. Order
+  matters less to Nimble than to the next person reading the file, and a task
+  that reappears at the bottom looks like a new one
+- The definition is recovered from the version history rather than a copy kept
+  for the purpose — nothing extra to store, and no chance of a stored copy
+  drifting from what was really running
+- **Both are deploys.** They call the deploy body, so they carry the same
+  checks as any other write. A second way to change a live config would be a
+  second way that skips them, and this is the path most likely to be taken in a
+  hurry
+- 7 new checks
+
+**What would be needed for a true resume:** the file can express an `Offset`
+per entry, so a resume could be computed — but only from media durations the
+panel does not have. Probing them on the agent would make it possible; it is
+not guesswork that can be skipped, since being wrong means resuming into the
+wrong file.
+
+
+### v0.33.0 (iter19 m4) — deploying, and being able to take it back
+- The playlist file is a live broadcast config: writing it takes effect the
+  moment it lands, because Nimble watches the directory. There is no staging
+  step and nothing reports back that what it read was what was meant. So
+  everything checkable is checked **before** the write
+- **Three refusals, and they are different in kind.** A malformed file is
+  refused outright, whatever anyone says. A source the server does not have is
+  refused unless forced — it is recoverable, and an operator may know the file
+  is arriving in a minute. An **empty playlist** is refused too: it is legal
+  JSON that stops every stream on the server, and a plausible accident from
+  deleting the last task
+- An unreadable media list is not a licence to skip the check. The check
+  failing and the check passing must not look the same
+- **What is being replaced is recorded before it is replaced**, including what
+  was on the server before the panel ever wrote to it. Without that the first
+  rollback has nothing to go back to — and the first deploy is the one most
+  likely to need undoing
+- **Rolling back is deploying.** The rollback route calls the deploy body
+  rather than reimplementing it: a separate path would be one that skips the
+  checks at the exact moment they matter most, which is when something has
+  already gone wrong
+- A forced deploy is remembered as forced, with the paths that were missing at
+  the time. It explains an outage nobody could otherwise account for
+- Full content is kept per version, not a hash. A hash tells you the file
+  changed; it does not let you put back the one that worked at 3am. The version
+  list omits the bodies — thirty playlists is a lot to send to a browser that
+  wants a list
+- 9 new checks
+
+
+### v0.32.0 (iter19 m3) — the editor knows what the server has
+- The structural editor already existed; what it did not have was any idea
+  which server it was writing for. A source was **free text**, which is how a
+  path to a missing file gets into a playlist — and the only way to find out
+  has been silence on air
+- Pick a server and the editor gains three things: a **file picker** listing
+  what that server actually holds, a **warning on any entry** whose path is not
+  among them, and a line saying what is on the server now — task count, entry
+  count, and how many of its entries point at files that are not there
+- **Editing still never writes to a server.** It reads, so it can warn.
+  Deploying stays a separate act: a page that can save and deploy in one motion
+  is a page that deploys by accident. A check asserts every write in the
+  builder goes to the panel and none to an agent
+- **Interleave adverts**, which is what the live playlist was built with by
+  hand: three adverts before every match, 24 entries for 8 matches. Doing that a
+  row at a time is where an advert goes missing or a match repeats, and neither
+  shows until it airs. Applying it again replaces the previous insertion rather
+  than multiplying it
+- 4 new checks, one of them running the interleave and comparing the result
+  against the shape of the real file
+
+
+### v0.31.0 (iter19 m2) — media, in the folders operators actually use
+- The upload path was already built in iter12 — spooled by the panel, fetched
+  by the agent with a checksum, tracked with retries. What it could not do was
+  put a file in a folder: a media name had to be a bare file name
+- **One folder level is allowed now**, because that is how this work is
+  organised: the live playlist separates `adds/` from `matches/`. Flattening
+  would either collide names or force everything into one heap. Two levels are
+  refused — a depth limit that is a number invites argument about the number,
+  and one is what the work needs. Absolute paths, `..`, and anything escaping
+  the root still fail
+- The folder is created on upload rather than required to exist. Making an
+  operator log in and `mkdir` first defeats the point of uploading through the
+  panel
+- The listing reaches one level down to match, and is sorted — a file filed
+  under `adds/` would otherwise vanish from the panel the moment it landed
+  there, and a listing should not reshuffle itself between refreshes for
+  reasons that are the filesystem's
+- **A file the live playlist names cannot be deleted.** Tidying up media
+  happens between events and the consequence lands hours later in the middle of
+  one: the entry stays in the playlist and plays silence, and nothing else in
+  the system would report it. `force=1` overrides, as an explicit act
+- The reference check compares **full paths**, not file names: this fleet's
+  playlist holds two different `match_1.mp4` in different directories, and a
+  name match would block deleting either because of the other. A playlist that
+  cannot be read is not permission to delete either — the check failing is
+  reported rather than passed
+- 6 new checks. Agent protocol version 12
+
+
+## iter19 — playlists
+### v0.30.0 (m1) — what is actually on the server
+
+**Where the media goes, decided.** One shared library per server, with the
+subfolders the operator already uses — not a folder per playlist. The working
+file settles it: `reklama_1,2,3` appear eight times in one playlist and will
+appear in the next event's too. A folder per playlist would mean uploading the
+same advert again for every event and, worse, duplicating the truth — replace
+the advert and it stays old everywhere else. Playlists reference files; they do
+not own them. Two rules follow: deduplicate on the sha256 the agent already
+computes, and never delete a file a live playlist still names.
+
+- **Read-only, and deliberately.** An operator about to change a live playlist
+  should be able to see its current state without looking being able to alter
+  it
+- Built against a file from a running server. Two things it settled that would
+  have been guessed wrong: the playable items are nested one level deeper than
+  they look (`Tasks[].Blocks[].Streams[]`), and **entries and distinct files
+  are different numbers** — 24 entries describe 9 files, because three adverts
+  are interleaved between every match. Reporting one number for both would
+  misdescribe the playlist whichever was chosen
+- `MaxIterations: 0` is reported as looping. An operator reading "0 iterations"
+  would conclude the opposite
+- **Every path the file names is checked against the filesystem.** An entry
+  pointing at a missing file plays silence, and the only way to find that out
+  today is to watch the stream. The agent gained a `POST /media/stat` for it,
+  confined to the media root — reads reach the whole tree because a working
+  playlist points at directories the operator made by hand, while writes stay
+  where they were
+- The panel's copy and the server's are compared as parsed structure, so
+  whitespace and key order are not reported as changes. Keys the panel does not
+  model are preserved rather than dropped
+- A missing playlist is a state, not a failure: a server that has never had one
+  is the normal starting point
+- New `npm run test:playlist`: 9 checks, all against the live file kept as a
+  fixture. Agent protocol version 11
+
+
 ### v0.29.1 — five more places called node by bare name
 - The download worked, the unpack worked, the install reported success — and
   the script died two lines later with `node: not found`. Making Node optional

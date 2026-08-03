@@ -1,0 +1,173 @@
+{
+    "SyncInterval": 1000,
+    "Tasks": [
+        {
+            "Stream": "povtor_tennis/video_playlist_02_03",
+            "InactivityTimeout": 0,
+            "Blocks": [
+                {
+                    "Id": "b517f333",
+                    "MaxIterations": 0,
+                    "Streams": [
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/matches/match_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/matches/match_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/matches/match_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/matches/match_4.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/matches/match_5.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/adds/reklama_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208/matches/match_6.mp4"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "Stream": "povtor_tennis/video_playlist_02_03_kp",
+            "InactivityTimeout": 0,
+            "Blocks": [
+                {
+                    "Id": "a9cc972f",
+                    "MaxIterations": 0,
+                    "Streams": [
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/adds/reklama.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/matches/match_1.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/adds/reklama.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/matches/match_2.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/adds/reklama.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/matches/match_3.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/adds/reklama.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/matches/match_4.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/adds/reklama.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/matches/match_5.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/adds/reklama.mp4"
+                        },
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/media/2470208_kp/matches/match_6.mp4"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -24,6 +24,65 @@ const BIND = process.env.NNM_AGENT_BIND || '127.0.0.1';
 const TOKEN = process.env.NNM_AGENT_TOKEN || '';
 const CONF_DIR = path.resolve(process.env.NNM_AGENT_CONF_DIR || '/srv/nimble/conf');
 const MEDIA_DIR = path.resolve(process.env.NNM_AGENT_MEDIA_DIR || '/srv/nimble/media/gallery');
+
+// Everything the panel may ask about, which is wider than where it may write.
+//
+// A working playlist points at files the operator placed by hand — the one
+// this was built against uses /srv/nimble/media/2470208/ while uploads land in
+// .../gallery. Refusing to look outside the upload directory would mean the
+// panel could not tell an operator that a path in their own playlist is
+// missing, which is the whole point of checking.
+//
+// Reads are allowed anywhere under the media root; writes are not, and stay in
+// MEDIA_DIR as before.
+// Where reads may reach. Wider than where writes may land, because a working
+// playlist points at directories the operator made by hand — but not derived
+// from the upload directory, which is what the first version did.
+//
+// `dirname(MEDIA_DIR)` was convenient and wrong: with MEDIA_DIR set to
+// /srv/nimble/media it yields /srv/nimble, which contains conf/ and therefore
+// the agent's own token; with MEDIA_DIR at / it yields the whole filesystem. A
+// default that widens as someone's configuration gets simpler is the wrong
+// shape for a permission.
+//
+// So: a fixed default, and a refusal to accept a root that is obviously too
+// broad. An installation whose media genuinely lives elsewhere sets it
+// explicitly, which is a deliberate act by someone who knows the layout.
+// A bad value narrows to the default; it never stops the agent.
+//
+// Throwing here was the first attempt and it was worse than the problem: an
+// agent that will not start is one that cannot self-update to a fix either,
+// on a machine that by design has no inbound route. Someone would have to be
+// sent to it. Refusing the setting and carrying on is the only version of
+// this that cannot strand a server.
+const MEDIA_ROOT = (() => {
+  const dflt = '/srv/nimble/media';
+  const raw = process.env.NNM_AGENT_MEDIA_ROOT;
+  if (!raw) return dflt;
+  const want = path.resolve(raw);
+  if (want.split(path.sep).filter(Boolean).length < 2) {
+    console.error(`[nnm-agent] NNM_AGENT_MEDIA_ROOT=${want} is too broad to read media from; using ${dflt}`);
+    return dflt;
+  }
+  return want;
+})();
+
+// The first external process this agent has ever run, and kept deliberately
+// narrow because of it.
+//
+// execFile, not exec: there is no shell, so a file name containing a quote or
+// a semicolon is an argument and not an instruction. The command is a
+// constant; only its arguments vary, and those are paths already confined to
+// the media root.
+async function runTool(cmd, args, { timeoutMs = 15_000 } = {}) {
+  const { execFile } = await import('node:child_process');
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 1 << 20 }, (err, stdout) => {
+      if (err) reject(err);
+      else resolve(String(stdout));
+    });
+  });
+}
 // iter10 m1 — logs are read-only and live in their own root. Nimble's default
 // on Linux is /var/log/nimble. This directory is never written to, and it is
 // mounted read-only in the systemd unit, so a bug here cannot damage a log.
@@ -53,7 +112,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 10;
+const AGENT_VERSION = 15;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -105,15 +164,31 @@ function tokenOk(header) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// A name is a single file inside the given root — never a path, never a parent.
-function safeJoin(root, name) {
-  const clean = String(name || '');
+// A file inside the given root — never a parent, never an absolute path.
+//
+// One level of folder is allowed, because operators organise media by role:
+// the playlist this was built against separates `adds/` from `matches/`, and
+// flattening that would either collide names or force everything into one
+// heap. Two levels are not allowed: a depth limit that is a number invites
+// argument about the number, and one level is what the work actually needs.
+function safeJoin(root, name, { allowFolder = false } = {}) {
+  const clean = String(name || '').trim();
   if (!clean || clean.includes('\0')) throw new Error('invalid name');
-  if (clean !== path.basename(clean)) throw new Error('name must not contain a path');
-  const full = path.resolve(root, clean);
+  if (path.isAbsolute(clean)) throw new Error('name must be relative');
+
+  const parts = clean.split('/').filter(p => p !== '');
+  if (parts.some(p => p === '.' || p === '..')) throw new Error('name must not contain . or ..');
+  if (!allowFolder && parts.length !== 1) throw new Error('name must not contain a path');
+  if (parts.length > 2) throw new Error('at most one folder is allowed');
+  // A folder name has the same rules as a file name; letting one through
+  // unchecked would make the check on the other pointless.
+  if (parts.some(p => p !== path.basename(p))) throw new Error('invalid name');
+
+  const rel = parts.join(path.sep);
+  const full = path.resolve(root, rel);
   // resolve() alone is not enough: a symlinked root could still escape, so the
   // prefix is re-checked after resolution.
-  if (full !== path.join(root, clean) || !full.startsWith(root + path.sep)) throw new Error('path escapes the allowed directory');
+  if (full !== path.join(root, rel) || !full.startsWith(root + path.sep)) throw new Error('path escapes the allowed directory');
   return full;
 }
 
@@ -158,6 +233,7 @@ const routes = {
     }
     // Offered so the panel can let an operator choose which to graph.
     try { disk.interfaces = await physicalInterfaces(); } catch { disk.interfaces = []; }
+    disk.mediaRoot = MEDIA_ROOT;
     disk.selfPath = SELF_PATH;
     disk.selfUpdate = await canSelfUpdate();
     return { ok: true, agent: 'nnm-agent', version: AGENT_VERSION, logs: LOG_ENABLED,
@@ -265,15 +341,27 @@ const routes = {
 
   async 'GET /media'() {
     await ensureDir(MEDIA_DIR);
-    const names = await fs.readdir(MEDIA_DIR);
+    // One level down as well, matching what uploads may now create. Listing
+    // only the top would hide every file the operator filed under `adds/`
+    // moments after putting it there.
     const files = [];
-    for (const n of names) {
-      try {
-        const st = await fs.stat(path.join(MEDIA_DIR, n));
-        if (st.isFile()) files.push({ name: n, size: st.size, mtime: st.mtime });
-      } catch { /* vanished between readdir and stat */ }
-    }
-    return { dir: MEDIA_DIR, files };
+    const scan = async (rel) => {
+      const dir = rel ? path.join(MEDIA_DIR, rel) : MEDIA_DIR;
+      let names = [];
+      try { names = await fs.readdir(dir); } catch { return; }
+      for (const n of names) {
+        try {
+          const st = await fs.stat(path.join(dir, n));
+          if (st.isFile()) files.push({ name: rel ? `${rel}/${n}` : n, size: st.size, mtime: st.mtime });
+          else if (st.isDirectory() && !rel) await scan(n);
+        } catch { /* vanished between readdir and stat */ }
+      }
+    };
+    await scan('');
+    // Sorted so a listing does not reshuffle itself between refreshes for
+    // reasons that are the filesystem's and not the operator's.
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    return { dir: MEDIA_DIR, files, folders: [...new Set(files.map(f => f.name.split('/')[0]).filter((x, i, a) => files.some(f => f.name.startsWith(`${x}/`))))] };
   },
 
   // Raw-body upload keyed by name: no multipart parser to get wrong.
@@ -286,6 +374,114 @@ const routes = {
   // Downloaded to a .part file, hashed while it streams, and only renamed into
   // place once the digest matches what the panel said. A 2 GB transfer cut
   // short must never become a media file Nimble will play half of.
+  // iter19 m6 — how long does this file run.
+  //
+  // Needed to work out where a stopped playlist had got to: the file format
+  // carries no position, so it has to be reconstructed from durations, and a
+  // wrong duration puts the resume in the wrong file.
+  //
+  // ffprobe is asked because it reads the container rather than guessing from
+  // size and bitrate. If it is not installed, that is reported — a made-up
+  // duration is worse than none, because none disables the resume while a
+  // wrong one silently misplaces it.
+  async 'POST /media/probe'(req, url, task) {
+    const paths = Array.isArray(task?.paths) ? task.paths.slice(0, 200) : [];
+    const results = [];
+    let toolMissing = false;
+
+    for (const raw of paths) {
+      const p = path.resolve(String(raw || ''));
+      if (p !== MEDIA_ROOT && !p.startsWith(`${MEDIA_ROOT}${path.sep}`)) {
+        results.push({ path: raw, ok: false, reason: 'outside the media root' });
+        continue;
+      }
+      if (toolMissing) { results.push({ path: raw, ok: false, reason: 'ffprobe is not installed' }); continue; }
+      try {
+        const st = await fs.stat(p);
+        // Streams as well as duration, in one call. A playlist made of files
+        // that disagree on resolution or frame rate stutters at every join,
+        // and the probe that measures length is already open — asking twice
+        // would double the cost of the check that catches it.
+        const out = await runTool('ffprobe', [
+          '-v', 'error', '-print_format', 'json',
+          '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels',
+          p,
+        ], { timeoutMs: 20_000 });
+
+        let doc;
+        try { doc = JSON.parse(String(out)); }
+        catch { results.push({ path: raw, ok: false, reason: 'ffprobe returned something unreadable' }); continue; }
+
+        const seconds = Number(doc?.format?.duration);
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+          results.push({ path: raw, ok: false, reason: 'ffprobe reported no usable duration' });
+          continue;
+        }
+
+        const v = (doc.streams || []).find(x => x.codec_type === 'video');
+        const a = (doc.streams || []).find(x => x.codec_type === 'audio');
+        // r_frame_rate is a ratio like "30000/1001". Reduced here so the panel
+        // compares numbers rather than two spellings of the same rate.
+        const fps = (() => {
+          const [n, d] = String(v?.r_frame_rate || '').split('/').map(Number);
+          return n && d ? Math.round((n / d) * 1000) / 1000 : null;
+        })();
+
+        results.push({
+          path: raw, ok: true,
+          durationMs: Math.round(seconds * 1000),
+          // Size and mtime travel with it so the panel can tell a cached
+          // reading from one belonging to a file that has since been replaced.
+          size: st.size, mtime: st.mtimeMs,
+          video: v ? { codec: v.codec_name || null, width: v.width || null, height: v.height || null, fps } : null,
+          audio: a ? { codec: a.codec_name || null, sampleRate: Number(a.sample_rate) || null, channels: a.channels || null } : null,
+        });
+      } catch (e) {
+        const msg = String(e?.message || e);
+        // `e.code === 'ENOENT'` on a spawn failure means the BINARY is absent;
+        // a missing media file fails differently, because ffprobe runs and
+        // then complains. Matching on the message would confuse the two the
+        // first time either wording changed.
+        if (e?.code === 'ENOENT' && !/No such file/i.test(msg)) {
+          // Asked once, reported for all: two hundred identical failures is
+          // not two hundred pieces of information.
+          toolMissing = true;
+          results.push({ path: raw, ok: false, reason: 'ffprobe is not installed' });
+        } else {
+          results.push({ path: raw, ok: false, reason: msg.slice(0, 120) });
+        }
+      }
+    }
+    return { root: MEDIA_ROOT, ffprobe: !toolMissing, results };
+  },
+
+  // iter19 m1 — does this path exist, and how big is it.
+  //
+  // A playlist entry naming a file that is not there plays silence, and the
+  // only way to find out today is to watch the stream. Checked before the file
+  // is deployed rather than after.
+  async 'POST /media/stat'(req, url, task) {
+    const paths = Array.isArray(task?.paths) ? task.paths.slice(0, 500) : [];
+    const out = [];
+    for (const raw of paths) {
+      const p = path.resolve(String(raw || ''));
+      // Confined to the media root. The panel decides what to ask about, but
+      // not where to look — a stat is a small oracle about a filesystem and
+      // this one answers only about media.
+      if (p !== MEDIA_ROOT && !p.startsWith(`${MEDIA_ROOT}${path.sep}`)) {
+        out.push({ path: raw, ok: false, reason: 'outside the media root' });
+        continue;
+      }
+      try {
+        const st = await fs.stat(p);
+        out.push({ path: raw, ok: st.isFile(), size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() });
+      } catch (e) {
+        out.push({ path: raw, ok: false, reason: e.code === 'ENOENT' ? 'missing' : String(e.code || e.message) });
+      }
+    }
+    return { root: MEDIA_ROOT, results: out };
+  },
+
   // iter16 — read Nimble's native API on the panel's behalf.
   //
   // The panel used to call the server directly, which was a leftover from
@@ -371,7 +567,11 @@ const routes = {
   async 'POST /media/fetch'(req, url, task) {
     const { transferId, name, sha256: expected, size } = task || {};
     if (!transferId || !name) throw new Error('transferId and name are required');
-    const full = safeJoin(MEDIA_DIR, name);
+    const full = safeJoin(MEDIA_DIR, name, { allowFolder: true });
+    // The folder is created here rather than required to exist: the operator
+    // is choosing it in the panel, and making them log in to mkdir first
+    // defeats the point of uploading through the panel at all.
+    await fs.mkdir(path.dirname(full), { recursive: true });
     const ext = path.extname(full).slice(1).toLowerCase();
     if (!ALLOWED_MEDIA.includes(ext)) {
       throw Object.assign(new Error(`extension .${ext || '?'} is not allowed`), { code: 415 });
@@ -417,7 +617,8 @@ const routes = {
 
   async 'PUT /media'(req, url) {
     const name = url.searchParams.get('name');
-    const full = safeJoin(MEDIA_DIR, name);
+    const full = safeJoin(MEDIA_DIR, name, { allowFolder: true });
+    await fs.mkdir(path.dirname(full), { recursive: true });
     const ext = path.extname(full).slice(1).toLowerCase();
     if (!ALLOWED_MEDIA.includes(ext)) {
       throw Object.assign(new Error(`extension .${ext || '?'} is not allowed`), { code: 415 });
@@ -443,7 +644,7 @@ const routes = {
   },
 
   async 'DELETE /media'(req, url) {
-    const full = safeJoin(MEDIA_DIR, url.searchParams.get('name'));
+    const full = safeJoin(MEDIA_DIR, url.searchParams.get('name'), { allowFolder: true });
     await fs.rm(full, { force: false });
     return { ok: true, name: path.basename(full) };
   },

@@ -353,5 +353,76 @@ check('the unit runs the Node that was settled on', () => {
   assert.ok(!sh.includes('ExecStart=$(command -v node)'));
 });
 
+console.log('\nA MIXED-VERSION FLEET (v0.38.0):');
+
+const clientSrc2 = readFileSync(new URL('../src/services/nimbleClient.js', import.meta.url), 'utf8');
+const agentFile = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+
+check('an agent too old for a route falls back instead of failing', () => {
+  // This listed the failures worth falling back from and missed the one that
+  // matters: an agent older than v10 has no `POST /nimble` and answers "no
+  // handler for ...". A fleet of older agents would have lost native
+  // statistics entirely rather than falling back to a direct call.
+  const rethrows = (msg) => /^Nimble API HTTP/.test(msg) || /^nimble returned \d+ for /.test(msg);
+  assert.equal(rethrows('no handler for POST /nimble'), false);
+  assert.equal(rethrows('task timed out'), false);
+  assert.equal(rethrows('agent is not enabled for this server'), false);
+  // Answers that came from Nimble itself are the answer: asking again would
+  // only reproduce them.
+  assert.equal(rethrows('Nimble API HTTP 404'), true);
+  assert.equal(rethrows('nimble returned 500 for /manage/x'), true);
+  assert.ok(clientSrc2.includes('const fromNimble ='));
+});
+
+check('an unknown route fails fast, not on a timeout', () => {
+  // Twenty seconds per call on an old agent would make the panel look broken
+  // rather than the agent look old.
+  assert.ok(agentFile.includes('throw new Error(`no handler for ${task.route}`)'));
+  assert.ok(agentFile.includes("panelFetch(`/task/${task.id}/result`, { ok: false"));
+});
+
+check('the media root is fixed, not derived from the upload directory', () => {
+  // dirname(MEDIA_DIR) was convenient and wrong: with MEDIA_DIR at
+  // /srv/nimble/media it yields /srv/nimble, which contains conf/ and so the
+  // agent's own token. A default that widens as a configuration gets simpler
+  // is the wrong shape for a permission.
+  assert.ok(!agentFile.includes('path.dirname(MEDIA_DIR)'));
+  assert.ok(agentFile.includes("const dflt = '/srv/nimble/media'"));
+  const pick = (raw) => {
+    if (!raw) return '/srv/nimble/media';
+    return raw.split('/').filter(Boolean).length < 2 ? '/srv/nimble/media' : raw;
+  };
+  assert.equal(pick(undefined), '/srv/nimble/media');
+  assert.equal(pick('/srv'), '/srv/nimble/media', 'too broad, narrowed');
+  assert.equal(pick('/'), '/srv/nimble/media');
+  assert.equal(pick('/opt/nimble/media'), '/opt/nimble/media', 'a real directory is honoured');
+});
+
+check('a bad setting never stops the agent from starting', () => {
+  // Throwing was the first attempt and was worse than the problem: an agent
+  // that will not start cannot self-update to a fix either, on a machine that
+  // by design has no inbound route. Someone would have to be sent to it.
+  const block = agentFile.slice(agentFile.indexOf('const MEDIA_ROOT'), agentFile.indexOf('const MEDIA_ROOT') + 900);
+  assert.ok(!/throw new Error/.test(block));
+  assert.ok(block.includes('console.error'), 'refused loudly and carried on');
+});
+
+check('nothing new can abort start-up', () => {
+  // Every throw added by iter19 is inside a handler. The only top-level exit
+  // is the token check, which predates this and is correct.
+  const head = agentFile.slice(0, agentFile.indexOf('const routes ='));
+  const topLevelThrows = head.split('\n')
+    .filter(l => /^\s*throw /.test(l) && !/^\s*\/\//.test(l));
+  assert.deepEqual(topLevelThrows, []);
+});
+
+check('a v9 agent will accept the new file as an update', () => {
+  // The check the OLD agent applies to a replacement before becoming it. If
+  // the new file failed it, the fleet would be stuck at v9 with no way
+  // forward but a visit.
+  assert.ok(agentFile.startsWith('#!'));
+  assert.ok(agentFile.includes('AGENT_VERSION'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall agent-lifecycle checks passed');
 process.exit(fail ? 1 : 0);

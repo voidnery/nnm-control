@@ -5,6 +5,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
+import PlaylistServerPanel from '../components/PlaylistServerPanel.jsx';
 import Select from '../components/Select.jsx';
 import * as E from '../lib/playlistEngine.js';
 import { DeployPlaylistModal } from '../components/AgentPanel.jsx';
@@ -20,10 +21,18 @@ function NumOrEmpty({ value, onChange, placeholder }) {
 }
 
 // ---- Stream editor ----
-function StreamEditor({ stream, onChange, onRemove, onDup, isDefault }) {
+function StreamEditor({ stream, onChange, onRemove, onDup, isDefault, media }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...stream, [k]: v });
   const isVod = stream.Type === 'vod';
+  // Whether this entry points at a file the server actually has.
+  //
+  // A source has always been free text, which is how a path to a missing file
+  // gets into a playlist — and the only way to find out has been silence on
+  // air. Checked here, while it is being typed, against what the server
+  // reports it holds.
+  const known = media?.paths;
+  const missing = isVod && known && stream.Source && !known.has(stream.Source);
   return (
     <div className="panel" style={{ background: 'var(--bg-raise)', marginBottom: 6 }}>
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -41,7 +50,18 @@ function StreamEditor({ stream, onChange, onRemove, onDup, isDefault }) {
                   options={[{ value: 'vod', label: 'vod (file)' }, { value: 'live', label: 'live (stream)' }]} />
         </Field>
         <Field label={t('pl.source')}>
-          <input value={stream.Source} onChange={e => set('Source', e.target.value)} placeholder={isVod ? '/media/file.mp4' : 'rtmp://src/app/stream'} />
+          <input value={stream.Source} onChange={e => set('Source', e.target.value)}
+                 style={missing ? { borderColor: 'var(--warn)' } : undefined}
+                 placeholder={isVod ? '/media/file.mp4' : 'rtmp://src/app/stream'} />
+          {missing && <div className="hint" style={{ color: 'var(--warn)' }}>{t('pl.sourceMissing')}</div>}
+          {/* Picking beats typing: a list of what is there cannot produce a
+              path that is not. Typing stays for live sources and for files
+              placed outside the media library. */}
+          {isVod && known && known.size > 0 && (
+            <Select value="" onChange={v => v && set('Source', v)} style={{ marginTop: 4 }}
+                    options={[{ value: '', label: t('pl.pickFromServer') },
+                              ...[...known].sort().map(p => ({ value: p, label: p.replace(media.dir + '/', '') }))]} />
+          )}
         </Field>
         <Field label={t('pl.durationSec')}>
           <input value={E.msToSec(stream.Duration)} placeholder="sec / hh:mm:ss"
@@ -64,8 +84,11 @@ function StreamEditor({ stream, onChange, onRemove, onDup, isDefault }) {
 }
 
 // ---- Block editor ----
-function BlockEditor({ block, onChange, onRemove, onDup }) {
+function BlockEditor({ block, onChange, onRemove, onDup, media }) {
   const { t } = useI18n();
+  const [ads, setAds] = useState(false);
+  const [every, setEvery] = useState(1);
+  const [chosen, setChosen] = useState([]);
   const [open, setOpen] = useState(true);
   const set = (k, v) => onChange({ ...block, [k]: v });
   const setStream = (i, s) => set('Streams', block.Streams.map((x, j) => j === i ? s : x));
@@ -105,10 +128,19 @@ function BlockEditor({ block, onChange, onRemove, onDup }) {
 
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 8 }}>
             <b>{t('pl.sources')}</b>
-            <button onClick={() => set('Streams', [...block.Streams, E.makeStream()])}>+ {t('pl.addSource')}</button>
+            {/* Grouped: a third child under space-between spreads into the
+                middle instead of sitting with its neighbour. */}
+            <div className="row" style={{ gap: 6 }}>
+              <button onClick={() => set('Streams', [...block.Streams, E.makeStream()])}>+ {t('pl.addSource')}</button>
+              {/* The pattern the live playlist was built with by hand: three
+                  adverts before every match, 24 entries for 8 matches. Doing
+                  it a row at a time is where an advert goes missing or a match
+                  repeats, and neither shows until it airs. */}
+              <button onClick={() => setAds(true)} disabled={!block.Streams.length}>{t('pl.interleave')}</button>
+            </div>
           </div>
           {block.Streams.map((s, i) => (
-            <StreamEditor key={s._id || i} stream={s}
+            <StreamEditor key={s._id || i} stream={s} media={media}
                           onChange={ns => setStream(i, ns)}
                           onRemove={() => set('Streams', block.Streams.filter((_, j) => j !== i))}
                           onDup={() => set('Streams', [...block.Streams.slice(0, i + 1), { ...s, _id: E.newUid() }, ...block.Streams.slice(i + 1)])} />
@@ -116,12 +148,53 @@ function BlockEditor({ block, onChange, onRemove, onDup }) {
           {block.Streams.length === 0 && <div className="hint">{t('pl.noSources')}</div>}
         </div>
       )}
+
+      {ads && (
+        <Modal onClose={() => setAds(false)} size="wide">
+          <h3 style={{ marginTop: 0 }}>{t('pl.interleave')}</h3>
+          <p className="hint">{t('pl.interleaveHint')}</p>
+          <label>{t('pl.interleaveWhich')}</label>
+          <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 6, padding: 6 }}>
+            {(media?.files || []).map(f => {
+              const full = `${media.dir}/${f.name}`;
+              return (
+                <label key={full} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0' }}>
+                  <input type="checkbox" checked={chosen.includes(full)}
+                         onChange={e => setChosen(c => (e.target.checked ? [...c, full] : c.filter(x => x !== full)))} />
+                  <span className="mono" style={{ fontSize: 12 }}>{f.name}</span>
+                </label>
+              );
+            })}
+            {!media?.files?.length && <div className="hint">{t('pl.interleaveNoMedia')}</div>}
+          </div>
+          <label style={{ marginTop: 8 }}>{t('pl.interleaveEvery')}</label>
+          <input type="number" min={1} value={every} onChange={e => setEvery(Math.max(1, Number(e.target.value) || 1))} />
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <button onClick={() => setAds(false)}>{t('action.cancel')}</button>
+            <button className="primary" disabled={!chosen.length}
+                    onClick={() => {
+                      // Applied here rather than through the parent: the block
+                      // is what is being changed, and routing it upward would
+                      // need the block's own index, which is exactly the sort
+                      // of bookkeeping that goes wrong quietly.
+                      const content = block.Streams.filter(x => !chosen.includes(x.Source));
+                      const out = [];
+                      content.forEach((item, i) => {
+                        if (i % every === 0) for (const src of chosen) out.push(E.makeStream({ Type: 'vod', Source: src }));
+                        out.push(item);
+                      });
+                      onChange({ ...block, Streams: out });
+                      setAds(false);
+                    }}>{t('pl.interleaveApply')}</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 // ---- Task editor ----
-function TaskEditor({ task, onChange, onRemove }) {
+function TaskEditor({ task, onChange, onRemove, media }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...task, [k]: v });
   const setBlock = (i, b) => set('Blocks', task.Blocks.map((x, j) => j === i ? b : x));
@@ -140,7 +213,7 @@ function TaskEditor({ task, onChange, onRemove }) {
         <button onClick={() => set('Blocks', [...task.Blocks, E.makeBlock()])}>+ {t('pl.addBlock')}</button>
       </div>
       {task.Blocks.map((b, i) => (
-        <BlockEditor key={b._id || i} block={b}
+        <BlockEditor key={b._id || i} block={b} media={media}
                      onChange={nb => setBlock(i, nb)}
                      onRemove={() => set('Blocks', task.Blocks.filter((_, j) => j !== i))}
                      onDup={() => set('Blocks', [...task.Blocks.slice(0, i + 1), { ...b, _id: E.newUid(), Id: E.newBlockId() }, ...task.Blocks.slice(i + 1)])} />
@@ -151,7 +224,7 @@ function TaskEditor({ task, onChange, onRemove }) {
 }
 
 // ---- Builder (full editor for one playlist) ----
-function Builder({ initial, onClose, onSaved }) {
+function Builder({ initial, onClose, onSaved, servers = [] }) {
   const { t } = useI18n();
   const { push } = useToast();
   const [name, setName] = useState(initial?.name || '');
@@ -164,6 +237,57 @@ function Builder({ initial, onClose, onSaved }) {
   const [err, setErr] = useState('');
 
   const built = useMemo(() => { try { return E.buildJson(model, 2); } catch { return '{}'; } }, [model]);
+
+  // A server to check against. Editing stays local — nothing here writes to a
+  // server — but an editor with no idea what the server holds is how a path to
+  // a missing file gets saved and only surfaces as silence on air.
+  const [srvId, setSrvId] = useState('');
+  const [media, setMedia] = useState(null);
+  const [state, setState] = useState(null);
+
+  useEffect(() => {
+    if (!srvId) { setMedia(null); setState(null); return undefined; }
+    let dead = false;
+    api(`/nimble/${srvId}/agent/media`)
+      .then(d => { if (dead) return;
+        const dir = String(d?.dir || '').replace(/\/+$/, '');
+        setMedia({ dir, files: d?.files || [],
+          paths: new Set((d?.files || []).map(f => `${dir}/${f.name}`)) });
+      })
+      .catch(() => { if (!dead) setMedia(null); });
+    api(`/nimble/${srvId}/agent/playlist-state`)
+      .then(d => { if (!dead) setState(d); })
+      .catch(e => { if (!dead) setState({ error: e.message }); });
+    return () => { dead = true; };
+  }, [srvId]);
+
+  // Interleave a repeating set between the items already in a block.
+  //
+  // The live playlist does this by hand: three adverts between every match,
+  // 24 entries for 8 matches. Building that a row at a time is where an
+  // operator loses an advert or repeats a match, and neither is visible until
+  // it airs.
+  const interleave = (taskIndex, blockIndex, sources, every) => {
+    setModel(m => {
+      const tasks = m.Tasks.map((tk, ti) => {
+        if (ti !== taskIndex) return tk;
+        const blocks = tk.Blocks.map((b, bi) => {
+          if (bi !== blockIndex) return b;
+          // Only the content already there is treated as content; a previous
+          // interleave is not multiplied by the next one.
+          const content = b.Streams.filter(x => !sources.includes(x.Source));
+          const out = [];
+          content.forEach((item, i) => {
+            if (i % every === 0) for (const src of sources) out.push(E.makeStream({ Type: 'vod', Source: src }));
+            out.push(item);
+          });
+          return { ...b, Streams: out };
+        });
+        return { ...tk, Blocks: blocks };
+      });
+      return { ...m, Tasks: tasks };
+    });
+  };
   const notes = useMemo(() => E.validate(model), [model]);
   const setTask = (i, tk) => setModel(m => ({ ...m, Tasks: m.Tasks.map((x, j) => j === i ? tk : x) }));
 
@@ -215,12 +339,40 @@ function Builder({ initial, onClose, onSaved }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: showJson ? '1fr 1fr' : '1fr', gap: 12 }}>
           <div>
+            {/* Which server this is being written for. Nothing is sent to it
+                from here — but without one the editor cannot say whether a
+                path exists, which is the failure it is meant to prevent. */}
+            <div className="row" style={{ gap: 10, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+              <span className="hint">{t('pl.checkAgainst')}</span>
+              <Select value={srvId} onChange={setSrvId} style={{ minWidth: 220 }}
+                      options={[{ value: '', label: t('pl.noServer') },
+                                ...servers.map(sv => ({ value: sv.id || sv._id, label: sv.name }))]} />
+              {media && <span className="hint">{t('pl.mediaCount', { n: media.files.length, dir: media.dir })}</span>}
+              {srvId && !media && <span className="hint" style={{ color: 'var(--warn)' }}>{t('pl.mediaUnavailable')}</span>}
+            </div>
+
+            {/* What is on that server now, so an edit is made knowing what it
+                would replace. */}
+            {state && !state.error && (
+              <div className="hint" style={{ marginBottom: 8 }}>
+                {state.exists === false
+                  ? t('pl.stateNone')
+                  : t('pl.stateHas', {
+                    tasks: state.parsed?.tasks?.length ?? 0,
+                    entries: (state.parsed?.tasks || []).reduce((a, x) => a + x.count, 0),
+                  })}
+                {state.media?.missing?.length > 0 && (
+                  <span style={{ color: 'var(--warn)' }}> · {t('pl.stateMissing', { n: state.media.missing.length })}</span>
+                )}
+              </div>
+            )}
+
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <b>{t('pl.tasks')}</b>
               <button onClick={() => setModel(m => ({ ...m, Tasks: [...m.Tasks, E.makeTask()] }))}>+ {t('pl.addTask')}</button>
             </div>
             {model.Tasks.map((tk, i) => (
-              <TaskEditor key={tk._id || i} task={tk} onChange={ntk => setTask(i, ntk)}
+              <TaskEditor key={tk._id || i} task={tk} media={media} onChange={ntk => setTask(i, ntk)}
                           onRemove={() => setModel(m => ({ ...m, Tasks: m.Tasks.filter((_, j) => j !== i) }))} />
             ))}
             {model.Tasks.length === 0 && <div className="hint">{t('pl.noTasks')}</div>}
@@ -333,8 +485,12 @@ export default function PlaylistsPage() {
       )}
 
       {editing && (
-        <Builder initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
+        <Builder initial={editing} servers={servers} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
       )}
+      {/* The server side of playlists: what is running, what is wrong with it,
+          what media is there, and what was there before. All of it existed as
+          routes and none of it was reachable. */}
+      <PlaylistServerPanel servers={servers} />
       {deploying && <DeployPlaylistModal playlist={deploying} servers={servers} onClose={() => setDeploying(null)} />}
     </div>
   );

@@ -63,7 +63,23 @@ async function call(server, path, { method = 'GET', body, extraQuery } = {}) {
       // The agent being unable to answer does not mean the server is
       // unreachable — fall through and try directly, which is what a server on
       // a routable address would have done anyway.
-      if (!/timed out|no agent|not enabled/i.test(String(e?.message))) throw e;
+      //
+      // This used to list the failures worth falling back from, and missed the
+      // one that matters most: an agent older than v10 has no `POST /nimble`
+      // and answers "no handler for ...". That threw, so a fleet of older
+      // agents would have lost native statistics entirely rather than falling
+      // back to a direct call.
+      //
+      // Inverted deliberately. The fallback is harmless — a direct call either
+      // works or fails quickly — so the default is to try it, and only a
+      // failure that came from NIMBLE ITSELF is worth propagating, because
+      // asking the same server the same question again would only repeat it.
+      const msg = String(e?.message || '');
+      // Answers that came from Nimble itself, whether directly or relayed by
+      // the agent. Asking the same server the same question again would only
+      // reproduce them, so they are the answer.
+      const fromNimble = /^Nimble API HTTP/.test(msg) || /^nimble returned \d+ for /.test(msg);
+      if (fromNimble) throw e;
     }
   }
   const url = buildUrl(server, path, extraQuery);

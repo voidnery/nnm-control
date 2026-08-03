@@ -253,6 +253,26 @@ window.fetch = (u) => {
       { ts:new Date(Date.now()-60000).toISOString(), v:[6.4,null,9.8,10,0,3,5,2,81.3,50,8192,8192,0,29e9,8.3e6,0,39] },
       { ts:new Date().toISOString(),                 v:[6.5,null,10.1,12,0,3,6,2,81.5,50,8192,8192,0,30e9,8.4e6,0,39] }] }),
     text:()=>Promise.resolve('{}') });
+  if (s.includes('/agent/playlist-state')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    name:'server-playlist.json', exists:true,
+    parsed:{ ok:true, tasks:[{ stream:'povtor_tennis/video_playlist_02_03', count:24, distinct:9,
+      blocks:[{ index:0, id:'b517f333', loops:true, count:24 }], items:[] }], sources:[] },
+    media:{ checked:16, missing:[{ path:'/srv/nimble/media/x.mp4', reason:'missing' }] } }), text:()=>Promise.resolve('{}') });
+  if (s.includes('/agent/playlist-advice')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    drift:{ state:'drifted', since:new Date().toISOString() },
+    joins:[{ stream:'povtor_tennis/video_playlist_02_03', issues:[{ at:3, diffs:[{ what:'frame rate', from:25, to:30 }] }], unknown:[] }],
+    timings:[{ stream:'povtor_tennis/video_playlist_02_03', totalMs:7_740_000, loopsForever:true,
+      blocks:[{ complete:true }], endsAt:null, endsInMs:null }], endingSoon:[] }), text:()=>Promise.resolve('{}') });
+  if (s.includes('/agent/playlist-history/')) return Promise.resolve({ ok:true, status:200,
+    json:()=>Promise.resolve({ _id:'v1', createdAt:new Date().toISOString(), content:'{"Tasks":[{"Stream":"old/one"}]}' }),
+    text:()=>Promise.resolve('{}') });
+  if (s.includes('/agent/playlist-history')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    versions:[{ _id:'v1', createdAt:new Date().toISOString(), by:'superadmin', bytes:7422, origin:'panel', forced:false, missingAtDeploy:[] }] }),
+    text:()=>Promise.resolve('{}') });
+  if (s.includes('/agent/media')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    dir:'/srv/nimble/media/gallery',
+    files:[{ name:'adds/reklama_1.mp4', size:12e6 }, { name:'matches/match_1.mp4', size:900e6 }] }),
+    text:()=>Promise.resolve('{}') });
   if (s.includes('/live-objects/')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     kind:'incoming', available:true, strategy:'name', matched:1, objects:2, entries:1,
     live:{ 'o1': { bps:6200000, online:true, idle:false, rtt:9.8, loss:0.81, retries:39 }, 'o2': { bps:0, online:true, idle:true, rtt:9.3, loss:null, retries:51427 } }, diagnostics:null }),
