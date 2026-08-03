@@ -112,7 +112,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 15;
+const AGENT_VERSION = 16;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -244,9 +244,12 @@ const routes = {
     const full = safeJoin(CONF_DIR, url.searchParams.get('name'));
     try {
       const [content, stat] = await Promise.all([fs.readFile(full, 'utf8'), fs.stat(full)]);
-      return { name: path.basename(full), content, size: stat.size, mtime: stat.mtime };
+      return { name: path.basename(full), content, size: stat.size, mtime: stat.mtime, dir: CONF_DIR };
     } catch (e) {
-      if (e.code === 'ENOENT') return { name: path.basename(full), content: null, exists: false };
+      // The directory travels with the answer. "No such file" is not
+      // actionable without knowing where it was looked for: a CONF_DIR
+      // pointing somewhere else looks exactly like a server with no playlist.
+      if (e.code === 'ENOENT') return { name: path.basename(full), content: null, exists: false, dir: CONF_DIR };
       throw e;
     }
   },

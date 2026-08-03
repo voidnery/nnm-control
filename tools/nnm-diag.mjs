@@ -214,4 +214,34 @@ if (!subject) {
   }
 }
 
+// ── playlists ────────────────────────────────────────────────────────────────
+//
+// Added because "the panel cannot see the playlist" has at least four causes
+// and they look alike from a screen: the agent is not answering, it is looking
+// in the wrong directory, the file is not there, or it is there and will not
+// parse.
+console.log('\n6. PLAYLIST');
+try {
+  const st = await api(`/nimble/${SERVER}/agent/playlist-state`);
+  line('file', st.name);
+  line('agent looked in', st.confDir || '— not reported (agent older than v16) —');
+  if (st.exists === null) {
+    line('VERDICT', `the agent could not answer: ${st.error}`);
+  } else if (st.exists === false) {
+    line('VERDICT', 'the agent looked and the file is not there — check the directory above');
+  } else if (!st.parsed?.ok) {
+    line('parsed', `no — ${st.parsed?.reason}`);
+    line('VERDICT', 'the file is there and could not be read as a Nimble playlist');
+  } else {
+    const entries = st.parsed.tasks.reduce((a, t) => a + t.count, 0);
+    line('tasks', String(st.parsed.tasks.length));
+    line('entries', `${entries} (${st.parsed.sources.length} distinct files)`);
+    for (const t of st.parsed.tasks.slice(0, 5)) line('', `${t.stream} — ${t.count} entries`);
+    line('sources missing', String(st.media?.missing?.length ?? '— not checked —'));
+    line('VERDICT', 'the panel can see the playlist');
+  }
+} catch (e) {
+  line('VERDICT', `the request itself failed: ${e.message.slice(0, 140)}`);
+}
+
 console.log('');

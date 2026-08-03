@@ -608,5 +608,51 @@ check('stopping and rolling back ask first', () => {
   assert.ok(panel.includes("confirm({ title: t('pls.rollback')"));
 });
 
+console.log('\nWHY THE PANEL CANNOT SEE A PLAYLIST (v0.38.1):');
+
+const proxy3 = readFileSync(new URL('../src/routes/agentProxy.js', import.meta.url), 'utf8');
+const panel2 = readFileSync(new URL('../../frontend/src/components/PlaylistServerPanel.jsx', import.meta.url), 'utf8');
+const agent4 = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+
+check('a politely-reported missing file is no longer parsed as empty', () => {
+  // The agent answers ENOENT with `{ content: null, exists: false }` rather
+  // than throwing, and that answer was ignored: it fell through to the parser,
+  // which said "empty". So an unreachable agent, a server with no playlist and
+  // a server with an unreadable one all reached the page looking alike.
+  assert.ok(proxy3.includes('if (file && file.exists === false)'));
+  const at = proxy3.indexOf('if (file && file.exists === false)');
+  const parseAt = proxy3.indexOf('parsePlaylistFile(file.content)', at);
+  assert.ok(parseAt > at, 'the check comes before the parse');
+});
+
+check('content that is neither a string nor a stated absence is reported', () => {
+  // Rather than becoming "empty playlist", which is a different fact.
+  assert.ok(proxy3.includes("typeof file?.content !== 'string'"));
+  assert.ok(proxy3.includes('did not say it was missing'));
+});
+
+check('the agent says where it looked', () => {
+  // "No such file" is not actionable without it: a CONF_DIR pointing
+  // elsewhere looks exactly like a server that has no playlist.
+  assert.equal((agent4.match(/dir: CONF_DIR/g) || []).length, 2, 'on both the found and missing paths');
+});
+
+check('the page tells the four causes apart', () => {
+  for (const k of ['pls.unreachable', 'pls.noFile', 'pls.lookedIn', 'pls.unreadable']) {
+    assert.ok(panel2.includes(k), k);
+  }
+  assert.ok(panel2.includes('state.exists === null'));
+  assert.ok(panel2.includes('state.exists === true && state.parsed && !state.parsed.ok'));
+});
+
+check('the standalone diagnostic reaches the same four verdicts', () => {
+  const diag = readFileSync(new URL('../../tools/nnm-diag.mjs', import.meta.url), 'utf8');
+  assert.ok(diag.includes('6. PLAYLIST'));
+  assert.ok(diag.includes('the agent could not answer'));
+  assert.ok(diag.includes('the file is not there — check the directory above'));
+  assert.ok(diag.includes('could not be read as a Nimble playlist'));
+  assert.ok(diag.includes('the panel can see the playlist'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall playlist-file checks passed');
 process.exit(fail ? 1 : 0);

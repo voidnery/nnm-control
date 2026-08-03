@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.38.1 — a found defect, and four causes told apart
+- **The agent reports a missing file politely and the panel was not listening.**
+  `GET /config` answers ENOENT with `{ content: null, exists: false }` rather
+  than throwing, and that answer fell straight through to the parser, which
+  said "empty". So an agent that could not be reached, a server with no
+  playlist, and a server with an unreadable one all arrived at the page looking
+  alike — and none of them looked like "the playlist is there"
+- Content that is neither a string nor a stated absence is now reported as
+  such, rather than becoming "empty playlist", which is a different fact
+- **The agent says where it looked.** "No such file" is not actionable without
+  it: a `CONF_DIR` pointing elsewhere looks exactly like a server that has no
+  playlist. Agent protocol version 16
+- The page says the four apart, and `tools/nnm-diag.mjs` gained a playlist
+  section reaching the same four verdicts — the agent did not answer, it looked
+  and the file is not there, it is there and will not parse, or the panel can
+  see it
+- 5 new checks
+
+
 ### v0.38.0 — reviewing iter19, with the fleet in mind
 Three defects, all in the seam between a new panel and agents that are not new.
 

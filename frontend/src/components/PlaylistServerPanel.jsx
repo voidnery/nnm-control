@@ -96,8 +96,27 @@ export default function PlaylistServerPanel({ servers }) {
         <>
           {/* ---- What is running ---- */}
           <div style={{ marginTop: 12 }}>
-            {state.error && <div className="hint" style={{ color: 'var(--warn)' }}>{state.error}</div>}
-            {state.exists === false && <div className="hint">{t('pls.noFile')}</div>}
+            {/* Four causes that look alike from a screen: the agent is not
+                answering, it is looking in the wrong directory, the file is
+                not there, or it is there and will not parse. They need
+                different things done about them, so they are said
+                differently. */}
+            {state.exists === null && (
+              <div className="hint" style={{ color: 'var(--warn)' }}>
+                {t('pls.unreachable', { why: state.error || '' })}
+              </div>
+            )}
+            {state.exists === false && (
+              <div className="hint">
+                {t('pls.noFile')}
+                {state.confDir && ` ${t('pls.lookedIn', { dir: state.confDir })}`}
+              </div>
+            )}
+            {state.exists === true && state.parsed && !state.parsed.ok && (
+              <div className="hint" style={{ color: 'var(--warn)' }}>
+                {t('pls.unreadable', { why: state.parsed.reason })}
+              </div>
+            )}
 
             {/* Changed behind the panel: the next deploy overwrites it, and
                 editing by hand is how this has always been done here. */}

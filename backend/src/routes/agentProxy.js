@@ -159,9 +159,25 @@ agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadS
   if (readError && /not found|ENOENT|missing/i.test(readError)) {
     return { name, exists: false, parsed: null, media: null, compare: null };
   }
-  if (readError) return { name, exists: null, error: readError };
+  if (readError) return { name, exists: null, error: readError, confDir: null };
 
-  const parsed = parsePlaylistFile(file?.content ?? '');
+  // The agent answers a missing file politely rather than by throwing, and
+  // that answer was being ignored: `content: null` fell through to the parser,
+  // which reported "empty" — so a server that could not be reached, a server
+  // with no playlist, and a server with an unreadable one all arrived at the
+  // page looking alike. They need different things done about them.
+  if (file && file.exists === false) {
+    return { name, exists: false, parsed: null, media: null, compare: null, confDir: file.dir || null };
+  }
+  if (typeof file?.content !== 'string') {
+    return {
+      name, exists: null,
+      error: 'the agent returned no content for this file and did not say it was missing',
+      raw: file ? Object.keys(file) : null,
+    };
+  }
+
+  const parsed = parsePlaylistFile(file.content);
 
   // Does every file it names actually exist? A playlist entry pointing at a
   // missing file plays silence, and today the only way to find that out is to
