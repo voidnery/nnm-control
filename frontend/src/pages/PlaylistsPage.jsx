@@ -248,14 +248,14 @@ function Builder({ initial, onClose, onSaved, servers = [] }) {
   useEffect(() => {
     if (!srvId) { setMedia(null); setState(null); return undefined; }
     let dead = false;
-    api(`/nimble/${srvId}/agent/media`)
+    api(`/servers/${srvId}/agent/media`)
       .then(d => { if (dead) return;
         const dir = String(d?.dir || '').replace(/\/+$/, '');
         setMedia({ dir, files: d?.files || [],
           paths: new Set((d?.files || []).map(f => `${dir}/${f.name}`)) });
       })
       .catch(() => { if (!dead) setMedia(null); });
-    api(`/nimble/${srvId}/agent/playlist-state`)
+    api(`/servers/${srvId}/agent/playlist-state`)
       .then(d => { if (!dead) setState(d); })
       .catch(e => { if (!dead) setState({ error: e.message }); });
     return () => { dead = true; };

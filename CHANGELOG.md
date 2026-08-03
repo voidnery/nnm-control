@@ -1,5 +1,28 @@
 # Changelog
 
+### v0.38.2 — the calls were aimed at the wrong router
+- The diagnostic named it in one line: **409, "native control is off while the
+  control plane is WMSPanel"**. The playlist panel called
+  `/nimble/:id/agent/...` for all fourteen of its requests, and the agent
+  routes are mounted at `/api/servers` — so every one landed in the native-API
+  router instead, which has a control-plane guard, and was refused
+- It looked like a permissions problem, then like a missing playlist, and was a
+  wrong prefix. Nothing in a build catches that: both prefixes exist, both
+  routers are real, the request is well-formed, and it only shows at runtime on
+  a server in a particular mode
+- New `npm run audit:prefix`. It reads **where each router is actually
+  mounted** from `index.js` and which router declares each `/:id/agent/...`
+  route, then checks every call in the frontend against that — rather than
+  against a list of prefixes someone would have to keep current. 17 calls, 12
+  routes, 25 mounts, verified both ways
+- Also from that run: "73 — the rest are disconnected sockets" reads as though
+  something is still wrong when 73 of 73 have data. The remainder is named only
+  when there is one
+
+**The rest of that run was clean**: all live sockets have a stored series, and
+end to end is intact.
+
+
 ### v0.38.1 — a found defect, and four causes told apart
 - **The agent reports a missing file politely and the panel was not listening.**
   `GET /config` answers ENOENT with `{ content: null, exists: false }` rather

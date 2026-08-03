@@ -132,7 +132,11 @@ const subjects = await api(`/stats/${SERVER}/subjects`).catch(() => ({ subjects:
 const srt = (subjects.subjects || []).filter(s => s.group === 'srt');
 line('srt subjects (last 15m)', String(srt.length));
 const rich = srt.filter(s => (s.metrics || []).length > 1);
-line('with more than retryCount', `${rich.length} — the rest are disconnected sockets, which carry nothing else`);
+// "73 — the rest are disconnected" when 73 of 73 have data reads as though
+// something is still wrong. The remainder is named only when there is one.
+line('with more than retryCount', rich.length === srt.length
+  ? `${rich.length} — all of them`
+  : `${rich.length}; the other ${srt.length - rich.length} are disconnected sockets, which carry nothing else`);
 if (rich.length) line('example', `${rich[0].label || rich[0].subject} → ${rich[0].metrics.length} metrics`);
 
 // ── 5. do the live sockets and the stored subjects agree? ───────────────────

@@ -50,10 +50,10 @@ export default function PlaylistServerPanel({ servers }) {
     // Independently: a server whose media cannot be listed can still have its
     // playlist read, and saying "nothing works" when one thing does is how an
     // operator ends up looking in the wrong place.
-    api(`/nimble/${srvId}/agent/playlist-state`).then(setState).catch(e => setState({ error: e.message }));
-    api(`/nimble/${srvId}/agent/playlist-advice`).then(setAdvice).catch(() => setAdvice(null));
-    api(`/nimble/${srvId}/agent/media`).then(d => setMedia(d)).catch(() => setMedia(null));
-    api(`/nimble/${srvId}/agent/playlist-history`).then(d => setVersions(d.versions || [])).catch(() => setVersions([]));
+    api(`/servers/${srvId}/agent/playlist-state`).then(setState).catch(e => setState({ error: e.message }));
+    api(`/servers/${srvId}/agent/playlist-advice`).then(setAdvice).catch(() => setAdvice(null));
+    api(`/servers/${srvId}/agent/media`).then(d => setMedia(d)).catch(() => setMedia(null));
+    api(`/servers/${srvId}/agent/playlist-history`).then(d => setVersions(d.versions || [])).catch(() => setVersions([]));
   }, [srvId]);
 
   useEffect(() => { load(); }, [load]);
@@ -70,7 +70,7 @@ export default function PlaylistServerPanel({ servers }) {
     // The folder is part of the name: one level, which is how this work is
     // organised — adverts apart from matches.
     const name = folder ? `${folder}/${file.name}` : file.name;
-    await act('upload', () => api(`/nimble/${srvId}/agent/media?name=${encodeURIComponent(name)}`, {
+    await act('upload', () => api(`/servers/${srvId}/agent/media?name=${encodeURIComponent(name)}`, {
       method: 'PUT', body: file, raw: true,
     }));
   };
@@ -146,7 +146,7 @@ export default function PlaylistServerPanel({ servers }) {
                       <div className="row" style={{ gap: 6 }}>
                         <button disabled={!!busy}
                                 onClick={() => confirm({ title: t('pls.stop'), body: t('pls.stopConfirm', { stream: task.stream }) })
-                                  .then(ok => ok && act('stop', () => api(`/nimble/${srvId}/agent/playlist-stop`, {
+                                  .then(ok => ok && act('stop', () => api(`/servers/${srvId}/agent/playlist-stop`, {
                                     method: 'POST', body: { stream: task.stream },
                                   })))}>{t('pls.stop')}</button>
                       </div>
@@ -224,7 +224,7 @@ export default function PlaylistServerPanel({ servers }) {
                             <button className="danger" disabled={!!busy}
                                     onClick={() => confirm({ title: t('action.delete'), body: t('pls.deleteConfirm', { name: f.name }) })
                                       .then(ok => ok && act('del', () => api(
-                                        `/nimble/${srvId}/agent/media?name=${encodeURIComponent(f.name)}`, { method: 'DELETE' })))}>
+                                        `/servers/${srvId}/agent/media?name=${encodeURIComponent(f.name)}`, { method: 'DELETE' })))}>
                               {t('action.delete')}
                             </button>
                           )}
@@ -256,13 +256,13 @@ export default function PlaylistServerPanel({ servers }) {
                       </td>
                       <td className="hint" style={{ whiteSpace: 'nowrap' }}>{fmtBytes(v.bytes)}</td>
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => api(`/nimble/${srvId}/agent/playlist-history/${v._id}`).then(setViewing)}>
+                        <button onClick={() => api(`/servers/${srvId}/agent/playlist-history/${v._id}`).then(setViewing)}>
                           {t('pls.view')}
                         </button>
                         {manage && (
                           <button disabled={!!busy}
                                   onClick={() => confirm({ title: t('pls.rollback'), body: t('pls.rollbackConfirm', { when: new Date(v.createdAt).toLocaleString() }) })
-                                    .then(ok => ok && act('rollback', () => api(`/nimble/${srvId}/agent/rollback-playlist`, {
+                                    .then(ok => ok && act('rollback', () => api(`/servers/${srvId}/agent/rollback-playlist`, {
                                       method: 'POST', body: { versionId: v._id },
                                     })))}>{t('pls.rollback')}</button>
                         )}
@@ -302,7 +302,7 @@ function StoppedStreams({ srvId, running, versions, busy, act }) {
     // The newest few versions are enough: a stream stopped ten deploys ago is
     // not something being restored in a hurry, and reading every version to
     // find it would cost a request each.
-    Promise.all(versions.slice(0, 5).map(v => api(`/nimble/${srvId}/agent/playlist-history/${v._id}`).catch(() => null)))
+    Promise.all(versions.slice(0, 5).map(v => api(`/servers/${srvId}/agent/playlist-history/${v._id}`).catch(() => null)))
       .then(list => {
         const names = new Set();
         for (const v of list) {
@@ -328,11 +328,11 @@ function StoppedStreams({ srvId, running, versions, busy, act }) {
             {/* Two buttons, not one with a checkbox: they do different things
                 and the difference is an hour of broadcast. */}
             <button disabled={!!busy}
-                    onClick={() => act('start', () => api(`/nimble/${srvId}/agent/playlist-start`, {
+                    onClick={() => act('start', () => api(`/servers/${srvId}/agent/playlist-start`, {
                       method: 'POST', body: { stream },
                     }))}>{t('pls.startTop')}</button>
             <button disabled={!!busy}
-                    onClick={() => act('resume', () => api(`/nimble/${srvId}/agent/playlist-start`, {
+                    onClick={() => act('resume', () => api(`/servers/${srvId}/agent/playlist-start`, {
                       method: 'POST', body: { stream, resume: true },
                     }))}>{t('pls.startResume')}</button>
           </div>

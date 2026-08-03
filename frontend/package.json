@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-frontend",
-  "version": "0.38.1",
+  "version": "0.38.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "audit:ui": "node scripts/ui-components-test.mjs",
     "audit:docker": "node scripts/docker-build-context-test.mjs",
     "audit:i18n": "python3 scripts/i18n-keys-audit.py",
-    "audit": "npm run audit:hooks && npm run audit:i18n && npm run audit:select && npm run audit:ui && npm run audit:playback && npm run audit:stats && npm run audit:graph && npm run audit:render && npm run audit:pages && npm run audit:docker && npm run audit:version && npm run audit:clipboard && npm run audit:layout && npm run audit:cache && npm run audit:plot && npm run audit:align && npm run audit:setter && npm run audit:settings && npm run audit:wired && npm run audit:spacing",
+    "audit": "npm run audit:hooks && npm run audit:i18n && npm run audit:select && npm run audit:ui && npm run audit:playback && npm run audit:stats && npm run audit:graph && npm run audit:render && npm run audit:pages && npm run audit:docker && npm run audit:version && npm run audit:clipboard && npm run audit:layout && npm run audit:cache && npm run audit:plot && npm run audit:align && npm run audit:setter && npm run audit:settings && npm run audit:wired && npm run audit:spacing && npm run audit:prefix",
     "audit:pages": "node scripts/pages-smoke.mjs",
     "audit:playback": "node scripts/playback-url-test.mjs",
     "audit:stats": "node scripts/stats-chart-test.mjs",
@@ -26,7 +26,8 @@
     "audit:setter": "node scripts/setter-audit.mjs",
     "audit:settings": "node scripts/settings-audit.mjs",
     "audit:wired": "node scripts/wired-audit.mjs",
-    "audit:spacing": "node scripts/spacing-audit.mjs"
+    "audit:spacing": "node scripts/spacing-audit.mjs",
+    "audit:prefix": "node scripts/route-prefix-audit.mjs"
   },
   "dependencies": {
     "hls.js": "^1.5.17",
