@@ -645,6 +645,24 @@ check('the page tells the four causes apart', () => {
   assert.ok(panel2.includes('state.exists === true && state.parsed && !state.parsed.ok'));
 });
 
+check('the diagnostic calls the router that serves it', () => {
+  // The panel was fixed and the tool was not, so it reported the very fault it
+  // had itself — and reported it again after the fault was fixed. A tool that
+  // can be wrong about the thing it diagnoses is worse than no tool, which is
+  // the second time that has come up in this project.
+  const diag = readFileSync(new URL('../../tools/nnm-diag.mjs', import.meta.url), 'utf8');
+  assert.ok(diag.includes('/servers/${SERVER}/agent/playlist-state'));
+  assert.ok(!diag.includes('/nimble/${SERVER}/agent/'));
+});
+
+check('the prefix audit covers the tools, not only the pages', () => {
+  const audit = readFileSync(new URL('../../frontend/scripts/route-prefix-audit.mjs', import.meta.url), 'utf8');
+  assert.ok(audit.includes("new URL('../../tools'"));
+  // The extension lives inside a regular expression in the audit, so a plain
+  // substring search for it finds nothing.
+  assert.ok(audit.includes('(jsx?|mjs)'), 'and reads the extension the tools use');
+});
+
 check('the standalone diagnostic reaches the same four verdicts', () => {
   const diag = readFileSync(new URL('../../tools/nnm-diag.mjs', import.meta.url), 'utf8');
   assert.ok(diag.includes('6. PLAYLIST'));

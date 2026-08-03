@@ -226,7 +226,7 @@ if (!subject) {
 // parse.
 console.log('\n6. PLAYLIST');
 try {
-  const st = await api(`/nimble/${SERVER}/agent/playlist-state`);
+  const st = await api(`/servers/${SERVER}/agent/playlist-state`);
   line('file', st.name);
   line('agent looked in', st.confDir || '— not reported (agent older than v16) —');
   if (st.exists === null) {

@@ -13,7 +13,15 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FRONT = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
+// The frontend AND the standalone tools. Fixing the panel and leaving the
+// diagnostic pointed at the wrong router is what happened here: the tool then
+// reported the very fault it had itself, and reported it a second time after
+// the fault was fixed.
+const ROOTS = [
+  path.resolve(fileURLToPath(new URL('../src', import.meta.url))),
+  path.resolve(fileURLToPath(new URL('../../tools', import.meta.url))),
+  path.resolve(fileURLToPath(new URL('../../backend/tools', import.meta.url))),
+];
 const BACK = path.resolve(fileURLToPath(new URL('../../backend/src', import.meta.url)));
 
 // Where each router is mounted, read from the server rather than assumed.
@@ -36,13 +44,14 @@ for (const f of readdirSync(path.join(BACK, 'routes'))) {
 }
 
 const files = [];
-(function walk(d) {
+const walk = (d) => {
   for (const e of readdirSync(d)) {
     const p = path.join(d, e);
     if (statSync(p).isDirectory()) walk(p);
-    else if (/\.jsx?$/.test(p)) files.push(p);
+    else if (/\.(jsx?|mjs)$/.test(p)) files.push(p);
   }
-})(FRONT);
+};
+for (const root of ROOTS) { try { walk(root); } catch { /* an absent tools dir is fine */ } }
 
 let bad = 0;
 let checked = 0;
@@ -56,7 +65,7 @@ for (const file of files) {
     const want = mounts.get(router);
     if (want && prefix !== want) {
       const line = src.slice(0, m.index).split('\n').length;
-      console.log(`  ✗ ${path.relative(FRONT, file)}:${line} — calls /${prefix}/…/${route}, `
+      console.log(`  ✗ ${path.relative(path.resolve(fileURLToPath(new URL('../..', import.meta.url))), file)}:${line} — calls /${prefix}/…/${route}, `
         + `but ${router} is mounted at /api/${want}`);
       bad++;
     }

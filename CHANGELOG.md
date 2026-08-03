@@ -1,5 +1,20 @@
 # Changelog
 
+### v0.38.3 — the diagnostic had the same fault it was reporting
+- v0.38.2 fixed fourteen calls in the panel and missed the fifteenth, in
+  `nnm-diag.mjs` itself. So the tool went on reporting the 409 **after the
+  fault was fixed** — reporting its own bug as the panel's
+- The audit added in the same release read only `frontend/src`, which is why it
+  passed. It reads the standalone tools and `backend/tools` too now, and the
+  extension they use. 18 calls instead of 17
+- Verified both ways, on the tool this time
+
+A tool that can be wrong about the thing it diagnoses is worse than no tool.
+That is the second time in this project — the first was `nnm-diag` reporting
+"no rate in any point" against a panel that was storing rates perfectly well.
+Both times the tool was fixed rather than the finding explained away.
+
+
 ### v0.38.2 — the calls were aimed at the wrong router
 - The diagnostic named it in one line: **409, "native control is off while the
   control plane is WMSPanel"**. The playlist panel called
