@@ -701,6 +701,31 @@ function Builder({ initial, servers, onClose, onSaved }) {
   // iter11 2b — one skeleton, several sets of values. An empty list means the
   // function runs exactly as it always did.
   const [variants, setVariants] = useState(initial.variants || []);
+
+  // Variant overrides are keyed by step POSITION, so any change to the order
+  // or the number of steps silently re-points every override after it.
+  //
+  // Deleting the third of six steps left the fourth variant's values attached
+  // to what had been the fifth — reported as "drifted from the step", which
+  // was true and unexplainable — and left an override for a position that no
+  // longer existed, which is why a variant showed six values against five
+  // steps. Reordering, added in v0.43.0, made it worse: it re-points overrides
+  // without changing the count, so nothing looks wrong at all.
+  //
+  // The keys are moved with the steps. The alternative — keying by a stable
+  // step id — is the better shape and needs a migration of every stored
+  // function; this keeps the two in step today.
+  const remapVariants = (fn) => setVariants(all => all.map(v => {
+    const next = {};
+    for (const [k, over] of Object.entries(v.overrides || {})) {
+      const to = fn(Number(k));
+      // null means the step it belonged to is gone. Dropping the override is
+      // right: keeping it would leave a value with nothing to apply to, which
+      // is the six-against-five case.
+      if (to != null) next[String(to)] = over;
+    }
+    return { ...v, overrides: next };
+  }));
   const [openVariant, setOpenVariant] = useState(null);
   const [error, setError] = useState('');
 
@@ -798,7 +823,29 @@ function Builder({ initial, servers, onClose, onSaved }) {
               <div className="row" style={{ gap: 6, alignItems: 'center' }}>
                 <input style={{ flex: 1 }} value={v.name} onChange={e => patchVariant(v.id, { name: e.target.value })} />
                 {drift[v.id]?.length > 0 && (
-                  <span className="badge err" title={t('fn.driftHint')}>{t('fn.driftBadge')}</span>
+                  <>
+                    <span className="badge err" title={t('fn.driftHint')}>{t('fn.driftBadge')}</span>
+                    {/* Existing functions carry overrides left behind by the
+                        keying bug — values attached to a position that no
+                        longer holds the step they were written for. They
+                        cannot be repaired automatically, because there is no
+                        way to know which step they were meant for; they can
+                        be dropped, and dropping them is what makes the badge
+                        mean something again. */}
+                    <button onClick={() => patchVariant(v.id, {
+                      overrides: Object.fromEntries(
+                        Object.entries(v.overrides || {})
+                          .map(([k, over]) => {
+                            const step = steps[Number(k)];
+                            if (!step) return null;              // the step is gone
+                            const base = step.patch || {};
+                            const kept = Object.fromEntries(
+                              Object.entries(over || {}).filter(([f]) => f in base));
+                            return Object.keys(kept).length ? [k, kept] : null;
+                          })
+                          .filter(Boolean)),
+                    })} title={t('fn.dropStaleHint')}>{t('fn.dropStale')}</button>
+                  </>
                 )}
                 <button onClick={() => setOpenVariant(openVariant === v.id ? null : v.id)}>
                   {openVariant === v.id ? t('fn.hideValues') : t('fn.editValues', { n: Object.keys(v.overrides || {}).length })}
@@ -853,16 +900,29 @@ function Builder({ initial, servers, onClose, onSaved }) {
                         if (n.has(i)) n.delete(i); else n.add(i);
                         return n;
                       })}
-                      onMove={(dir) => setSteps(all => {
+                      onMove={(dir) => {
                         const to = i + dir;
-                        if (to < 0 || to >= all.length) return all;
-                        const list = [...all];
-                        [list[i], list[to]] = [list[to], list[i]];
-                        return list;
-                      })}
+                        if (to < 0 || to >= steps.length) return;
+                        remapVariants(k => (k === i ? to : (k === to ? i : k)));
+                        setSteps(all => {
+                          const list = [...all];
+                          [list[i], list[to]] = [list[to], list[i]];
+                          return list;
+                        });
+                      }}
                       onChange={next => setSteps(all => all.map((s, j) => j === i ? next : s))}
-                      onRemove={() => setSteps(all => all.filter((_, j) => j !== i))}
-                      onDuplicate={() => setSteps(all => [
+                      onRemove={() => {
+                        remapVariants(k => (k === i ? null : (k > i ? k - 1 : k)));
+                        setSteps(all => all.filter((_, j) => j !== i));
+                      }}
+                      onDuplicate={() => {
+                        // The copy lands at i+1, so everything from there down
+                        // moves one place. The copy itself gets no overrides:
+                        // a variant names the fields it differs in, and
+                        // inheriting them would silently give the new step
+                        // values nobody chose for it.
+                        remapVariants(k => (k > i ? k + 1 : k));
+                        setSteps(all => [
                         ...all.slice(0, i + 1),
                         // Deep-copied: a shallow copy would share the patch
                         // object, and editing one step would silently edit its
@@ -870,7 +930,8 @@ function Builder({ initial, servers, onClose, onSaved }) {
                         // made to be tweaked belongs beside what it came from.
                         JSON.parse(JSON.stringify({ ...all[i], label: `${all[i].label || ''} (copy)`.trim() })),
                         ...all.slice(i + 1),
-                      ])} />
+                        ]);
+                      }} />
         ))}
         {/* Back below the list: the palette is nine rows of buttons, and above
             the steps it pushed the thing being edited off the screen. It sits

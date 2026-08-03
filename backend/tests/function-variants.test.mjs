@@ -703,9 +703,75 @@ check('steps fold, one at a time and all at once', () => {
 check('order can be changed where the steps are', () => {
   // Order is what a function does, and changing it meant deleting a step and
   // re-adding it further down the page.
-  assert.ok(fnPage.includes('onMove={(dir) => setSteps'));
+  // The handler gained the variant remap in v0.43.1, so it no longer opens
+  // straight into setSteps.
+  assert.ok(fnPage.includes('onMove={(dir) => {'));
+  assert.ok(fnPage.includes('if (to < 0 || to >= steps.length) return;'));
   assert.ok(fnPage.includes('disabled={index === 0}'));
   assert.ok(fnPage.includes('disabled={index === total - 1}'));
+});
+
+console.log('\nOVERRIDES MOVE WITH THEIR STEPS (v0.43.1):');
+
+// Overrides are keyed by step POSITION, so any change to the order or number
+// of steps re-points every override after it. Deleting the third of six left
+// the fourth variant's values on what had been the fifth — reported as
+// "drifted", which was true and unexplainable — and left an override for a
+// position that no longer existed, which is why a variant showed six values
+// against five steps.
+const remap = (overrides, fn) => {
+  const next = {};
+  for (const [k, v] of Object.entries(overrides)) {
+    const to = fn(Number(k));
+    if (to != null) next[String(to)] = v;
+  }
+  return next;
+};
+const six = { 0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e', 5: 'f' };
+
+check('deleting a step takes its override and closes the gap', () => {
+  // Not just dropping the one: everything below it moves up, and leaving them
+  // where they were is what attached values to the wrong steps.
+  assert.deepEqual(remap(six, k => (k === 2 ? null : (k > 2 ? k - 1 : k))),
+    { 0: 'a', 1: 'b', 2: 'd', 3: 'e', 4: 'f' });
+});
+
+check('reordering swaps exactly two', () => {
+  // Reordering was added in v0.43.0 and is the worse case: it re-points
+  // overrides without changing the count, so nothing looks wrong at all.
+  assert.deepEqual(remap(six, k => (k === 1 ? 2 : (k === 2 ? 1 : k))),
+    { 0: 'a', 1: 'c', 2: 'b', 3: 'd', 4: 'e', 5: 'f' });
+});
+
+check('a duplicated step inherits no values', () => {
+  // A variant names the fields it differs in; inheriting them would give the
+  // new step values nobody chose for it.
+  assert.deepEqual(remap({ 0: 'a', 1: 'b', 2: 'c' }, k => (k > 0 ? k + 1 : k)),
+    { 0: 'a', 2: 'b', 3: 'c' });
+});
+
+check('all three mutations remap, not just deletion', () => {
+  const page = readFileSync(new URL('../../frontend/src/pages/FunctionsPage.jsx', import.meta.url), 'utf8');
+  // The declaration is `const remapVariants = (fn) =>`, so it does not match
+  // the call shape — the three calls are what is being counted.
+  assert.equal((page.match(/remapVariants\(k =>/g) || []).length, 3,
+    'called on remove, move and duplicate');
+  assert.ok(page.includes('const remapVariants = (fn) =>'), 'and declared once');
+});
+
+check('stale values can be dropped, and only the stale ones', () => {
+  // They cannot be repaired automatically — there is no way to know which step
+  // they were meant for — but they can be removed, and removing them is what
+  // makes the badge mean something again.
+  const steps = [{ patch: { a: 1, b: 2 } }, { patch: { c: 3 } }];
+  const overrides = { 0: { a: 9, gone: 9 }, 1: { c: 9 }, 5: { x: 9 } };
+  const cleaned = Object.fromEntries(Object.entries(overrides).map(([k, over]) => {
+    const step = steps[Number(k)];
+    if (!step) return null;
+    const kept = Object.fromEntries(Object.entries(over).filter(([f]) => f in (step.patch || {})));
+    return Object.keys(kept).length ? [k, kept] : null;
+  }).filter(Boolean));
+  assert.deepEqual(cleaned, { 0: { a: 9 }, 1: { c: 9 } });
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');

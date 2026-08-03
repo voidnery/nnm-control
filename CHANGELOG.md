@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.43.1 — variant overrides move with their steps
+- **Variant overrides are keyed by step position**, so any change to the order
+  or the number of steps silently re-points every override after it. Deleting
+  the third of six steps left the fourth variant's values attached to what had
+  been the fifth — reported as "drifted from the step", which was true and
+  unexplainable — and left an override for a position that no longer existed,
+  which is why a variant showed **six values against five steps**
+- **Reordering, added in v0.43.0, made it worse.** It re-points overrides
+  without changing the count, so nothing looks wrong at all until a variant is
+  run against the wrong step
+- The keys move with the steps now, on all three mutations: deleting closes the
+  gap, reordering swaps exactly two, and a duplicated step inherits nothing —
+  a variant names the fields it differs in, and inheriting them would give the
+  new step values nobody chose for it
+- Functions already carrying stale overrides can be cleaned: **drop the values
+  that no longer match any step or field**, keeping the ones that do. They
+  cannot be repaired automatically — there is no way to know which step they
+  were written for — but removing them is what makes the drift badge mean
+  something again
+- Keying by a stable step id is the better shape and needs a migration of every
+  stored function; this keeps the two in step today
+- 5 new checks; two re-pointed at handlers that changed
+
+
 ### v0.43.0 — telling fifteen steps apart
 A function of fifteen steps was fifteen identical grey panels, each labelled
 with a grey badge reading `action:outgoing:restart`. Scanning them meant
