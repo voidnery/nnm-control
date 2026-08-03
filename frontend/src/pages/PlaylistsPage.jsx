@@ -453,7 +453,18 @@ export default function PlaylistsPage() {
       <div className="sub">{t('page.playlists.sub')}</div>
       {error && <div className="error-box">{error}</div>}
 
-      <div className="row" style={{ marginBottom: 12 }}>
+      {/* The server comes first because the question does. This page used to
+          open with a library of stored playlists and put the live server
+          underneath, so the same subject appeared twice in two mental models
+          and the reader joined them up themselves. What is on air is the
+          truth; what the panel holds is material for it. */}
+      <PlaylistServerPanel servers={servers} />
+
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', margin: '18px 0 8px' }}>
+        <div>
+          <b>{t('pl.drafts')}</b>
+          <div className="hint">{t('pl.draftsSub')}</div>
+        </div>
         {can('playlist.manage') && (
           <button className="primary" onClick={() => setEditing({})}>+ {t('pl.newTitle')}</button>
         )}
@@ -487,10 +498,6 @@ export default function PlaylistsPage() {
       {editing && (
         <Builder initial={editing} servers={servers} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
       )}
-      {/* The server side of playlists: what is running, what is wrong with it,
-          what media is there, and what was there before. All of it existed as
-          routes and none of it was reachable. */}
-      <PlaylistServerPanel servers={servers} />
       {deploying && <DeployPlaylistModal playlist={deploying} servers={servers} onClose={() => setDeploying(null)} />}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
@@ -47,6 +47,7 @@ export default function PlaylistServerPanel({ servers }) {
   // character away from the name this fleet uses, and the panel then reported
   // "no playlist" about a server that had one.
   const [file, setFile] = useState('server-playlist.json');
+  const fileInput = useRef(null);
 
   const load = useCallback(async () => {
     if (!srvId) { setState(null); setAdvice(null); setMedia(null); setVersions([]); return; }
@@ -70,13 +71,15 @@ export default function PlaylistServerPanel({ servers }) {
     finally { setBusy(''); }
   };
 
-  const upload = async (file) => {
-    if (!file) return;
+  const upload = async (f) => {
+    if (!f) return;
     // The folder is part of the name: one level, which is how this work is
     // organised — adverts apart from matches.
-    const name = folder ? `${folder}/${file.name}` : file.name;
+    // `file` is the playlist being viewed; the upload's own file was shadowing
+    // it, so the name sent was the playlist's rather than the chosen file's.
+    const name = folder ? `${folder}/${f.name}` : f.name;
     await act('upload', () => api(`/servers/${srvId}/agent/media?name=${encodeURIComponent(name)}`, {
-      method: 'PUT', body: file, raw: true,
+      method: 'PUT', body: f, raw: true,
     }));
   };
 
@@ -239,11 +242,14 @@ export default function PlaylistServerPanel({ servers }) {
                 <div className="row" style={{ gap: 6, alignItems: 'center' }}>
                   <input placeholder={t('pls.folder')} value={folder} onChange={e => setFolder(e.target.value)}
                          style={{ width: 130 }} />
-                  <label className="btn" style={{ cursor: 'pointer' }}>
+                  {/* A real button opening a real input, rather than a label
+                      wrapping a hidden one: that either works or does nothing,
+                      and "does nothing" is not a state anyone can debug. */}
+                  <button disabled={!!busy} onClick={() => fileInput.current?.click()}>
                     {busy === 'upload' ? t('pls.uploading') : t('pls.upload')}
-                    <input type="file" style={{ display: 'none' }} disabled={!!busy}
-                           onChange={e => { upload(e.target.files?.[0]); e.target.value = ''; }} />
-                  </label>
+                  </button>
+                  <input ref={fileInput} type="file" style={{ display: 'none' }}
+                         onChange={e => { upload(e.target.files?.[0]); e.target.value = ''; }} />
                 </div>
               )}
             </div>

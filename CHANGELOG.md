@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.40.0 — the upload, and one page instead of two
+- **The upload sent the wrong file name.** `upload(file)` shadowed the `file`
+  state — the playlist being viewed — so it uploaded the chosen file's contents
+  under the playlist's name. It compiles, it runs, and it is wrong in a way
+  nobody reads past
+- The backend has had a shadow check since v0.25.3, when a destructured `pub`
+  shadowed the function that built a response. The same mistake reached the
+  frontend by a different route, so **the check follows it**: a parameter named
+  after a `useState` in the same component. 59 components, verified both ways
+- The control was a `<label>` wrapping a hidden input, which either works or
+  does nothing — and "does nothing" was reported as "there is no upload". It is
+  a button opening a real input now
+- **The page opened on the library and put the server underneath**, showing the
+  same subject twice in two mental models and leaving the reader to join them
+  up. The server comes first: what is on air is the truth, and the panel's
+  stored playlists are material for it — relabelled "drafts", with a line
+  saying they affect nothing until deployed
+- 4 new checks
+
+
 ### v0.39.1 — seeing it was not the same as being able to touch it
 Three faults, all visible on one screen.
 

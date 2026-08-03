@@ -784,5 +784,45 @@ check('a playlist on the server can be brought in to edit', () => {
   assert.ok(!/deploy-playlist|PUT \/config/.test(around));
 });
 
+console.log('\nUPLOAD, AND ONE PAGE INSTEAD OF TWO (v0.40.0):');
+
+const panel5 = readFileSync(new URL('../../frontend/src/components/PlaylistServerPanel.jsx', import.meta.url), 'utf8');
+const page5 = readFileSync(new URL('../../frontend/src/pages/PlaylistsPage.jsx', import.meta.url), 'utf8');
+
+check('the upload sends the file that was chosen', () => {
+  // `upload(file)` shadowed the `file` state — the playlist being viewed — so
+  // an upload sent the playlist's name as the media file's name. It compiles,
+  // it runs, and it is wrong in a way nobody reads past.
+  assert.ok(panel5.includes('const upload = async (f) =>'));
+  assert.ok(panel5.includes('folder ? `${folder}/${f.name}` : f.name'));
+  assert.ok(!/const upload = async \(file\)/.test(panel5));
+});
+
+check('the frontend has the shadow check the backend has had since v0.25.3', () => {
+  // The same mistake arrived by a different route — a destructured `pub` there,
+  // a parameter here — so the check follows it.
+  const audit = readFileSync(new URL('../../frontend/scripts/shadow-audit.mjs', import.meta.url), 'utf8');
+  assert.ok(audit.includes('use(?:State|Reducer)'));
+  const pkg = JSON.parse(readFileSync(new URL('../../frontend/package.json', import.meta.url), 'utf8'));
+  assert.ok(pkg.scripts.audit.includes('audit:shadow'), 'and it runs in the gate');
+});
+
+check('the upload control is a button, not a label around a hidden input', () => {
+  // A label either works or does nothing, and "does nothing" is not a state
+  // anyone can debug — it was reported as "there is no upload".
+  assert.ok(panel5.includes('onClick={() => fileInput.current?.click()}'));
+  assert.ok(!panel5.includes('<label className="btn"'));
+});
+
+check('the page opens on the server, not on the library', () => {
+  // It showed the same subject twice in two mental models — stored playlists
+  // above, the live server below — and left the reader to join them up. What
+  // is on air is the truth; what the panel holds is material for it.
+  const at = page5.indexOf('<PlaylistServerPanel');
+  const drafts = page5.indexOf("t('pl.drafts')");
+  assert.ok(at > 0 && drafts > at, 'the server panel comes first');
+  assert.equal((page5.match(/<PlaylistServerPanel/g) || []).length, 1, 'and only once');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall playlist-file checks passed');
 process.exit(fail ? 1 : 0);
