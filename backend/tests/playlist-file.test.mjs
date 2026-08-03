@@ -634,7 +634,12 @@ check('content that is neither a string nor a stated absence is reported', () =>
 check('the agent says where it looked', () => {
   // "No such file" is not actionable without it: a CONF_DIR pointing
   // elsewhere looks exactly like a server that has no playlist.
-  assert.equal((agent4.match(/dir: CONF_DIR/g) || []).length, 2, 'on both the found and missing paths');
+  // Both the found and the missing path of GET /config carry it. The listing
+  // route added later reports the same directory, so counting occurrences
+  // across the file measures the wrong thing.
+  const cfg = agent4.slice(agent4.indexOf("async 'GET /config'(req, url)"));
+  const body = cfg.slice(0, cfg.indexOf('\n  },'));
+  assert.equal((body.match(/dir: CONF_DIR/g) || []).length, 2, 'on both the found and missing paths');
 });
 
 check('the page tells the four causes apart', () => {
@@ -670,6 +675,51 @@ check('the standalone diagnostic reaches the same four verdicts', () => {
   assert.ok(diag.includes('the file is not there — check the directory above'));
   assert.ok(diag.includes('could not be read as a Nimble playlist'));
   assert.ok(diag.includes('the panel can see the playlist'));
+});
+
+console.log('\nTHE FILE NAME WAS A GUESS (v0.39.0):');
+
+const proxy4 = readFileSync(new URL('../src/routes/agentProxy.js', import.meta.url), 'utf8');
+const panel3 = readFileSync(new URL('../../frontend/src/components/PlaylistServerPanel.jsx', import.meta.url), 'utf8');
+const agent5 = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+
+check('the agent can say what is in the config directory', () => {
+  // The default was one character from the real name — `server-playlist.json`
+  // against `server_playlist.json` — so the panel reported "no playlist" about
+  // a server that had one, and nothing on the page could have said otherwise.
+  // A guess at a name is not something to build on when the directory can be
+  // read.
+  assert.ok(agent5.includes("async 'GET /config/list'"));
+  assert.ok(agent5.includes("n.toLowerCase().endsWith('.json')"), 'and only configuration files');
+});
+
+check('a .bak is not offered as a playlist', () => {
+  const keep = (n) => n.toLowerCase().endsWith('.json');
+  assert.deepEqual(['playlist.json', 'playlist.json.bak', 'server_playlist.json', 'nimble.conf'].filter(keep),
+    ['playlist.json', 'server_playlist.json']);
+});
+
+check('what IS there is offered when what was asked for is not', () => {
+  assert.ok(proxy4.includes("runTask(req.srv, 'GET /config/list'"));
+  assert.ok(proxy4.includes('alternatives'));
+  assert.ok(panel3.includes("t('pls.butThereIs')"));
+  assert.ok(panel3.includes('onClick={() => setFile(n)}'), 'and picking one is a click');
+});
+
+check('an agent too old to list is still an agent that answered', () => {
+  // The listing failing must not turn "the file is not there" into an error.
+  // The guarded call is the one inside playlist-state, not the route that
+  // simply exposes the listing — indexOf finds the latter first.
+  const at = proxy4.indexOf('let alternatives = [];');
+  assert.ok(at > 0);
+  assert.ok(proxy4.slice(at, at + 400).includes('catch'), 'the listing failing does not become an error');
+});
+
+check('the chosen name travels with the request', () => {
+  // It was fetched without one, so the server default applied and choosing a
+  // file would have changed nothing.
+  assert.ok(panel3.includes('playlist-state?name=${encodeURIComponent(file)}'));
+  assert.ok(panel3.includes('}, [srvId, file]);'), 'and choosing one reloads');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall playlist-file checks passed');

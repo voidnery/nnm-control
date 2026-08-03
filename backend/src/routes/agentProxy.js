@@ -143,6 +143,11 @@ agentRouter.put('/:id/agent/config', requirePerm('playlist.manage'), loadServer,
 // Read-only, and deliberately so: an operator about to change a live playlist
 // should be able to see the current state without the act of looking being
 // able to alter it.
+// What configuration files this server has. The panel offers these rather
+// than assuming a name.
+agentRouter.get('/:id/agent/config-list', requirePerm('playlist.view'), loadServer,
+  wrap(req => runTask(req.srv, 'GET /config/list', { createdBy: req.user?.username })));
+
 agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadServer, wrap(async (req) => {
   const name = String(req.query.name || 'server-playlist.json');
 
@@ -167,7 +172,19 @@ agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadS
   // with no playlist, and a server with an unreadable one all arrived at the
   // page looking alike. They need different things done about them.
   if (file && file.exists === false) {
-    return { name, exists: false, parsed: null, media: null, compare: null, confDir: file.dir || null };
+    // What IS there, since what was asked for is not. A default filename one
+    // character away from the real one — `server-playlist.json` against
+    // `server_playlist.json` — reported "no playlist" about a server that had
+    // one, and nothing on the page could have told the operator otherwise.
+    let alternatives = [];
+    try {
+      const listing = await runTask(req.srv, 'GET /config/list', { createdBy: req.user?.username });
+      alternatives = (listing?.files || []).map(f => f.name);
+    } catch { /* an agent too old to list is still an agent that answered */ }
+    return {
+      name, exists: false, parsed: null, media: null, compare: null,
+      confDir: file.dir || null, alternatives,
+    };
   }
   if (typeof file?.content !== 'string') {
     return {

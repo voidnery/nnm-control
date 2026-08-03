@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.39.0 — the file name was a guess, and the guess was wrong
+- The playlist on this fleet is `server_playlist.json`. The panel asked for
+  `server-playlist.json`. One character, and it reported "no playlist" about a
+  server that has had one running for weeks
+- The captured file was named with the underscore when it arrived; the hyphen
+  came from prose describing it. The written name was taken over the actual
+  one, which is the same mistake as trusting a five-entry sample earlier in
+  this project
+- **The guess is gone rather than corrected.** The agent lists the `.json`
+  files in its config directory, and when the requested one is absent the panel
+  offers what is actually there — each name a button that switches to it.
+  `.bak` files and `nimble.conf` are not offered as playlists
+- The chosen name travels with the request. It was being fetched without one,
+  so the server default applied and picking a file would have changed nothing
+- A listing that fails does not turn "the file is not there" into an error: an
+  agent too old to list is still an agent that answered
+- 5 new checks; two existing ones re-aimed at the code they meant rather than
+  at the first textual match. Agent protocol version 17
+
+
 ### v0.38.3 — the diagnostic had the same fault it was reporting
 - v0.38.2 fixed fourteen calls in the panel and missed the fifteenth, in
   `nnm-diag.mjs` itself. So the tool went on reporting the 409 **after the

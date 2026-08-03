@@ -43,6 +43,10 @@ export default function PlaylistServerPanel({ servers }) {
   const [error, setError] = useState('');
   const [folder, setFolder] = useState('');
   const [viewing, setViewing] = useState(null);
+  // Which file on the server is the playlist. Not assumed: the default was one
+  // character away from the name this fleet uses, and the panel then reported
+  // "no playlist" about a server that had one.
+  const [file, setFile] = useState('server-playlist.json');
 
   const load = useCallback(async () => {
     if (!srvId) { setState(null); setAdvice(null); setMedia(null); setVersions([]); return; }
@@ -50,11 +54,12 @@ export default function PlaylistServerPanel({ servers }) {
     // Independently: a server whose media cannot be listed can still have its
     // playlist read, and saying "nothing works" when one thing does is how an
     // operator ends up looking in the wrong place.
-    api(`/servers/${srvId}/agent/playlist-state`).then(setState).catch(e => setState({ error: e.message }));
+    api(`/servers/${srvId}/agent/playlist-state?name=${encodeURIComponent(file)}`)
+      .then(setState).catch(e => setState({ exists: null, error: e.message }));
     api(`/servers/${srvId}/agent/playlist-advice`).then(setAdvice).catch(() => setAdvice(null));
     api(`/servers/${srvId}/agent/media`).then(d => setMedia(d)).catch(() => setMedia(null));
     api(`/servers/${srvId}/agent/playlist-history`).then(d => setVersions(d.versions || [])).catch(() => setVersions([]));
-  }, [srvId]);
+  }, [srvId, file]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -87,6 +92,7 @@ export default function PlaylistServerPanel({ servers }) {
                 options={[{ value: '', label: t('pls.pickServer') },
                           ...servers.map(s => ({ value: s.id || s._id, label: s.name }))]} />
         {srvId && <button onClick={load} disabled={!!busy}>{t('action.refresh')}</button>}
+        {srvId && <span className="hint mono" style={{ fontSize: 12 }}>{file}</span>}
       </div>
 
       {error && <div className="error-box" style={{ marginTop: 8 }}>{error}</div>}
@@ -110,6 +116,16 @@ export default function PlaylistServerPanel({ servers }) {
               <div className="hint">
                 {t('pls.noFile')}
                 {state.confDir && ` ${t('pls.lookedIn', { dir: state.confDir })}`}
+                {/* Offered rather than described: the operator should not have
+                    to guess the spelling either. */}
+                {state.alternatives?.length > 0 && (
+                  <div className="row" style={{ gap: 6, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span>{t('pls.butThereIs')}</span>
+                    {state.alternatives.map(n => (
+                      <button key={n} onClick={() => setFile(n)}>{n}</button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {state.exists === true && state.parsed && !state.parsed.ok && (

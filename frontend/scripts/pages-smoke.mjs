@@ -253,6 +253,9 @@ window.fetch = (u) => {
       { ts:new Date(Date.now()-60000).toISOString(), v:[6.4,null,9.8,10,0,3,5,2,81.3,50,8192,8192,0,29e9,8.3e6,0,39] },
       { ts:new Date().toISOString(),                 v:[6.5,null,10.1,12,0,3,6,2,81.5,50,8192,8192,0,30e9,8.4e6,0,39] }] }),
     text:()=>Promise.resolve('{}') });
+  if (s.includes('/agent/config-list')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    dir:'/srv/nimble/conf', readable:true, files:[{ name:'playlist.json' }, { name:'server_playlist.json' }] }),
+    text:()=>Promise.resolve('{}') });
   if (s.includes('/agent/playlist-state')) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     name:'server-playlist.json', exists:true,
     parsed:{ ok:true, tasks:[{ stream:'povtor_tennis/video_playlist_02_03', count:24, distinct:9,

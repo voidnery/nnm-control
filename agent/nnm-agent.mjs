@@ -112,7 +112,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 16;
+const AGENT_VERSION = 17;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -238,6 +238,28 @@ const routes = {
     disk.selfUpdate = await canSelfUpdate();
     return { ok: true, agent: 'nnm-agent', version: AGENT_VERSION, logs: LOG_ENABLED,
              maxLogChunk: MAX_LOG_CHUNK, maxUploadBytes: MAX_UPLOAD, ...disk };
+  },
+
+  // What configuration files are actually there.
+  //
+  // The panel had a default filename compiled into it and the file on this
+  // fleet is called something one character different — `server_playlist.json`
+  // against `server-playlist.json`. The panel reported "no playlist", which
+  // was true of the name it asked for and false of the server. A guess at a
+  // name is not something to build on when the directory can simply be read.
+  async 'GET /config/list'() {
+    let names = [];
+    try { names = await fs.readdir(CONF_DIR); } catch { return { dir: CONF_DIR, files: [], readable: false }; }
+    const files = [];
+    for (const n of names) {
+      if (!n.toLowerCase().endsWith('.json')) continue;
+      try {
+        const st = await fs.stat(path.join(CONF_DIR, n));
+        if (st.isFile()) files.push({ name: n, size: st.size, mtime: st.mtimeMs });
+      } catch { /* vanished between readdir and stat */ }
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    return { dir: CONF_DIR, files, readable: true };
   },
 
   async 'GET /config'(req, url) {
