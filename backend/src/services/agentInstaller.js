@@ -131,8 +131,12 @@ else
   echo "node $NODE_VERSION installed under $STATE_DIR/node (nothing outside it was changed)"
 fi
 
-NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
-[ "$NODE_MAJOR" -ge 18 ] || die "node 18+ required, found $(node -v)"
+# The version gate lives in node_ok(), which is what chose $NODE_BIN above —
+# and it is the only place that knows WHICH node was chosen. The check that
+# used to stand here called node by bare name, which is exactly the thing that
+# may not exist: it survived the change that made Node optional and failed with
+# "node: not found" after the install had already succeeded.
+[ -n "$NODE_BIN" ] || die "no usable node was found or installed"
 
 id "$RUN_USER" >/dev/null 2>&1 || RUN_USER=root
 echo "==> installing as user: $RUN_USER"
@@ -160,7 +164,7 @@ else
   if command -v openssl >/dev/null 2>&1; then
     TOKEN=$(openssl rand -hex 24)
   else
-    TOKEN=$(node -e 'console.log(require("crypto").randomBytes(24).toString("hex"))')
+    TOKEN=$("$NODE_BIN" -e 'console.log(require("crypto").randomBytes(24).toString("hex"))')
   fi
   umask 077
   cat > "$ENV_FILE" <<EOF
@@ -225,7 +229,7 @@ done
 [ $i -lt 20 ] || die "agent did not come up; check: journalctl -u nnm-agent -n 50"
 
 HEALTH=$(curl -4fsS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/health")
-VERSION=$(echo "$HEALTH" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version||0)}catch{console.log(0)}})')
+VERSION=$(echo "$HEALTH" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).version||0)}catch{console.log(0)}})')
 
 # --- report back ------------------------------------------------------------
 # No address is sent. The panel does not need one: from here the agent calls
@@ -234,7 +238,7 @@ echo "==> enrolling with the panel"
 
 # The token goes through the environment, never through argv — arguments are
 # visible in the process list to every user on the box.
-BODY=$(TOKEN="$TOKEN" node -e '
+BODY=$(TOKEN="$TOKEN" "$NODE_BIN" -e '
   const [t,h,v]=process.argv.slice(1);
   process.stdout.write(JSON.stringify({ticket:t,agentToken:process.env.TOKEN,hostname:h,agentVersion:Number(v)}));
 ' "$TICKET" "$(hostname)" "$VERSION")
@@ -247,7 +251,7 @@ ENROLL=$(curl -4fsS -X POST "$PANEL/api/agents/enroll" \\
 # say who it is when it calls in, so it is written to the env file and the
 # service restarted to pick it up. From here on the agent connects OUT to the
 # panel and never needs an address of its own.
-SERVER_ID=$(echo "$ENROLL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).serverId||""))}catch{}})')
+SERVER_ID=$(echo "$ENROLL" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).serverId||""))}catch{}})')
 [ -n "$SERVER_ID" ] || die "the panel accepted the agent but returned no server id"
 
 if grep -q '^NNM_AGENT_SERVER_ID=' "$ENV_FILE"; then

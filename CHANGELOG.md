@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.29.1 — five more places called node by bare name
+- The download worked, the unpack worked, the install reported success — and
+  the script died two lines later with `node: not found`. Making Node optional
+  in v0.29.0 was only half the change: five places went on calling `node`
+  directly, including a version gate that had become redundant the moment
+  `node_ok` started choosing the binary
+- Every one of them was written when Node was a prerequisite, and none was
+  wrong at the time. That is exactly why re-reading the diff does not catch
+  them
+- New `npm run audit:installer`, ahead of the test suite. It **generates the
+  installer and inspects it** rather than trusting a review: any use of node by
+  bare name, any resolution from PATH outside the one line that discovers a
+  system Node, and a unit that does not run `$NODE_BIN`. It also fails if it
+  finds suspiciously few uses of `$NODE_BIN`, since that means the check has
+  stopped matching the script rather than the script having become clean
+- Verified both ways, including a false positive on the discovery line itself,
+  which was narrowed rather than suppressed
+
+
 ## iter18 — the installer brings what it needs
 ### v0.29.0 — Node is no longer a prerequisite
 - The SSH install exists so nobody has to touch the server, and it failed with

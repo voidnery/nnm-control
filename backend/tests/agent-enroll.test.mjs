@@ -67,14 +67,20 @@ check('the agent token is generated on the server, not sent to it', () => {
 
 check('the token never appears in argv, where any user could read it', () => {
   // It is passed through the environment; argv is world-readable via /proc.
-  assert.ok(script.includes('TOKEN="$TOKEN" node -e'));
+  // Through $NODE_BIN since v0.29.1, but the point is unchanged: the token is
+  // passed in the environment, never on a command line where `ps` would show
+  // it to any user on the box.
+  assert.ok(script.includes('TOKEN="$TOKEN" "$NODE_BIN" -e'));
   assert.ok(!/node -e .*\$TOKEN"?\s*$/m.test(script));
 });
 
-check('it refuses to run without root, curl or a modern node', () => {
+check('it refuses to run without root or curl, and settles Node itself', () => {
   assert.ok(script.includes('[ "$(id -u)" = "0" ]'));
   assert.ok(script.includes('command -v curl'));
-  assert.ok(script.includes('NODE_MAJOR'));
+  // NODE_MAJOR was the old gate, removed once node_ok() started choosing the
+  // binary — it called node by bare name and failed on a box that had none.
+  assert.ok(script.includes('no usable node was found or installed'));
+  assert.ok(script.includes('NODE_VERSION='), 'and it brings one itself');
 });
 
 check('it does not touch Nimble in any way', () => {
