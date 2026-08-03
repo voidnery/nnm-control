@@ -1,5 +1,28 @@
 # Changelog
 
+### v0.43.0 — telling fifteen steps apart
+A function of fifteen steps was fifteen identical grey panels, each labelled
+with a grey badge reading `action:outgoing:restart`. Scanning them meant
+reading every one.
+
+- **The colour encodes what a step does**, not what it acts on. The question
+  asked of a long list is "which of these stops something" — and which object
+  is already spelled out beside it, so colouring by object kind would spend the
+  one signal available on the answer already given. Pause and restart read as
+  consequential, resume as safe, a settings change as neutral
+- **The header carries the order, the verb and the target**, in that order,
+  because that is the order they are looked for. The ordinal has a fixed width
+  so the numbers form a column instead of drifting right as the list passes
+  nine, and the target — the longest and least predictable part — is the part
+  allowed to run out of room
+- **Steps fold**, one at a time and all at once. At fifteen the useful view is
+  the list of what happens, not fifteen open forms with the one being edited
+  somewhere in the middle
+- **Order can be changed where the steps are.** Order is what a function does,
+  and changing it meant deleting a step and re-adding it further down the page
+- 5 new checks
+
+
 ### v0.42.1 — one file at a time
 - **The history was not scoped to the file being viewed.** It listed versions
   of every playlist file on the server, so the stopped-streams list offered a

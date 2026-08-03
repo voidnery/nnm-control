@@ -664,5 +664,49 @@ check('the reason the agent gave is shown', () => {
   assert.ok(centreSrc.includes("s.lastUpdate?.status === 'expired'"), 'and "nobody picked it up" is its own case');
 });
 
+console.log('\nTELLING FIFTEEN STEPS APART (v0.43.0):');
+
+const fnPage = readFileSync(new URL('../../frontend/src/pages/FunctionsPage.jsx', import.meta.url), 'utf8');
+const css2 = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+
+check('the colour encodes what a step does, not what it acts on', () => {
+  // The question asked of a long list is "which of these stops something".
+  // Which object it acts on is already spelled out beside it, so colouring by
+  // object kind would spend the one signal available on the answer already
+  // given.
+  assert.ok(fnPage.includes('const STEP_TONE = {'));
+  const tone = fnPage.slice(fnPage.indexOf('const STEP_TONE = {'), fnPage.indexOf('const stepTone'));
+  for (const k of ['pause', 'restart', 'resume', 'patch', 'delay']) assert.ok(tone.includes(`${k}:`), k);
+  assert.ok(!/outgoing:|republish:|live_pull:/.test(tone), 'not by object kind');
+});
+
+check('pausing and resuming do not look the same', () => {
+  // Opposite consequences, and they were the same grey badge.
+  const tone = fnPage.slice(fnPage.indexOf('const STEP_TONE = {'), fnPage.indexOf('const stepTone'));
+  assert.ok((tone.match(/var\(--warn\)/g) || []).length >= 2, 'pause and restart read as consequential');
+  assert.ok(tone.includes("resume: 'var(--ok)'"));
+});
+
+check('the header carries order, verb and target', () => {
+  // In the order they are looked for. It was a text field and a grey badge
+  // reading `action:outgoing:restart`, fifteen times over.
+  for (const k of ['step-no', 'step-verb', 'step-target']) assert.ok(fnPage.includes(k), k);
+  assert.match(css2, /\.step-no[^}]*min-width/, 'the ordinals form a column rather than drifting right past nine');
+});
+
+check('steps fold, one at a time and all at once', () => {
+  assert.ok(fnPage.includes('const [folded, setFolded]'));
+  assert.ok(fnPage.includes("t('fn.foldAll')") && fnPage.includes("t('fn.unfoldAll')"));
+  assert.ok(fnPage.includes('collapsed ? null : ('));
+});
+
+check('order can be changed where the steps are', () => {
+  // Order is what a function does, and changing it meant deleting a step and
+  // re-adding it further down the page.
+  assert.ok(fnPage.includes('onMove={(dir) => setSteps'));
+  assert.ok(fnPage.includes('disabled={index === 0}'));
+  assert.ok(fnPage.includes('disabled={index === total - 1}'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);

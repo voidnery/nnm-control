@@ -124,6 +124,39 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
 
+/* One step of a function.
+   The left edge carries the colour of what the step DOES, so a column of them
+   can be read down rather than across: the eye finds the amber restarts among
+   the teal patches without reading a word. */
+.step {
+  border: 1px solid var(--line); border-left: 3px solid var(--line);
+  border-radius: 6px; margin-bottom: 8px; background: var(--bg-panel);
+}
+.step-head {
+  padding: 8px 10px; align-items: center;
+  border-bottom: 1px solid transparent;
+}
+.step:not(:has(.step-body)) .step-head { border-bottom-color: transparent; }
+.step-body { padding: 0 10px 10px; border-top: 1px solid var(--line); }
+.step-body > label:first-of-type { margin-top: 8px; }
+/* The ordinal: fixed width so the numbers form a column instead of drifting
+   right as the list passes nine. */
+.step-no {
+  min-width: 20px; text-align: right; font-size: 12px; color: var(--muted); flex-shrink: 0;
+}
+.step-verb {
+  border: 1px solid; border-radius: 4px; padding: 1px 7px;
+  font-size: 11px; text-transform: lowercase; flex-shrink: 0; white-space: nowrap;
+}
+/* The target is the longest and least predictable part, so it is the part
+   allowed to run out of room. */
+.step-target { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-fold {
+  padding: 2px 6px; font-size: 11px; line-height: 1;
+  background: transparent; border-color: transparent; color: var(--muted); flex-shrink: 0;
+}
+.step-fold:hover { border-color: var(--line); }
+
 /* One playable item. Bordered rather than separated by rules so a row being
    dragged reads as a single object, and tight enough that twenty-four of them
    are a list rather than a scroll. */

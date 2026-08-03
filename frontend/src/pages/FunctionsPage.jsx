@@ -341,7 +341,23 @@ function VariantStepFields({ step, override, onChange }) {
   );
 }
 
-function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
+// What a step does, as the thing the eye should find first.
+//
+// Fifteen steps were fifteen identical grey panels distinguished by a grey
+// badge reading `action:outgoing:restart`. Scanning them meant reading every
+// one. The colour encodes the ACTION rather than the object kind, because the
+// question asked of a long list is "which of these stops something", and the
+// answer to "which object" is already spelled out beside it.
+const STEP_TONE = {
+  pause: 'var(--warn)',
+  restart: 'var(--warn)',
+  resume: 'var(--ok)',
+  patch: 'var(--accent)',
+  delay: 'var(--muted)',
+};
+const stepTone = (step) => STEP_TONE[step.action] || STEP_TONE[step.type] || 'var(--line)';
+
+function StepEditor({ step, servers, onChange, onRemove, onDuplicate, index, total, onMove, collapsed, onToggle }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...step, [k]: v });
   // Two set() calls in one handler both read the same `step` prop — React has
@@ -404,20 +420,44 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
     setPatchText(JSON.stringify(nextPatch, null, 0));
     setPatchErr('');
   };
+  const tone = stepTone(step);
+  const verb = step.type === 'delay' ? t('fn.v.delay')
+    : step.action ? t(`fn.v.${step.action}`)
+    : t('fn.v.patch');
+
   return (
-    <div className="panel" style={{ padding: 12 }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <input style={{ maxWidth: 260 }} value={step.label} placeholder={t('fn.stepLabel')}
-               onChange={e => set('label', e.target.value)} />
-        <div className="row" style={{ gap: 8, flexShrink: 0 }}>
-          <span className="badge">{step.type}{step.objectKind ? ':' + step.objectKind : ''}{step.action ? ':' + step.action : ''}</span>
+    <div className="step" style={{ borderLeftColor: tone }}>
+      {/* Order, verb, object, server — in the order they are looked for. The
+          band is the step's identity; everything below it is its settings. */}
+      <div className="row step-head" style={{ justifyContent: 'space-between', gap: 8 }}>
+        <div className="row" style={{ gap: 8, alignItems: 'center', minWidth: 0 }}>
+          <button className="step-fold" onClick={onToggle} title={collapsed ? t('fn.expand') : t('fn.collapse')}>
+            {collapsed ? '▸' : '▾'}
+          </button>
+          <span className="step-no mono">{index + 1}</span>
+          <span className="step-verb" style={{ color: tone, borderColor: tone }}>{verb}</span>
+          <span className="step-target mono" title={step.targetLabel || ''}>
+            {step.targetLabel || <span className="hint">{t('fn.noTargetYet')}</span>}
+          </span>
+          {step.objectKind && <span className="hint" style={{ flexShrink: 0 }}>{step.objectKind}</span>}
+        </div>
+        <div className="row" style={{ gap: 6, flexShrink: 0 }}>
           {step.type !== 'delay' && !String(step.targetId || '').trim() && (
             <span className="badge err" title={t('fn.incompleteNoTarget')}>{t('fn.needsPick')}</span>
           )}
+          {/* Order matters to what a function does, so it is changeable here
+              rather than by deleting and re-adding further down. */}
+          {onMove && <button onClick={() => onMove(-1)} disabled={index === 0} title={t('src.up')}>↑</button>}
+          {onMove && <button onClick={() => onMove(+1)} disabled={index === total - 1} title={t('src.down')}>↓</button>}
           {onDuplicate && <button onClick={onDuplicate}>{t('fn.duplicate')}</button>}
           <button className="danger" onClick={onRemove}>{t('fn.remove')}</button>
         </div>
       </div>
+
+      {collapsed ? null : (
+      <div className="step-body">
+      <input style={{ maxWidth: 260 }} value={step.label} placeholder={t('fn.stepLabel')}
+             onChange={e => set('label', e.target.value)} />
       {step.type === 'action' && (
         <>
           <label>{t('fn.actionTargetKind')}</label>
@@ -516,6 +556,8 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate }) {
           <label>{t('fn.waitSeconds')}</label>
           <input type="number" value={step.waitSec || 0} onChange={e => set('waitSec', Number(e.target.value))} />
         </>
+      )}
+      </div>
       )}
     </div>
   );
@@ -653,6 +695,9 @@ function Builder({ initial, servers, onClose, onSaved }) {
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
   const [steps, setSteps] = useState(initial.steps || []);
+  // Folded steps, by index. A function of fifteen steps is a page of forms
+  // otherwise, and the one being edited is somewhere in the middle of it.
+  const [folded, setFolded] = useState(new Set());
   // iter11 2b — one skeleton, several sets of values. An empty list means the
   // function runs exactly as it always did.
   const [variants, setVariants] = useState(initial.variants || []);
@@ -787,8 +832,34 @@ function Builder({ initial, servers, onClose, onSaved }) {
         </div>
 
 
+        {/* At fifteen steps the useful view is the list of what happens, not
+            fifteen open forms. Folding is per step and for all of them. */}
+        {steps.length > 1 && (
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 8px' }}>
+            <span className="hint">{t('fn.stepCount', { n: steps.length })}</span>
+            <button onClick={() => setFolded(f => (f.size === steps.length
+              ? new Set()
+              : new Set(steps.map((_, i) => i))))}>
+              {folded.size === steps.length ? t('fn.unfoldAll') : t('fn.foldAll')}
+            </button>
+          </div>
+        )}
         {steps.map((st, i) => (
           <StepEditor key={i} step={st} servers={servers}
+                      index={i} total={steps.length}
+                      collapsed={folded.has(i)}
+                      onToggle={() => setFolded(f => {
+                        const n = new Set(f);
+                        if (n.has(i)) n.delete(i); else n.add(i);
+                        return n;
+                      })}
+                      onMove={(dir) => setSteps(all => {
+                        const to = i + dir;
+                        if (to < 0 || to >= all.length) return all;
+                        const list = [...all];
+                        [list[i], list[to]] = [list[to], list[i]];
+                        return list;
+                      })}
                       onChange={next => setSteps(all => all.map((s, j) => j === i ? next : s))}
                       onRemove={() => setSteps(all => all.filter((_, j) => j !== i))}
                       onDuplicate={() => setSteps(all => [
