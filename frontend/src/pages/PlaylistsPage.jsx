@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
@@ -6,6 +6,7 @@ import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import PlaylistServerPanel from '../components/PlaylistServerPanel.jsx';
+import SourceRows from '../components/SourceRows.jsx';
 import Select from '../components/Select.jsx';
 import * as E from '../lib/playlistEngine.js';
 import { DeployPlaylistModal } from '../components/AgentPanel.jsx';
@@ -21,70 +22,7 @@ function NumOrEmpty({ value, onChange, placeholder }) {
 }
 
 // ---- Stream editor ----
-function StreamEditor({ stream, onChange, onRemove, onDup, isDefault, media }) {
-  const { t } = useI18n();
-  const set = (k, v) => onChange({ ...stream, [k]: v });
-  const isVod = stream.Type === 'vod';
-  // Whether this entry points at a file the server actually has.
-  //
-  // A source has always been free text, which is how a path to a missing file
-  // gets into a playlist — and the only way to find out has been silence on
-  // air. Checked here, while it is being typed, against what the server
-  // reports it holds.
-  const known = media?.paths;
-  const missing = isVod && known && stream.Source && !known.has(stream.Source);
-  return (
-    <div className="panel" style={{ background: 'var(--bg-raise)', marginBottom: 6 }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <b className="mono">{isDefault ? t('pl.defaultStream') : t('pl.stream')}: {stream.Source || '—'}</b>
-        {!isDefault && (
-          <div className="row">
-            <button onClick={onDup}>{t('pl.dup')}</button>
-            <button className="danger" onClick={onRemove}>{t('action.delete')}</button>
-          </div>
-        )}
-      </div>
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', marginTop: 8 }}>
-        <Field label={t('pl.type')}>
-          <Select value={stream.Type} onChange={v => set('Type', v)}
-                  options={[{ value: 'vod', label: 'vod (file)' }, { value: 'live', label: 'live (stream)' }]} />
-        </Field>
-        <Field label={t('pl.source')}>
-          <input value={stream.Source} onChange={e => set('Source', e.target.value)}
-                 style={missing ? { borderColor: 'var(--warn)' } : undefined}
-                 placeholder={isVod ? '/media/file.mp4' : 'rtmp://src/app/stream'} />
-          {missing && <div className="hint" style={{ color: 'var(--warn)' }}>{t('pl.sourceMissing')}</div>}
-          {/* Picking beats typing: a list of what is there cannot produce a
-              path that is not. Typing stays for live sources and for files
-              placed outside the media library. */}
-          {isVod && known && known.size > 0 && (
-            <Select value="" onChange={v => v && set('Source', v)} style={{ marginTop: 4 }}
-                    options={[{ value: '', label: t('pl.pickFromServer') },
-                              ...[...known].sort().map(p => ({ value: p, label: p.replace(media.dir + '/', '') }))]} />
-          )}
-        </Field>
-        <Field label={t('pl.durationSec')}>
-          <input value={E.msToSec(stream.Duration)} placeholder="sec / hh:mm:ss"
-                 onChange={e => { try { set('Duration', E.secToMs(e.target.value)); } catch { /* keep typing */ } }} />
-        </Field>
-        <Field label={t('pl.totalDurationSec')}>
-          <input value={E.msToSec(stream.TotalDuration)} placeholder="sec / hh:mm:ss"
-                 onChange={e => { try { set('TotalDuration', E.secToMs(e.target.value)); } catch { /* */ } }} />
-        </Field>
-        {isVod && <Field label={t('pl.startSec')}>
-          <input value={E.msToSec(stream.Start)} placeholder="sec"
-                 onChange={e => { try { set('Start', E.secToMs(e.target.value)); } catch { /* */ } }} />
-        </Field>}
-        {isVod && <Field label={t('pl.maxIter')}><NumOrEmpty value={stream.MaxIterations} onChange={v => set('MaxIterations', v)} /></Field>}
-        <Field label={t('pl.streamTitle')}><input value={stream.StreamTitle || ''} onChange={e => set('StreamTitle', e.target.value || null)} /></Field>
-        <Field label={t('pl.streamUrl')}><input value={stream.StreamUrl || ''} onChange={e => set('StreamUrl', e.target.value || null)} /></Field>
-      </div>
-    </div>
-  );
-}
-
-// ---- Block editor ----
-function BlockEditor({ block, onChange, onRemove, onDup, media }) {
+function BlockEditor({ block, onChange, onRemove, onDup, media, srvId, onMediaChanged, move }) {
   const { t } = useI18n();
   const [ads, setAds] = useState(false);
   const [every, setEvery] = useState(1);
@@ -139,10 +77,11 @@ function BlockEditor({ block, onChange, onRemove, onDup, media }) {
               <button onClick={() => setAds(true)} disabled={!block.Streams.length}>{t('pl.interleave')}</button>
             </div>
           </div>
-          {block.Streams.map((s, i) => (
-            <StreamEditor key={s._id || i} stream={s} media={media}
-                          onChange={ns => setStream(i, ns)}
-                          onRemove={() => set('Streams', block.Streams.filter((_, j) => j !== i))}
+          {/* One line per item, ordering by drag or arrows, and a file that can be
+              picked or uploaded in place. What was here was a grid of eight
+              labelled inputs per item, repeated down the modal. */}
+          <SourceRows block={block} onChange={onChange} media={media} srvId={srvId}
+                      onMediaChanged={onMediaChanged} move={move} />
                           onDup={() => set('Streams', [...block.Streams.slice(0, i + 1), { ...s, _id: E.newUid() }, ...block.Streams.slice(i + 1)])} />
           ))}
           {block.Streams.length === 0 && <div className="hint">{t('pl.noSources')}</div>}
@@ -194,7 +133,7 @@ function BlockEditor({ block, onChange, onRemove, onDup, media }) {
 }
 
 // ---- Task editor ----
-function TaskEditor({ task, onChange, onRemove, media }) {
+function TaskEditor({ task, onChange, onRemove, media, srvId, onMediaChanged }) {
   const { t } = useI18n();
   const set = (k, v) => onChange({ ...task, [k]: v });
   const setBlock = (i, b) => set('Blocks', task.Blocks.map((x, j) => j === i ? b : x));
@@ -213,7 +152,24 @@ function TaskEditor({ task, onChange, onRemove, media }) {
         <button onClick={() => set('Blocks', [...task.Blocks, E.makeBlock()])}>+ {t('pl.addBlock')}</button>
       </div>
       {task.Blocks.map((b, i) => (
-        <BlockEditor key={b._id || i} block={b} media={media}
+        <BlockEditor key={b._id || i} block={b} media={media} srvId={srvId} onMediaChanged={onMediaChanged}
+                     // Moving an item to a neighbouring block. Called with
+                     // `probe` to ask whether it is possible, so the button can
+                     // be disabled rather than silently doing nothing.
+                     move={(si, dir, probe) => {
+                       const to = i + dir;
+                       if (to < 0 || to >= task.Blocks.length) return false;
+                       if (probe) return true;
+                       const item = (b.Streams || [])[si];
+                       if (!item) return false;
+                       const blocks = task.Blocks.map((x, j) => {
+                         if (j === i) return { ...x, Streams: x.Streams.filter((_, k) => k !== si) };
+                         if (j === to) return { ...x, Streams: [...(x.Streams || []), item] };
+                         return x;
+                       });
+                       set('Blocks', blocks);
+                       return true;
+                     }}
                      onChange={nb => setBlock(i, nb)}
                      onRemove={() => set('Blocks', task.Blocks.filter((_, j) => j !== i))}
                      onDup={() => set('Blocks', [...task.Blocks.slice(0, i + 1), { ...b, _id: E.newUid(), Id: E.newBlockId() }, ...task.Blocks.slice(i + 1)])} />
@@ -245,21 +201,30 @@ function Builder({ initial, onClose, onSaved, servers = [] }) {
   const [media, setMedia] = useState(null);
   const [state, setState] = useState(null);
 
-  useEffect(() => {
-    if (!srvId) { setMedia(null); setState(null); return undefined; }
-    let dead = false;
+  // Named rather than buried in the effect: a file uploaded from a source row
+  // has to appear in the picker immediately, or the next row's operator picks
+  // from a list that is one file out of date.
+  const loadMedia = useCallback(() => {
+    if (!srvId) { setMedia(null); return; }
     api(`/servers/${srvId}/agent/media`)
-      .then(d => { if (dead) return;
+      .then(d => {
         const dir = String(d?.dir || '').replace(/\/+$/, '');
         setMedia({ dir, files: d?.files || [],
           paths: new Set((d?.files || []).map(f => `${dir}/${f.name}`)) });
       })
-      .catch(() => { if (!dead) setMedia(null); });
+      .catch(() => setMedia(null));
+  }, [srvId]);
+
+  useEffect(() => {
+    if (!srvId) { setState(null); }
+    loadMedia();
+    if (!srvId) return undefined;
+    let dead = false;
     api(`/servers/${srvId}/agent/playlist-state`)
       .then(d => { if (!dead) setState(d); })
       .catch(e => { if (!dead) setState({ error: e.message }); });
     return () => { dead = true; };
-  }, [srvId]);
+  }, [srvId, loadMedia]);
 
   // Interleave a repeating set between the items already in a block.
   //
@@ -372,7 +337,8 @@ function Builder({ initial, onClose, onSaved, servers = [] }) {
               <button onClick={() => setModel(m => ({ ...m, Tasks: [...m.Tasks, E.makeTask()] }))}>+ {t('pl.addTask')}</button>
             </div>
             {model.Tasks.map((tk, i) => (
-              <TaskEditor key={tk._id || i} task={tk} media={media} onChange={ntk => setTask(i, ntk)}
+              <TaskEditor key={tk._id || i} task={tk} media={media} srvId={srvId} onMediaChanged={loadMedia}
+                          onChange={ntk => setTask(i, ntk)}
                           onRemove={() => setModel(m => ({ ...m, Tasks: m.Tasks.filter((_, j) => j !== i) }))} />
             ))}
             {model.Tasks.length === 0 && <div className="hint">{t('pl.noTasks')}</div>}

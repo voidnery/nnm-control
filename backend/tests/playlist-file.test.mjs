@@ -167,9 +167,12 @@ const page = readFileSync(new URL('../../frontend/src/pages/PlaylistsPage.jsx', 
 check('a source can be picked from what the server holds', () => {
   // It has always been free text, which is how a path to a missing file gets
   // into a playlist — and the only way to find out has been silence on air.
-  assert.ok(page.includes("t('pl.pickFromServer')"));
-  assert.ok(page.includes('const missing = isVod && known && stream.Source && !known.has(stream.Source)'));
-  assert.ok(page.includes("t('pl.sourceMissing')"));
+  // The per-item grid this lived in was replaced in v0.41.0; the guarantee
+  // moved with it rather than going away.
+  const src = readFileSync(new URL('../../frontend/src/components/SourceRows.jsx', import.meta.url), 'utf8');
+  assert.ok(src.includes("t('src.pick')"));
+  assert.ok(src.includes('const missing = isVod(s) && known && s.Source && !known.has(s.Source)'));
+  assert.ok(src.includes("t('src.missing')"));
 });
 
 check('editing never writes to a server', () => {
@@ -822,6 +825,69 @@ check('the page opens on the server, not on the library', () => {
   const drafts = page5.indexOf("t('pl.drafts')");
   assert.ok(at > 0 && drafts > at, 'the server panel comes first');
   assert.equal((page5.match(/<PlaylistServerPanel/g) || []).length, 1, 'and only once');
+});
+
+console.log('\nAN EDITOR SOMEONE CAN USE (v0.41.0):');
+
+const rows = readFileSync(new URL('../../frontend/src/components/SourceRows.jsx', import.meta.url), 'utf8');
+const page6 = readFileSync(new URL('../../frontend/src/pages/PlaylistsPage.jsx', import.meta.url), 'utf8');
+
+check('the eight-field grid per item is gone', () => {
+  // Every field was equally prominent, so the two used constantly were as hard
+  // to find as the two used once a year — twenty-four times down a modal.
+  assert.ok(!page6.includes('function StreamEditor('));
+  assert.ok(page6.includes('<SourceRows'));
+});
+
+check('order can be changed by dragging or by arrows', () => {
+  // There was no way to reorder anything at all: an item in the wrong place
+  // had to be deleted and retyped.
+  assert.ok(rows.includes('draggable'));
+  assert.ok(rows.includes('const drop = (to)'));
+  assert.ok(rows.includes('const swap = (i, j)'));
+  // Dropping past the last row appends; every other target inserts before
+  // something, so without it the end of the list is unreachable.
+  assert.ok(rows.includes('onDrop={() => drop(streams.length)}'));
+});
+
+check('dragging starts from the handle, not the whole row', () => {
+  // Otherwise every attempt to select text in the path starts a drag.
+  // indexOf finds the word in the comment above it, so the element is located
+  // by its opening tag.
+  const at = rows.indexOf('<span draggable');
+  assert.ok(at > 0);
+  assert.ok(rows.slice(at, at + 300).includes("cursor: 'grab'"));
+  assert.ok(!/<div[^>]*className="src-row"[^>]*draggable/.test(rows));
+});
+
+check('an item can be moved to a neighbouring block', () => {
+  // The thing that was impossible: a source in the wrong block had to be
+  // deleted and retyped there.
+  assert.ok(rows.includes("title={t('src.toPrevBlock')}"));
+  assert.ok(page6.includes('move={(si, dir, probe) =>'));
+  // Asked before it is done, so the button is disabled rather than silently
+  // doing nothing at the ends.
+  assert.ok(page6.includes('if (probe) return true;'));
+  assert.ok(rows.includes('disabled={!move(i, -1, true)}'));
+});
+
+check('a file can be picked or uploaded in place, and fills the path in', () => {
+  // Uploading elsewhere and typing the path here is how an entry ends up
+  // naming a file that arrived under a different name.
+  assert.ok(rows.includes("t('src.pick')"));
+  assert.ok(rows.includes('setAt(i, { ...streams[i], Source: `${dir}/${f.name}` })'));
+  assert.ok(rows.includes('onMediaChanged?.()'), 'and the picker is refreshed');
+  assert.ok(page6.includes('const loadMedia = useCallback'), 'by a loader that exists outside the effect');
+});
+
+check('the rare fields are present but out of the way', () => {
+  // Someone needs each of them once a year. Removing them would be worse than
+  // showing them; showing them beside the path was what made this unusable.
+  for (const k of ['src.duration', 'src.offset', 'src.totalDuration',
+                   'src.maxIterations', 'src.streamTitle', 'src.streamUrl']) {
+    assert.ok(rows.includes(k), k);
+  }
+  assert.ok(rows.includes('const advanced = open === i'));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall playlist-file checks passed');

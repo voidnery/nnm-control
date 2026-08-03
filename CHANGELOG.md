@@ -1,5 +1,38 @@
 # Changelog
 
+### v0.41.0 — an editor someone can actually use
+The source list was a grid of eight labelled inputs per item — type, path,
+duration, total duration, offset, iterations, and two Icecast fields —
+repeated twenty-four times down a modal. Every field was equally prominent, so
+the two used constantly were as hard to find as the two used once a year, and
+there was no way to reorder anything.
+
+- **One line per item**: the type, the file, and the controls. Everything else
+  behind a disclosure — those fields are real and occasionally needed, and
+  showing them beside the path is what made this unusable
+- **Order can be changed.** Drag by the handle, or arrows. Dragging is on the
+  handle alone, because a draggable row means every attempt to select text in
+  the path starts a drag. Dropping past the last row appends: every other
+  target inserts before something, so without it the end of the list is
+  unreachable
+- **An item can be moved to a neighbouring block** — the thing that was
+  impossible before, where a source in the wrong block had to be deleted and
+  retyped. The move is asked before it is done, so the button is disabled at
+  the ends rather than silently doing nothing
+- **A file can be picked from the server or uploaded right there**, and the
+  upload fills the path in. Uploading elsewhere and typing the path here is
+  exactly how an entry ends up naming a file that arrived under a different
+  name. The picker refreshes after an upload, so the next row is not choosing
+  from a list one file out of date
+- An entry naming a file the server does not have is still marked, as before —
+  that guarantee moved into the new component rather than going away
+- 6 new checks; two existing ones re-pointed, one because its subject was
+  deleted with the old grid
+
+**Coverage, stated:** the click gate does not open the editor modal, so these
+controls are exercised by hand.
+
+
 ### v0.40.0 — the upload, and one page instead of two
 - **The upload sent the wrong file name.** `upload(file)` shadowed the `file`
   state — the playlist being viewed — so it uploaded the chosen file's contents

@@ -124,6 +124,19 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
 
+/* One playable item. Bordered rather than separated by rules so a row being
+   dragged reads as a single object, and tight enough that twenty-four of them
+   are a list rather than a scroll. */
+.src-row {
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; margin-bottom: 4px; background: var(--bg-raise);
+}
+.src-row:hover { border-color: var(--accent-dim); }
+.src-row button { padding: 5px 8px; font-size: 12px; }
+/* The advanced fields: labelled, small, and clearly a second tier. */
+.src-adv { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+.src-adv input { width: 120px; font-size: 12px; padding: 4px 6px; }
+
 .panel.quota { margin: 0; border-color: var(--line); background: var(--bg); }
 .grid { display: grid; gap: 12px; }
 .grid.cols3 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
