@@ -1,5 +1,22 @@
 # Changelog
 
+### v0.42.1 — one file at a time
+- **The history was not scoped to the file being viewed.** It listed versions
+  of every playlist file on the server, so the stopped-streams list offered a
+  stream belonging to one file while another was selected — and starting it
+  failed with "no version this panel holds contains it", which was true and
+  left nothing to do about it
+- **The panel lands on a file that exists.** The default name is right for a
+  fresh install and wrong for a server that named its file something else, and
+  the page then showed an empty state, a history of other files, and buttons
+  that could not work. A name differing only in its separator —
+  `server-playlist.json` against `server_playlist.json` — is recognised as the
+  same intent. An operator who picked a file keeps it
+- **A stream that lives in another file says which.** "There is nothing to
+  restore" sends someone to rebuild a task that already exists a few lines away
+- 3 new checks; one re-pointed at the extended handler
+
+
 ### v0.42.0 — uploads up to a hundred gigabytes
 - Raised on **every** limit along the path, not just the first: nginx, the
   spool, and the transfer timeouts. A limit raised in one place and left in

@@ -59,8 +59,32 @@ export default function PlaylistServerPanel({ servers }) {
       .then(setState).catch(e => setState({ exists: null, error: e.message }));
     api(`/servers/${srvId}/agent/playlist-advice`).then(setAdvice).catch(() => setAdvice(null));
     api(`/servers/${srvId}/agent/media`).then(d => setMedia(d)).catch(() => setMedia(null));
-    api(`/servers/${srvId}/agent/playlist-history`).then(d => setVersions(d.versions || [])).catch(() => setVersions([]));
+    // Scoped to the file being looked at. Unscoped, it listed versions of
+    // every playlist file on the server — so a stopped stream from one file
+    // was offered while another was selected, and starting it failed with "no
+    // version contains this", which was true and unhelpable.
+    api(`/servers/${srvId}/agent/playlist-history?filename=${encodeURIComponent(file)}`)
+      .then(d => setVersions(d.versions || [])).catch(() => setVersions([]));
   }, [srvId, file]);
+
+  // Land on a file that exists.
+  //
+  // The default is right for a fresh install and wrong for every server that
+  // named its file something else — and then the page shows an empty state, a
+  // history of other files, and buttons that cannot work. Choosing is only
+  // automatic when the panel has not been told otherwise: an operator who
+  // picked a file keeps it.
+  const [picked, setPicked] = useState(false);
+  useEffect(() => {
+    if (picked || state?.exists !== false) return;
+    const options = state.alternatives || [];
+    if (!options.length) return;
+    // The closest thing to what was asked for, then anything.
+    const best = options.find(n => n.replace(/[-_]/g, '') === file.replace(/[-_]/g, ''))
+      || options.find(n => /playlist/i.test(n))
+      || options[0];
+    setFile(best);
+  }, [state, file, picked]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -135,7 +159,7 @@ export default function PlaylistServerPanel({ servers }) {
                   <div className="row" style={{ gap: 6, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span>{t('pls.butThereIs')}</span>
                     {state.alternatives.map(n => (
-                      <button key={n} onClick={() => setFile(n)}>{n}</button>
+                      <button key={n} onClick={() => { setPicked(true); setFile(n); }}>{n}</button>
                     ))}
                   </div>
                 )}

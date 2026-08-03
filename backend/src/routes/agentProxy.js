@@ -362,9 +362,18 @@ agentRouter.post('/:id/agent/playlist-start', requirePerm('playlist.manage'), lo
     .sort({ createdAt: -1 }).limit(50).lean();
   const found = findTaskInVersions(versions, stream);
   if (!found) {
-    throw Object.assign(new Error(
-      `no version this panel holds contains "${stream}", so there is nothing to restore. `
-      + 'Add the task in the editor and deploy it.'), { status: 404 });
+    // Say where it WAS seen. The stopped-streams list is built from history,
+    // so a stream offered here and not found came from a different file — and
+    // "there is nothing to restore" sends the operator to rebuild something
+    // that already exists a few lines away.
+    const elsewhere = await PlaylistDeploy.find({ serverId: req.srv._id, filename: { $ne: filename } })
+      .sort({ createdAt: -1 }).limit(50).lean();
+    const other = findTaskInVersions(elsewhere, stream);
+    throw Object.assign(new Error(other
+      ? `"${stream}" is not in any version of ${filename}, but it is in ${other.from.filename}. `
+        + 'Switch to that file to start it.'
+      : `no version this panel holds contains "${stream}", so there is nothing to restore. `
+        + 'Add the task in the editor and deploy it.'), { status: 404 });
   }
 
   const cur = await runTask(req.srv, 'GET /config', { query: { name: filename }, createdBy: req.user?.username });

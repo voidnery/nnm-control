@@ -703,7 +703,10 @@ check('what IS there is offered when what was asked for is not', () => {
   assert.ok(proxy4.includes("runTask(req.srv, 'GET /config/list'"));
   assert.ok(proxy4.includes('alternatives'));
   assert.ok(panel3.includes("t('pls.butThereIs')"));
-  assert.ok(panel3.includes('onClick={() => setFile(n)}'), 'and picking one is a click');
+  // The handler also records that the choice was deliberate, so the automatic
+  // pick added in v0.42.1 does not override it.
+  assert.ok(/onClick=\{\(\) => \{ setPicked\(true\); setFile\(n\); \}\}/.test(panel3),
+    'and picking one is a click that sticks');
 });
 
 check('an agent too old to list is still an agent that answered', () => {
@@ -988,6 +991,39 @@ check('the timeouts allow for hours, not minutes', () => {
   // mid-transfer throws all of it away.
   assert.ok(proxy6.includes('timeoutMs: 12 * 60 * 60_000'));
   assert.ok(/proxy_read_timeout\s+12h/.test(conf2));
+});
+
+console.log('\nONE FILE AT A TIME (v0.42.1):');
+
+const panel6 = readFileSync(new URL('../../frontend/src/components/PlaylistServerPanel.jsx', import.meta.url), 'utf8');
+const proxy7b = readFileSync(new URL('../src/routes/agentProxy.js', import.meta.url), 'utf8');
+
+check('the history is scoped to the file being looked at', () => {
+  // Unscoped it listed versions of every playlist file on the server, so a
+  // stopped stream from one file was offered while another was selected — and
+  // starting it failed with "no version contains this", which was true and
+  // left nothing to do about it.
+  assert.ok(panel6.includes('playlist-history?filename=${encodeURIComponent(file)}'));
+});
+
+check('the panel lands on a file that exists', () => {
+  // The default is right for a fresh install and wrong for every server that
+  // named its file something else — and then the page shows an empty state, a
+  // history of other files, and buttons that cannot work.
+  const pick = (want, opts) => opts.find(n => n.replace(/[-_]/g, '') === want.replace(/[-_]/g, ''))
+    || opts.find(n => /playlist/i.test(n)) || opts[0];
+  assert.equal(pick('server-playlist.json', ['playlist.json', 'server_playlist.json']), 'server_playlist.json',
+    'a name differing only in the separator is recognised');
+  assert.equal(pick('server-playlist.json', ['other.json']), 'other.json');
+  assert.ok(panel6.includes('if (picked || state?.exists !== false) return;'),
+    'and an operator who chose a file keeps it');
+});
+
+check('a stream that lives in another file says so', () => {
+  // "There is nothing to restore" sends the operator to rebuild something that
+  // already exists a few lines away.
+  assert.ok(proxy7b.includes('filename: { $ne: filename }'));
+  assert.ok(proxy7b.includes('Switch to that file to start it.'));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall playlist-file checks passed');
