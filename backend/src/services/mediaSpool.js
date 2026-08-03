@@ -18,7 +18,56 @@ import path from 'node:path';
 import { MediaTransfer, RETENTION_DAYS } from '../models/MediaTransfer.js';
 
 export const SPOOL_DIR = path.resolve(process.env.MEDIA_SPOOL_DIR || '/var/lib/nnm-control/media-spool');
-const MAX_BYTES = Number(process.env.MEDIA_MAX_MB || 2048) * 1024 * 1024;
+// 100 GB. Large enough for the material this handles, and bounded on purpose:
+// an unlimited upload is one that fills a disk, and a panel with no disk left
+// stops answering for every server rather than failing one transfer.
+const MAX_BYTES = Number(process.env.MEDIA_MAX_MB || 102_400) * 1024 * 1024;
+
+// Refuse before starting rather than fail part-way.
+//
+// At this size the limit that bites is not the configured maximum but the
+// spool's own free space. Discovering that at 90 GB means 90 GB of someone's
+// time and bandwidth already spent, a half-written file to clean up, and — if
+// the disk is shared with the database, which it is by default — a panel that
+// has stopped working for reasons nobody will connect to an upload.
+//
+// The margin exists because a disk filled exactly to zero is a disk that
+// cannot be recovered from without shell access.
+const FREE_MARGIN_BYTES = 2 * 1024 * 1024 * 1024;
+
+export async function spoolFreeBytes() {
+  const st = await fs.statfs(SPOOL_DIR);
+  return st.bavail * st.bsize;
+}
+
+/**
+ * Whether a file of this size can be taken, and why not if it cannot.
+ *
+ * `declared` is what the browser said. It is not trusted for the write — the
+ * meter still counts — but it is exactly what is needed to say no early.
+ */
+export async function canAccept(declared) {
+  const bytes = Number(declared) || 0;
+  if (bytes > MAX_BYTES) {
+    return { ok: false, status: 413,
+      reason: `the file is ${(bytes / 1e9).toFixed(1)} GB and the limit is ${(MAX_BYTES / 1e9).toFixed(0)} GB` };
+  }
+  try {
+    await fs.mkdir(SPOOL_DIR, { recursive: true });
+    const free = await spoolFreeBytes();
+    if (bytes && bytes + FREE_MARGIN_BYTES > free) {
+      return { ok: false, status: 507,
+        reason: `the panel has ${(free / 1e9).toFixed(1)} GB free and this needs `
+          + `${(bytes / 1e9).toFixed(1)} GB plus a ${(FREE_MARGIN_BYTES / 1e9).toFixed(0)} GB margin` };
+    }
+  } catch {
+    // Unable to measure is not a reason to refuse: the meter still stops an
+    // overlong write, and a filesystem that will not answer statfs is not
+    // necessarily full.
+    return { ok: true, unmeasured: true };
+  }
+  return { ok: true };
+}
 
 const spoolFile = (id) => path.join(SPOOL_DIR, `${id}.bin`);
 

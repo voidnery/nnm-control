@@ -112,7 +112,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 17;
+const AGENT_VERSION = 18;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -597,6 +597,29 @@ const routes = {
     // is choosing it in the panel, and making them log in to mkdir first
     // defeats the point of uploading through the panel at all.
     await fs.mkdir(path.dirname(full), { recursive: true });
+
+    // Refuse before pulling, not after.
+    //
+    // This machine is a broadcast server. Filling its disk does not fail a
+    // file transfer, it stops encoders writing and takes streams off air —
+    // and the transfer would have to run to completion first to do it. Two
+    // gigabytes of margin because a disk at exactly zero cannot be recovered
+    // from without someone on site.
+    if (Number.isFinite(size) && size > 0) {
+      try {
+        const st = await fs.statfs(path.dirname(full));
+        const free = st.bavail * st.bsize;
+        const margin = 2 * 1024 * 1024 * 1024;
+        if (size + margin > free) {
+          throw new Error(`not enough space on this server: ${(free / 1e9).toFixed(1)} GB free, `
+            + `this file needs ${(size / 1e9).toFixed(1)} GB plus a 2 GB margin`);
+        }
+      } catch (e) {
+        // A filesystem that will not answer statfs is not necessarily full;
+        // only a measured shortfall stops the transfer.
+        if (/not enough space/.test(String(e.message))) throw e;
+      }
+    }
     const ext = path.extname(full).slice(1).toLowerCase();
     if (!ALLOWED_MEDIA.includes(ext)) {
       throw Object.assign(new Error(`extension .${ext || '?'} is not allowed`), { code: 415 });

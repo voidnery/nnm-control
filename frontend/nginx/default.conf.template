@@ -17,6 +17,38 @@ server {
         proxy_read_timeout 30s;
     }
 
+    # Media upload -> the same backend, with the limits a video needs.
+    #
+    # nginx defaults to a 1 MB body, so every upload was refused with 413
+    # before it reached a panel that accepts 2 GB. The limit lives here because
+    # this is the first thing in the path that can say no, and a 413 from a
+    # proxy looks identical to a 413 from an application.
+    #
+    # Buffering off: a two-gigabyte file spooled to the proxy's disk first
+    # doubles the write and delays the first byte reaching the panel by the
+    # length of the upload.
+    location ~ ^/api/servers/[^/]+/agent/media$ {
+        proxy_pass http://backend:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        # A literal value, not a substituted one. The nginx image renders this
+        # with envsubst, which does not understand shell-style defaults — such a
+        # value would be left in the file verbatim and nginx would refuse to
+        # start. A web container that will not start is a worse outcome than
+        # a limit that has to be edited, so the limit is written out.
+        client_max_body_size 102400m;
+        proxy_request_buffering off;
+        # A slow link uploading a large file is not an idle connection.
+        # A hundred gigabytes over a studio uplink is hours, not minutes, and
+        # a timeout mid-transfer wastes all of it.
+        proxy_read_timeout 12h;
+        proxy_send_timeout 12h;
+        client_body_timeout 12h;
+    }
+
     # SPA fallback
     location / {
         try_files $uri /index.html;

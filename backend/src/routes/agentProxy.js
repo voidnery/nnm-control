@@ -30,7 +30,7 @@ import { runTask, enqueueTask, reapExpiredTasks } from '../services/agentBus.js'
 import { AgentTask } from '../models/AgentTask.js';
 import { diagnose, HINTS } from '../services/agentDiagnosis.js';
 import { MediaTransfer } from '../models/MediaTransfer.js';
-import { spoolUpload, spoolUsage } from '../services/mediaSpool.js';
+import { canAccept, spoolUpload, spoolUsage } from '../services/mediaSpool.js';
 import { logEvent } from '../services/audit.js';
 
 export const agentRouter = Router();
@@ -550,10 +550,21 @@ agentRouter.delete('/:id/agent/media', requirePerm('playlist.manage'), loadServe
 agentRouter.put('/:id/agent/media', requirePerm('playlist.manage'), loadServer, wrap(async (req) => {
   const name = String(req.query.name || '');
   if (!name) throw Object.assign(new Error('name is required'), { status: 400 });
+
+  // Asked before a byte is written. At a hundred gigabytes the answer "no"
+  // arriving at the end is the expensive one: the bandwidth is spent, there is
+  // a half-file to clean up, and the disk it was going to fill is shared with
+  // the database.
+  const room = await canAccept(req.headers['content-length']);
+  if (!room.ok) throw Object.assign(new Error(`this upload cannot be accepted: ${room.reason}`), { status: room.status });
+
   const doc = await spoolUpload(req.srv, name, req, { createdBy: req.user?.username });
   await enqueueTask(req.srv, 'POST /media/fetch', {
     body: { transferId: String(doc._id), name: doc.name, sha256: doc.sha256, size: doc.size },
-    timeoutMs: 30 * 60_000,          // a large file over a slow link
+    // The agent has to pull the whole file from the panel before it can
+    // report success, and at this size that is hours. A task that expires
+    // mid-transfer is a transfer thrown away.
+    timeoutMs: 12 * 60 * 60_000,
     createdBy: req.user?.username,
   });
   logEvent({ req, action: 'agent:media_upload', target: `${req.srv.name}:${name} (${doc.size} B)`, outcome: 'ok', status: 200 });

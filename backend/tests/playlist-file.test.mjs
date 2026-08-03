@@ -209,11 +209,6 @@ check('the interleave reproduces the pattern the live file was built with', () =
   assert.deepEqual(once.slice(0, 4).map(x => x.Source), [...ads, 'm/match_1.mp4']);
 });
 
-check('the interleave is applied by the block that owns it', () => {
-  // Routing it through the parent would need the block's index carried along,
-  // which is the sort of bookkeeping that goes wrong quietly.
-  assert.ok(page.includes('onChange({ ...block, Streams: out })'));
-});
 
 console.log('\nDEPLOY AND ROLLBACK (m4):');
 
@@ -888,6 +883,111 @@ check('the rare fields are present but out of the way', () => {
     assert.ok(rows.includes(k), k);
   }
   assert.ok(rows.includes('const advanced = open === i'));
+});
+
+console.log('\nTHE UPLOAD ACTUALLY GETTING THROUGH (v0.41.1):');
+
+const conf = readFileSync(new URL('../../frontend/nginx/default.conf.template', import.meta.url), 'utf8');
+const page7 = readFileSync(new URL('../../frontend/src/pages/PlaylistsPage.jsx', import.meta.url), 'utf8');
+
+check('the proxy accepts a video, not a megabyte', () => {
+  // nginx defaults to 1 MB, so every upload was refused with 413 before it
+  // reached a panel that accepts 2 GB. A 413 from a proxy looks identical to a
+  // 413 from an application, which is why this took a screenshot to find.
+  // Matched inside the block rather than within N characters of the location
+  // line: the explanation between them is longer than any span worth guessing.
+  const at = conf.indexOf('agent/media$');
+  assert.ok(at > 0, 'there is a location for the upload');
+  const block = conf.slice(at, conf.indexOf('\n    }', at));
+  // The figure moved to 100 GB in v0.42.0. What is asserted is that a limit
+  // exists and is far above nginx's one-megabyte default, not the number.
+  const mb = Number(/client_max_body_size\s+(\d+)m/.exec(block)?.[1]);
+  assert.ok(mb >= 2048, `expected a real limit, got ${mb}m`);
+  assert.ok(/proxy_request_buffering\s+off/.test(conf), 'and is not spooled to the proxy first');
+});
+
+check('the limit is a literal, because envsubst cannot do defaults', () => {
+  // `${VAR:-2048}` would be left in the file verbatim and nginx would refuse
+  // to start. A web container that will not start is worse than a limit that
+  // has to be edited.
+  const code = conf.split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
+  for (const m of code.matchAll(/\$\{[^}]*\}/g)) {
+    assert.match(m[0], /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/, m[0]);
+  }
+});
+
+check('no markup was left behind by the source-list replacement', () => {
+  // A fragment of the old call survived the edit and rendered as literal text
+  // in the middle of the editor: "onDup= /> ))}".
+  assert.ok(!page7.includes('onDup= />'));
+  assert.ok(!/onDup=\{\(\) => set\('Streams'/.test(page7), 'the old per-item handlers are gone with it');
+});
+
+check('the advert interleave is gone', () => {
+  // It was never asked for.
+  assert.ok(!page7.includes('setAds'));
+  assert.ok(!page7.includes("t('pl.interleave')"));
+});
+
+console.log('\nUPLOADS UP TO A HUNDRED GIGABYTES (v0.42.0):');
+
+const spool = readFileSync(new URL('../src/services/mediaSpool.js', import.meta.url), 'utf8');
+const conf2 = readFileSync(new URL('../../frontend/nginx/default.conf.template', import.meta.url), 'utf8');
+const proxy6 = readFileSync(new URL('../src/routes/agentProxy.js', import.meta.url), 'utf8');
+const agent6 = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+
+check('every limit on the path was raised, not just the first one', () => {
+  // A limit raised in one place and left in another produces the same refusal
+  // from a different component, which is harder to find than the original.
+  assert.ok(spool.includes('MEDIA_MAX_MB || 102_400'));
+  const at = conf2.indexOf('agent/media$');
+  assert.match(conf2.slice(at, conf2.indexOf('\n    }', at)), /client_max_body_size\s+102400m/);
+});
+
+check('the limit is bounded, not removed', () => {
+  // An unlimited upload is one that fills a disk, and a panel with no disk
+  // left stops answering for every server rather than failing one transfer.
+  assert.ok(!/client_max_body_size\s+0/.test(conf2));
+});
+
+check('an upload with nowhere to go is refused before it starts', () => {
+  // At this size the answer "no" arriving at the end is the expensive one: the
+  // bandwidth is spent, there is a half-file to clean up, and the disk it was
+  // going to fill is shared with the database.
+  assert.ok(spool.includes('export async function canAccept'));
+  assert.ok(proxy6.includes("canAccept(req.headers['content-length'])"));
+  const at = proxy6.indexOf("canAccept(req.headers['content-length'])");
+  assert.ok(at < proxy6.indexOf('spoolUpload(req.srv', at), 'before the write, not after');
+});
+
+check('too large and no room are different answers', () => {
+  // 413 is "never"; 507 is "not now" and will be right again once something is
+  // deleted. Telling an operator the wrong one sends them to the wrong fix.
+  assert.ok(spool.includes('status: 413'));
+  assert.ok(spool.includes('status: 507'));
+  assert.ok(spool.includes('plus a'), 'and the margin is stated');
+});
+
+check('being unable to measure does not refuse', () => {
+  // A filesystem that will not answer statfs is not necessarily full, and the
+  // meter still stops an overlong write.
+  assert.ok(spool.includes('return { ok: true, unmeasured: true }'));
+});
+
+check('the broadcast server refuses what it cannot hold', () => {
+  // Filling this disk does not fail a transfer, it stops encoders writing and
+  // takes streams off air — and the transfer would run to completion first.
+  assert.ok(agent6.includes('not enough space on this server'));
+  const at = agent6.indexOf('not enough space on this server');
+  const fetchAt = agent6.indexOf('await fetch(', agent6.indexOf("'POST /media/fetch'"));
+  assert.ok(at < fetchAt, 'checked before pulling the file');
+});
+
+check('the timeouts allow for hours, not minutes', () => {
+  // A hundred gigabytes over a studio uplink is hours, and a task expiring
+  // mid-transfer throws all of it away.
+  assert.ok(proxy6.includes('timeoutMs: 12 * 60 * 60_000'));
+  assert.ok(/proxy_read_timeout\s+12h/.test(conf2));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall playlist-file checks passed');

@@ -1,5 +1,54 @@
 # Changelog
 
+### v0.42.0 — uploads up to a hundred gigabytes
+- Raised on **every** limit along the path, not just the first: nginx, the
+  spool, and the transfer timeouts. A limit raised in one place and left in
+  another produces the same refusal from a different component, which is harder
+  to find than the original was
+- **Bounded, not removed.** An unlimited upload is one that fills a disk, and a
+  panel with no disk left stops answering for every server rather than failing
+  one transfer
+- **An upload with nowhere to go is refused before it starts.** At this size
+  the answer "no" arriving at the end is the expensive one: the bandwidth is
+  spent, there is a half-written file to clean up, and the disk it was going to
+  fill is shared with the database. The declared size is checked against actual
+  free space, with a 2 GB margin — a disk at exactly zero cannot be recovered
+  from without someone on site
+- Too large and no room are **different answers**: 413 is "never", 507 is "not
+  now" and will be right again once something is deleted. Telling an operator
+  the wrong one sends them to the wrong fix. Being unable to measure refuses
+  nothing — the meter still stops an overlong write
+- **The broadcast server refuses what it cannot hold**, before pulling the file
+  rather than after. Filling that disk does not fail a transfer: it stops
+  encoders writing and takes streams off air, and the transfer would have run
+  to completion first to do it
+- Timeouts allow hours. A hundred gigabytes over a studio uplink is not
+  minutes, and a task expiring mid-transfer throws all of it away
+- 7 new checks; one from v0.41.1 rewritten to assert a real limit rather than a
+  particular figure. Agent protocol version 18
+
+
+### v0.41.1 — the 413, the stray text, and one feature removed
+- **nginx was refusing every upload before it reached the panel.** There was no
+  `client_max_body_size` in the template, so the default of one megabyte
+  applied — while the panel itself accepts two gigabytes. A 413 from a proxy
+  looks identical to a 413 from an application, which is why this needed a
+  screenshot to find. The upload location has its own limit now, and
+  `proxy_request_buffering off` so a large file is not written to the proxy's
+  disk first and delayed by the length of its own upload
+- The limit is written out rather than substituted: the nginx image renders
+  this template with envsubst, which does not understand shell-style defaults —
+  `${VAR:-2048}` would be left verbatim and nginx would refuse to start. **A web
+  container that will not start is worse than a limit that has to be edited**
+- New `npm run audit:nginx`: any substitution envsubst cannot render, a missing
+  body limit, and unbuffered upload. Verified against both faults
+- **"onDup= /> ))}" was my own damage** — a fragment of the old per-item call
+  survived the replacement of the source list and rendered as literal text in
+  the middle of the editor
+- **"Interleave adverts" is gone.** It was never asked for
+- 4 new checks; one retired with the feature it described
+
+
 ### v0.41.0 — an editor someone can actually use
 The source list was a grid of eight labelled inputs per item — type, path,
 duration, total duration, offset, iterations, and two Icecast fields —

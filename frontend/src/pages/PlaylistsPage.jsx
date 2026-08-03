@@ -24,9 +24,6 @@ function NumOrEmpty({ value, onChange, placeholder }) {
 // ---- Stream editor ----
 function BlockEditor({ block, onChange, onRemove, onDup, media, srvId, onMediaChanged, move }) {
   const { t } = useI18n();
-  const [ads, setAds] = useState(false);
-  const [every, setEvery] = useState(1);
-  const [chosen, setChosen] = useState([]);
   const [open, setOpen] = useState(true);
   const set = (k, v) => onChange({ ...block, [k]: v });
   const setStream = (i, s) => set('Streams', block.Streams.map((x, j) => j === i ? s : x));
@@ -70,63 +67,16 @@ function BlockEditor({ block, onChange, onRemove, onDup, media, srvId, onMediaCh
                 middle instead of sitting with its neighbour. */}
             <div className="row" style={{ gap: 6 }}>
               <button onClick={() => set('Streams', [...block.Streams, E.makeStream()])}>+ {t('pl.addSource')}</button>
-              {/* The pattern the live playlist was built with by hand: three
-                  adverts before every match, 24 entries for 8 matches. Doing
-                  it a row at a time is where an advert goes missing or a match
-                  repeats, and neither shows until it airs. */}
-              <button onClick={() => setAds(true)} disabled={!block.Streams.length}>{t('pl.interleave')}</button>
             </div>
           </div>
           {/* One line per item, ordering by drag or arrows, and a file that can be
               picked or uploaded in place. What was here was a grid of eight
               labelled inputs per item, repeated down the modal. */}
+          {/* SourceRows says "nothing here yet" itself; the old empty state
+              stayed behind and would have said it a second time. */}
           <SourceRows block={block} onChange={onChange} media={media} srvId={srvId}
                       onMediaChanged={onMediaChanged} move={move} />
-                          onDup={() => set('Streams', [...block.Streams.slice(0, i + 1), { ...s, _id: E.newUid() }, ...block.Streams.slice(i + 1)])} />
-          ))}
-          {block.Streams.length === 0 && <div className="hint">{t('pl.noSources')}</div>}
         </div>
-      )}
-
-      {ads && (
-        <Modal onClose={() => setAds(false)} size="wide">
-          <h3 style={{ marginTop: 0 }}>{t('pl.interleave')}</h3>
-          <p className="hint">{t('pl.interleaveHint')}</p>
-          <label>{t('pl.interleaveWhich')}</label>
-          <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 6, padding: 6 }}>
-            {(media?.files || []).map(f => {
-              const full = `${media.dir}/${f.name}`;
-              return (
-                <label key={full} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0' }}>
-                  <input type="checkbox" checked={chosen.includes(full)}
-                         onChange={e => setChosen(c => (e.target.checked ? [...c, full] : c.filter(x => x !== full)))} />
-                  <span className="mono" style={{ fontSize: 12 }}>{f.name}</span>
-                </label>
-              );
-            })}
-            {!media?.files?.length && <div className="hint">{t('pl.interleaveNoMedia')}</div>}
-          </div>
-          <label style={{ marginTop: 8 }}>{t('pl.interleaveEvery')}</label>
-          <input type="number" min={1} value={every} onChange={e => setEvery(Math.max(1, Number(e.target.value) || 1))} />
-          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-            <button onClick={() => setAds(false)}>{t('action.cancel')}</button>
-            <button className="primary" disabled={!chosen.length}
-                    onClick={() => {
-                      // Applied here rather than through the parent: the block
-                      // is what is being changed, and routing it upward would
-                      // need the block's own index, which is exactly the sort
-                      // of bookkeeping that goes wrong quietly.
-                      const content = block.Streams.filter(x => !chosen.includes(x.Source));
-                      const out = [];
-                      content.forEach((item, i) => {
-                        if (i % every === 0) for (const src of chosen) out.push(E.makeStream({ Type: 'vod', Source: src }));
-                        out.push(item);
-                      });
-                      onChange({ ...block, Streams: out });
-                      setAds(false);
-                    }}>{t('pl.interleaveApply')}</button>
-          </div>
-        </Modal>
       )}
     </div>
   );
