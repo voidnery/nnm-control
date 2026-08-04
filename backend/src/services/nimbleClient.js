@@ -43,7 +43,10 @@ async function viaAgent(server, path, extraQuery) {
   const auth = authQuery(server.token);
   const query = [extraQuery, auth].filter(Boolean).join('&');
   const out = await runTask(server, 'POST /nimble', {
-    body: { path, query },
+    // The address the panel knows this server by, as a fallback for an agent
+    // whose Nimble is not listening on loopback. It is still the same machine
+    // — the agent runs on it — so this cannot reach a different Nimble.
+    body: { path, query, baseUrl: buildUrl(server, '', null).split('?')[0].replace(/\/$/, '') },
     // Shorter than the collector's own interval, so a slow answer is dropped
     // rather than piling up behind the next cycle.
     timeoutMs: 12_000,

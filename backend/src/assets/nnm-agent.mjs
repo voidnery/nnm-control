@@ -112,7 +112,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 18;
+const AGENT_VERSION = 19;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -531,12 +531,39 @@ const routes = {
     const query = String(task?.query || '');
     if (query && !/^[A-Za-z0-9_=&.%-]*$/.test(query)) throw new Error('bad query string');
 
-    const target = `${NIMBLE_URL}${rawPath}${query ? `?${query}` : ''}`;
-    const res = await fetch(target, { signal: AbortSignal.timeout(NIMBLE_TIMEOUT_MS) });
-    const text = await res.text();
-    if (!res.ok) throw new Error(`nimble returned ${res.status} for ${rawPath}: ${text.slice(0, 160)}`);
-    try { return { status: res.status, json: JSON.parse(text) }; }
-    catch { throw new Error(`nimble returned ${text.length} bytes of non-JSON for ${rawPath}`); }
+    // Loopback first, then whatever the panel knows the server by.
+    //
+    // Loopback is right and is what makes "which machine answered" a
+    // non-question — but only if Nimble is listening on it. A management API
+    // bound to the external interface alone refuses it, and the panel saw
+    // nothing but "fetch failed", which names neither the address nor the
+    // reason.
+    //
+    // The fallback is still this machine: the agent runs on it, so dialling
+    // the address the panel holds for it reaches the same Nimble or nothing.
+    const bases = [NIMBLE_URL];
+    if (task?.baseUrl && !bases.includes(task.baseUrl)) bases.push(String(task.baseUrl).replace(/\/+$/, ''));
+
+    const failures = [];
+    for (const base of bases) {
+      const target = `${base}${rawPath}${query ? `?${query}` : ''}`;
+      let res;
+      try {
+        res = await fetch(target, { signal: AbortSignal.timeout(NIMBLE_TIMEOUT_MS) });
+      } catch (e) {
+        // The address is part of the fault. Without it the operator cannot
+        // tell a Nimble that is down from one that is listening elsewhere.
+        failures.push(`${base}: ${e?.cause?.code || e?.name || e?.message || 'unreachable'}`);
+        continue;
+      }
+      const text = await res.text();
+      // An answer, even a bad one, ends the search: a second address would be
+      // asking a server that already replied.
+      if (!res.ok) throw new Error(`nimble returned ${res.status} for ${rawPath}: ${text.slice(0, 160)}`);
+      try { return { status: res.status, json: JSON.parse(text), via: base }; }
+      catch { throw new Error(`nimble returned ${text.length} bytes of non-JSON for ${rawPath}`); }
+    }
+    throw new Error(`could not reach Nimble from this server — tried ${failures.join('; ')}`);
   },
 
   // iter14 — fetch the panel's copy of the agent, check it, become it.

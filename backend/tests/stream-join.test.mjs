@@ -1122,5 +1122,44 @@ check('a chart modal is wide but never wider than the screen', () => {
   assert.ok(css.includes('min(760px, calc(100vw - 48px))'));
 });
 
+console.log('\nWHEN NIMBLE IS NOT ON LOOPBACK (v0.45.0):');
+
+const agentSrc9 = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+const clientSrc9 = readFileSync(new URL('../src/services/nimbleClient.js', import.meta.url), 'utf8');
+
+check('the failure names the addresses it tried', () => {
+  // "fetch failed" names neither the address nor the reason, so a Nimble that
+  // is down and one listening on a different interface look identical.
+  assert.ok(agentSrc9.includes('could not reach Nimble from this server — tried'));
+  assert.ok(agentSrc9.includes("e?.cause?.code || e?.name"), 'with the errno, not just a message');
+});
+
+check('loopback is tried first and the known address second', () => {
+  // Loopback is what makes "which machine answered" a non-question. The
+  // fallback is still this machine — the agent runs on it — so it cannot
+  // reach a different Nimble.
+  assert.ok(agentSrc9.includes('const bases = [NIMBLE_URL];'));
+  assert.ok(agentSrc9.includes('if (task?.baseUrl && !bases.includes(task.baseUrl))'));
+  assert.ok(clientSrc9.includes('baseUrl: buildUrl(server'), 'and the panel supplies it');
+});
+
+check('an answer ends the search, even a bad one', () => {
+  // Trying a second address after a server has already replied is asking a
+  // question that was answered.
+  const at = agentSrc9.indexOf('for (const base of bases)');
+  const body = agentSrc9.slice(at, agentSrc9.indexOf('throw new Error(`could not reach', at));
+  assert.ok(body.includes('if (!res.ok) throw new Error('), 'an HTTP error is the answer');
+  assert.ok(body.includes('continue;'), 'only an unreachable address moves on');
+});
+
+check('the fallback keeps the credential', () => {
+  // The token travels in the query string the panel builds, not in the base —
+  // a base carrying it would put it in the fallback path twice or not at all.
+  const at = clientSrc9.indexOf('async function viaAgent');
+  const body = clientSrc9.slice(at, at + 700);
+  assert.ok(body.includes('authQuery(server.token)'));
+  assert.ok(body.includes("[extraQuery, auth].filter(Boolean).join('&')"));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

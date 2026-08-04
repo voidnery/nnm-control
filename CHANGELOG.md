@@ -1,5 +1,26 @@
 # Changelog
 
+### v0.45.0 — when Nimble is not listening on loopback
+- Two of three new agents collect statistics and the third reports **"fetch
+  failed"**, which names neither the address nor the reason. A Nimble that is
+  down, one bound to the external interface alone, and a wrong port all look
+  the same
+- The agent now says what it tried and why each attempt failed, with the errno:
+  `could not reach Nimble from this server — tried http://127.0.0.1:8082:
+  ECONNREFUSED`
+- **Loopback first, then the address the panel knows the server by.** Loopback
+  is what makes "which machine answered" a non-question, and it is right
+  whenever Nimble listens there — but a management API bound only to the
+  external interface refuses it. The fallback is still the same machine, since
+  the agent runs on it, so it cannot reach a different Nimble
+- An answer ends the search even when it is an error: asking a second address
+  after a server has already replied is asking a question that was answered.
+  Only an unreachable address moves on
+- The credential travels in the query the panel builds rather than in the base,
+  so the fallback path carries it unchanged
+- 4 new checks. Agent protocol version 19
+
+
 ### v0.44.0 — reading a list of steps
 - Steps are numbered in words — "Step 3", not a bare 3 — with the column kept
   wide enough that they still line up
