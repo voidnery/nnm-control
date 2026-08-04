@@ -1260,5 +1260,36 @@ check('the glyphs are defined once', () => {
   assert.ok(icon.includes("GLYPH[action] || '·'"), 'and an unknown action is visible, not blank');
 });
 
+console.log('\nONE SET OF GLYPHS EVERYWHERE (v0.47.0):');
+
+const files = ['pages/RepublishTab.jsx', 'pages/WmsObjectsTabs.jsx', 'pages/FunctionsPage.jsx',
+               'components/SourceRows.jsx']
+  .map(f => readFileSync(new URL(`../../frontend/src/${f}`, import.meta.url), 'utf8'));
+
+check('every tab draws its verbs from the one component', () => {
+  // Five actions across four files spelled per call site is how two tabs come
+  // to mean different things by the same symbol.
+  for (const src of files) assert.ok(src.includes('IconButton'), 'uses the shared component');
+});
+
+check('the glyphs are not written out anywhere else', () => {
+  // A stray ↑ or × beside a shared one is the drift this is meant to prevent.
+  for (const src of files) {
+    // The multiplication sign was a delete button in the SRT Out form; the
+    // shared component uses ✕, so a stray × is a call site that was missed.
+    assert.ok(!/>[↑↓×⟳▶⏸]</.test(src), 'no bare glyph in markup');
+  }
+});
+
+check('SRT In has no start/stop, because the object has no such field', () => {
+  // Its edit form carries application, port, protocol, chunking and
+  // fallbacks — and no paused. A button sending a field WMSPanel does not know
+  // is a button that silently does nothing, which is the failure this project
+  // has spent a week finding in other forms.
+  const wo = files[1];
+  const form = wo.slice(wo.indexOf('New incoming stream'), wo.indexOf('New incoming stream') + 3000);
+  assert.ok(!/modal\.paused/.test(form));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

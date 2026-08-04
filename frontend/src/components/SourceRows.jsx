@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import Select from './Select.jsx';
+import IconButton from './IconButton.jsx';
 
 // The list of things a block plays.
 //
@@ -131,8 +132,9 @@ export default function SourceRows({ block, onChange, media, srvId, onMediaChang
               )}
 
               <div className="row" style={{ gap: 2, flexShrink: 0 }}>
-                <button onClick={() => swap(i, i - 1)} disabled={i === 0} title={t('src.up')}>↑</button>
-                <button onClick={() => swap(i, i + 1)} disabled={i === streams.length - 1} title={t('src.down')}>↓</button>
+                <IconButton action="up" disabled={i === 0} label={t('src.up')} onClick={() => swap(i, i - 1)} />
+                <IconButton action="down" disabled={i === streams.length - 1} label={t('src.down')}
+                            onClick={() => swap(i, i + 1)} />
                 {/* Moving between blocks is the thing that was impossible
                     before: an item in the wrong block had to be deleted and
                     retyped. */}
@@ -143,7 +145,7 @@ export default function SourceRows({ block, onChange, media, srvId, onMediaChang
                   </>
                 )}
                 <button onClick={() => setOpen(advanced ? null : i)} title={t('src.more')}>⋯</button>
-                <button className="danger" onClick={() => set(streams.filter((_, j) => j !== i))}>×</button>
+                <IconButton action="remove" danger onClick={() => set(streams.filter((_, j) => j !== i))} />
               </div>
             </div>
 

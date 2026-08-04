@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.47.0 — the glyphs everywhere
+- The same icons across the object tabs, the playlist source rows and the
+  function steps — seventeen call sites, all drawing from the one component, so
+  two tabs cannot come to mean different things by the same symbol. Each keeps
+  its word as the tooltip and the accessible name
+- A check now fails on a glyph written straight into markup, and found one on
+  its first run: a delete button in the SRT Out form using `×` where the shared
+  component uses `✕`
+
+**No start/stop on SRT In, and this is deliberate.** Its objects have no
+`paused` field — the edit form carries application, port, protocol, chunking
+and fallbacks, and nothing else. A button sending a field WMSPanel does not
+know is a button that silently does nothing, which is the exact failure this
+project has spent a week finding in other forms. SRT Out and RTMP Pull have the
+field and now use the shared glyph for it.
+
+If pausing an incoming stream is wanted, the question is what WMSPanel offers
+for it — worth checking against the API before a control is added, not after.
+
+
 ### v0.46.1 — the names, and verbs as glyphs
 - **The name was there and never shown.** A republish rule carries a
   description, editable in its form, and the table displayed only

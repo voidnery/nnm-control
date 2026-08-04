@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
+import IconButton from '../components/IconButton.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useToast } from '../toast.jsx';
 import SearchInput from '../components/SearchInput.jsx';
@@ -447,10 +448,10 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate, index, tot
           )}
           {/* Order matters to what a function does, so it is changeable here
               rather than by deleting and re-adding further down. */}
-          {onMove && <button onClick={() => onMove(-1)} disabled={index === 0} title={t('src.up')}>↑</button>}
-          {onMove && <button onClick={() => onMove(+1)} disabled={index === total - 1} title={t('src.down')}>↓</button>}
-          {onDuplicate && <button onClick={onDuplicate}>{t('fn.duplicate')}</button>}
-          <button className="danger" onClick={onRemove}>{t('fn.remove')}</button>
+          {onMove && <IconButton action="up" disabled={index === 0} onClick={() => onMove(-1)} />}
+          {onMove && <IconButton action="down" disabled={index === total - 1} onClick={() => onMove(+1)} />}
+          {onDuplicate && <IconButton action="duplicate" onClick={onDuplicate} />}
+          <IconButton action="remove" danger onClick={onRemove} />
         </div>
       </div>
 

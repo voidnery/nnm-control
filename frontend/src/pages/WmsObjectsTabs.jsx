@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Plot from '../components/Plot.jsx';
+import IconButton from '../components/IconButton.jsx';
 import { formatValue } from '../components/TimeChart.jsx';
 import { Link } from 'react-router-dom';
 import Select from '../components/Select.jsx';
@@ -468,11 +469,13 @@ export function UdpTab({ serverId }) {
                 </td>
                 <td><TagChips st={st} kind="udp" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <button onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })}>{t('wo.history')}</button>
+                  <IconButton action="history"
+                              onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })} />
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => openEdit(o)}>{t('wo.editSourceBtn')}</button>{' '}
                     <button disabled={busy} onClick={() => openCfg(o)}>{t('wo.settingsBtn')}</button>{' '}
-                    <button disabled={busy} onClick={() => togglePause(o)}>{o.paused ? 'Resume' : 'Pause'}</button>{' '}
+                    <IconButton action={o.paused ? 'start' : 'stop'} disabled={busy}
+                                onClick={() => togglePause(o)} />
                     <button className="danger" disabled={busy} onClick={() => removeUdp(o)}>{t('action.delete')}</button>
                   </>}
                 </td>
@@ -548,7 +551,8 @@ export function UdpTab({ serverId }) {
                         setEdit(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, application: e.target.value } : x) }))} />
                       <input placeholder="stream" value={ss.stream || ''} onChange={e =>
                         setEdit(m => ({ ...m, sources: m.sources.map((x, j) => j === i ? { ...x, stream: e.target.value } : x) }))} />
-                      <button onClick={() => setEdit(m => ({ ...m, sources: m.sources.filter((_, j) => j !== i) }))}>×</button>
+                      <button onClick={() => setEdit(m => ({ ...m, sources: m.sources.filter((_, j) => j !== i) }))} className="icon danger"
+                        title={t('act.remove')} aria-label={t('act.remove')}>✕</button>
                     </div>
                     <div className="hint mono">
                       PIDs: {ss.pmt_pid !== undefined ? `pmt=${ss.pmt_pid} video=${ss.video_pid} audio=${ss.audio_pid} (preserved)` : 'assigned by WMSPanel on create'}
@@ -1117,7 +1121,8 @@ export function MpegtsInTab({ serverId }) {
                   {/* Asked from the row that raises the question, and available to
                       anyone who can see the stream — reading its past is not a
                       change to it. */}
-                  <button onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })}>{t('wo.history')}</button>
+                  <IconButton action="history"
+                              onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })} />
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => setModal({
                       id: o.id, name: o.name, description: o.description || '',
@@ -1256,9 +1261,9 @@ export function LivePullTab({ serverId }) {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     <button disabled={busy} onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}/restart`, { method: 'POST' }))}>{t('action.restart')}</button>{' '}
-                    <button disabled={busy} onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}`, { method: 'PUT', body: { paused: !o.paused } }))}>
-                      {o.paused ? 'Resume' : 'Pause'}
-                    </button>{' '}
+                    <IconButton action={o.paused ? 'start' : 'stop'} disabled={busy}
+                                onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}`,
+                                  { method: 'PUT', body: { paused: !o.paused } }))} />{' '}
                     <button disabled={busy} onClick={() => setModal({
                       id: o.id, url: o.url, fallback_urls: (o.fallback_urls || []).join('\n'),
                       application: o.application, stream: o.stream, description: o.description || '',
