@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api.js';
+import Modal from './Modal.jsx';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
@@ -76,8 +77,13 @@ export function useStreamTags(serverId, kind) {
     await load();
   }, [serverId, kind, load]);
 
+  // How many objects carry a tag. The dialog offers to delete a tag from every
+  // stream on the tab, and doing that without knowing how many is a decision
+  // taken blind.
+  const countFor = (tag) => Object.values(map || {}).filter(list => (list || []).includes(tag)).length;
+
   return { kind, map, catalog, selected, mode, setMode, toggleFilter, setSelected,
-           getTags, setTags, matches, reload: load, renameTag, deleteTagEverywhere };
+           getTags, setTags, matches, reload: load, renameTag, deleteTagEverywhere, countFor };
 }
 
 // Shared popover positioning: fixed + portal so no scroll container can clip it.
@@ -116,11 +122,28 @@ function usePopover(open, anchorRef) {
 // Filter bar: catalog chips as toggles + AND/OR mode switch.
 export function TagFilterBar({ st }) {
   const { t } = useI18n();
+  const [manage, setManage] = useState(false);
+  // Hidden tags stay ON their streams and leave the bar. A vocabulary grows
+  // over a season and most of it is last month's; deleting would unassign, and
+  // an operator who wants a tag out of the way rarely wants it off the object.
+  const [hidden, setHidden] = useState(() => {
+    try { return new Set(JSON.parse(sessionStorage.getItem('nnm.tagsHidden') || '[]')); }
+    catch { return new Set(); }
+  });
+  const setHiddenPersist = (next) => {
+    setHidden(next);
+    // Per tab, not per account: it is a working preference for the afternoon,
+    // and one carried across sessions would hide tags for reasons nobody
+    // remembers.
+    try { sessionStorage.setItem('nnm.tagsHidden', JSON.stringify([...next])); } catch { /* private mode */ }
+  };
+  const visible = st.catalog.filter(x => !hidden.has(x));
+
   if (!st.catalog.length) return null;
   return (
-    <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+    <div className="row tag-bar" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 10 }}>
       <span className="hint" style={{ marginRight: 2 }}>{t('tag.filter')}:</span>
-      {st.catalog.map(tag => (
+      {visible.map(tag => (
         <button key={tag} className={'tagchip' + (st.selected.includes(tag) ? ' on' : '')}
                 onClick={() => st.toggleFilter(tag)}>{tag}</button>
       ))}
@@ -131,6 +154,42 @@ export function TagFilterBar({ st }) {
         </span>
         <button className="linklike" onClick={() => st.setSelected([])}>{t('tag.clear')}</button>
       </>}
+      {hidden.size > 0 && (
+        <span className="hint">{t('tag.hiddenCount', { n: hidden.size })}</span>
+      )}
+      <button className="linklike" onClick={() => setManage(true)}>{t('tag.manage')}</button>
+
+      {manage && (
+        <Modal onClose={() => setManage(false)} size="wide">
+          <h3 style={{ marginTop: 0 }}>{t('tag.manageTitle')}</h3>
+          <p className="hint">{t('tag.manageHint')}</p>
+          <table>
+            <tbody>
+              {st.catalog.map(tag => (
+                <tr key={tag}>
+                  <td><span className="tagchip">{tag}</span></td>
+                  <td className="hint">{t('tag.usedBy', { n: st.countFor ? st.countFor(tag) : '—' })}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => {
+                      const next = new Set(hidden);
+                      if (next.has(tag)) next.delete(tag); else next.add(tag);
+                      setHiddenPersist(next);
+                    }}>{hidden.has(tag) ? t('tag.show') : t('tag.hide')}</button>
+                    {/* The name is `deleteTagEverywhere`; a guessed one made
+                        the button vanish rather than fail, which is the harder
+                        of the two to notice. */}
+                    <button className="danger" onClick={() => st.deleteTagEverywhere(tag)}
+                            title={t('tag.deleteHint')}>{t('tag.delete')}</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <button onClick={() => setManage(false)}>{t('action.close')}</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

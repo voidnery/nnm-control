@@ -1161,5 +1161,61 @@ check('the fallback keeps the credential', () => {
   assert.ok(body.includes("[extraQuery, auth].filter(Boolean).join('&')"));
 });
 
+console.log('\nRTMP TABS AND TAGS (v0.46.0):');
+
+const rp = readFileSync(new URL('../../frontend/src/pages/RepublishTab.jsx', import.meta.url), 'utf8');
+const wo = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+const tags = readFileSync(new URL('../../frontend/src/components/StreamTags.jsx', import.meta.url), 'utf8');
+const css5 = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+
+check('both RTMP tabs filter, as the SRT tabs do', () => {
+  // It was the only difference in how the two families were treated, and a
+  // list this long is unusable without one.
+  assert.ok(rp.includes("const [filter, setFilter]"));
+  assert.ok(wo.includes("t('wo.filterPlaceholder')"));
+  // Matched on what someone knows about a rule when hunting for it.
+  assert.ok(rp.includes('rule.src_app, rule.src_strm, rule.dest_addr'));
+  assert.ok(wo.includes('[o.application, o.stream, o.url, o.description]'));
+});
+
+check('the name leads, not the id', () => {
+  // The id identifies a rule to the system and never to the person looking
+  // for it, and it was the first column.
+  const head = rp.slice(rp.indexOf('<thead>'), rp.indexOf('</thead>'));
+  assert.ok(head.indexOf('rp.sourceAppStream') < head.indexOf('rp.id') || !head.includes('rp.id'));
+});
+
+check('a push rule can be stopped from its row', () => {
+  // Stopping one was a checkbox called "Paused" inside the edit form: three
+  // clicks and a save, for something done in a hurry.
+  assert.ok(rp.includes('const savePaused = async (rule, paused)'));
+  assert.ok(rp.includes("t('rp.stop')") && rp.includes("t('rp.start')"));
+  // A whole-object PUT: rebuilding the rule from the row would drop whatever
+  // the row does not display.
+  assert.ok(rp.includes('body: { ...rule, paused }'));
+});
+
+check('tag chips are sized for a pointer', () => {
+  // They are the primary filter on every object list and were small enough to
+  // read as decoration.
+  assert.match(css5, /\.tagchip \{[^}]*font-size:12\.5px/);
+});
+
+check('a tag can be hidden without being unassigned', () => {
+  // A vocabulary grows over a season and most of it is last month's. Deleting
+  // would take the tag off the streams; hiding is what was actually wanted.
+  assert.ok(tags.includes("sessionStorage.getItem('nnm.tagsHidden'"));
+  assert.ok(tags.includes('const visible = st.catalog.filter(x => !hidden.has(x))'));
+  assert.ok(tags.includes("t('tag.hiddenCount'"), 'and the bar says how many are out of sight');
+});
+
+check('deleting a tag says how many streams carry it', () => {
+  // Removing it from every stream on a tab is a decision taken blind
+  // otherwise.
+  assert.ok(tags.includes('const countFor = (tag) =>'));
+  assert.ok(tags.includes('st.deleteTagEverywhere(tag)'), 'and calls the helper that exists');
+  assert.ok(!tags.includes('removeTagEverywhere'), 'a guessed name made the button vanish rather than fail');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

@@ -124,6 +124,10 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
 
+/* Tag chips in the filter bar.
+   They were small enough to be decoration; they are the primary filter on
+   every object list, and something clicked constantly should be sized for a
+   pointer rather than for the space it saves. */
 /* A control holding a choice that has not been applied yet.
    Two seconds is slow enough not to nag and fast enough to catch an eye
    crossing the panel; it stops at rest for anyone who finds motion difficult,
@@ -429,7 +433,10 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Stream tags */
 .tagcell { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; }
-.tagchip { font-size:11px; padding:2px 8px; border-radius:11px; border:1px solid var(--line);
+/* Sized for a pointer, not for the space it saves: this is the primary filter
+   on every object list and is aimed at constantly. It was small enough to read
+   as decoration. */
+.tagchip { font-size:12.5px; padding:5px 12px; border-radius:13px; border:1px solid var(--line);
   background:var(--bg-raise); color:var(--fg); cursor:pointer; line-height:1.5; }
 .tagchip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
 .tagchip.static { cursor:default; }

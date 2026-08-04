@@ -1181,6 +1181,7 @@ export function MpegtsInTab({ serverId }) {
 // ------------------------------------------------------------- Live Pull
 // RTMP pull feeds with fallback_urls — the built-in feed reserve mechanism.
 export function LivePullTab({ serverId }) {
+  const [filter, setFilter] = useState('');
   const st = useStreamTags(serverId, 'livepull');
   const cp = useStreamCopy(serverId, 'livepull');
   const { t } = useI18n();
@@ -1190,6 +1191,13 @@ export function LivePullTab({ serverId }) {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(null);
   const settings = data?.settings || [];
+  // Matched on where it pulls from and where it lands — what someone knows
+  // about a rule when hunting for it.
+  const q = filter.trim().toLowerCase();
+  const shown = settings
+    .filter(o => st.matches('livepull', o.id))
+    .filter(o => !q || [o.application, o.stream, o.url, o.description]
+      .some(v => String(v || '').toLowerCase().includes(q)));
 
   const act = async (fn) => {
     setBusy(true); setError('');
@@ -1224,12 +1232,20 @@ export function LivePullTab({ serverId }) {
         )}
       </div>
       <TagFilterBar st={st} />
-      <CopySelectionBar cp={cp} visibleIds={settings.filter(o => st.matches('livepull', o.id)).map(o => o.id)} />
+      {/* The same filter the SRT tabs have. A list this long is unusable
+          without one, and it was the only difference in how the two families
+          were treated. */}
+      <div className="row" style={{ gap: 8, marginBottom: 8, alignItems: 'center' }}>
+        <input style={{ maxWidth: 320 }} value={filter} onChange={e => setFilter(e.target.value)}
+               placeholder={t('wo.filterPlaceholder')} />
+        <span className="hint">{shown.length} of {settings.length}</span>
+      </div>
+      <CopySelectionBar cp={cp} visibleIds={shown.map(o => o.id)} />
       <div className="panel">
         <table>
           <thead><tr><th></th><th>{t('wo.localAppStream')}</th><th>{t('wo.sourceUrl')}</th><th>{t('wo.fallbacks')}</th><th>{t('wo.state')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
-            {settings.filter(o => st.matches('livepull', o.id)).map(o => (
+            {shown.map(o => (
               <tr key={o.id}>
                 <td><CopyCheckbox cp={cp} id={o.id} /></td>
                 <td className="mono"><b>{o.application}/{o.stream}</b>{o.description && <div className="hint">{o.description}</div>}</td>

@@ -21,6 +21,7 @@ function WmspanelRules({ serverId }) {
   const confirm = useConfirm();
   const { can } = useAuth();
   const [rules, setRules] = useState(null);
+  const [filter, setFilter] = useState('');
   const [raw, setRaw] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
   const [error, setError] = useState('');
@@ -71,6 +72,30 @@ function WmspanelRules({ serverId }) {
   const restart = (rule) =>
     act(() => api(`/wmspanel/server/${serverId}/republish/${rule.id}/restart`, { method: 'POST' }));
 
+  // Matched against the source, the destination and the description — the
+  // three things someone knows about a rule when looking for it. Not the id,
+  // which identifies the rule to the system and never to the person.
+  const q = filter.trim().toLowerCase();
+  const shown = (rules || [])
+    .filter(rule => tg.matches('republish', rule.id))
+    .filter(rule => !q || [
+      rule.src_app, rule.src_strm, rule.dest_addr, rule.dest_app, rule.dest_strm, rule.description,
+    ].some(v => String(v || '').toLowerCase().includes(q)));
+
+  // One field changed, everything else sent back as it was: the update is a
+  // whole-object PUT, and rebuilding a rule from the row would drop whatever
+  // the row does not display.
+  const savePaused = async (rule, paused) => {
+    setBusy(true); setError('');
+    try {
+      await api(`/wmspanel/server/${serverId}/republish/${rule.id}`, {
+        method: 'PUT', body: { ...rule, paused },
+      });
+      await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
   if (rules === null) return <div className="hint">{t('rp.loadingWms')}</div>;
   return (
     <div>
@@ -84,13 +109,22 @@ function WmspanelRules({ serverId }) {
         {can('republish.manage') && <button className="primary" onClick={() => setCreating(true)}>+ {t('republish.newRule')}</button>}
       </div>
       <TagFilterBar st={tg} />
+      {/* A filter, as on the SRT tabs. Twenty-two rules is a list nobody reads
+          through to find one. */}
+      <div className="row" style={{ gap: 8, marginBottom: 8, alignItems: 'center' }}>
+        <input style={{ maxWidth: 320 }} value={filter} onChange={e => setFilter(e.target.value)}
+               placeholder={t('rp.filter')} />
+        <span className="hint">{shown.length} of {rules.length}</span>
+      </div>
       <div className="panel">
         <table>
-          <thead><tr><th>{t('rp.id')}</th><th>{t('rp.sourceAppStream')}</th><th>{t('rp.destination')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
+          {/* The name leads. The id was first and is the one thing an operator
+              never searches by — it identifies the rule to the system, not to
+              the person looking for it. */}
+          <thead><tr><th>{t('rp.sourceAppStream')}</th><th>{t('rp.destination')}</th><th>{t('rp.state')}</th><th>{t('tags.col')}</th><th></th></tr></thead>
           <tbody>
-            {rules.filter(rule => tg.matches('republish', rule.id)).map(rule => (
+            {shown.map(rule => (
               <tr key={rule.id}>
-                <td className="mono">{String(rule.id).slice(-6)}</td>
                 <td className="mono">
                   {edit?.ruleId === rule.id ? (
                     <span className="row">
@@ -103,6 +137,19 @@ function WmspanelRules({ serverId }) {
                   )}
                 </td>
                 <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_strm}</td>
+                {/* Stopping a rule was buried in the edit form behind a
+                    checkbox called "Paused" — three clicks and a save for
+                    something done in a hurry. */}
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <span className={'lamp ' + (rule.paused ? 'off' : 'on')} />
+                  {rule.paused ? t('rp.paused') : t('rp.running')}
+                  {can('republish.manage') && (
+                    <button style={{ marginLeft: 8 }} disabled={busy}
+                            onClick={() => savePaused(rule, !rule.paused)}>
+                      {rule.paused ? t('rp.start') : t('rp.stop')}
+                    </button>
+                  )}
+                </td>
                 <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('republish.manage') && (edit?.ruleId === rule.id ? (
@@ -274,7 +321,20 @@ function NativeRules({ serverId }) {
                   <td className="mono">{rule.dest_addr}:{rule.dest_port}/{rule.dest_app}/{rule.dest_strm}</td>
                   <td>{st ? <><span className={'lamp ' + (st.state === 'connected' ? 'on' : 'warn')} />{st.state}</> : '—'}</td>
                   <td className="mono">{st ? fmtBps(st.bandwidth) : '—'}</td>
-                  <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>
+                  {/* Stopping a rule was buried in the edit form behind a
+                    checkbox called "Paused" — three clicks and a save for
+                    something done in a hurry. */}
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <span className={'lamp ' + (rule.paused ? 'off' : 'on')} />
+                  {rule.paused ? t('rp.paused') : t('rp.running')}
+                  {can('republish.manage') && (
+                    <button style={{ marginLeft: 8 }} disabled={busy}
+                            onClick={() => savePaused(rule, !rule.paused)}>
+                      {rule.paused ? t('rp.start') : t('rp.stop')}
+                    </button>
+                  )}
+                </td>
+                <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>
                   <td style={{ textAlign: 'right' }}>
                     {can('republish.manage') && <button className="danger" onClick={() => remove(rule.id)}>{t('action.delete')}</button>}
                   </td>

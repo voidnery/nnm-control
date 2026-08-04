@@ -1,5 +1,34 @@
 # Changelog
 
+### v0.46.0 — the RTMP tabs, and managing tags
+- **Both RTMP tabs filter now**, matched on source, destination and
+  description — what someone knows about a rule when hunting for it, not the
+  id. A filter was the only difference in how the SRT and RTMP families were
+  treated
+- **The name leads on RTMP Push.** The id was the first column and is the one
+  thing nobody searches by: it identifies a rule to the system, never to the
+  person looking for it
+- **A push rule can be stopped from its row.** Stopping one was a checkbox
+  called "Paused" inside the edit form — three clicks and a save, for something
+  done in a hurry. Sent as a whole-object update, because rebuilding the rule
+  from the row would drop whatever the row does not display
+- **Tag chips are sized for a pointer.** They are the primary filter on every
+  object list and were small enough to read as decoration
+- **A tag can be hidden without being unassigned.** A vocabulary grows over a
+  season and most of it is last month's; deleting takes the tag off the
+  streams, which is rarely what someone tidying the filter bar wants. Hidden
+  tags stay on their objects and leave the bar, per browser tab — a working
+  preference for the afternoon, not one carried across sessions to hide things
+  for reasons nobody remembers
+- Deleting a tag says how many streams carry it first
+- 6 new checks
+
+Two mistakes caught by the gates on the way: a duplicate translation key that
+would have silently overridden an existing one, and a guessed helper name
+(`removeTagEverywhere` for `deleteTagEverywhere`) that made the delete button
+vanish rather than fail — the harder of the two to notice.
+
+
 ### v0.45.0 — when Nimble is not listening on loopback
 - Two of three new agents collect statistics and the third reports **"fetch
   failed"**, which names neither the address nor the reason. A Nimble that is
