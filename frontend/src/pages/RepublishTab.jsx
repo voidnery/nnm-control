@@ -5,6 +5,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useI18n } from '../i18n.jsx';
+import IconButton from '../components/IconButton.jsx';
 import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 
 const fmtBps = (b) => (b == null ? '—' : (Number(b) / 1e6).toFixed(2) + ' Mbps');
@@ -132,6 +133,17 @@ function WmspanelRules({ serverId }) {
                       /
                       <input style={{ width: 170 }} value={edit.src_strm} onChange={e => setEdit(s => ({ ...s, src_strm: e.target.value }))} />
                     </span>
+                  ) : rule.description ? (
+                    // The name the operator gave it, above the path the system
+                    // knows it by. It was stored and editable and never shown,
+                    // so a table of eighty-three rules identified them all by
+                    // app/stream alone.
+                    <>
+                      <b style={{ fontSize: 13 }}>{rule.description}</b>
+                      <div className="hint mono" style={{ fontSize: 11 }}>
+                        {rule.src_app}/{rule.src_strm || '*'}
+                      </div>
+                    </>
                   ) : (
                     <b>{rule.src_app}/{rule.src_strm || '*'}</b>
                   )}
@@ -144,10 +156,10 @@ function WmspanelRules({ serverId }) {
                   <span className={'lamp ' + (rule.paused ? 'off' : 'on')} />
                   {rule.paused ? t('rp.paused') : t('rp.running')}
                   {can('republish.manage') && (
-                    <button style={{ marginLeft: 8 }} disabled={busy}
-                            onClick={() => savePaused(rule, !rule.paused)}>
-                      {rule.paused ? t('rp.start') : t('rp.stop')}
-                    </button>
+                    <span style={{ marginLeft: 8 }}>
+                      <IconButton action={rule.paused ? 'start' : 'stop'} disabled={busy}
+                                  onClick={() => savePaused(rule, !rule.paused)} />
+                    </span>
                   )}
                 </td>
                 <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>
@@ -158,19 +170,22 @@ function WmspanelRules({ serverId }) {
                       <button onClick={() => setEdit(null)}>{t('action.cancel')}</button>
                     </>
                   ) : (
+                    // Four words became four glyphs. On a table of eighty-three
+                    // rules the actions were taking most of the width, leaving
+                    // the thing each row is about squeezed into what remained.
                     <>
-                      <button disabled={busy}
-                              onClick={() => setEdit({ ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '' })}>
-                        {t('republish.switchSource')}
-                      </button>{' '}
-                      <button disabled={busy} onClick={() => setFull({
+                      <IconButton action="source" disabled={busy}
+                                  title={t('republish.switchSource')}
+                                  label={t('republish.switchSource')}
+                                  onClick={() => setEdit({ ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '' })} />
+                      <IconButton action="edit" disabled={busy} onClick={() => setFull({
                         ruleId: rule.id, src_app: rule.src_app || '', src_strm: rule.src_strm || '',
                         dest_addr: rule.dest_addr || '', dest_port: rule.dest_port || 1935,
                         dest_app: rule.dest_app || '', dest_strm: rule.dest_strm || '',
                         description: rule.description || '', paused: Boolean(rule.paused),
-                      })}>{t('action.edit')}</button>{' '}
-                      <button disabled={busy} onClick={() => restart(rule)}>{t('action.restart')}</button>{' '}
-                      <button className="danger" disabled={busy} onClick={() => remove(rule)}>{t('action.delete')}</button>
+                      })} />
+                      <IconButton action="restart" disabled={busy} onClick={() => restart(rule)} />
+                      <IconButton action="remove" danger disabled={busy} onClick={() => remove(rule)} />
                     </>
                   ))}
                 </td>
@@ -328,10 +343,10 @@ function NativeRules({ serverId }) {
                   <span className={'lamp ' + (rule.paused ? 'off' : 'on')} />
                   {rule.paused ? t('rp.paused') : t('rp.running')}
                   {can('republish.manage') && (
-                    <button style={{ marginLeft: 8 }} disabled={busy}
-                            onClick={() => savePaused(rule, !rule.paused)}>
-                      {rule.paused ? t('rp.start') : t('rp.stop')}
-                    </button>
+                    <span style={{ marginLeft: 8 }}>
+                      <IconButton action={rule.paused ? 'start' : 'stop'} disabled={busy}
+                                  onClick={() => savePaused(rule, !rule.paused)} />
+                    </span>
                   )}
                 </td>
                 <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>

@@ -1,5 +1,26 @@
 # Changelog
 
+### v0.46.1 — the names, and verbs as glyphs
+- **The name was there and never shown.** A republish rule carries a
+  description, editable in its form, and the table displayed only
+  `app/stream` — so eighty-three rules were identified by path alone. The name
+  leads now, with the path beneath it; a rule nobody named still shows its path
+  rather than an empty column
+- **Action buttons are glyphs.** Five words per row — switch source, edit,
+  restart, delete, and a start/stop — took most of the width of the table,
+  leaving the thing each row is about squeezed into what remained
+- **The word does not go away.** It is the tooltip and the accessible name,
+  positioned off-screen rather than hidden, because an icon alone is a guess
+  until it has been learned and some of these stop a broadcast. The glyphs are
+  the ones already learned from media players rather than anything invented
+  here
+- Defined once, in `IconButton`: five actions across several tabs spelled per
+  call site is how two tabs come to mean different things by the same symbol.
+  An unknown action renders a visible placeholder rather than nothing
+- 4 new checks; one from v0.46.0 re-pointed, since it asserted the words that
+  are now glyphs
+
+
 ### v0.46.0 — the RTMP tabs, and managing tags
 - **Both RTMP tabs filter now**, matched on source, destination and
   description — what someone knows about a rule when hunting for it, not the

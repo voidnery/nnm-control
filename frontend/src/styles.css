@@ -124,6 +124,17 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
 
+/* A verb rendered as a glyph. The label is kept for screen readers and as the
+   tooltip: an icon alone is a guess until it has been learned, and some of
+   these stop a broadcast. */
+button.icon {
+  padding: 5px 9px; font-size: 14px; line-height: 1.1; min-width: 32px;
+}
+button.icon .lbl {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
 /* Tag chips in the filter bar.
    They were small enough to be decoration; they are the primary filter on
    every object list, and something clicked constantly should be sized for a

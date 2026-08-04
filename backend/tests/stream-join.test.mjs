@@ -1189,7 +1189,9 @@ check('a push rule can be stopped from its row', () => {
   // Stopping one was a checkbox called "Paused" inside the edit form: three
   // clicks and a save, for something done in a hurry.
   assert.ok(rp.includes('const savePaused = async (rule, paused)'));
-  assert.ok(rp.includes("t('rp.stop')") && rp.includes("t('rp.start')"));
+  // The words became glyphs in v0.46.1; what matters is that the row offers
+  // both states, not how they are spelled.
+  assert.ok(rp.includes("action={rule.paused ? 'start' : 'stop'}"));
   // A whole-object PUT: rebuilding the rule from the row would drop whatever
   // the row does not display.
   assert.ok(rp.includes('body: { ...rule, paused }'));
@@ -1215,6 +1217,47 @@ check('deleting a tag says how many streams carry it', () => {
   assert.ok(tags.includes('const countFor = (tag) =>'));
   assert.ok(tags.includes('st.deleteTagEverywhere(tag)'), 'and calls the helper that exists');
   assert.ok(!tags.includes('removeTagEverywhere'), 'a guessed name made the button vanish rather than fail');
+});
+
+console.log('\nNAMES AND GLYPHS (v0.46.1):');
+
+const rp2 = readFileSync(new URL('../../frontend/src/pages/RepublishTab.jsx', import.meta.url), 'utf8');
+const icon = readFileSync(new URL('../../frontend/src/components/IconButton.jsx', import.meta.url), 'utf8');
+const css6 = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+
+check('a rule shows the name it was given', () => {
+  // The description was stored and editable and never displayed, so a table of
+  // eighty-three rules identified them all by app/stream alone.
+  assert.ok(rp2.includes('rule.description ? ('));
+  assert.ok(rp2.includes('<b style={{ fontSize: 13 }}>{rule.description}</b>'));
+  // And the path stays, below it: it is what the system knows the rule by.
+  const at = rp2.indexOf('{rule.description}</b>');
+  assert.ok(rp2.slice(at, at + 260).includes('{rule.src_app}/{rule.src_strm'));
+});
+
+check('a rule without a name falls back to its path', () => {
+  // Otherwise the column would be empty for every rule nobody described.
+  const at = rp2.indexOf('rule.description ? (');
+  assert.ok(rp2.slice(at, at + 700).includes(') : ('), 'there is an else');
+});
+
+check('an icon keeps its word', () => {
+  // An icon alone is a guess until it has been learned, and some of these stop
+  // a broadcast.
+  assert.ok(icon.includes('title={title || word}'));
+  assert.ok(icon.includes('aria-label={word}'));
+  assert.ok(icon.includes('<span className="lbl">{word}</span>'));
+  assert.match(css6, /button\.icon \.lbl[^}]*clip:/, 'the word is off-screen, not display:none');
+});
+
+check('the glyphs are defined once', () => {
+  // Five actions across several tabs; spelling them per call site is how two
+  // tabs end up meaning different things by the same symbol.
+  assert.ok(icon.includes('const GLYPH = {'));
+  for (const a of ['start', 'stop', 'restart', 'edit', 'remove']) {
+    assert.ok(new RegExp(`${a}:`).test(icon), a);
+  }
+  assert.ok(icon.includes("GLYPH[action] || '·'"), 'and an unknown action is visible, not blank');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
