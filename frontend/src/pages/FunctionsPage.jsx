@@ -434,7 +434,7 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate, index, tot
           <button className="step-fold" onClick={onToggle} title={collapsed ? t('fn.expand') : t('fn.collapse')}>
             {collapsed ? '▸' : '▾'}
           </button>
-          <span className="step-no mono">{index + 1}</span>
+          <span className="step-no">{t('fn.stepNo', { n: index + 1 })}</span>
           <span className="step-verb" style={{ color: tone, borderColor: tone }}>{verb}</span>
           <span className="step-target mono" title={step.targetLabel || ''}>
             {step.targetLabel || <span className="hint">{t('fn.noTargetYet')}</span>}
@@ -525,7 +525,13 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate, index, tot
                     <Select value={pairKind} onChange={setPairKind}
                             options={availablePairs.map(k => ({ value: k.value, label: k.label }))} />
                   </div>
-                  <button disabled={!pick.includes('/')} onClick={insertPick}>{t('fn.insert')}</button>
+                  {/* Pulsing only while something is chosen and not yet
+                      applied. A button that always pulses is a button nobody
+                      sees after a day — and the trap here is specific:
+                      picking a stream changes nothing until this is pressed,
+                      so the moment worth marking is exactly that gap. */}
+                  <button className={pick.includes('/') ? 'pending' : ''}
+                          disabled={!pick.includes('/')} onClick={insertPick}>{t('fn.insert')}</button>
                 </div>
               )}
               </>)}
@@ -938,9 +944,34 @@ function Builder({ initial, servers, onClose, onSaved }) {
             where it appends to now. */}
         <div className="panel" style={{ marginTop: 10, marginBottom: 4 }}>
           <div className="hint" style={{ marginBottom: 6 }}>{t('fn.addStep')}</div>
-          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-            {PRESETS.map(p => <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>)}
-          </div>
+          {/* Grouped by the object kind of the step itself, so a preset added
+              later lands in its group without anyone maintaining a list. A
+              flat row of twenty-seven buttons is a wall to read every time. */}
+          {(() => {
+            const groups = new Map();
+            for (const p of PRESETS) {
+              const kind = p.step?.objectKind || (p.step?.type === 'delay' ? 'other' : 'other');
+              if (!groups.has(kind)) groups.set(kind, []);
+              groups.get(kind).push(p);
+            }
+            // A stated order rather than insertion order: the protocols an
+            // operator reaches for most come first, and "other" last wherever
+            // it was declared.
+            const ORDER = ['incoming', 'udp', 'outgoing', 'republish', 'live_pull',
+                           'hotswap', 'transcoder', 'other'];
+            const seen = [...ORDER.filter(k => groups.has(k)),
+                          ...[...groups.keys()].filter(k => !ORDER.includes(k))];
+            return seen.map(kind => (
+              <div key={kind} style={{ marginBottom: 8 }}>
+                <div className="hint" style={{ fontSize: 11, marginBottom: 3 }}>{t(`fn.g.${kind}`)}</div>
+                <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+                  {groups.get(kind).map(p => (
+                    <button key={p.label} onClick={() => addPreset(p)}>+ {p.key ? t(p.key) : p.label}</button>
+                  ))}
+                </div>
+              </div>
+            ));
+          })()}
         </div>
 
         {incomplete.length > 0 && (

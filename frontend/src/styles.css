@@ -124,14 +124,34 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
 
+/* A control holding a choice that has not been applied yet.
+   Two seconds is slow enough not to nag and fast enough to catch an eye
+   crossing the panel; it stops at rest for anyone who finds motion difficult,
+   and the border alone still reads as active without it. */
+button.pending {
+  border-color: var(--accent); color: var(--accent);
+  animation: pending-pulse 2s ease-in-out infinite;
+}
+@keyframes pending-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(63, 182, 168, .45); border-color: var(--accent-dim); }
+  50%      { box-shadow: 0 0 0 4px rgba(63, 182, 168, 0); border-color: var(--accent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  button.pending { animation: none; }
+}
+
 /* One step of a function.
    The left edge carries the colour of what the step DOES, so a column of them
    can be read down rather than across: the eye finds the amber restarts among
    the teal patches without reading a word. */
 .step {
   border: 1px solid var(--line); border-left: 3px solid var(--line);
-  border-radius: 6px; margin-bottom: 8px; background: var(--bg-panel);
+  border-radius: 6px; margin-bottom: 18px; background: var(--bg-panel);
 }
+/* Folded steps sit closer: the gap exists to separate blocks of controls, and
+   a folded step has none — spacing them the same makes a scannable list sparse
+   for no reason. */
+.step:not(:has(.step-body)) { margin-bottom: 6px; }
 .step-head {
   padding: 8px 10px; align-items: center;
   border-bottom: 1px solid transparent;
@@ -142,7 +162,8 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
 /* The ordinal: fixed width so the numbers form a column instead of drifting
    right as the list passes nine. */
 .step-no {
-  min-width: 20px; text-align: right; font-size: 12px; color: var(--muted); flex-shrink: 0;
+  min-width: 62px; font-size: 12px; color: var(--muted); flex-shrink: 0;
+  letter-spacing: .02em;
 }
 .step-verb {
   border: 1px solid; border-radius: 4px; padding: 1px 7px;

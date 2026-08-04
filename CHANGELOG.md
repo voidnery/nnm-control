@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.44.0 — reading a list of steps
+- Steps are numbered in words — "Step 3", not a bare 3 — with the column kept
+  wide enough that they still line up
+- **Open steps are spaced; folded ones are not.** The gap exists to separate
+  blocks of controls, and a folded step has none — spacing them the same makes
+  a scannable list sparse for no reason
+- **The preset palette is grouped**: SRT In, SRT Out, SRT in Nimble, RTMP Push,
+  RTMP Pull, hot swap, transcoder, other. Twenty-seven buttons in one row is a
+  wall to read every time. The grouping comes from each preset's own
+  `objectKind`, so one added later lands in its group without anyone
+  maintaining a list — and a check fails if a group has no name, because an
+  unnamed group renders an empty heading and its buttons vanish
+- **The Insert button pulses while a choice is waiting to be applied.** Picking
+  a stream changes nothing until it is pressed, and that gap is where the
+  patch silently stays as it was. It pulses only in that gap: a button that
+  always pulses is one nobody sees after a day. The border reads as active
+  without the motion, and the motion stops under `prefers-reduced-motion`
+- 5 new checks
+
+
 ### v0.43.1 — variant overrides move with their steps
 - **Variant overrides are keyed by step position**, so any change to the order
   or the number of steps silently re-points every override after it. Deleting

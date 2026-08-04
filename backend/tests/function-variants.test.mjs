@@ -774,5 +774,53 @@ check('stale values can be dropped, and only the stale ones', () => {
   assert.deepEqual(cleaned, { 0: { a: 9 }, 1: { c: 9 } });
 });
 
+console.log('\nREADING A LIST OF STEPS (v0.44.0):');
+
+const fnPage2 = readFileSync(new URL('../../frontend/src/pages/FunctionsPage.jsx', import.meta.url), 'utf8');
+const css3 = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+
+check('a step is numbered in words, not just digits', () => {
+  assert.ok(fnPage2.includes("t('fn.stepNo', { n: index + 1 })"));
+  assert.match(css3, /\.step-no[^}]*min-width:\s*62px/, 'wide enough for the word, so they still form a column');
+});
+
+check('open steps are spaced, folded ones are not', () => {
+  // The gap separates blocks of controls. A folded step has none, and spacing
+  // them the same makes a scannable list sparse for no reason.
+  assert.match(css3, /\.step \{[^}]*margin-bottom:\s*18px/);
+  assert.match(css3, /\.step:not\(:has\(\.step-body\)\) \{[^}]*margin-bottom:\s*6px/);
+});
+
+check('the preset palette is grouped by what the step acts on', () => {
+  // Twenty-seven buttons in one row is a wall to read every time. Grouped from
+  // the step's own objectKind, so a preset added later lands in its group
+  // without anyone maintaining a list.
+  assert.ok(fnPage2.includes("p.step?.objectKind || (p.step?.type === 'delay'"));
+  assert.ok(fnPage2.includes("const ORDER = ['incoming', 'udp', 'outgoing'"));
+});
+
+check('every preset lands in a named group', () => {
+  // A group with no name renders an empty heading, and its buttons vanish from
+  // the palette.
+  const kinds = [...fnPage2.matchAll(/step: \{ type: '(\w+)'(?:, objectKind: '(\w+)')?/g)]
+    .map(m => m[2] || 'other');
+  assert.ok(kinds.length > 20, 'the presets were found at all');
+  const named = new Set(['incoming', 'udp', 'outgoing', 'republish', 'live_pull',
+                         'hotswap', 'transcoder', 'other']);
+  for (const k of new Set(kinds)) assert.ok(named.has(k), k);
+  const i18n = readFileSync(new URL('../../frontend/src/i18n.jsx', import.meta.url), 'utf8');
+  for (const k of new Set(kinds)) assert.ok(i18n.includes(`'fn.g.${k}'`), `fn.g.${k}`);
+});
+
+check('the insert button pulses only while a choice is waiting', () => {
+  // Picking a stream changes nothing until it is pressed, so the moment worth
+  // marking is exactly that gap. A button that always pulses is one nobody
+  // sees after a day.
+  assert.ok(fnPage2.includes("className={pick.includes('/') ? 'pending' : ''}"));
+  assert.match(css3, /button\.pending[^}]*animation/);
+  assert.ok(css3.includes('prefers-reduced-motion'), 'and it stops for anyone who finds motion difficult');
+  assert.match(css3, /button\.pending[^}]*border-color/, 'the border still reads as active without motion');
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);
