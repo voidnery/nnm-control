@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useNotices } from '../notices.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Plot from '../components/Plot.jsx';
 import IconButton from '../components/IconButton.jsx';
+import SrtParams from '../components/SrtParams.jsx';
 import { formatValue } from '../components/TimeChart.jsx';
 import { Link } from 'react-router-dom';
 import Select from '../components/Select.jsx';
-import SrtHelper from '../components/SrtHelper.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 import { useStreamCopy, CopyCheckbox, CopySelectionBar, CopyModal } from '../components/StreamCopy.jsx';
@@ -299,7 +300,19 @@ function StreamHistory({ serverId, subject, name, onClose }) {
 // Shown once above a table when the join found nothing: the field names differ
 // between Nimble builds and were never documented, so the evidence goes on
 // screen instead of into a guess.
-function JoinNote({ live, t }) {
+function JoinNote({ live, t, scope = '' }) {
+  // Hooks first, unconditionally. This component returns early three times —
+  // no readings, unavailable, matched — and a hook placed after any of them
+  // runs on some renders and not others, which React cannot track.
+  const { notify } = useNotices();
+
+  const wrongMachine = !!live && live.matched === 0 && live.portOverlap === 0 && live.serverOverlap === 0;
+  const text = noteText(live, t);
+
+  useEffect(() => {
+    if (text && !wrongMachine) notify(text, scope);
+  }, [text, scope, wrongMachine, notify]);
+
   if (!live) return null;
   if (live.available === false) {
     return <div className="hint" style={{ marginBottom: 6 }}>{t('wo.liveUnavailable', { why: live.reason || '' })}</div>;
@@ -315,9 +328,23 @@ function JoinNote({ live, t }) {
   // Nothing in common across the WHOLE server is a different claim: the native
   // URL and the WMSPanel mapping are pointing at two different machines, and
   // no amount of looking at streams will explain it.
-  const wrongMachine = live.matched === 0 && live.portOverlap === 0 && live.serverOverlap === 0;
+  //
+  // That one stays on the page. It is not a remark about the tab, it is a
+  // warning that the readings shown belong to a different server — and a
+  // warning filed in a tray is a warning nobody sees in time. Everything else
+  // goes to the tray, where it stops pushing the list down the page.
+  if (wrongMachine) {
+    return <div className="hint" style={{ marginBottom: 6, color: 'var(--warn)' }}>{text}</div>;
+  }
+  return null;
+}
 
-  const text = live.entries === 0
+// The wording, separated so the component can compute it before its early
+// returns without duplicating the ladder.
+function noteText(live, t) {
+  if (!live || live.available === false) return '';
+  const wrongMachine = live.matched === 0 && live.portOverlap === 0 && live.serverOverlap === 0;
+  return live.entries === 0
     ? t('wo.liveEmpty', { objects: live.objects, endpoint: '' })
     : wrongMachine
       ? t('wo.wrongMachine', { entries: live.entries, host: live.nativeHost || '?' })
@@ -328,7 +355,6 @@ function JoinNote({ live, t }) {
         ? t('wo.livePartial', { matched: live.matched, unmatched: live.unmatched })
         : t('wo.liveNoMatch', { entries: live.entries, objects: live.objects });
 
-  return <div className="hint" style={{ marginBottom: 6, color: 'var(--warn)' }}>{text}</div>;
 }
 
 export function UdpTab({ serverId }) {
@@ -416,7 +442,6 @@ export function UdpTab({ serverId }) {
   return (
     <div>
       <SyncNote />
-      {sys?.srtHelperEnabled && <SrtHelper />}
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
         <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
@@ -506,8 +531,8 @@ export function UdpTab({ serverId }) {
               <div><label>IP</label><input className="mono" value={cfgModal.ip} onChange={e => setCfgModal(m => ({ ...m, ip: e.target.value }))} /></div>
               <div><label>{t('wo.port')}</label><input type="number" value={cfgModal.port} onChange={e => setCfgModal(m => ({ ...m, port: e.target.value }))} /></div>
             </div>
-            <label>Parameters (JSON, e.g. {'{"latency":"1000","maxbw":"0"}'})</label>
-            <input className="mono" value={cfgModal.parameters} onChange={e => setCfgModal(m => ({ ...m, parameters: e.target.value }))} />
+            <SrtParams value={cfgModal.parameters}
+                       onChange={v => setCfgModal(m => ({ ...m, parameters: v }))} />
             {!cfgModal.id && <div className="hint" style={{ marginTop: 6 }}>{t('wo.sourceAfterCreate')}</div>}
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
               <button onClick={() => setCfgModal(null)}>{t('action.cancel')}</button>
@@ -1056,7 +1081,6 @@ export function MpegtsInTab({ serverId }) {
   return (
     <div>
       <SyncNote />
-      {sys?.srtHelperEnabled && <SrtHelper />}
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
         <SearchInput style={{ maxWidth: 260 }} placeholder={t('wo.filterNameDesc')} value={filter} onChange={setFilter} />
@@ -1178,8 +1202,8 @@ export function MpegtsInTab({ serverId }) {
               <div><label>IP</label><input className="mono" value={modal.ip} onChange={e => setModal(m => ({ ...m, ip: e.target.value }))} /></div>
               <div><label>{t('wo.port')}</label><input type="number" value={modal.port} onChange={e => setModal(m => ({ ...m, port: e.target.value }))} /></div>
             </div>
-            <label>Parameters (JSON, e.g. {'{"latency":"1000"}'} — empty = none)</label>
-            <input className="mono" value={modal.parameters} onChange={e => setModal(m => ({ ...m, parameters: e.target.value }))} />
+            <SrtParams value={modal.parameters}
+                       onChange={v => setModal(m => ({ ...m, parameters: v }))} />
             <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
               <button onClick={() => setModal(null)}>{t('action.cancel')}</button>
               <button className="primary" disabled={busy || !modal.name || !modal.ip || !modal.port} onClick={save}>

@@ -1,5 +1,57 @@
 # Changelog
 
+### v0.52.0 — the helper moved in, the remarks moved out
+- **The SRT tuning helper lives in the stream's own settings now**, folded away
+  until wanted. On the tab it could only offer three numbers to copy, because
+  it had no stream in front of it — and copying them by hand into a live stream
+  is what it was asking for. It fills the fields directly, and touches only the
+  three it computes: a calculator has no opinion about a stream id
+- It moved rather than being duplicated. Two copies of a calculator drift
+- **Technical remarks collect in a tray, top right.** Lines like "64 streams
+  matched; 12 more shown from WMSPanel data" are each true and worth having,
+  and each pushed the table they described further down the page — on a tab
+  with three of them the list started below the fold, and they were read once
+  on the first day and never again. Countable, clearable, and out of the way
+- Not toasts, deliberately: a toast is for something that just happened and
+  then disappears, and these describe a standing condition of the page that is
+  wanted on the fifth visit as much as the first. A repeated notice counts
+  rather than stacking, and the list is bounded — a page in a loop must not
+  grow it without limit
+- **One warning stays on the page:** the readings shown belong to a different
+  server. That is not a remark about the tab, and a warning filed in a tray is
+  one nobody sees in time
+- Restructured `JoinNote` so its hooks run before its three early returns. A
+  hook placed after one of them runs on some renders and not others, which
+  React cannot track — the move to the tray would have introduced exactly that
+- The tray degrades to nothing outside its provider: a component that reports
+  something must not be why a page fails to render
+- 6 new checks. **All four requests from this round are done.**
+
+
+### v0.51.0 — SRT parameters as fields, and the Raw view removed
+- **The parameters were a box of raw JSON**, typed by hand into a live stream:
+  `{"latency":"3000","maxbw":"6250000","rcvbuf":"15728640"}`. A misplaced brace
+  there is a stream that does not come back, and nothing checked it before it
+  was sent. Five named fields now — latency, max bandwidth, receive and send
+  buffers, stream id — which is what this fleet actually sets
+- **A parameter this panel has never heard of survives an edit.** SRT accepts
+  many more than five, and dropping the rest would make editing latency quietly
+  change something else
+- Values stay strings, because every working stream on this fleet has `"3000"`
+  and not `3000` — converting here would send a different thing than what came
+  back
+- Parameters that cannot be parsed show the text and no fields: offering empty
+  fields over an unreadable value would discard whatever is actually set the
+  moment anyone typed
+- The hardcoded English label went with it
+- **The Raw view is gone** — a debug panel from an earlier version of this
+  page — along with the state that fed it, which was written and never read
+- New `npm run audit:deadimport`, which found four: the two the Raw view left
+  behind and two that predate it. An unused import is harmless and invisible,
+  which is exactly how a page accumulates the artefacts of its previous selves
+- 5 new checks
+
+
 ### v0.50.0 — every verb is a glyph
 - Thirty-six text buttons across eleven pages — edit, delete, restart, pause,
   resume, duplicate, history — now draw from the one component, each keeping

@@ -8,7 +8,13 @@ import { copyText } from '../lib/clipboard.js';
 // Collapsible SRT tuning helper. Given a bitrate, channel scenario and a
 // "drops observed" flag, it produces Nimble SRT params, a URL query, sysctl
 // and human notes. Shown on SRT tabs when enabled in system settings.
-export default function SrtHelper() {
+// `onApply` turns the helper from a calculator into part of the form.
+//
+// On the tab it could only offer text to copy, because it had no stream in
+// front of it. Inside a stream's own settings it does, so the numbers it
+// computes can go straight into the fields — which is the whole reason the
+// operator was copying them by hand.
+export default function SrtHelper({ onApply }) {
   const { t } = useI18n();
   const { push } = useToast();
   const [open, setOpen] = useState(false);
@@ -76,6 +82,15 @@ export default function SrtHelper() {
               <div className="row" style={{ alignItems: 'flex-start' }}>
                 <pre className="mono panel" style={{ flex: 1, margin: 0, whiteSpace: 'pre-wrap' }}>{res.paramBlock}</pre>
                 <button onClick={() => copy(res.paramBlock)}>{t('srt.copy')}</button>
+                {onApply && (
+                  <button className="primary" onClick={() => {
+                    // Only the three it computes. Anything else already set on
+                    // the stream is left alone: a calculator has no opinion
+                    // about a stream id.
+                    onApply({ latency: String(res.latency), maxbw: String(res.maxbw), rcvbuf: String(res.buf) });
+                    push({ type: 'ok', message: t('srt.applied') });
+                  }}>{t('srt.apply')}</button>
+                )}
               </div>
 
               <label style={{ marginTop: 10 }}>{t('srt.url')}</label>

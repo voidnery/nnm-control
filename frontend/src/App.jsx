@@ -68,6 +68,7 @@ import SharedLogsPage from './pages/SharedLogsPage.jsx';
 import CategoriesPage from './pages/CategoriesPage.jsx';
 import TranscodersPage from './pages/TranscodersPage.jsx';
 import DistributionPage from './pages/DistributionPage.jsx';
+import { NoticeTray } from './notices.jsx';
 
 function Layout({ children }) {
   const { user, logout, can, sys } = useAuth();
@@ -104,6 +105,9 @@ function Layout({ children }) {
           <button style={{ marginTop: 8 }} onClick={logout}>{t('action.logout')}</button>
         </div>
       </aside>
+      {/* Top right, above the content and out of its way — the corner nothing
+          else claims, so it never moves the page it comments on. */}
+      <NoticeTray />
       <main className="main">{children}</main>
     </div>
   );

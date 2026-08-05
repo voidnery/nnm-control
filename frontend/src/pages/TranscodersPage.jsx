@@ -8,7 +8,6 @@ import { useConfirm } from '../confirm.jsx';
 import { useToast } from '../toast.jsx';
 import Modal from '../components/Modal.jsx';
 import TranscoderGraph from '../components/TranscoderGraph.jsx';
-import TemplateWizard from '../components/TemplateWizard.jsx';
 import ScenarioEditor from '../components/ScenarioEditor.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 

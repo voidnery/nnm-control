@@ -124,6 +124,20 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
 
+.srt-param { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.srt-param > span { color: var(--muted); }
+.srt-param input { font-family: var(--mono); font-size: 12.5px; }
+
+.notice-tray { position: fixed; top: 12px; right: 16px; z-index: 40; }
+.notice-tray > button { font-size: 12px; padding: 4px 10px; opacity: .85; }
+.notice-tray > button:hover { opacity: 1; }
+.notice-list {
+  position: absolute; right: 0; top: 34px; width: min(460px, calc(100vw - 32px));
+  max-height: 60vh; overflow: auto; box-shadow: 0 8px 28px rgba(0,0,0,.5);
+}
+.notice-item { font-size: 12px; padding: 6px 0; border-top: 1px solid var(--line); }
+.notice-item:first-of-type { border-top: none; }
+
 /* A verb rendered as a glyph. The label is kept for screen readers and as the
    tooltip: an icon alone is a guess until it has been learned, and some of
    these stop a broadcast. */

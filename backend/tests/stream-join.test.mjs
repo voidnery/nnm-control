@@ -1374,5 +1374,108 @@ check('every file using the component imports it', () => {
   }
 });
 
+console.log('\nSRT PARAMETERS AS FIELDS (v0.51.0):');
+
+const sp = readFileSync(new URL('../../frontend/src/components/SrtParams.jsx', import.meta.url), 'utf8');
+const wo4 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+const rp3 = readFileSync(new URL('../../frontend/src/pages/RepublishTab.jsx', import.meta.url), 'utf8');
+
+check('the JSON box is gone from both SRT forms', () => {
+  // It was a single input holding raw JSON, typed by hand into a live stream:
+  // a misplaced brace there is a stream that does not come back.
+  assert.equal((wo4.match(/<SrtParams/g) || []).length, 2);
+  assert.ok(!/value=\{cfgModal\.parameters\} onChange/.test(wo4));
+  assert.ok(!/value=\{modal\.parameters\} onChange/.test(wo4));
+  // And the hardcoded English label went with it.
+  assert.ok(!wo4.includes('Parameters (JSON, e.g.'));
+});
+
+check('values stay strings', () => {
+  // Every working stream on this fleet has `"3000"`, not `3000`. Converting
+  // here would send a different thing than what came back.
+  assert.ok(!/Number\(/.test(sp.slice(sp.indexOf('const write'), sp.indexOf('if (!ok)'))));
+});
+
+check('a parameter this panel has never heard of survives an edit', () => {
+  // Five fields cover what this fleet sets; SRT accepts many more, and
+  // dropping them would be an edit that quietly changes a stream.
+  const KNOWN = new Set(['latency', 'maxbw', 'rcvbuf', 'sndbuf', 'streamid']);
+  const obj = { latency: '3000', nakreport: '1' };
+  const rest = Object.fromEntries(Object.entries(obj).filter(([k]) => !KNOWN.has(k)));
+  assert.deepEqual(rest, { nakreport: '1' });
+  assert.ok(sp.includes('const merged = { ...rest, ...next }'));
+});
+
+check('unreadable parameters are not silently replaced', () => {
+  // Showing empty fields over a value that could not be parsed would discard
+  // whatever is actually set the moment anyone typed.
+  assert.ok(sp.includes("t('srt.p.unreadable'"));
+  assert.ok(sp.includes('if (!ok) {'));
+});
+
+check('the Raw view and its leftovers are gone', () => {
+  // A debug panel from an earlier version of this page, and the state feeding
+  // it, which was written and never read.
+  assert.ok(!/showRaw|Hide raw/.test(rp3));
+  assert.ok(!/const \[raw, setRaw\]/.test(rp3));
+  assert.ok(!rp3.includes('DataView'), 'and the import that only it needed');
+});
+
+console.log('\nTHE HELPER AND THE NOTICE TRAY (v0.52.0):');
+
+const sp2 = readFileSync(new URL('../../frontend/src/components/SrtParams.jsx', import.meta.url), 'utf8');
+const sh = readFileSync(new URL('../../frontend/src/components/SrtHelper.jsx', import.meta.url), 'utf8');
+const wo5 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+const nt = readFileSync(new URL('../../frontend/src/notices.jsx', import.meta.url), 'utf8');
+
+check('the helper moved into the stream form and can fill it in', () => {
+  // On the tab it could only offer text to copy, because it had no stream in
+  // front of it. Copying three numbers by hand into a live stream is what it
+  // was asking for.
+  assert.ok(sp2.includes('<SrtHelper onApply='));
+  assert.ok(sh.includes("t('srt.apply')"));
+  assert.ok(sh.includes('latency: String(res.latency)'));
+  assert.ok(!wo5.includes('<SrtHelper'), 'and it moved rather than being duplicated');
+});
+
+check('applying leaves the parameters it has no opinion about', () => {
+  // A calculator has nothing to say about a stream id.
+  const at = sh.indexOf("onApply({");
+  const call = sh.slice(at, at + 200);
+  for (const k of ['latency', 'maxbw', 'rcvbuf']) assert.ok(call.includes(k), k);
+  assert.ok(!call.includes('streamid'));
+  assert.ok(sp2.includes('const merged = { ...rest, ...next }'));
+});
+
+check('hooks in JoinNote run unconditionally', () => {
+  // It returns early three times, and a hook after any of them runs on some
+  // renders and not others — which React cannot track.
+  const fn = wo5.slice(wo5.indexOf('function JoinNote'), wo5.indexOf('function noteText'));
+  const firstHook = fn.indexOf('useNotices()');
+  const firstReturn = fn.indexOf('return null;');
+  assert.ok(firstHook > 0 && firstHook < firstReturn, 'the hook precedes every early return');
+});
+
+check('the wrong-machine warning stays on the page', () => {
+  // It is not a remark about the tab, it is a warning that the readings shown
+  // belong to a different server — and a warning filed in a tray is one nobody
+  // sees in time.
+  assert.ok(wo5.includes('if (wrongMachine) {'));
+  assert.ok(wo5.includes('if (text && !wrongMachine) notify(text, scope)'));
+});
+
+check('a repeated notice counts rather than stacks', () => {
+  // These are recomputed on every refresh; without this a morning produces
+  // twenty copies of one sentence.
+  assert.ok(nt.includes('prev.findIndex(x => x.text === line && x.scope === scope)'));
+  assert.ok(nt.includes('.slice(0, 50)'), 'and the list is bounded');
+});
+
+check('the tray degrades to nothing outside its provider', () => {
+  // A component that reports something must not be the reason a page fails to
+  // render.
+  assert.ok(nt.includes('useContext(Ctx) || { items: [], notify: () => {}, clear: () => {} }'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

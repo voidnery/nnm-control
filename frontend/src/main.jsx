@@ -5,6 +5,7 @@ import { AuthProvider } from './auth.jsx';
 import { ThemeProvider } from './theme.jsx';
 import { I18nProvider } from './i18n.jsx';
 import { ToastProvider } from './toast.jsx';
+import { NoticeProvider } from './notices.jsx';
 import { ConfirmProvider } from './confirm.jsx';
 import App from './App.jsx';
 import './styles.css';
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <ThemeProvider>
         <ToastProvider>
+          <NoticeProvider>
           <AuthProvider>
             <I18nProvider>
               <ConfirmProvider>
@@ -21,6 +23,7 @@ createRoot(document.getElementById('root')).render(
               </ConfirmProvider>
             </I18nProvider>
           </AuthProvider>
+          </NoticeProvider>
         </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>

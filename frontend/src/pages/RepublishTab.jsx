@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
-import DataView, { CopyJsonButton } from '../components/DataView.jsx';
 import { useConfirm } from '../confirm.jsx';
 import { useI18n } from '../i18n.jsx';
 import IconButton from '../components/IconButton.jsx';
@@ -23,8 +22,6 @@ function WmspanelRules({ serverId }) {
   const { can } = useAuth();
   const [rules, setRules] = useState(null);
   const [filter, setFilter] = useState('');
-  const [raw, setRaw] = useState(null);
-  const [showRaw, setShowRaw] = useState(false);
   const [error, setError] = useState('');
   // Canonical WMSPanel republish fields: src_app/src_strm, dest_app/dest_strm
   const [edit, setEdit] = useState(null); // { ruleId, src_app, src_strm }
@@ -38,7 +35,6 @@ function WmspanelRules({ serverId }) {
     setError('');
     try {
       const data = await api(`/wmspanel/server/${serverId}/republish`);
-      setRaw(data);
       setRules(data.rules || data.republish_rules || []);
     } catch (e) { setError(e.message); setRules([]); }
   };
@@ -102,7 +98,7 @@ function WmspanelRules({ serverId }) {
     <div>
       <div className="hint" style={{ marginBottom: 10 }}>
         <span className="lamp on" />Control plane: <b>WMSPanel API</b> — changes here are persistent and visible in WMSPanel.
-        <button style={{ marginLeft: 12 }} onClick={() => setShowRaw(v => !v)}>{showRaw ? 'Hide raw' : 'Raw'}</button>
+
       </div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 10 }}>
@@ -219,12 +215,6 @@ function WmspanelRules({ serverId }) {
               </button>
             </div>
           </div>
-        </div>
-      )}
-      {showRaw && (
-        <div className="panel">
-          <div className="row" style={{ justifyContent: 'flex-end' }}><CopyJsonButton data={raw} /></div>
-          <div style={{ maxHeight: 320, overflow: 'auto' }}><DataView data={raw} /></div>
         </div>
       )}
       {full && (
