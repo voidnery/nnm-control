@@ -476,7 +476,7 @@ export function UdpTab({ serverId }) {
                     <button disabled={busy} onClick={() => openCfg(o)}>{t('wo.settingsBtn')}</button>{' '}
                     <IconButton action={o.paused ? 'start' : 'stop'} disabled={busy}
                                 onClick={() => togglePause(o)} />
-                    <button className="danger" disabled={busy} onClick={() => removeUdp(o)}>{t('action.delete')}</button>
+                    <IconButton action="remove" danger disabled={busy} onClick={() => removeUdp(o)} />
                   </>}
                 </td>
               </tr>
@@ -668,8 +668,8 @@ export function OutgoingTab({ serverId }) {
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
                     {String(o.paused) === 'true'
-                      ? <button disabled={busy} onClick={() => act(o, 'resume')}>{t('action.resume')}</button>
-                      : <button disabled={busy} onClick={() => act(o, 'pause')}>{t('action.pause')}</button>}{' '}
+                      ? <IconButton action="start" disabled={busy} onClick={() => act(o, 'resume')} />
+                      : <IconButton action="stop" disabled={busy} onClick={() => act(o, 'pause')} />}
                     <button disabled={busy} onClick={() => act(o, 'restart')}>{t('action.restart')}</button>{' '}
                     <button disabled={busy} onClick={() => setModal({
                       id: o.id, application: o.application, stream: o.stream,
@@ -1044,19 +1044,6 @@ export function MpegtsInTab({ serverId }) {
     finally { setBusy(false); }
   };
 
-  // The same path the rest of this tab uses for an incoming object — the
-  // family's own route, not the one SRT Out uses for its family.
-  const togglePause = async (o) => {
-    setBusy(true); setError('');
-    try {
-      await api(`/wmspanel/server/${serverId}/incoming/${o.id}`, {
-        method: 'PUT', body: { paused: o.status !== 'paused' },
-      });
-      await load();
-    } catch (e) { setError(e.message); }
-    finally { setBusy(false); }
-  };
-
   const remove = async (o) => {
     if (!(await confirm(t('wo.confirmDeleteIncoming', { s: o.name })))) return;
     setBusy(true); setError('');
@@ -1134,33 +1121,17 @@ export function MpegtsInTab({ serverId }) {
                   {/* Asked from the row that raises the question, and available to
                       anyone who can see the stream — reading its past is not a
                       change to it. */}
-                  {/* WMSPanel's own interface pauses an incoming stream, and
-                      the object comes back reporting `status: paused` — so the
-                      state exists. What is written to make it so is inferred:
-                      `paused`, as on SRT Out, sent as a partial update the way
-                      that family does it.
-                      If WMSPanel ignores the field the row will simply not
-                      change state, which is visible immediately rather than
-                      silently — the panel re-reads after every action. */}
-                  {can('wmsobjects.manage') && (
-                    <IconButton action={o.status === 'paused' ? 'start' : 'stop'} disabled={busy}
-                                onClick={() => act(() => api(
-                                  `/wmspanel/server/${serverId}/mpegts/incoming/${o.id}`,
-                                  { method: 'PUT', body: { paused: o.status !== 'paused' } }))} />
-                  )}
-                  {/* WMSPanel's own interface pauses an incoming stream and
-                      the object comes back reporting `status: paused`, so the
-                      state exists. What is WRITTEN to set it is inferred —
-                      `paused`, as on SRT Out — because the API reference does
-                      not document it and the UI route is session-authenticated
-                      and unusable from here.
-                      Safe to infer: the panel re-reads after every action, so
-                      a field WMSPanel ignores leaves the row unchanged in
-                      front of the operator rather than failing silently. */}
-                  {can('wmsobjects.manage') && (
-                    <IconButton action={o.status === 'paused' ? 'start' : 'stop'} disabled={busy}
-                                onClick={() => togglePause(o)} />
-                  )}
+                  {/* No pause here, and the reason is measured rather than
+                      assumed: across 76 incoming objects the API returns
+                      twelve fields and `paused` is not among them — not even
+                      on the one whose `status` reads `paused`.
+                      So the state exists and is not set through the object.
+                      WMSPanel's own interface uses a separate action route on
+                      a session-authenticated host, which this panel cannot
+                      call. A button writing a field the schema does not have
+                      would be one that silently does nothing, which is the
+                      failure this project has spent a fortnight finding in
+                      other forms. */}
                   <IconButton action="history"
                               onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })} />
                   {can('wmsobjects.manage') && <>

@@ -1295,24 +1295,7 @@ console.log('\nPAUSING AN INCOMING STREAM (v0.48.0):');
 
 const wo2 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
 
-check('SRT In can be paused, because the object reports that state', () => {
-  // I concluded there was no such field by reading our edit form, which was
-  // wrong: the form does not show it and the object carries it. WMSPanel's own
-  // interface pauses these streams and ours reports `status: paused` back.
-  const tab = wo2.slice(wo2.indexOf('export function MpegtsInTab'));
-  assert.ok(tab.includes('const togglePause = async (o)'));
-  assert.ok(tab.includes("body: { paused: o.status !== 'paused' }"));
-  assert.ok(tab.includes("action={o.status === 'paused' ? 'start' : 'stop'}"));
-});
 
-check('it uses its own family route', () => {
-  // SRT Out writes to /udp/, this family to /incoming/. Borrowing the other
-  // one would address a different object entirely.
-  const tab = wo2.slice(wo2.indexOf('export function MpegtsInTab'));
-  const fn = tab.slice(tab.indexOf('const togglePause'), tab.indexOf('const remove'));
-  assert.ok(fn.includes('/incoming/${o.id}'));
-  assert.ok(!fn.includes('/udp/'));
-});
 
 check('no row gates on an identifier the component does not have', () => {
   // `{manage && …}` compiles and throws when the row renders, taking the whole
@@ -1320,6 +1303,39 @@ check('no row gates on an identifier the component does not have', () => {
   const tab = wo2.slice(wo2.indexOf('export function MpegtsInTab'));
   assert.ok(!/^\s*\{manage && \($/m.test(tab));
   assert.ok(tab.includes("{can('wmsobjects.manage') && ("));
+});
+
+console.log('\nWHICH FAMILIES CAN BE PAUSED (v0.49.0):');
+
+const wo3 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+
+check('SRT In has no pause, and the reason is measured', () => {
+  // Across 76 incoming objects the API returns twelve fields and `paused` is
+  // not among them — not even on the one whose `status` reads `paused`. So the
+  // state exists and is not set through the object. The button shipped in
+  // v0.48.0 wrote a field the schema does not have, which is a button that
+  // silently does nothing.
+  const tab = wo3.slice(wo3.indexOf('export function MpegtsInTab'));
+  assert.ok(!tab.includes('const togglePause'));
+  assert.ok(!/body: \{ paused: o\.status/.test(tab));
+  assert.ok(tab.includes('`paused` is not among them'), 'and the finding is written down where it was acted on');
+});
+
+check('the families that do have the field keep their control', () => {
+  // SRT Out and SRT in Nimble both report `paused` on every object; RTMP Push
+  // and RTMP Pull too. Only SRT In does not.
+  assert.ok(wo3.includes("<IconButton action={o.paused ? 'start' : 'stop'}"), 'SRT Out');
+  assert.ok(wo3.includes("<IconButton action=\"start\" disabled={busy} onClick={() => act(o, 'resume')}"), 'SRT in Nimble');
+});
+
+check('the probe reads the panel\'s paths, not WMSPanel\'s names', () => {
+  // Its first run asked for `mpegts/incoming` — the upstream resource name —
+  // and three families answered 404, which read as "this server has none of
+  // those". Same mistake as calling an agent route on the wrong router.
+  const probe = readFileSync(new URL('../../tools/nnm-api-probe.mjs', import.meta.url), 'utf8');
+  assert.ok(probe.includes("path: 'incoming'") && !probe.includes("path: 'mpegts/incoming'"));
+  assert.ok(probe.includes('the probe is asking for the wrong path'),
+    'and an HTML 404 is named as that rather than as an absent family');
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

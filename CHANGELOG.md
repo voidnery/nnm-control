@@ -1,5 +1,37 @@
 # Changelog
 
+### v0.49.0 — measured, and one control removed
+
+The probe answered for all six families:
+
+| tab | field | values |
+|---|---|---|
+| SRT In | *(none)* | `status`: offline ×56, online ×19, **paused ×1** |
+| SRT Out | `paused` | false ×44 |
+| SRT in Nimble | `paused` | false ×44, `status`: synced ×44 |
+| RTMP Push | `paused` | true ×2 |
+| RTMP Pull | `paused` | true ×8, false ×2 — and `status` agrees exactly |
+
+- **The SRT In pause shipped in v0.48.0 does not work, and is removed.** Across
+  76 incoming objects the API returns twelve fields and `paused` is not among
+  them — not even on the one whose `status` reads `paused`. The state exists
+  and is not set through the object; WMSPanel's own interface uses a separate
+  action route on a session-authenticated host that this panel cannot call. A
+  button writing a field the schema does not have is one that silently does
+  nothing
+- RTMP Pull is what made the rest legible: it carries **both** `paused` and
+  `status`, and they agree object for object — so `paused` is the switch and
+  `status` is the report of it. SRT In has only the report
+- The four families that have the field keep their control, now all drawing the
+  same glyph from the same component
+- **The probe's first run was wrong in my hands**: it asked for
+  `mpegts/incoming` — WMSPanel's own resource name — where the panel serves
+  `incoming`, and three families answered 404 in a way that read as "this
+  server has none of those". It uses the panel's paths now and names an HTML
+  404 as a wrong path rather than an absent family
+- 3 new checks; two from v0.48.0 retired, because measurement disproved them
+
+
 ### v0.48.0 — SRT In can be paused after all
 - **I was wrong in v0.47.0.** I concluded these objects had no paused state by
   reading our own edit form — which does not show it — and the object carries
