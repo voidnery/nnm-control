@@ -1291,5 +1291,36 @@ check('SRT In has no start/stop, because the object has no such field', () => {
   assert.ok(!/modal\.paused/.test(form));
 });
 
+console.log('\nPAUSING AN INCOMING STREAM (v0.48.0):');
+
+const wo2 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
+
+check('SRT In can be paused, because the object reports that state', () => {
+  // I concluded there was no such field by reading our edit form, which was
+  // wrong: the form does not show it and the object carries it. WMSPanel's own
+  // interface pauses these streams and ours reports `status: paused` back.
+  const tab = wo2.slice(wo2.indexOf('export function MpegtsInTab'));
+  assert.ok(tab.includes('const togglePause = async (o)'));
+  assert.ok(tab.includes("body: { paused: o.status !== 'paused' }"));
+  assert.ok(tab.includes("action={o.status === 'paused' ? 'start' : 'stop'}"));
+});
+
+check('it uses its own family route', () => {
+  // SRT Out writes to /udp/, this family to /incoming/. Borrowing the other
+  // one would address a different object entirely.
+  const tab = wo2.slice(wo2.indexOf('export function MpegtsInTab'));
+  const fn = tab.slice(tab.indexOf('const togglePause'), tab.indexOf('const remove'));
+  assert.ok(fn.includes('/incoming/${o.id}'));
+  assert.ok(!fn.includes('/udp/'));
+});
+
+check('no row gates on an identifier the component does not have', () => {
+  // `{manage && …}` compiles and throws when the row renders, taking the whole
+  // page with it — MpegtsInTab has `can`, never `manage`.
+  const tab = wo2.slice(wo2.indexOf('export function MpegtsInTab'));
+  assert.ok(!/^\s*\{manage && \($/m.test(tab));
+  assert.ok(tab.includes("{can('wmsobjects.manage') && ("));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

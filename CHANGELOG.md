@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.48.0 — SRT In can be paused after all
+- **I was wrong in v0.47.0.** I concluded these objects had no paused state by
+  reading our own edit form — which does not show it — and the object carries
+  it: WMSPanel's interface pauses these streams and ours reports
+  `status: paused` back. Reading our form is not evidence about what WMSPanel
+  supports
+- The control is there now, writing `paused` through this family's own route.
+  What is written to set it is still inferred — the API reference does not
+  document it and the UI route is session-authenticated and unusable from here
+  — but the inference is safe to act on: the panel re-reads after every action,
+  so a field WMSPanel ignores leaves the row unchanged in front of the operator
+  rather than failing quietly
+- **And a defect found while placing it.** Two rows in that tab gated on
+  `{manage && …}`, an identifier the component does not have — it uses `can`.
+  That compiles and throws when the row renders, taking the whole tab with it.
+  One of them was mine, from the History button in iter19
+- 3 new checks
+
+
 ### v0.47.0 — the glyphs everywhere
 - The same icons across the object tabs, the playlist source rows and the
   function steps — seventeen call sites, all drawing from the one component, so
