@@ -857,7 +857,7 @@ function Builder({ initial, servers, onClose, onSaved }) {
                 <button onClick={() => setOpenVariant(openVariant === v.id ? null : v.id)}>
                   {openVariant === v.id ? t('fn.hideValues') : t('fn.editValues', { n: Object.keys(v.overrides || {}).length })}
                 </button>
-                <button className="danger" onClick={() => dropVariant(v.id)}>{t('action.delete')}</button>
+                <IconButton action="remove" danger onClick={() => dropVariant(v.id)} />
               </div>
               {openVariant === v.id && (
                 <div style={{ marginTop: 6 }}>
@@ -1112,8 +1112,8 @@ export default function FunctionsPage() {
                       {t('fn.run')}{fn.variants?.length ? ` (${fn.variants.length})` : ''}
                     </button>
                   )}{' '}
-                  {can('functions.manage') && <><button onClick={() => setBuilder(fn)}>{t('action.edit')}</button>{' '}
-                  <button className="danger" onClick={() => remove(fn)}>{t('action.delete')}</button></>}
+                  {can('functions.manage') && <><IconButton action="edit" onClick={() => setBuilder(fn)} />{' '}
+                  <IconButton action="remove" danger onClick={() => remove(fn)} /></>}
                 </td>
               </tr>
             ))}

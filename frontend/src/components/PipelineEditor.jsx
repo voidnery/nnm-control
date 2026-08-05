@@ -4,6 +4,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import Select from './Select.jsx';
+import IconButton from './IconButton.jsx';
 
 // Transcoder pipeline editor, built from the real WMSPanel schema
 // (GET /transcoder/{id}?details=true → video_pipelines[] / audio_pipelines[]).
@@ -82,7 +83,7 @@ function IoCard({ tid, kind, pid, io, obj, onSaved, onDeleted }) {
     <div className="panel" style={{ background: 'var(--bg-raise)', marginBottom: 6 }}>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <b>{t('tc.' + io)}{d.main ? ` · ${t('tc.main')}` : ''} <span className="hint mono">{d.app}/{d.stream}</span></b>
-        <div className="row"><button disabled={busy} onClick={save}>{t('action.save')}</button><button className="danger" onClick={del}>{t('action.delete')}</button></div>
+        <div className="row"><button disabled={busy} onClick={save}>{t('action.save')}</button><IconButton action="remove" danger onClick={del} /></div>
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', marginTop: 8 }}>

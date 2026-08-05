@@ -11,6 +11,7 @@ import Select from '../components/Select.jsx';
 import * as E from '../lib/playlistEngine.js';
 import { DeployPlaylistModal } from '../components/AgentPanel.jsx';
 import { copyText } from '../lib/clipboard.js';
+import IconButton from '../components/IconButton.jsx';
 
 // ---- small field helpers ----
 function Field({ label, children }) {
@@ -33,7 +34,7 @@ function BlockEditor({ block, onChange, onRemove, onDup, media, srvId, onMediaCh
         <b>{t('pl.block')}: {block.Name || block.Id} <span className="hint mono">({(block.Streams || []).length} {t('pl.sources')})</span></b>
         <div className="row" onClick={e => e.stopPropagation()}>
           <button onClick={onDup}>{t('pl.dup')}</button>
-          <button className="danger" onClick={onRemove}>{t('action.delete')}</button>
+          <IconButton action="remove" danger onClick={onRemove} />
           <span className="caret">{open ? '▲' : '▼'}</span>
         </div>
       </div>
@@ -91,7 +92,7 @@ function TaskEditor({ task, onChange, onRemove, media, srvId, onMediaChanged }) 
     <div className="panel" style={{ marginBottom: 10, borderColor: 'var(--accent-dim)' }}>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <b>{t('pl.task')}</b>
-        <button className="danger" onClick={onRemove}>{t('action.delete')}</button>
+        <IconButton action="remove" danger onClick={onRemove} />
       </div>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', marginTop: 8 }}>
         <Field label={t('pl.outputStream')}><input className="mono" value={task.Stream} onChange={e => set('Stream', e.target.value)} placeholder="application/stream" /></Field>
@@ -399,8 +400,8 @@ export default function PlaylistsPage() {
                   <td style={{ textAlign: 'right' }}>
                     {can('playlist.manage')
                       ? <><button onClick={() => setDeploying(p)}>{t('agent.deploy')}</button>{' '}
-                          <button onClick={() => openEdit(p)}>{t('action.edit')}</button>{' '}
-                          <button className="danger" onClick={() => remove(p)}>{t('action.delete')}</button></>
+                          <IconButton action="edit" onClick={() => openEdit(p)} />{' '}
+                          <IconButton action="remove" danger onClick={() => remove(p)} /></>
                       : <button onClick={() => openEdit(p)}>{t('action.details')}</button>}
                   </td>
                 </tr>

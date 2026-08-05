@@ -6,6 +6,7 @@ import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import Select from './Select.jsx';
 import Modal from './Modal.jsx';
+import IconButton from './IconButton.jsx';
 
 // What is on a server, and what can be done about it.
 //
@@ -288,12 +289,10 @@ export default function PlaylistServerPanel({ servers }) {
                         <td className="hint" style={{ whiteSpace: 'nowrap' }}>{fmtBytes(f.size)}</td>
                         <td style={{ textAlign: 'right' }}>
                           {manage && (
-                            <button className="danger" disabled={!!busy}
+                            <IconButton action="remove" danger disabled={!!busy}
                                     onClick={() => confirm({ title: t('action.delete'), body: t('pls.deleteConfirm', { name: f.name }) })
                                       .then(ok => ok && act('del', () => api(
-                                        `/servers/${srvId}/agent/media?name=${encodeURIComponent(f.name)}`, { method: 'DELETE' })))}>
-                              {t('action.delete')}
-                            </button>
+                                        `/servers/${srvId}/agent/media?name=${encodeURIComponent(f.name)}`, { method: 'DELETE' })))} />
                           )}
                         </td>
                       </tr>

@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.50.0 — every verb is a glyph
+- Thirty-six text buttons across eleven pages — edit, delete, restart, pause,
+  resume, duplicate, history — now draw from the one component, each keeping
+  its word as the tooltip and the accessible name
+- Only buttons whose entire body is a single translated verb were converted. A
+  button whose label is part of a sentence stays a sentence; turning it into a
+  glyph would lose what it was saying
+- **The first sweep found four of them.** Its pattern forbade braces in the
+  attributes, and an `onClick` almost always has them — so every button with a
+  handler was invisible to it. Balancing the braces instead found the other
+  thirty-two
+- **And the sweep broke ten files.** Its check for an existing import looked
+  for the bare name and matched the markup it had just written, so ten files
+  gained the component and no import — which compiles and throws when the row
+  renders. The click gate caught all ten, which is exactly why it clicks every
+  button rather than counting them
+- 2 new checks: no verb left as a text button anywhere, and every file using
+  the component importing it
+
+
 ### v0.49.0 — measured, and one control removed
 
 The probe answered for all six families:

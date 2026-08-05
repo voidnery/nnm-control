@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { backdropClose } from '../components/Modal.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import IconButton from '../components/IconButton.jsx';
 
 // Account-level distribution: ABR ladders, application aliases, origin apps.
 // server_ids are edited as checkboxes of mapped panel servers and displayed
@@ -133,15 +134,15 @@ export default function DistributionPage() {
                 <td>{serverNames(o.server_ids)}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
-                    <button disabled={busy} onClick={() => setAbrModal({
+                    <IconButton action="edit" disabled={busy} onClick={() => setAbrModal({
                       id: o.id, application: o.application, stream: o.stream,
                       server_ids: o.server_ids || [],
                       sources: (o.source_streams || []).map(ss => ({ ...ss })),
-                    })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={async () => {
+                    })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={async () => {
                       if (await confirm(t('ds.confirmDeleteAbr', { s: `${o.application}/${o.stream}` })))
                         act(() => api(`/wmspanel/abr/${o.id}`, { method: 'DELETE' }));
-                    }}>{t('action.delete')}</button>
+                    }} />
                   </>}
                 </td>
               </tr>
@@ -175,16 +176,16 @@ export default function DistributionPage() {
                     <button disabled={busy} onClick={() => act(() => api(`/wmspanel/aliases/${o.id}`, { method: 'PUT', body: { paused: !o.paused } }))}>
                       {o.paused ? 'Resume' : 'Pause'}
                     </button>{' '}
-                    <button disabled={busy} onClick={() => setAliasModal({
+                    <IconButton action="edit" disabled={busy} onClick={() => setAliasModal({
                       id: o.id, application: o.application,
                       aliases: (o.aliases || []).map(a => a.application).join('\n'),
                       protocols: (o.protocols || []).join(','),
                       server_ids: o.server_ids || [], description: o.description || '',
-                    })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={async () => {
+                    })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={async () => {
                       if (await confirm(t('ds.confirmDeleteAlias', { s: o.application })))
                         act(() => api(`/wmspanel/aliases/${o.id}`, { method: 'DELETE' }));
-                    }}>{t('action.delete')}</button>
+                    }} />
                   </>}
                 </td>
               </tr>
@@ -212,11 +213,11 @@ export default function DistributionPage() {
                 <td>{serverNames(o.server_ids)}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
-                    <button disabled={busy} onClick={() => setOriginModal({ id: o.id, application: o.application, server_ids: o.server_ids || [] })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={async () => {
+                    <IconButton action="edit" disabled={busy} onClick={() => setOriginModal({ id: o.id, application: o.application, server_ids: o.server_ids || [] })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={async () => {
                       if (await confirm(t('ds.confirmDeleteOrigin', { s: o.application })))
                         act(() => api(`/wmspanel/originapps/${o.id}`, { method: 'DELETE' }));
-                    }}>{t('action.delete')}</button>
+                    }} />
                   </>}
                 </td>
               </tr>

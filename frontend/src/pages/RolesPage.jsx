@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { backdropClose } from '../components/Modal.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import IconButton from '../components/IconButton.jsx';
 
 function RoleModal({ initial, catalog, functions, onClose, onSaved }) {
   const { t } = useI18n();
@@ -115,8 +116,8 @@ export default function RolesPage() {
                 <td className="hint">{r.description}</td>
                 <td>{r.permissions.map(p => <span key={p} className="badge" style={{ margin: '1px 3px 1px 0' }}>{p}</span>)}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <button onClick={() => setModal(r)}>{t('action.edit')}</button>{' '}
-                  <button className="danger" onClick={() => remove(r)}>{t('action.delete')}</button>
+                  <IconButton action="edit" onClick={() => setModal(r)} />{' '}
+                  <IconButton action="remove" danger onClick={() => remove(r)} />
                 </td>
               </tr>
             ))}

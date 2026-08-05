@@ -5,6 +5,7 @@ import { useToast } from '../toast.jsx';
 import SearchInput from './SearchInput.jsx';
 import { copyText } from '../lib/clipboard.js';
 import { cacheGet, cacheSet, cacheKey } from '../lib/logCache.js';
+import IconButton from './IconButton.jsx';
 
 // iter10 m4 — one log window.
 //
@@ -150,7 +151,7 @@ export default function LogWindow({
           </button>
           {controls && <button style={{ padding: '2px 6px', fontSize: 11 }} onClick={copyAll}>{t('srt.copy')}</button>}
           {onEdit && (
-            <button style={{ padding: '2px 6px', fontSize: 11 }} onClick={onEdit}>{t('action.edit')}</button>
+            <IconButton action="edit" style={{ padding: '2px 6px', fontSize: 11 }} onClick={onEdit} />
           )}
           {onRemove && (
             <button className="danger" style={{ padding: '2px 6px', fontSize: 11 }} onClick={onRemove}>×</button>

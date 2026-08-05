@@ -7,6 +7,7 @@ import Modal from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import LogWindow from '../components/LogWindow.jsx';
 import { copyText } from '../lib/clipboard.js';
+import IconButton from '../components/IconButton.jsx';
 
 // iter10 m5 — operator-built arrangements of log windows.
 //
@@ -183,7 +184,7 @@ export default function LogDashboardsPage() {
                         touching, and one of them deletes a dashboard. */}
                     <div className="row" style={{ gap: 14, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                       <button onClick={() => open(d.id)}>{t('action.open')}</button>
-                      <button className="danger" onClick={() => remove(d)}>{t('action.delete')}</button>
+                      <IconButton action="remove" danger onClick={() => remove(d)} />
                     </div>
                   </td>
                 </tr>

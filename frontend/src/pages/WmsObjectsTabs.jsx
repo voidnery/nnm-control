@@ -670,13 +670,13 @@ export function OutgoingTab({ serverId }) {
                     {String(o.paused) === 'true'
                       ? <IconButton action="start" disabled={busy} onClick={() => act(o, 'resume')} />
                       : <IconButton action="stop" disabled={busy} onClick={() => act(o, 'pause')} />}
-                    <button disabled={busy} onClick={() => act(o, 'restart')}>{t('action.restart')}</button>{' '}
-                    <button disabled={busy} onClick={() => setModal({
+                    <IconButton action="restart" disabled={busy} onClick={() => act(o, 'restart')} />{' '}
+                    <IconButton action="edit" disabled={busy} onClick={() => setModal({
                       id: o.id, application: o.application, stream: o.stream,
                       description: o.description || '',
                       video_source: o.video_source?.id || '', audio_source: o.audio_source?.id || '',
-                    })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => remove(o)}>{t('action.delete')}</button>
+                    })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={() => remove(o)} />
                   </>}
                 </td>
               </tr>
@@ -788,12 +788,12 @@ export function HotswapTab({ serverId }) {
                             onClick={() => put(o, { emergency: !o.emergency })}>
                       {o.emergency ? t('wo.backToOriginal') : t('wo.emergencyOnBtn')}
                     </button>{' '}
-                    <button disabled={busy} onClick={() => setEditModal({
+                    <IconButton action="edit" disabled={busy} onClick={() => setEditModal({
                       id: o.id, original_app: o.original_app, original_stream: o.original_stream,
                       substitute_app: o.substitute_app, substitute_stream: o.substitute_stream,
                       paused: Boolean(o.paused),
-                    })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => remove(o)}>{t('action.delete')}</button>
+                    })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={() => remove(o)} />
                   </>}
                 </td>
               </tr>
@@ -1135,13 +1135,13 @@ export function MpegtsInTab({ serverId }) {
                   <IconButton action="history"
                               onClick={() => setHistory({ subject: live?.live?.[o.id]?.subject || null, name: o.name })} />
                   {can('wmsobjects.manage') && <>
-                    <button disabled={busy} onClick={() => setModal({
+                    <IconButton action="edit" disabled={busy} onClick={() => setModal({
                       id: o.id, name: o.name, description: o.description || '',
                       protocol: o.protocol, ip: o.ip, port: o.port,
                       receive_mode: o.receive_mode,
                       parameters: Object.keys(o.parameters || {}).length ? JSON.stringify(o.parameters) : '',
-                    })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => remove(o)}>{t('action.delete')}</button>
+                    })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={() => remove(o)} />
                   </>}
                 </td>
               </tr>
@@ -1271,18 +1271,18 @@ export function LivePullTab({ serverId }) {
                 <td><TagChips st={st} kind="livepull" objId={o.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
-                    <button disabled={busy} onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}/restart`, { method: 'POST' }))}>{t('action.restart')}</button>{' '}
+                    <IconButton action="restart" disabled={busy} onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}/restart`, { method: 'POST' }))} />{' '}
                     <IconButton action={o.paused ? 'start' : 'stop'} disabled={busy}
                                 onClick={() => act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}`,
                                   { method: 'PUT', body: { paused: !o.paused } }))} />{' '}
-                    <button disabled={busy} onClick={() => setModal({
+                    <IconButton action="edit" disabled={busy} onClick={() => setModal({
                       id: o.id, url: o.url, fallback_urls: (o.fallback_urls || []).join('\n'),
                       application: o.application, stream: o.stream, description: o.description || '',
-                    })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={async () => {
+                    })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={async () => {
                       if (await confirm(t('wo.confirmDeletePull', { s: `${o.application}/${o.stream}` })))
                         act(() => api(`/wmspanel/server/${serverId}/livepull/${o.id}`, { method: 'DELETE' }));
-                    }}>{t('action.delete')}</button>
+                    }} />
                   </>}
                 </td>
               </tr>
@@ -1386,19 +1386,19 @@ export function AppsTab({ serverId }) {
                 <td><TagChips st={tg} kind="apps" objId={a.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
-                    <button disabled={busy} onClick={() => setModal({
+                    <IconButton action="edit" disabled={busy} onClick={() => setModal({
                       id: a.id, application: a.application,
                       chunk_duration: a.chunk_duration, chunk_count: a.chunk_count,
                       protocols: (a.protocols || []).join(','),
                       push_login: a.push_login || '', push_password: a.push_password || '',
-                    })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={async () => {
+                    })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={async () => {
                       if (!(await confirm(t('wo.confirmDeleteApp', { s: a.application })))) return;
                       setBusy(true); setError('');
                       try { await api(`/wmspanel/server/${serverId}/apps/${a.id}`, { method: 'DELETE' }); await load(); }
                       catch (e) { setError(e.message); }
                       finally { setBusy(false); }
-                    }}>{t('action.delete')}</button>
+                    }} />
                   </>}
                 </td>
               </tr>
@@ -1487,8 +1487,8 @@ export function InterfacesTab({ serverId }) {
                 <td><TagChips st={tg} kind="interfaces" objId={i.id} /></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {can('wmsobjects.manage') && <>
-                    <button disabled={busy} onClick={() => setModal({ id: i.id, ip: i.ip, port: i.port, ssl: i.ssl })}>{t('action.edit')}</button>{' '}
-                    <button className="danger" disabled={busy} onClick={() => remove(i)}>{t('action.delete')}</button>
+                    <IconButton action="edit" disabled={busy} onClick={() => setModal({ id: i.id, ip: i.ip, port: i.port, ssl: i.ssl })} />{' '}
+                    <IconButton action="remove" danger disabled={busy} onClick={() => remove(i)} />
                   </>}
                 </td>
               </tr>

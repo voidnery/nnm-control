@@ -351,7 +351,7 @@ function NativeRules({ serverId }) {
                 </td>
                 <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>
                   <td style={{ textAlign: 'right' }}>
-                    {can('republish.manage') && <button className="danger" onClick={() => remove(rule.id)}>{t('action.delete')}</button>}
+                    {can('republish.manage') && <IconButton action="remove" danger onClick={() => remove(rule.id)} />}
                   </td>
                 </tr>
               );

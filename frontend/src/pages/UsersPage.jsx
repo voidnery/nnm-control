@@ -5,6 +5,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import IconButton from '../components/IconButton.jsx';
 
 function UserModal({ initial, roles, onClose, onSaved }) {
   const { t } = useI18n();
@@ -127,7 +128,7 @@ export default function UsersPage() {
                 <td><span className={'lamp ' + (u.active ? 'on' : 'off')} />{u.active ? 'active' : 'disabled'}</td>
                 <td className="hint">{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <button onClick={() => setModal(u)}>{t('action.edit')}</button>{' '}
+                  <IconButton action="edit" onClick={() => setModal(u)} />{' '}
                   {u.twoFactorEnabled && (
                     <>
                       <button title={t('us.reset2faTitle')} onClick={async () => {
@@ -138,7 +139,7 @@ export default function UsersPage() {
                     </>
                   )}
                   {u.roleType !== 'superadmin' &&
-                    <button className="danger" onClick={() => remove(u)}>{t('action.delete')}</button>}
+                    <IconButton action="remove" danger onClick={() => remove(u)} />}
                 </td>
               </tr>
             ))}

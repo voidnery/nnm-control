@@ -1338,5 +1338,41 @@ check('the probe reads the panel\'s paths, not WMSPanel\'s names', () => {
     'and an HTML 404 is named as that rather than as an absent family');
 });
 
+console.log('\nEVERY VERB IS A GLYPH (v0.50.0):');
+
+const { readdirSync: rd, statSync: stt } = await import('node:fs');
+const FRONT = new URL('../../frontend/src/', import.meta.url);
+const jsx = [];
+(function walk(dir) {
+  for (const e of rd(dir)) {
+    const p = new URL(e, dir.href.endsWith('/') ? dir : `${dir.href}/`);
+    if (stt(p).isDirectory()) walk(new URL(`${e}/`, dir));
+    else if (e.endsWith('.jsx')) jsx.push(p);
+  }
+})(FRONT);
+
+check('no verb is left as a text button', () => {
+  // Thirty-six across eleven files, in handlers spanning several lines — the
+  // reason the first sweep missed them was a pattern that forbade braces in
+  // attributes, and an onClick almost always has them.
+  const VERBS = /\{t\('(?:action\.(?:edit|delete|restart|pause|resume|duplicate)|fn\.(?:remove|duplicate)|wo\.history)'\)\}<\/button>/;
+  for (const f of jsx) {
+    const src = readFileSync(f, 'utf8');
+    assert.ok(!VERBS.test(src), `${f.pathname.split('/').pop()} still has a text verb button`);
+  }
+});
+
+check('every file using the component imports it', () => {
+  // The sweep's own check looked for the bare name and matched the markup it
+  // had just written, so ten files gained the component and no import. That
+  // compiles and throws when the row renders — the click gate caught it, which
+  // is the whole reason it clicks every button.
+  for (const f of jsx) {
+    const src = readFileSync(f, 'utf8');
+    if (!src.includes('<IconButton')) continue;
+    assert.match(src, /^import IconButton from/m, f.pathname.split('/').pop());
+  }
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);

@@ -7,6 +7,7 @@ import { useConfirm } from '../confirm.jsx';
 import Modal, { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import SearchInput from '../components/SearchInput.jsx';
+import IconButton from '../components/IconButton.jsx';
 
 // Object kinds that can be grouped. Endpoint segment -> label key; mirrors the
 // tabs a stream can live on.
@@ -230,8 +231,8 @@ export default function CategoriesPage() {
               <button onClick={loadState}>{t('action.refresh')}</button>
               {manage && <>
                 <button onClick={() => setPicker(true)}>+ {t('cat.addMembers')}</button>
-                <button onClick={() => setEditModal(active)}>{t('action.edit')}</button>
-                <button className="danger" onClick={() => removeCat(active)}>{t('action.delete')}</button>
+                <IconButton action="edit" onClick={() => setEditModal(active)} />
+                <IconButton action="remove" danger onClick={() => removeCat(active)} />
               </>}
             </div>
           </div>

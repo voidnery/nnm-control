@@ -6,6 +6,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import IconButton from '../components/IconButton.jsx';
 
 const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [], httpPort: 0 };
 
@@ -248,8 +249,8 @@ export default function ServersPage() {
                   </td>}
                   <td style={{ textAlign: 'right' }}>
                     {can('servers.manage') && <>
-                      <button onClick={() => setModal(s)}>{t('action.edit')}</button>{' '}
-                      <button className="danger" onClick={() => remove(s)}>{t('action.delete')}</button>
+                      <IconButton action="edit" onClick={() => setModal(s)} />{' '}
+                      <IconButton action="remove" danger onClick={() => remove(s)} />
                     </>}
                   </td>
                 </tr>
