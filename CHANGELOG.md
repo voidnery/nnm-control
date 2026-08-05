@@ -1,5 +1,21 @@
 # Changelog
 
+### v0.52.1 — the helper beside the form, not under it
+- Below the fields it was a second screenful: compute at the bottom, scroll up
+  to see what landed. Beside them both are visible, which makes filling the
+  fields one action instead of two
+- Portalled out of the dialog, because the dialog scrolls its own content — a
+  child placed to its left would be clipped by that overflow rather than
+  appearing there
+- Positioned against the dialog's own centring rather than measured: the
+  dialog is a fixed width and centred, so half of it plus a gap is the offset,
+  and nothing can drift out of step with it. Checked at 1920, 1400 and 1200 —
+  it clears the dialog and stays on screen at each
+- Below 1100px there is no room for two columns and it returns under the form,
+  where it is cramped and reachable, which beats being off-screen
+- 1 new check
+
+
 ### v0.52.0 — the helper moved in, the remarks moved out
 - **The SRT tuning helper lives in the stream's own settings now**, folded away
   until wanted. On the tab it could only offer three numbers to copy, because

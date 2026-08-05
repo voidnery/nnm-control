@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useI18n } from '../i18n.jsx';
 import SrtHelper from './SrtHelper.jsx';
 
@@ -91,10 +92,18 @@ export default function SrtParams({ value, onChange, helper = true }) {
           <button onClick={() => setShowHelper(v => !v)}>
             {showHelper ? t('srt.hideHelper') : t('srt.showHelper')}
           </button>
-          {showHelper && (
-            <div style={{ marginTop: 6 }}>
+          {/* Beside the form, not below it: the numbers are computed on one
+              side and land on the other, and both have to be visible for that
+              to be one action instead of two.
+              Portalled because the dialog scrolls its own content — a child
+              placed to its left would be clipped by that overflow — and fixed
+              against the dialog's own centring rather than measured, so it
+              cannot drift out of step with it. */}
+          {showHelper && createPortal(
+            <div className="srt-helper-side" onClick={e => e.stopPropagation()}>
               <SrtHelper onApply={next => write(next)} />
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
       )}

@@ -128,6 +128,28 @@ h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 600; color: var(--text);
 .srt-param > span { color: var(--muted); }
 .srt-param input { font-family: var(--mono); font-size: 12.5px; }
 
+/* The tuning helper, beside the dialog it fills in.
+   Its right edge sits a gap to the left of the dialog's left edge: the dialog
+   is 480px and centred, so half of it plus the gap is the offset, and no
+   measurement is needed to stay in step with it.
+   Below 1100px there is no room for two columns and it goes back under the
+   form, where it is cramped but reachable — which beats being off-screen. */
+.srt-helper-side {
+  position: fixed; z-index: 60;
+  top: 50%; transform: translateY(-50%);
+  right: calc(50% + 240px + 14px);
+  width: min(380px, calc(50vw - 254px));
+  max-height: 90vh; overflow: auto;
+  background: var(--bg-panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px; box-shadow: 0 10px 34px rgba(0,0,0,.55);
+}
+@media (max-width: 1100px) {
+  .srt-helper-side {
+    position: static; transform: none; width: auto; margin-top: 8px;
+    box-shadow: none; max-height: none;
+  }
+}
+
 .notice-tray { position: fixed; top: 12px; right: 16px; z-index: 40; }
 .notice-tray > button { font-size: 12px; padding: 4px 10px; opacity: .85; }
 .notice-tray > button:hover { opacity: 1; }

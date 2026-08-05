@@ -1428,6 +1428,22 @@ const sh = readFileSync(new URL('../../frontend/src/components/SrtHelper.jsx', i
 const wo5 = readFileSync(new URL('../../frontend/src/pages/WmsObjectsTabs.jsx', import.meta.url), 'utf8');
 const nt = readFileSync(new URL('../../frontend/src/notices.jsx', import.meta.url), 'utf8');
 
+check('the helper sits beside the dialog, not below it', () => {
+  // The numbers are computed on one side and land on the other, and both have
+  // to be visible for that to be one action instead of two. Portalled because
+  // the dialog scrolls its own content: a child to its left would be clipped
+  // by that overflow.
+  const sp3 = readFileSync(new URL('../../frontend/src/components/SrtParams.jsx', import.meta.url), 'utf8');
+  const css7 = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+  assert.ok(sp3.includes('createPortal('));
+  assert.ok(sp3.includes('className="srt-helper-side"'));
+  // Offset from the dialog's own centring rather than measured, so it cannot
+  // drift out of step with it.
+  assert.match(css7, /\.srt-helper-side[^}]*right: calc\(50% \+ 240px/);
+  // And a narrow screen has no room for two columns.
+  assert.match(css7, /@media \(max-width: 1100px\)[\s\S]{0,200}\.srt-helper-side[\s\S]{0,120}position: static/);
+});
+
 check('the helper moved into the stream form and can fill it in', () => {
   // On the tab it could only offer text to copy, because it had no stream in
   // front of it. Copying three numbers by hand into a live stream is what it
