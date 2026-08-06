@@ -23,6 +23,18 @@ permissions:
   contents: write
   packages: write
 
+# One release at a time, and no overlapping Pages deployments.
+#
+# Without this every re-run adds a deployment for the same branch commit, and
+# GitHub cancels the earlier one to make way — so a run re-tried to fix a
+# stuck deployment is a run that cancels the deployment it was waiting for.
+# `cancel-in-progress: false` because a release that is half-published is
+# worse than one that waits: the deb is already attached and the images are
+# already pushed by the time Pages runs.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   images:
     runs-on: ubuntu-latest

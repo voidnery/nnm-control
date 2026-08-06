@@ -19,6 +19,20 @@ rm -rf "$REPO"
 mkdir -p "$REPO/pool/main" "$REPO/dists/stable/main/binary-amd64"
 cp dist/*.deb "$REPO/pool/main/"
 
+# A stamp, so every build produces content that differs from the last.
+#
+# peaceiris/actions-gh-pages does not push when the tree is identical, and a
+# run that pushes nothing creates no new commit — so a re-run intended to
+# retry a stuck Pages deployment simply re-deploys the same version, which
+# GitHub then cancels against the one already in flight. This also makes what
+# is actually published readable from a browser.
+{
+  echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "run:   ${GITHUB_RUN_ID:-local}"
+  echo "commit: ${GITHUB_SHA:-unknown}"
+  ls -1 dist/*.deb 2>/dev/null | sed 's|.*/|deb:    |'
+} > "$REPO/build-info.txt"
+
 cd "$REPO"
 dpkg-scanpackages --multiversion pool > dists/stable/main/binary-amd64/Packages
 gzip -k9 dists/stable/main/binary-amd64/Packages

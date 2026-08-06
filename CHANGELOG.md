@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.58.2 — two real faults in our release workflow
+Both found by reading the Pages logs rather than the panel, and both ours.
+
+- **No `concurrency` group.** Every re-run and every overlapping release adds a
+  Pages deployment for the same branch, and GitHub cancels the earlier one to
+  make way — so a run re-tried to unstick a deployment is a run that cancels
+  the deployment it was waiting for. That is exactly the `Deployment
+  cancelled` in the log. `cancel-in-progress: false`, because a half-published
+  release is worse than one that waits: by the time Pages runs, the deb is
+  attached and the images are pushed
+- **A re-run produced no new commit.** `peaceiris/actions-gh-pages` does not
+  push when the tree is identical, so re-running after a successful push
+  creates nothing and re-deploys the same version — which is why
+  `pages_build_version` was byte-identical across two runs with different
+  artifacts. The repo build now writes `build-info.txt` with the timestamp, run
+  id, commit and deb name, so every release differs and what is published can
+  be read from a browser:
+  `https://voidnery.github.io/nnm-control/apt/build-info.txt`
+
+The branch content itself was correct throughout — the Pages build log lists
+`nnm-control_1.8.4_all.deb` in the archive. Nothing between v0.56.0 and v0.58.1
+touches anything that reaches `public/`.
+
+
 ### v0.58.1 — two defects in the last few releases
 Both mine, both from v0.51–0.52, and one of them would have cost an outage.
 
