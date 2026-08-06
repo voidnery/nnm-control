@@ -148,4 +148,35 @@ for (const fam of FAMILIES) {
   report.families[fam.path] = entry;
 }
 
+// ---- transcoders -----------------------------------------------------------
+//
+// A whole one, not a shape summary. The pipeline is nested — lines, then
+// input/filter/output, each with its own fields — and which fields appear
+// depends on what the stage is. A summary of the top level says nothing about
+// that, and rebuilding the editor from what the editor currently assumes is
+// how it came to show fields nobody has and hide fields people set.
+report.transcoders = { note: 'one full pipeline, field names intact, values reduced' };
+try {
+  const d = await api(`/wmspanel/transcoders`);
+  const all = (d?.transcoders || d?.settings || (Array.isArray(d) ? d : [])) || [];
+  report.transcoders.count = all.length;
+  const mine = all.filter(x => !SERVER || String(x.server_id) === SERVER);
+  const one = mine[0] || all[0];
+  if (one) {
+    report.transcoders.topLevelFields = Object.keys(one).sort();
+    // The pipeline verbatim: names and structure are the point, so only leaf
+    // values are reduced and nothing is dropped.
+    const reduce = (v, key = '') => {
+      if (Array.isArray(v)) return v.map(x => reduce(x));
+      if (v && typeof v === 'object') {
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, reduce(x, k)]));
+      }
+      return shapeOf(v, key);
+    };
+    report.transcoders.sample = reduce(one);
+  }
+} catch (e) {
+  report.transcoders.error = String(e.message).slice(0, 200);
+}
+
 process.stdout.write(`${JSON.stringify(report, null, 1)}\n`);

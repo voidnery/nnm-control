@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.55.0 — the transcoder probe
+
+- `nnm-api-probe.mjs` dumps **one whole transcoder pipeline** — nesting and
+  field names intact, only leaf values reduced. A shape summary of the top
+  level says nothing about which fields appear at which stage, and that is
+  exactly the question: the editor currently shows fields nobody has and hides
+  fields people set
+
+**The load collection is not in this release, and the reason is the gate.** The
+agent side was written and works — `/proc` parsing verified against a live
+process — but it makes `audit:shadow`'s sibling, the undefined-reference audit,
+report four real functions as undefined. Narrowed to the new block and not
+pinned: the audit tokenises this file, and something in the block reads to it
+as an unterminated literal, after which every declaration below becomes
+invisible.
+
+That is a broken gate rather than broken code — `node --check` passes and the
+functions are plainly there. But a gate that fails is either a real defect or a
+gate that cannot be trusted, and shipping past it without knowing which is the
+one thing this project does not do. The block is reverted rather than the gate
+suppressed; the fix is to find the construction, which is a short job with a
+fresh look at the tokeniser.
+
+
 ### v0.54.0 — transcoders: the guidance, and tags
 Two of the four asked for. The other two are set out below rather than
 half-built.

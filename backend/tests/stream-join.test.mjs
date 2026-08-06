@@ -1493,5 +1493,19 @@ check('the tray degrades to nothing outside its provider', () => {
   assert.ok(nt.includes('useContext(Ctx) || { items: [], notify: () => {}, clear: () => {} }'));
 });
 
+console.log('\nTHE TRANSCODER PROBE (v0.55.0):');
+
+const probe2 = readFileSync(new URL('../../tools/nnm-api-probe.mjs', import.meta.url), 'utf8');
+
+check('the probe can dump a whole pipeline', () => {
+  // Rebuilding the editor from what the editor currently assumes is how it
+  // came to show fields nobody has and hide fields people set. The playlist
+  // work went right because it started from a real file.
+  assert.ok(probe2.includes('report.transcoders'));
+  assert.ok(probe2.includes('one full pipeline, field names intact'));
+  // Structure and names survive; only leaf values are reduced.
+  assert.ok(probe2.includes('const reduce = (v, key =') && probe2.includes('shapeOf(v, key)'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');
 process.exit(fail ? 1 : 0);
