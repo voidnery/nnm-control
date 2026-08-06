@@ -867,5 +867,35 @@ check('the runner has a route for what the step writes', () => {
   assert.ok(runner.includes("republish: { get: 'republishList', put: 'republishUpdate'"));
 });
 
+console.log('\nTRANSCODERS: GUIDANCE AND TAGS (v0.54.0):');
+
+const tp = readFileSync(new URL('../../frontend/src/pages/TranscodersPage.jsx', import.meta.url), 'utf8');
+
+check('the page says where a new transcoder comes from', () => {
+  // WMSPanel's API has no method for creating one, so without this the page
+  // reads as broken: every other object on this panel can be created from it.
+  assert.ok(tp.includes("t('tcp.howTitle')") && tp.includes("t('tcp.howBody')"));
+});
+
+check('tags appear once a server is chosen', () => {
+  // They belong to a server. On the all-servers view they would merge the
+  // vocabularies of fifteen machines into one list where half of it matches
+  // nothing on screen.
+  assert.ok(tp.includes("useStreamTags(serverFilter || null, 'transcoder')"));
+  assert.ok(tp.includes("t('tcp.tagsNeedServer')"));
+  assert.ok(tp.includes('{serverFilter\n        ? <TagFilterBar st={tg} />'));
+});
+
+check('the tag bar actually filters the list', () => {
+  // Otherwise it is a row of buttons that highlight and change nothing, which
+  // is worse than having no bar.
+  assert.ok(tp.includes("tg.matches('transcoder', t.id)"));
+});
+
+check('WMSPanel tags and ours are kept apart', () => {
+  // Merging them would offer to remove a tag this panel cannot remove.
+  assert.ok(tp.includes('className="badge"') && tp.includes('<TagChips st={tg}'));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);

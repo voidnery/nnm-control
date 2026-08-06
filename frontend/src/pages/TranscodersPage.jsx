@@ -5,6 +5,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import Select from '../components/Select.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
+import { useStreamTags, TagFilterBar, TagChips } from '../components/StreamTags.jsx';
 import { useToast } from '../toast.jsx';
 import Modal from '../components/Modal.jsx';
 import TranscoderGraph from '../components/TranscoderGraph.jsx';
@@ -25,6 +26,10 @@ export default function TranscodersPage() {
   const [servers, setServers] = useState([]);
   const [filter, setFilter] = useState('');
   const [serverFilter, setServerFilter] = useState('');
+  // Tags belong to a server, so they appear once one is chosen. On the
+  // all-servers view they would merge the vocabularies of fifteen machines
+  // into one list where half of it matches nothing on screen.
+  const tg = useStreamTags(serverFilter || null, 'transcoder');
   const [detail, setDetail] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [pipeModal, setPipeModal] = useState(null);
@@ -100,13 +105,25 @@ export default function TranscodersPage() {
   const q = filter.trim().toLowerCase();
   const list = transcoders.filter(t =>
     (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.tags || []).join(' ')).toLowerCase().includes(q)) &&
-    (!serverFilter || t.server_id === serverFilter));
+    (!serverFilter || t.server_id === serverFilter) &&
+    // The tag bar has to act on the list, or it is a row of buttons that
+    // highlight and change nothing — which is worse than having no bar.
+    (!serverFilter || tg.matches('transcoder', t.id)));
   const usedServerIds = [...new Set(transcoders.map(t => t.server_id).filter(Boolean))];
 
   return (
     <div>
       <h1>{t('page.transcoders.title')}</h1>
       <div className="sub">{t('page.transcoders.sub')}</div>
+      {/* Said once, at the top, because it is the thing an operator cannot
+          discover from the page: WMSPanel's API has no method for creating a
+          transcoder, so a new one starts as a template made there and copied
+          here. Without this the page reads as broken — every other object on
+          this panel can be created from it. */}
+      <div className="panel" style={{ marginBottom: 12, borderColor: 'var(--accent-dim)' }}>
+        <b>{t('tcp.howTitle')}</b>
+        <div className="hint" style={{ marginTop: 4 }}>{t('tcp.howBody')}</div>
+      </div>
       {error && <div className="error-box">{error}</div>}
       <div className="row" style={{ marginBottom: 12 }}>
         <SearchInput style={{ maxWidth: 260 }} placeholder={t('tcp.filter')} value={filter} onChange={setFilter} />
@@ -117,6 +134,9 @@ export default function TranscodersPage() {
         <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
         <span className="hint">{list.length} of {transcoders.length}</span>
       </div>
+      {serverFilter
+        ? <TagFilterBar st={tg} />
+        : <div className="hint" style={{ marginBottom: 8 }}>{t('tcp.tagsNeedServer')}</div>}
       <div className="row" style={{ marginBottom: 10, alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <button disabled={fleetBusy} onClick={() => refreshDetails(selected)}>
           {tt('fleet.refreshDetails')}
@@ -154,7 +174,18 @@ export default function TranscodersPage() {
                   );
                 })()}</td>
                 <td className="mono">{serverName(t.server_id)}</td>
-                <td>{(t.tags || []).map((x, i) => <span key={`${i}:${x}`} className="badge" style={{ marginRight: 3 }}>{x}</span>)}</td>
+                {/* Two kinds of tag, kept apart on purpose. The badges come
+                    from WMSPanel and are read-only here; the chips below are
+                    this panel's own and are what the filter bar acts on.
+                    Merging them would offer to remove a tag we cannot remove. */}
+                <td>
+                  {(t.tags || []).map((x, i) => <span key={`${i}:${x}`} className="badge" style={{ marginRight: 3 }}>{x}</span>)}
+                  {serverFilter && (
+                    <div style={{ marginTop: 4 }}>
+                      <TagChips st={tg} kind="transcoder" objId={t.id} />
+                    </div>
+                  )}
+                </td>
                 <td><span className={'lamp ' + (t.paused ? 'off' : 'on')} />{t.paused ? 'paused' : 'running'}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button onClick={() => openDetail(t)}>{tt('action.details')}</button>{' '}

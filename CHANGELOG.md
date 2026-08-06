@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.54.0 — transcoders: the guidance, and tags
+Two of the four asked for. The other two are set out below rather than
+half-built.
+
+- **The page says where a new transcoder comes from.** WMSPanel's API has no
+  method for creating one, so this panel cannot — and without saying so the
+  page reads as broken, because every other object here can be created from it.
+  Build the pipeline in WMSPanel once, and from here it is viewed, copied and
+  changed, which is what the work consists of
+- **Tags appear once a server is chosen.** They belong to a server; on the
+  all-servers view they would merge the vocabularies of fifteen machines into
+  one list where half of it matches nothing on screen. The bar filters the list
+  — a row of buttons that highlight and change nothing is worse than no bar
+- WMSPanel's own tags and this panel's are kept apart in the row. Merging them
+  would offer to remove a tag we cannot remove
+- 4 new checks
+
+**Not done, and why.** The structured pipeline view (decoders, filters,
+encoders per line) is partly built already in `PipelineEditor` — reworking it
+should start from a real transcoder configuration rather than from what the
+component currently assumes, the way the playlist work started from a real
+`server_playlist.json`. And the load dashboard has no data source: there is no
+transcoder statistics method in the WMSPanel client at all, so there is nothing
+yet to put on it.
+
+
 ### v0.53.0 — a step that changes where a push goes
 - There was a step for what an RTMP Push **takes** and none for where it
   **sends**. The destination is the half that changes between events, and it
