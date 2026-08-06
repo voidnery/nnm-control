@@ -822,5 +822,50 @@ check('the insert button pulses only while a choice is waiting', () => {
   assert.match(css3, /button\.pending[^}]*border-color/, 'the border still reads as active without motion');
 });
 
+console.log('\nCOPYING A PUSH DESTINATION (v0.53.0):');
+
+const fp = readFileSync(new URL('../../frontend/src/pages/FunctionsPage.jsx', import.meta.url), 'utf8');
+const runner = readFileSync(new URL('../src/services/functionRunner.js', import.meta.url), 'utf8');
+
+check('a step can change where a push goes', () => {
+  // There was only a step for what a push TAKES. Where it goes is the other
+  // half and the one that changes between events.
+  assert.ok(fp.includes("key: 'fn.p.switchRepublishDest'"));
+  for (const f of ['dest_addr', 'dest_port', 'dest_app', 'dest_strm',
+                   'dest_app_params', 'dest_strm_params']) {
+    assert.ok(fp.includes(f), f);
+  }
+});
+
+check('the destination can be copied from a rule that already works', () => {
+  // Typed by hand it is six fields including a stream key sixty characters
+  // long — and a step pushing to a mistyped destination reports success,
+  // because the rule was changed exactly as asked.
+  assert.ok(fp.includes("t('fn.copyDestFrom')"));
+  assert.ok(fp.includes('const rule = (destRules || []).find(r => r.id === id)'));
+});
+
+check('copying takes the destination and nothing else', () => {
+  // Bringing the source along would make it a different step than the one
+  // chosen.
+  const at = fp.indexOf('applyPatchText(JSON.stringify({');
+  const call = fp.slice(at, fp.indexOf('}));', at));
+  assert.ok(call.includes('dest_addr'));
+  assert.ok(!call.includes('src_app') && !call.includes('src_strm'));
+});
+
+check('the rules are fetched only by the step that uses them', () => {
+  // Every step fetching every family would be one request per step on a
+  // function with fifteen.
+  assert.ok(fp.includes("const wantsDest = step.type === 'patch' && step.objectKind === 'republish'"));
+  assert.ok(fp.includes('if (!wantsDest || !step.serverId) { setDestRules(null); return; }'));
+});
+
+check('the runner has a route for what the step writes', () => {
+  // A step whose fields no backend applies is a step that reports success and
+  // changes nothing — the failure this project keeps finding in other shapes.
+  assert.ok(runner.includes("republish: { get: 'republishList', put: 'republishUpdate'"));
+});
+
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall function-variant checks passed');
 process.exit(fail ? 1 : 0);

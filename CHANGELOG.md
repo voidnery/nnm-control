@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.53.0 — a step that changes where a push goes
+- There was a step for what an RTMP Push **takes** and none for where it
+  **sends**. The destination is the half that changes between events, and it
+  was the half a function could not touch
+- **The destination can be copied from a rule that already works.** Typed by
+  hand it is six fields including a stream key sixty characters long, and a
+  step pushing to a mistyped destination reports success — the rule was
+  changed exactly as asked, and the mistake only shows as an empty player
+- Copying takes the destination and nothing else. Bringing the source along
+  would make it a different step than the one chosen
+- The rules are fetched only by the step that can use them: every step
+  fetching every family would be one request per step on a function with
+  fifteen
+- A check asserts the runner has a route for the fields the step writes. A step
+  whose fields nothing applies reports success and changes nothing, which is
+  the failure this project keeps finding in other shapes
+- 5 new checks
+
+
 ### v0.52.1 — the helper beside the form, not under it
 - Below the fields it was a second screenful: compute at the bottom, scroll up
   to see what landed. Beside them both are visible, which makes filling the

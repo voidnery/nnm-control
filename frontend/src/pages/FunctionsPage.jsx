@@ -47,6 +47,14 @@ const COMPOSITE_RESTART = new Set(['udp', 'hotswap', 'incoming']);
 const PRESETS = [
   // Canonical WMSPanel field names (pinned from live account dump 2026-07-21)
   { key: 'fn.p.switchRepublish', label: 'Switch republish source', step: { type: 'patch', objectKind: 'republish', patch: { src_app: 'zagl_app', src_strm: 'zagl_stream' }, label: 'Switch republish source' } },
+  // Where a push GOES, as opposed to what it takes. The fields are the ones
+  // WMSPanel returns for a rule: address, port, application, stream, and the
+  // two parameter strings that ride along with them.
+  { key: 'fn.p.switchRepublishDest', label: 'Switch RTMP Push destination',
+    step: { type: 'patch', objectKind: 'republish',
+            patch: { dest_addr: '', dest_port: 1935, dest_app: '', dest_strm: '',
+                     dest_app_params: '', dest_strm_params: '' },
+            label: 'Switch RTMP Push destination' } },
   { key: 'fn.p.switchUdp', label: 'Switch SRT/UDP output source', step: { type: 'patch', objectKind: 'udp', patch: { source_streams: [{ application: 'zagl_app', stream: 'zagl_stream' }] }, label: 'Switch SRT/UDP source' } },
   { key: 'fn.p.patchOutgoing', label: 'Patch outgoing stream',   step: { type: 'patch', objectKind: 'outgoing', patch: {}, label: 'Patch outgoing stream' } },
   // iter11 2b — "SRT in Nimble" is an `outgoing` object, and its inputs are
@@ -369,6 +377,20 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate, index, tot
   const setMany = (patch) => onChange({ ...step, ...patch });
   const [patchText, setPatchText] = useState(JSON.stringify(step.patch || {}, null, 0));
   const [patchErr, setPatchErr] = useState('');
+  // Rules on this step's server, to copy a destination out of. Loaded only for
+  // the step that can use them: every step fetching every family would be a
+  // request per step on a function with fifteen.
+  const [destRules, setDestRules] = useState(null);
+  const wantsDest = step.type === 'patch' && step.objectKind === 'republish' && 'dest_addr' in (step.patch || {});
+  useEffect(() => {
+    if (!wantsDest || !step.serverId) { setDestRules(null); return; }
+    let dead = false;
+    api(`/wmspanel/server/${step.serverId}/republish`)
+      .then(d => { if (!dead) setDestRules(d?.rules || []); })
+      .catch(() => { if (!dead) setDestRules([]); });
+    return () => { dead = true; };
+  }, [wantsDest, step.serverId]);
+
   const [live, setLive] = useState(null);        // { streams, source }
   const [liveErr, setLiveErr] = useState('');
   const [pick, setPick] = useState('');          // "app/stream"
@@ -549,6 +571,36 @@ function StepEditor({ step, servers, onChange, onRemove, onDuplicate, index, tot
                                         ...(sources || []).map(srcOption)]} />
                     </div>
                   ))}
+                </div>
+              )}
+              {/* Copy the destination out of a rule that already sends where
+                  this step should send.
+                  Typed by hand it is six fields including a stream key sixty
+                  characters long — and a step that pushes to a mistyped
+                  destination reports success, because the rule was changed
+                  exactly as asked. */}
+              {step.objectKind === 'republish' && 'dest_addr' in (step.patch || {}) && (
+                <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span className="hint">{t('fn.copyDestFrom')}</span>
+                  <Select value="" onChange={id => {
+                    const rule = (destRules || []).find(r => r.id === id);
+                    if (!rule) return;
+                    // Only the destination. The source stays whatever the step
+                    // was already going to act on — copying that too would
+                    // make this a different step than the one chosen.
+                    applyPatchText(JSON.stringify({
+                      dest_addr: rule.dest_addr || '', dest_port: rule.dest_port || 1935,
+                      dest_app: rule.dest_app || '', dest_strm: rule.dest_strm || '',
+                      dest_app_params: rule.dest_app_params || '',
+                      dest_strm_params: rule.dest_strm_params || '',
+                    }));
+                  }} style={{ minWidth: 260 }}
+                          options={[{ value: '', label: t('fn.copyDestPick') },
+                                    ...(destRules || []).map(r => ({
+                                      value: r.id,
+                                      label: `${r.description || `${r.src_app}/${r.src_strm}`} → ${r.dest_addr}/${r.dest_app}`,
+                                    }))]} />
+                  {destRules === null && <span className="hint">{t('fn.copyDestNeedServer')}</span>}
                 </div>
               )}
               <label>Patch (JSON: fields to change; snapshot/rollback is automatic)</label>
