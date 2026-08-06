@@ -1,5 +1,89 @@
 # Changelog
 
+### v0.58.1 — two defects in the last few releases
+Both mine, both from v0.51–0.52, and one of them would have cost an outage.
+
+- **Editing one SRT parameter deleted the others.** The merge was over `rest` —
+  the parameters this panel does *not* model — so it kept `nakreport` and
+  dropped `latency`, `maxbw`, `rcvbuf` and `streamid`. Changing latency on a
+  live stream silently removed its bandwidth limit and receive buffer, and the
+  form still looked right afterwards because it re-read what it had just
+  written
+- **And a check was holding it in place.** Two assertions named the merge
+  expression rather than what it had to preserve, so `{ ...rest, ...next }`
+  satisfied them exactly while being wrong. Rewritten as outcomes: edit one
+  field, the rest survive; clear one, only it goes
+- **The hidden-tag count counted the wrong set.** It reported the size of the
+  hidden set, which is kept per browser tab and outlives the tags in it — so a
+  tag deleted, or simply absent from this tab's vocabulary, still counted, and
+  the bar said "2 hidden" with nothing hidden. Counted against the catalogue
+  now
+- Checked and found sound: the drag reordering at all four boundaries, the
+  helper's apply path, and the icon sweep against the classes it dropped
+- 2 new checks, 2 corrected
+
+
+### v0.58.0 — one fault in the audit's tokeniser, fixed
+- The `//` comment stripper carried a `[^:]` guard, there to protect `://` in a
+  URL. It also refused to strip **any** comment reaching `//` just after a
+  colon, and the leftover comment text then ran on to the next apostrophe and
+  swallowed whatever lay between — which is how four real functions came to be
+  reported as undefined. URLs are protected directly now, by hiding their
+  separator across the strip and restoring it after
+- 2 new checks, one of them running the stripper on a URL, a plain comment and
+  a comment containing an apostrophe
+
+**The load collection is still out**, and honestly so. The tokeniser has a
+second fault: with the block present, the transform swallows the middle of the
+file — `cpuSeconds` is gone from the output — so something before it consumes a
+long span. Narrowed to that and no further; the template-literal stripper is
+the next place to look, since it runs after the regex stripper and both handle
+backslashes. The block is reverted rather than the gate suppressed, as before.
+
+
+### v0.57.0 — the pipeline editor regrouped
+- **A second set of hidden fields, found the same way.** An audio filter's
+  `name` and `params` were rendered for video only — and the audio filter on
+  this fleet is `{ type: custom, name: aformat, params: sample_fmts=fltp }`,
+  set in WMSPanel and invisible here. Both lines show them now
+- **The forwarding flags are one folded question.** Seven or eight checkboxes
+  asking the same thing, on a stage with five real fields — they were most of
+  what the form showed. Folded, with a count of how many are on, because
+  scanning a pipeline what matters is that something is being forwarded, not
+  which
+- 2 new checks, both reading the fixture
+
+Two invisible fields in two releases, both found by measuring the editor
+against a real transcoder rather than reading it. That is the argument for the
+fixture: the next one will be found by a failing check instead of by someone
+noticing that a setting does not stick.
+
+
+### v0.56.0 — the pipeline editor, checked against a real pipeline
+A working transcoder is now a fixture, and the editor is measured against it
+rather than against what it assumed.
+
+- **A field people set was invisible.** A video output on this fleet carries
+  `forward_sei_timecodes`; the editor's list did not have it, so it could be
+  set in WMSPanel and never seen here. Added, and a check now derives the list
+  from the fixture — if an output grows a flag, the check fails rather than the
+  field quietly disappearing
+- The real shape, written down: `{ status, transcoder }` at the top — a caller
+  reading the top level finds two fields and no pipeline — then
+  `video_pipelines` and `audio_pipelines` **side by side**, each with its own
+  `inputs`, `filters` and `outputs`. Two independent lines, not one pipeline
+  with a video half
+- `params` is an **array of name/value on an output and a plain string on a
+  filter**. Same name, two shapes; the editor already tells them apart, and a
+  check now holds it to that, because an editor treating them alike writes the
+  wrong one and the transcoder accepts it empty
+- 4 new checks, all reading the fixture
+
+The list endpoint carries no pipeline at all — id, name, description, paused,
+server, tags, `out_of_process` — which is why the first probe run learned
+nothing. The pipeline comes one transcoder at a time.
+
+
 ### v0.55.0 — the transcoder probe
 
 - `nnm-api-probe.mjs` dumps **one whole transcoder pipeline** — nesting and

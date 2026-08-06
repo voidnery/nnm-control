@@ -51,7 +51,12 @@ export default function SrtParams({ value, onChange, helper = true }) {
   const rest = Object.fromEntries(Object.entries(obj).filter(([k]) => !KNOWN.has(k)));
 
   const write = (next) => {
-    const merged = { ...rest, ...next };
+    // Everything that was there, then the change. Merging `rest` alone kept
+    // only the parameters this panel does not model and dropped the four it
+    // does — so editing latency silently removed maxbw and rcvbuf from a live
+    // stream, and the form still looked right because it re-read what it had
+    // just written.
+    const merged = { ...obj, ...next };
     for (const [k, v] of Object.entries(merged)) {
       if (v === '' || v == null) delete merged[k];
     }

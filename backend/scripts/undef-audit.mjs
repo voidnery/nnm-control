@@ -45,7 +45,16 @@ const GLOBALS = new Set([
 function strip(src) {
   let out = src
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    // A `//` comment, with URLs protected by hiding their separator first
+    // rather than by refusing to strip a comment that happens to follow a
+    // colon. The old guard was `[^:]`, which meant a line such as
+    // `const clk = 100;  // USER_HZ; the kernel's own unit` stripped fine but
+    // anything reaching `//` just after a colon did not — and the leftover
+    // comment text then swallowed the rest of the file at the next apostrophe,
+    // reporting four real functions as undefined.
+    .replace(/:\/\//g, ':\u0000\u0000')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/:\u0000\u0000/g, '://');
   // A slash starts a regex only where a value may begin — after an operator,
   // a comma, a bracket or the start of a statement.
   out = out.replace(/([=(,:;[!&|?{}+\-*%^~<>]|^|\breturn\b|\btypeof\b)(\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[gimsuyd]*/g,

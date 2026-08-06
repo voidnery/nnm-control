@@ -154,8 +154,12 @@ export function TagFilterBar({ st }) {
         </span>
         <button className="linklike" onClick={() => st.setSelected([])}>{t('tag.clear')}</button>
       </>}
-      {hidden.size > 0 && (
-        <span className="hint">{t('tag.hiddenCount', { n: hidden.size })}</span>
+      {/* Counted against the catalogue, not against the set. The set is kept
+          per browser tab and outlives the tags in it: a tag deleted, or simply
+          absent from this tab's vocabulary, stayed in the set and the bar
+          claimed things were hidden when nothing was. */}
+      {st.catalog.length > visible.length && (
+        <span className="hint">{t('tag.hiddenCount', { n: st.catalog.length - visible.length })}</span>
       )}
       <button className="linklike" onClick={() => setManage(true)}>{t('tag.manage')}</button>
 

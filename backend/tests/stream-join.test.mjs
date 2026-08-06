@@ -1403,7 +1403,10 @@ check('a parameter this panel has never heard of survives an edit', () => {
   const obj = { latency: '3000', nakreport: '1' };
   const rest = Object.fromEntries(Object.entries(obj).filter(([k]) => !KNOWN.has(k)));
   assert.deepEqual(rest, { nakreport: '1' });
-  assert.ok(sp.includes('const merged = { ...rest, ...next }'));
+  // Asserted as an outcome, not as an expression. Naming the merge is what let
+  // this hold a defect in place: `{ ...rest, ...next }` satisfied it while
+  // dropping every parameter the panel does model.
+  assert.ok(sp.includes('const merged = { ...obj, ...next }'));
 });
 
 check('unreadable parameters are not silently replaced', () => {
@@ -1460,7 +1463,7 @@ check('applying leaves the parameters it has no opinion about', () => {
   const call = sh.slice(at, at + 200);
   for (const k of ['latency', 'maxbw', 'rcvbuf']) assert.ok(call.includes(k), k);
   assert.ok(!call.includes('streamid'));
-  assert.ok(sp2.includes('const merged = { ...rest, ...next }'));
+  assert.ok(sp2.includes('const merged = { ...obj, ...next }'));
 });
 
 check('hooks in JoinNote run unconditionally', () => {
@@ -1505,6 +1508,135 @@ check('the probe can dump a whole pipeline', () => {
   assert.ok(probe2.includes('one full pipeline, field names intact'));
   // Structure and names survive; only leaf values are reduced.
   assert.ok(probe2.includes('const reduce = (v, key =') && probe2.includes('shapeOf(v, key)'));
+});
+
+console.log('\nTHE PIPELINE EDITOR, AGAINST A REAL PIPELINE (v0.56.0):');
+
+const pipe = JSON.parse(readFileSync(new URL('./fixtures/transcoder-pipeline.json', import.meta.url), 'utf8'));
+const ed = readFileSync(new URL('../../frontend/src/components/PipelineEditor.jsx', import.meta.url), 'utf8');
+const tc = pipe.sample.transcoder;
+
+check('the shape is video_pipelines and audio_pipelines, side by side', () => {
+  // Two independent lines, each with its own inputs, filters and outputs —
+  // not one pipeline with a video half and an audio half.
+  assert.ok(Array.isArray(tc.video_pipelines) && Array.isArray(tc.audio_pipelines));
+  for (const stage of ['inputs', 'outputs', 'filters']) {
+    assert.ok(stage in tc.video_pipelines[0], stage);
+  }
+});
+
+check('every forward flag the real output carries is offered', () => {
+  // The video output here has forward_sei_timecodes and the editor's list did
+  // not — set in WMSPanel and invisible in the panel, which is how an editor
+  // comes to hide the things people use.
+  const real = Object.keys(tc.video_pipelines[0].outputs[0]).filter(k => k.startsWith('forward_'));
+  assert.ok(real.length > 0);
+  for (const f of real) assert.ok(ed.includes(f), `${f} missing from the editor`);
+  const realAudio = Object.keys(tc.audio_pipelines[0].outputs[0]).filter(k => k.startsWith('forward_'));
+  for (const f of realAudio) assert.ok(ed.includes(f), `${f} missing from the editor`);
+});
+
+check('params are an array on an output and a string on a filter', () => {
+  // Same name, two shapes. An editor treating them alike writes the wrong one
+  // and the transcoder rejects it — or worse, accepts it empty.
+  assert.ok(Array.isArray(tc.video_pipelines[0].outputs[0].params));
+  assert.equal(typeof tc.audio_pipelines[0].filters[0].params, 'string');
+  assert.ok(ed.includes('Array.isArray(d.params)'), 'and the editor tells them apart');
+});
+
+check('the detail response is wrapped', () => {
+  // `{ status, transcoder }`, not the transcoder itself — a caller reading the
+  // top level finds two fields and no pipeline.
+  assert.deepEqual(pipe.topLevelFields, ['status', 'transcoder']);
+});
+
+console.log('\nTHE EDITOR REGROUPED (v0.57.0):');
+
+const ed2 = readFileSync(new URL('../../frontend/src/components/PipelineEditor.jsx', import.meta.url), 'utf8');
+const pipe2 = JSON.parse(readFileSync(new URL('./fixtures/transcoder-pipeline.json', import.meta.url), 'utf8'));
+
+check('an audio filter shows its name and params', () => {
+  // They were rendered for video only. The audio filter on this fleet is
+  // `{ type: custom, name: aformat, params: sample_fmts=fltp }` — set in
+  // WMSPanel and invisible here, which is the second field of its kind this
+  // fixture has found.
+  const f = pipe2.sample.transcoder.audio_pipelines[0].filters[0];
+  assert.ok(f.name && f.params, 'the fixture has both');
+  const block = ed2.slice(ed2.indexOf("{io === 'filter' && <>"), ed2.indexOf("outputs_number"));
+  assert.ok(!/isVideo && <div><label>name<\/label>/.test(block));
+  assert.ok(!/isVideo && <div><label>params<\/label>/.test(block));
+});
+
+check('the forwarding flags are one folded question', () => {
+  // Seven or eight checkboxes that ask one thing, on a stage with five real
+  // fields — they were most of what the form showed.
+  assert.ok(ed2.includes('const [fwdOpen, setFwdOpen]'));
+  assert.ok(ed2.includes("t('tc.forwarding')"));
+  // Counted while folded: scanning a pipeline, what matters is that something
+  // is forwarded, not which.
+  assert.ok(ed2.includes('const on = keys.filter(k => d[k]).length'));
+});
+
+console.log('\nTHE AUDIT TOKENISER (v0.58.0):');
+
+const aud = readFileSync(new URL('../scripts/undef-audit.mjs', import.meta.url), 'utf8');
+
+check('a comment after a colon is stripped', () => {
+  // The guard was `[^:]`, there to protect `://` in a URL. It also refused to
+  // strip any comment reaching `//` just after a colon — and the leftover text
+  // then ran to the next apostrophe and swallowed whatever lay between,
+  // reporting real functions as undefined. URLs are protected directly now.
+  assert.ok(aud.includes("replace(/:\\/\\//g"));
+  assert.ok(!aud.includes("(^|[^:])"));
+});
+
+check('a URL still survives comment stripping', () => {
+  // The point of the old guard, kept.
+  const strip = (src) => src
+    .replace(/:\/\//g, ':\u0000\u0000')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/:\u0000\u0000/g, '://');
+  assert.equal(strip("const u = 'https://example.com/x';"), "const u = 'https://example.com/x';");
+  assert.equal(strip('const a = 1; // note').trim(), 'const a = 1;');
+  assert.equal(strip("const b = 2; // it's fine").trim(), 'const b = 2;');
+});
+
+console.log('\nTWO DEFECTS IN RECENT WORK (v0.58.1):');
+
+const sp4 = readFileSync(new URL('../../frontend/src/components/SrtParams.jsx', import.meta.url), 'utf8');
+const tags2 = readFileSync(new URL('../../frontend/src/components/StreamTags.jsx', import.meta.url), 'utf8');
+
+check('editing one SRT parameter keeps the others', () => {
+  // It merged over `rest` — the parameters this panel does NOT model — and so
+  // dropped the four it does. Editing latency silently removed maxbw and
+  // rcvbuf from a live stream, and the form still looked right because it
+  // re-read what it had just written.
+  const merge = (obj, next) => {
+    const m = { ...obj, ...next };
+    for (const [k, v] of Object.entries(m)) if (v === '' || v == null) delete m[k];
+    return m;
+  };
+  const obj = { latency: '3000', maxbw: '6250000', rcvbuf: '15728640', nakreport: '1' };
+  assert.deepEqual(merge(obj, { latency: '4000' }),
+    { latency: '4000', maxbw: '6250000', rcvbuf: '15728640', nakreport: '1' });
+  // And clearing one still removes it.
+  assert.deepEqual(merge(obj, { maxbw: '' }),
+    { latency: '3000', rcvbuf: '15728640', nakreport: '1' });
+  assert.ok(sp4.includes('const merged = { ...obj, ...next }'));
+  assert.ok(!sp4.includes('const merged = { ...rest, ...next }'));
+});
+
+check('the hidden-tag count matches what is actually hidden', () => {
+  // The set is kept per browser tab and outlives the tags in it. A tag deleted,
+  // or simply absent from this tab's vocabulary, stayed in the set and the bar
+  // claimed things were hidden when nothing was.
+  const catalog = ['live', 'backup'];
+  const hidden = new Set(['old_event', 'live']);
+  const visible = catalog.filter(x => !hidden.has(x));
+  assert.equal(catalog.length - visible.length, 1, 'one of the two is really hidden');
+  assert.notEqual(hidden.size, 1, 'and the set says two');
+  assert.ok(tags2.includes('st.catalog.length - visible.length'));
+  assert.ok(!tags2.includes('n: hidden.size'));
 });
 
 console.log(fail ? `\n${fail} failed, ${pass} passed` : '\nall stream-join checks passed');

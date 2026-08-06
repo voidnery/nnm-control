@@ -13,7 +13,11 @@ import IconButton from './IconButton.jsx';
 
 const FWD_VIDEO_IN = ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_sei_timecodes', 'forward_dvb_teletext'];
 const FWD_AUDIO_IN = ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_metadata'];
-const FWD_VIDEO_OUT = ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_cea708', 'forward_dvb_teletext'];
+// Checked against a real pipeline rather than remembered: a video output on
+// this fleet carries forward_sei_timecodes and this list did not, so the field
+// was set in WMSPanel and invisible here — which is how an editor comes to
+// hide the things people actually use.
+const FWD_VIDEO_OUT = ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_cea708', 'forward_sei_timecodes', 'forward_dvb_teletext'];
 const FWD_AUDIO_OUT = ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_metadata'];
 
 const VIDEO_CODECS = ['h264', 'hevc', 'hevc_nvenc', 'h264_nvenc', 'av1', 'passthrough'];
@@ -59,6 +63,7 @@ function IoCard({ tid, kind, pid, io, obj, onSaved, onDeleted }) {
   const { push } = useToast();
   const confirm = useConfirm();
   const [d, setD] = useState(obj);
+  const [fwdOpen, setFwdOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const set = (k, v) => setD(x => ({ ...x, [k]: v }));
   const isVideo = kind === 'video';
@@ -114,8 +119,11 @@ function IoCard({ tid, kind, pid, io, obj, onSaved, onDeleted }) {
 
         {io === 'filter' && <>
           <div><label>type</label><input value={d.type || ''} onChange={e => set('type', e.target.value)} /></div>
-          {isVideo && <div><label>name</label><input value={d.name || ''} onChange={e => set('name', e.target.value)} /></div>}
-          {isVideo && <div><label>params</label><input className="mono" value={d.params || ''} onChange={e => set('params', e.target.value)} /></div>}
+          {/* Both lines, not video alone. The audio filter on this fleet is
+              `{ type: custom, name: aformat, params: sample_fmts=fltp }` — set
+              in WMSPanel and, until now, invisible here. */}
+          <div><label>name</label><input value={d.name || ''} onChange={e => set('name', e.target.value)} /></div>
+          <div><label>params</label><input className="mono" value={d.params || ''} onChange={e => set('params', e.target.value)} /></div>
           {!isVideo && <div><label>outputs_number</label><input type="number" value={d.outputs_number ?? ''} onChange={e => set('outputs_number', e.target.value === '' ? null : Number(e.target.value))} /></div>}
           {isVideo && d.type === 'picture' && <>
             <div><label>filename</label><input value={d.filename || ''} onChange={e => set('filename', e.target.value)} /></div>
@@ -130,11 +138,29 @@ function IoCard({ tid, kind, pid, io, obj, onSaved, onDeleted }) {
         <div style={{ marginTop: 8 }}><ParamsEditor params={d.params} onChange={v => set('params', v)} /></div>
       )}
 
-      {io !== 'filter' && (
-        <div style={{ marginTop: 8 }}>
-          <Toggles obj={d} keys={io === 'input' ? (isVideo ? FWD_VIDEO_IN : FWD_AUDIO_IN) : (isVideo ? FWD_VIDEO_OUT : FWD_AUDIO_OUT)} onChange={set} />
-        </div>
-      )}
+      {/* What to pass through untouched — seven or eight checkboxes that are
+          one question, and on a stage with five real fields they were most of
+          what the form showed.
+          Folded, with the count of what is on: an operator scanning a pipeline
+          needs to know that something is being forwarded, not which. */}
+      {io !== 'filter' && (() => {
+        const keys = io === 'input'
+          ? (isVideo ? FWD_VIDEO_IN : FWD_AUDIO_IN)
+          : (isVideo ? FWD_VIDEO_OUT : FWD_AUDIO_OUT);
+        const on = keys.filter(k => d[k]).length;
+        return (
+          <div style={{ marginTop: 8 }}>
+            <button onClick={() => setFwdOpen(v => !v)}>
+              {t('tc.forwarding')} {on > 0 ? `· ${on}` : ''} {fwdOpen ? '▾' : '▸'}
+            </button>
+            {fwdOpen && (
+              <div style={{ marginTop: 6 }}>
+                <Toggles obj={d} keys={keys} onChange={set} />
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

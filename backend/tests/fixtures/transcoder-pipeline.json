@@ -1,0 +1,114 @@
+{
+ "note": "one full pipeline, field names intact, values reduced",
+ "count": 80,
+ "listFields": [
+  "description",
+  "id",
+  "name",
+  "out_of_process",
+  "paused",
+  "server_id",
+  "tags"
+ ],
+ "pickedName": "LivePause - Kruglosut Kinopoisk",
+ "topLevelFields": [
+  "status",
+  "transcoder"
+ ],
+ "sample": {
+  "status": "string \"Ok\"",
+  "transcoder": {
+   "id": "string \"684819cbdc5205e4c1ceac6a\"",
+   "name": "string \"LivePause - Kruglosut Kinopoisk\"",
+   "description": "string \"FileDecoder - Pause for 24/7 KP\"",
+   "paused": "boolean false",
+   "server_id": "string \"683d9d7ea41cacbce6db5196\"",
+   "out_of_process": "boolean true",
+   "tags": [
+    "string \"FileDecoder\""
+   ],
+   "video_pipelines": [
+    {
+     "id": "string \"684819cbdc5205e4c1ceac6e\"",
+     "inputs": [
+      {
+       "id": "string \"684819cbdc5205e4c1ceac6f\"",
+       "main": "boolean true",
+       "file_name": "string \"/srv/nimble/vid/pause/pause_24_7_kp.mp4\"",
+       "stream_id": "number 0",
+       "origin_fps": "number 60",
+       "type": "string \"file\""
+      }
+     ],
+     "outputs": [
+      {
+       "id": "string \"684819cbdc5205e4c1ceac70\"",
+       "app": "string \"sel\"",
+       "stream": "string \"pause_kp\"",
+       "codec": "string \"h264\"",
+       "encoder": "string \"libx264\"",
+       "params": [
+        {
+         "name": "string \"preset\"",
+         "value": "string \"veryfast\""
+        },
+        {
+         "name": "string \"profile\"",
+         "value": "string \"high\""
+        }
+       ],
+       "forward_scte35": "boolean false",
+       "forward_dvb_subtitles": "boolean false",
+       "forward_webvtt_subtitles": "boolean false",
+       "forward_klv_metadata": "boolean false",
+       "key_frame_alignment": "string(6) \u00abhidden\u00bb",
+       "forward_cea708": "boolean false",
+       "forward_sei_timecodes": "boolean false",
+       "forward_dvb_teletext": "boolean false",
+       "type": "string \"stream\""
+      }
+     ],
+     "filters": []
+    }
+   ],
+   "audio_pipelines": [
+    {
+     "id": "string \"684819ccdc5205e4c1ceac73\"",
+     "inputs": [
+      {
+       "id": "string \"684819ccdc5205e4c1ceac74\"",
+       "main": "boolean true",
+       "file_name": "string \"/srv/nimble/vid/pause/pause_24_7_kp.mp4\"",
+       "stream_id": "number 0",
+       "type": "string \"file\""
+      }
+     ],
+     "outputs": [
+      {
+       "id": "string \"684819ccdc5205e4c1ceac75\"",
+       "app": "string \"sel\"",
+       "stream": "string \"pause_kp\"",
+       "codec": "string \"AAC\"",
+       "encoder": "string \"FFmpeg\"",
+       "params": [],
+       "forward_scte35": "boolean false",
+       "forward_dvb_subtitles": "boolean false",
+       "forward_webvtt_subtitles": "boolean false",
+       "forward_klv_metadata": "boolean false",
+       "forward_metadata": "boolean false",
+       "type": "string \"stream\""
+      }
+     ],
+     "filters": [
+      {
+       "id": "string \"04e71dcf5a4ab6c6016ec5789ee3776a\"",
+       "type": "string \"custom\"",
+       "name": "string \"aformat\"",
+       "params": "string \"sample_fmts=fltp\""
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

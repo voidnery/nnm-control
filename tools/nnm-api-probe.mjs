@@ -160,10 +160,23 @@ try {
   const d = await api(`/wmspanel/transcoders`);
   const all = (d?.transcoders || d?.settings || (Array.isArray(d) ? d : [])) || [];
   report.transcoders.count = all.length;
+  // The list is a summary — id, name, description, paused, server, tags — and
+  // carries no pipeline at all. The pipeline comes one transcoder at a time,
+  // which is the request that has to be made.
   const mine = all.filter(x => !SERVER || String(x.server_id) === SERVER);
-  const one = mine[0] || all[0];
+  // A running one, in preference: a paused transcoder can have a half-finished
+  // pipeline, and a half-finished one is a poor thing to rebuild an editor
+  // from.
+  const one = mine.find(x => !x.paused) || mine[0] || all.find(x => !x.paused) || all[0];
   if (one) {
-    report.transcoders.topLevelFields = Object.keys(one).sort();
+    report.transcoders.listFields = Object.keys(one).sort();
+    report.transcoders.pickedName = one.name;
+
+    let full = null;
+    try { full = await api(`/wmspanel/transcoders/${one.id}`); }
+    catch (e) { report.transcoders.detailError = String(e.message).slice(0, 200); }
+    if (full) {
+      report.transcoders.topLevelFields = Object.keys(full).sort();
     // The pipeline verbatim: names and structure are the point, so only leaf
     // values are reduced and nothing is dropped.
     const reduce = (v, key = '') => {
@@ -173,7 +186,8 @@ try {
       }
       return shapeOf(v, key);
     };
-    report.transcoders.sample = reduce(one);
+      report.transcoders.sample = reduce(full);
+    }
   }
 } catch (e) {
   report.transcoders.error = String(e.message).slice(0, 200);
