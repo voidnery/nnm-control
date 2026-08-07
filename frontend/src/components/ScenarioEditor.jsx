@@ -12,6 +12,23 @@ import { filterLabel, codecLabel } from '../lib/pipelineLayout.js';
 // that silently does nothing.
 const DOCUMENTED = { input: ['app', 'stream'], output: ['app', 'stream'], filter: ['params', 'name'] };
 
+// Forwarding flags sit on inputs and outputs, and the set differs by kind and
+// direction — checked against a real pipeline rather than remembered, since a
+// video output on this fleet carries forward_sei_timecodes. They are NOT in the
+// documented set: the API may store them, but Softvelum does not guarantee it,
+// so they are editable only behind an explicit opt-in (see hasUndoc below).
+const FWD = {
+  input: {
+    video: ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_sei_timecodes', 'forward_dvb_teletext'],
+    audio: ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_metadata'],
+  },
+  output: {
+    video: ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_cea708', 'forward_sei_timecodes', 'forward_dvb_teletext'],
+    audio: ['forward_scte35', 'forward_dvb_subtitles', 'forward_webvtt_subtitles', 'forward_klv_metadata', 'forward_metadata'],
+  },
+};
+const fwdKeys = (io, kind) => (FWD[io] && FWD[io][kind]) || [];
+
 export default function ScenarioEditor({ transcoderId }) {
   const { t } = useI18n();
   const { push } = useToast();
@@ -21,6 +38,8 @@ export default function ScenarioEditor({ transcoderId }) {
   const [report, setReport] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fwdOpen, setFwdOpen] = useState({});  // key -> bool (forwarding block expanded)
+  const [allowUndoc, setAllowUndoc] = useState(false);
 
   const load = async () => {
     try { setGraph(await api(`/wmspanel/transcoders/${transcoderId}/graph`)); setError(''); }
@@ -58,15 +77,23 @@ export default function ScenarioEditor({ transcoderId }) {
               before: Object.fromEntries(Object.keys(set).map(f => [f, el.elem[f] ?? ''])) }];
   }), [elements, edits]);
 
+  // A change is undocumented when its field is not in the documented set for
+  // that element type — today that means the forwarding flags. The backend
+  // refuses these unless the request opts in, so surface the opt-in here rather
+  // than letting apply fail with a wall of field names.
+  const hasUndoc = useMemo(
+    () => diff.some(d => Object.keys(d.set).some(f => !(DOCUMENTED[d.io] || []).includes(f))),
+    [diff]);
+
   const apply = async () => {
     if (!(await confirm({ message: t('se.confirm', { n: diff.length }) }))) return;
     setBusy(true); setError(''); setReport(null);
     try {
       const r = await api(`/wmspanel/transcoders/${transcoderId}/apply-edits`, {
-        method: 'POST', body: { edits: diff.map(({ before, ...d }) => d) },
+        method: 'POST', body: { edits: diff.map(({ before, ...d }) => d), allowUndocumented: hasUndoc && allowUndoc },
       });
       setReport(r);
-      if (r.ok) { push({ type: 'ok', message: t('se.applied', { n: r.applied }) }); setEdits({}); }
+      if (r.ok) { push({ type: 'ok', message: t('se.applied', { n: r.applied }) }); setEdits({}); setAllowUndoc(false); }
       await load();
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
@@ -92,6 +119,9 @@ export default function ScenarioEditor({ transcoderId }) {
               const fixed = el.io === 'output' ? codecLabel(el.elem)
                 : el.io === 'filter' ? String(el.elem.type || '')
                 : String(el.elem.type || '');
+              const keys = fwdKeys(el.io, el.kind);
+              const cur = f => (edits[el.key]?.[f] ?? el.elem[f]);
+              const on = keys.filter(k => cur(k)).length;
               return (
                 <tr key={el.key}>
                   <td>
@@ -111,6 +141,25 @@ export default function ScenarioEditor({ transcoderId }) {
                       ))}
                       {!fields.length && <span className="hint">—</span>}
                     </div>
+                    {keys.length > 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        <button style={{ fontSize: 11 }}
+                                onClick={() => setFwdOpen(v => ({ ...v, [el.key]: !v[el.key] }))}>
+                          {t('tc.forwarding')}{on > 0 ? ` · ${on}` : ''} {fwdOpen[el.key] ? '▾' : '▸'}
+                        </button>
+                        {fwdOpen[el.key] && (
+                          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 4, marginTop: 4 }}>
+                            {keys.map(k => (
+                              <label key={k} style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0, fontSize: 11 }}>
+                                <input type="checkbox" checked={Boolean(cur(k))}
+                                       onChange={ev => setField(el.key, k, ev.target.checked)} />
+                                {t('tc.' + k) !== 'tc.' + k ? t('tc.' + k) : k.replace(/^forward_/, '')}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="hint" style={{ fontSize: 12 }}>{fixed || '—'}</td>
                 </tr>
@@ -132,6 +181,16 @@ export default function ScenarioEditor({ transcoderId }) {
         </div>
       )}
 
+      {hasUndoc && (
+        <div className="panel" style={{ marginTop: 8, borderColor: 'var(--warn, #5c4a2a)' }}>
+          <div className="hint">{t('se.undocWarn')}</div>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, margin: 0 }}>
+            <input type="checkbox" checked={allowUndoc} onChange={e => setAllowUndoc(e.target.checked)} />
+            {t('se.undocAck')}
+          </label>
+        </div>
+      )}
+
       {report && (
         <div className="panel" style={{ marginTop: 10 }}>
           <b>{report.ok ? t('se.done', { n: report.applied }) : t('se.stopped', { n: report.applied })}</b>
@@ -147,8 +206,8 @@ export default function ScenarioEditor({ transcoderId }) {
       )}
 
       <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
-        <button onClick={() => { setEdits({}); setReport(null); }} disabled={!diff.length}>{t('se.reset')}</button>
-        <button className="primary" disabled={busy || !diff.length} onClick={apply}>
+        <button onClick={() => { setEdits({}); setReport(null); setAllowUndoc(false); }} disabled={!diff.length}>{t('se.reset')}</button>
+        <button className="primary" disabled={busy || !diff.length || (hasUndoc && !allowUndoc)} onClick={apply}>
           {busy ? '…' : t('se.apply', { n: diff.length })}
         </button>
       </div>

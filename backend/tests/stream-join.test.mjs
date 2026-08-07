@@ -1513,7 +1513,7 @@ check('the probe can dump a whole pipeline', () => {
 console.log('\nTHE PIPELINE EDITOR, AGAINST A REAL PIPELINE (v0.56.0):');
 
 const pipe = JSON.parse(readFileSync(new URL('./fixtures/transcoder-pipeline.json', import.meta.url), 'utf8'));
-const ed = readFileSync(new URL('../../frontend/src/components/PipelineEditor.jsx', import.meta.url), 'utf8');
+const ed = readFileSync(new URL('../../frontend/src/components/ScenarioEditor.jsx', import.meta.url), 'utf8');
 const tc = pipe.sample.transcoder;
 
 check('the shape is video_pipelines and audio_pipelines, side by side', () => {
@@ -1541,7 +1541,11 @@ check('params are an array on an output and a string on a filter', () => {
   // and the transcoder rejects it — or worse, accepts it empty.
   assert.ok(Array.isArray(tc.video_pipelines[0].outputs[0].params));
   assert.equal(typeof tc.audio_pipelines[0].filters[0].params, 'string');
-  assert.ok(ed.includes('Array.isArray(d.params)'), 'and the editor tells them apart');
+  // ScenarioEditor documents the filter's params (a string) as editable and
+  // leaves the output's params (an array) fixed in WMSPanel, so the two shapes
+  // are never confused for one another.
+  assert.ok(ed.includes("filter: ['params', 'name']"), 'filter params/name are editable');
+  assert.ok(ed.includes("output: ['app', 'stream']"), 'output params (the array) stays fixed');
 });
 
 check('the detail response is wrapped', () => {
@@ -1552,7 +1556,7 @@ check('the detail response is wrapped', () => {
 
 console.log('\nTHE EDITOR REGROUPED (v0.57.0):');
 
-const ed2 = readFileSync(new URL('../../frontend/src/components/PipelineEditor.jsx', import.meta.url), 'utf8');
+const ed2 = readFileSync(new URL('../../frontend/src/components/ScenarioEditor.jsx', import.meta.url), 'utf8');
 const pipe2 = JSON.parse(readFileSync(new URL('./fixtures/transcoder-pipeline.json', import.meta.url), 'utf8'));
 
 check('an audio filter shows its name and params', () => {
@@ -1562,9 +1566,11 @@ check('an audio filter shows its name and params', () => {
   // fixture has found.
   const f = pipe2.sample.transcoder.audio_pipelines[0].filters[0];
   assert.ok(f.name && f.params, 'the fixture has both');
-  const block = ed2.slice(ed2.indexOf("{io === 'filter' && <>"), ed2.indexOf("outputs_number"));
-  assert.ok(!/isVideo && <div><label>name<\/label>/.test(block));
-  assert.ok(!/isVideo && <div><label>params<\/label>/.test(block));
+  // ScenarioEditor documents name and params for every filter regardless of
+  // kind, and its element loop walks audio pipelines too — so an audio filter
+  // gets both, which PipelineEditor used to show for video only.
+  assert.ok(ed2.includes("filter: ['params', 'name']"));
+  assert.ok(ed2.includes("['audio', graph.audio"), 'audio pipelines are walked');
 });
 
 check('the forwarding flags are one folded question', () => {
@@ -1574,7 +1580,16 @@ check('the forwarding flags are one folded question', () => {
   assert.ok(ed2.includes("t('tc.forwarding')"));
   // Counted while folded: scanning a pipeline, what matters is that something
   // is forwarded, not which.
-  assert.ok(ed2.includes('const on = keys.filter(k => d[k]).length'));
+  assert.ok(ed2.includes('keys.filter(k => cur(k)).length'));
+});
+
+check('forwarding edits are gated behind an explicit opt-in', () => {
+  // The flags are undocumented as changeable. ScenarioEditor surfaces them but
+  // refuses to apply them unless the operator opts in, and passes that through
+  // to the guarded apply-edits path rather than writing them silently.
+  assert.ok(ed2.includes('hasUndoc'), 'undocumented changes are detected');
+  assert.ok(ed2.includes('allowUndocumented: hasUndoc && allowUndoc'), 'opt-in flows to the API');
+  assert.ok(ed2.includes('se.undocAck'), 'the opt-in is a deliberate checkbox');
 });
 
 console.log('\nTHE AUDIT TOKENISER (v0.58.0):');

@@ -1,5 +1,34 @@
 # Changelog
 
+### v0.59.0 — the release the panel could actually deliver, and the editor it hid
+Two independent faults, both about work that existed but never reached a screen.
+
+- **The transcoder pipeline editor was edited in a file the app no longer
+  renders.** On 24 Jul the mounted editor was switched `PipelineEditor` →
+  `ScenarioEditor` (the guarded, preflight-checked one), and `PipelineEditor`
+  was left in the tree. Two later iterations then wrote the "regroup" work —
+  folded forwarding flags with a count, the audio filter's name/params — into
+  that orphan, so none of it ever showed. The forwarding block now lives in the
+  live `ScenarioEditor`, folded per input/output with a count of what is on;
+  because those flags are undocumented as changeable, editing them is gated
+  behind an explicit opt-in and still goes through the same preflight-verify-
+  rollback path. `PipelineEditor.jsx` is deleted.
+- **A new gate: `audit:orphan`.** A component that no other file imports is not
+  in the running app, and `audit:deadimport` could not see it (the orphan
+  imports nothing wrong; it is simply never reached). The gate also surfaced a
+  second orphan — `TemplateWizard`, reachable by a button that set state nothing
+  consumed — which is now wired back in.
+- **Versioning is single-source and can upgrade again.** The version comes from
+  `package.json`; the release fails if the tag disagrees. The `.deb` now carries
+  a Debian epoch (`1:0.59.0`) so the internal 0.x scheme sorts above the stray
+  `1.x` tags already in the pool and `apt upgrade` offers it; the image tag and
+  `NC_VERSION` are the same version without the epoch, since a docker tag cannot
+  contain a colon.
+- **The apt pool is preserved across releases.** The repo build pulls the
+  already-published `.deb`s back in before rebuilding, so older versions stay in
+  the index — rollback (`apt install nnm-control=<old>`) works again instead of
+  the pool holding only the current release.
+
 ### v0.58.2 — two real faults in our release workflow
 Both found by reading the Pages logs rather than the panel, and both ours.
 

@@ -10,6 +10,7 @@ import { useToast } from '../toast.jsx';
 import Modal from '../components/Modal.jsx';
 import TranscoderGraph from '../components/TranscoderGraph.jsx';
 import ScenarioEditor from '../components/ScenarioEditor.jsx';
+import TemplateWizard from '../components/TemplateWizard.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 
 // Transcoders are account-level in WMSPanel; server_id is an attribute.
@@ -307,6 +308,11 @@ export default function TranscodersPage() {
             </div>
           </div>
         </div>
+      )}
+    {wizard && (
+        <TemplateWizard template={wizard} servers={servers}
+          onClose={() => setWizard(null)}
+          onCreated={() => { setWizard(null); load(); }} />
       )}
     {pipeModal && (
         <Modal onClose={() => setPipeModal(null)} size="xwide">

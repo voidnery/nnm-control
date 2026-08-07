@@ -15,6 +15,28 @@ if [ -n "${APT_GPG_PASSPHRASE:-}" ]; then
   GPG+=(--pinentry-mode loopback --passphrase "$APT_GPG_PASSPHRASE")
 fi
 
+# Preserve the pool across releases. The rm -rf below rebuilds the repository
+# from dist/, so without this a release would publish only its own .deb and
+# every earlier version would vanish from the index — breaking both rollback
+# (`apt install nnm-control=<old>`) and any machine mid-upgrade. Pull the
+# already-published .debs back into dist/ first. A fetch failure is a warning,
+# not a stop: a first-ever run has nothing to fetch, which is not an error.
+BASE="${APT_PUBLIC_BASE:-}"
+if [ -n "$BASE" ]; then
+  echo "Preserving existing pool from $BASE"
+  idx="$(curl -fsSL "$BASE/dists/stable/main/binary-amd64/Packages" 2>/dev/null || true)"
+  printf '%s\n' "$idx" | awk '/^Filename:/{print $2}' | while read -r fn; do
+    [ -n "$fn" ] || continue
+    b="$(basename "$fn")"
+    [ -f "dist/$b" ] && continue                 # current build already staged
+    if curl -fsSL "$BASE/$fn" -o "dist/$b"; then
+      echo "  kept $b"
+    else
+      echo "  WARN: could not fetch $b — it will drop from the pool"; rm -f "dist/$b"
+    fi
+  done
+fi
+
 rm -rf "$REPO"
 mkdir -p "$REPO/pool/main" "$REPO/dists/stable/main/binary-amd64"
 cp dist/*.deb "$REPO/pool/main/"

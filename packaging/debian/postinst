@@ -35,7 +35,13 @@ ensure_secret() {
 set_var APP_DOMAIN "$APP_DOMAIN"
 set_var APP_PORT "$APP_PORT"
 set_var MONGO_URI "mongodb://mongo:27017/nnm_control"
-set_var NC_VERSION "$(dpkg-query -W -f='${Version}' nnm-control 2>/dev/null || echo latest)"
+# The installed package version may carry a Debian epoch (e.g. 1:0.59.0). A
+# docker image tag cannot contain a colon, so strip a leading "N:" before using
+# it as NC_VERSION — the images are pushed under the epoch-free tag. "latest"
+# and plain versions pass through unchanged.
+NCV="$(dpkg-query -W -f='${Version}' nnm-control 2>/dev/null || echo latest)"
+NCV="${NCV#*:}"
+set_var NC_VERSION "$NCV"
 ensure_secret JWT_SECRET 32
 ensure_secret ZABBIX_TOKEN 24
 ensure_secret SETUP_TOKEN 16

@@ -8,6 +8,12 @@ VERSION="${1:?version required, e.g. 0.2.0}"
 OWNER="${2:?ghcr owner required, e.g. voidnery}"
 OUT="${3:-dist}"
 
+# The version may carry a Debian epoch (e.g. 1:0.59.0). The control field keeps
+# it — that is what makes apt rank this above the stray 1.x pool — but a colon
+# is not allowed in a .deb filename, so the file is named without it. apt reads
+# the true version from the control field inside, not from the filename.
+FILEVER="${VERSION#*:}"
+
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT
 chmod 755 "$ROOT"
@@ -32,5 +38,5 @@ cp packaging/nnm-control.service "$ROOT/lib/systemd/system/nnm-control.service"
 cp packaging/nnm-control-backup.service packaging/nnm-control-backup.timer "$ROOT/lib/systemd/system/"
 
 mkdir -p "$OUT"
-dpkg-deb --build --root-owner-group "$ROOT" "$OUT/nnm-control_${VERSION}_all.deb"
-echo "Built: $OUT/nnm-control_${VERSION}_all.deb"
+dpkg-deb --build --root-owner-group "$ROOT" "$OUT/nnm-control_${FILEVER}_all.deb"
+echo "Built: $OUT/nnm-control_${FILEVER}_all.deb (control Version: ${VERSION})"

@@ -50,5 +50,33 @@ if (existsSync(dist)) {
   console.log('  – dist not built, skipping bundle check');
 }
 
+// Release mechanism (scheme A). The version drift that stranded apt upgrades
+// came back once because the tag, not package.json, drove the build. These
+// checks assert the single-source-of-truth wiring stays in place: the release
+// derives the version from package.json and refuses a mismatched tag, the deb
+// carries the Debian epoch while the docker image tag does not, and postinst
+// strips the epoch back off. All are readable from files, so this holds locally
+// and does not wait for a tag push to catch a regression.
+const read = (rel) => { try { return readFileSync(path.join(ROOT, rel), 'utf8'); } catch { return ''; } };
+const wf = read('.github/workflows/release.yml');
+const postinst = read('packaging/debian/postinst');
+const buildDeb = read('packaging/build-deb.sh');
+
+console.log('\nRELEASE MECHANISM (scheme A):');
+check('release derives version from frontend/package.json',
+  /require\(['"]\.\/frontend\/package\.json['"]\)\.version/.test(wf) ? 'yes' : 'no', 'yes');
+check('release fails when the tag disagrees with package.json',
+  /!=\s*"\$pkgver"/.test(wf) && /exit 1/.test(wf) ? 'yes' : 'no', 'yes');
+check('deb version carries the Debian epoch',
+  /deb_version=1:\$pkgver/.test(wf) ? 'yes' : 'no', 'yes');
+check('docker image tag is epoch-free',
+  /image_tag=\$pkgver/.test(wf) ? 'yes' : 'no', 'yes');
+check('postinst strips the epoch for NC_VERSION',
+  /NCV="\$\{NCV#\*:\}"/.test(postinst) ? 'yes' : 'no', 'yes');
+check('deb filename is built epoch-free',
+  /FILEVER="\$\{VERSION#\*:\}"/.test(buildDeb) && /nnm-control_\$\{FILEVER\}_all\.deb/.test(buildDeb) ? 'yes' : 'no', 'yes');
+check('apt pool is preserved across releases',
+  /APT_PUBLIC_BASE/.test(wf) ? 'yes' : 'no', 'yes');
+
 console.log(bad ? `\n${bad} failed` : `\nversion audit: OK (${fePkg.version})`);
 process.exit(bad ? 1 : 0);

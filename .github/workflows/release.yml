@@ -58,19 +58,25 @@ jobs:
       - uses: actions/checkout@v4
       - id: meta
         run: |
-          # A Docker tag may not begin with a separator, so `v.1.3.5` — a
-          # plausible typo for `v1.3.5` — became `.1.3.5` and failed on the
-          # very last step, after everything had been built and pushed to that
-          # point. Strip the leading `v` and any separator that followed it,
-          # then refuse anything that still is not a valid tag.
+          # Single source of truth for the version is frontend/package.json.
+          # The tag only *names* the release; if it disagrees with package.json,
+          # the two-scheme drift that stranded apt upgrades is back — so fail
+          # loudly here rather than ship a mislabelled build.
           raw="${GITHUB_REF_NAME}"
-          version="${raw#v}"
-          version="${version#[.\-_]}"
-          if ! printf '%s' "$version" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'; then
-            echo "::error::tag '$raw' does not yield a usable version (got '$version'); expected something like v1.3.5"
+          tag="${raw#v}"
+          tag="${tag#[.\-_]}"
+          pkgver="$(node -p "require('./frontend/package.json').version")"
+          if [ "$tag" != "$pkgver" ]; then
+            echo "::error::tag '$raw' -> '$tag' does not match frontend/package.json ($pkgver); tag the release to match package.json"
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Docker tags cannot contain a colon, so images carry the bare
+          # version. The .deb carries a Debian epoch (1:) so the 0.x scheme
+          # sorts above the stray 1.x versions already in the pool and
+          # `apt upgrade` offers it; postinst strips the epoch back off for
+          # the image tag it pulls.
+          echo "image_tag=$pkgver" >> "$GITHUB_OUTPUT"
+          echo "deb_version=1:$pkgver" >> "$GITHUB_OUTPUT"
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
       # Sign in to Docker Hub first when credentials exist, so pulling the
       # BuildKit image is not an anonymous, rate-limited request. Skipped
@@ -107,7 +113,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ steps.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ steps.meta.outputs.image_tag }}
             ghcr.io/${{ steps.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:latest
           cache-from: type=gha,scope=nc-${{ matrix.name }}
           cache-to: type=gha,scope=nc-${{ matrix.name }},mode=max
@@ -119,36 +125,45 @@ jobs:
       - uses: actions/checkout@v4
       - id: meta
         run: |
-          # A Docker tag may not begin with a separator, so `v.1.3.5` — a
-          # plausible typo for `v1.3.5` — became `.1.3.5` and failed on the
-          # very last step, after everything had been built and pushed to that
-          # point. Strip the leading `v` and any separator that followed it,
-          # then refuse anything that still is not a valid tag.
+          # Single source of truth for the version is frontend/package.json.
+          # The tag only *names* the release; if it disagrees with package.json,
+          # the two-scheme drift that stranded apt upgrades is back — so fail
+          # loudly here rather than ship a mislabelled build.
           raw="${GITHUB_REF_NAME}"
-          version="${raw#v}"
-          version="${version#[.\-_]}"
-          if ! printf '%s' "$version" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'; then
-            echo "::error::tag '$raw' does not yield a usable version (got '$version'); expected something like v1.3.5"
+          tag="${raw#v}"
+          tag="${tag#[.\-_]}"
+          pkgver="$(node -p "require('./frontend/package.json').version")"
+          if [ "$tag" != "$pkgver" ]; then
+            echo "::error::tag '$raw' -> '$tag' does not match frontend/package.json ($pkgver); tag the release to match package.json"
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Docker tags cannot contain a colon, so images carry the bare
+          # version. The .deb carries a Debian epoch (1:) so the 0.x scheme
+          # sorts above the stray 1.x versions already in the pool and
+          # `apt upgrade` offers it; postinst strips the epoch back off for
+          # the image tag it pulls.
+          echo "image_tag=$pkgver" >> "$GITHUB_OUTPUT"
+          echo "deb_version=1:$pkgver" >> "$GITHUB_OUTPUT"
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
       - name: Install packaging tools
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev apt-utils gnupg
       - name: Import GPG key
         run: echo "${{ secrets.APT_GPG_PRIVATE_KEY }}" | gpg --batch --import
       - name: Build deb
-        run: packaging/build-deb.sh "${{ steps.meta.outputs.version }}" "${{ steps.meta.outputs.owner }}"
+        run: packaging/build-deb.sh "${{ steps.meta.outputs.deb_version }}" "${{ steps.meta.outputs.owner }}"
       - name: Build APT repo
         env:
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          # Lets build-apt-repo pull the already-published pool back in, so a
+          # rebuild keeps every prior .deb (rollback) instead of shipping one.
+          APT_PUBLIC_BASE: https://${{ steps.meta.outputs.owner }}.github.io/nnm-control/apt
         run: packaging/build-apt-repo.sh "${{ secrets.APT_GPG_KEY_ID }}"
       - name: Publish repo to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./public
-          keep_files: false
+          keep_files: true
       - name: Attach deb to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
