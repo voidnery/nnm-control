@@ -1,49 +1,5 @@
 # Changelog
 
-### v0.59.1 — the release that could not be released
-v0.59.0 made the version single-source and made CI refuse a tag that disagrees
-with `package.json`. Both are right. Together they stopped delivery: the tag
-pushed was `v1.8.7` against a tree saying `0.59.0`, every job died on its first
-step, and nothing reached the fleet — which still sits on `1.8.5`, published
-06 Aug. The gate did its job; the mechanism around it did not.
-
-- **The tag is derived, not typed.** `packaging/tag-release.sh` reads the
-  version from `package.json`, refuses a dirty tree or an existing tag, warns
-  when the new version would not outrank what is published, and pushes. The
-  coupling that has to hold is now enforced where it is cheap rather than
-  discovered after a tag is public.
-- **The version is resolved once.** The two jobs each carried their own copy of
-  the same shell block — the same drift the block exists to catch, one level
-  up. A `meta` job resolves it and both consume its outputs. It also checks the
-  two `package.json` files against each other, which nothing did.
-- **The pool comes from the branch, not the CDN.** `build-apt-repo.sh` read the
-  existing pool through the Pages URL, and Pages is a CDN with a deployment
-  queue that has already been observed lagging and cancelling. A stale read
-  drops older versions out of the rebuilt index while their files sit on the
-  branch — rollback breaks and nothing reports an error. The job checks
-  `gh-pages` out and reads the pool from disk; the URL stays as a fallback.
-- **A release that cannot be installed is refused before it is signed.** apt
-  offers an upgrade only when the new version sorts strictly above the
-  installed one, and `0.59.0` sorts *below* the `1.8.x` in this pool — so a
-  release that loses the epoch publishes cleanly, reports success and reaches
-  no server. The repo build now compares the version being published against
-  every version already in the pool and stops.
-- **One `.deb` per Release.** v0.59.0 started pulling the published pool back
-  into `dist/`, and the Release step globbed `dist/*.deb` — so every historical
-  version would have been attached to every Release, growing each time. The
-  preserved pool is staged outside `dist/` and the Release names one file.
-- **A new gate: `audit:release`.** Seven rules over the workflow, the packaging
-  scripts and `postinst`: versions agree, the epoch is present on the `.deb` and
-  absent from the image tag, `postinst` strips it, the tag check survives, the
-  Release does not glob, the pool has a local source, the ordering assertion
-  exists. All seven proven by contradiction.
-
-Verified end-to-end in a container, not only read: deb built with the epoch,
-repository assembled against the real `gh-pages` pool, signed, and resolved by
-a live `apt` — `Candidate: 1:0.59.1` above `1.8.5`, InRelease accepted without
-warning, `apt install nnm-control=1.8.5` still available. The epoch-less build
-was rejected at the assertion, as designed.
-
 ### v0.59.0 — the release the panel could actually deliver, and the editor it hid
 Two independent faults, both about work that existed but never reached a screen.
 
