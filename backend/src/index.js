@@ -34,6 +34,8 @@ import { startTaskReaper } from './services/agentBus.js';
 import { startAgentWatchdog } from './services/agentWatchdog.js';
 import { wmspanelRouter } from './routes/wmspanelProxy.js';
 import { functionsRouter } from './routes/functions.js';
+import { geoipRouter } from './routes/geoip.js';
+import { cdnNetworkRouter } from './routes/cdnNetworks.js';
 import { auditRouter } from './routes/audit.js';
 import { auditMutations } from './services/audit.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
@@ -84,6 +86,8 @@ app.use('/api/wmspanel', transcoderGraphRouter);
 app.use('/api/wmspanel', transcoderTemplateRouter);
 app.use('/api/wmspanel', transcoderFleetRouter);
 app.use('/api/wmspanel', transcoderEditRouter);
+app.use('/api', geoipRouter);
+app.use('/api/cdn', cdnNetworkRouter);
 app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {

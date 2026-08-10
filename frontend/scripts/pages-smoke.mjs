@@ -147,6 +147,21 @@ window.console.error = (...a) => errors.push(`${window.__page || '?'}: ` + a.map
 window.fetch = (u) => {
   const s = String(u);
   let body = { status:'Ok' };
+  // iter20 m1 - the delivery network and the geolocation database. Without
+  // these the Distribution page renders its network view against undefined
+  // and the whole page comes back empty.
+  if (/\/cdn\/networks$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    networks:[{ id:'N1', name:'Prod', description:'', audience:'public', nodes:[
+      { id:'n1', server:'S1', role:'origin', upstream:[], weight:100, enabled:true, notes:'' },
+      { id:'n2', server:'S2', role:'edge', upstream:['n1'], weight:100, enabled:true, notes:'' },
+    ], updatedAt:new Date().toISOString() }],
+    roles:['ingest','origin','mid','edge','gateway'],
+    attribution:{ text:'IP Geolocation by DB-IP', url:'https://db-ip.com' } }), text:()=>Promise.resolve('{}') });
+  if (/\/geoip$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    present:true, edition:'country', release:'2026-08', size:8.1e6, hasCoordinates:false,
+    editions:[{ id:'country', label:'DB-IP Country Lite', approxBytes:7.9e6, accuracyIndex:81, hasCoordinates:false },
+              { id:'city', label:'DB-IP City Lite', approxBytes:124.2e6, accuracyIndex:77, hasCoordinates:true }],
+    attribution:{ text:'IP Geolocation by DB-IP', url:'https://db-ip.com' } }), text:()=>Promise.resolve('{}') });
   // iter9 m2 - resolved playback endpoints; without this the Streams tabs
   // render with no addresses and the watch buttons never appear.
   if (/\/servers\/[^/]+\/playback/.test(s)) return Promise.resolve({ ok:true, status:200,
@@ -294,7 +309,11 @@ window.fetch = (u) => {
   else if (s.includes('/roles')) body = [];
   else if (s.includes('/audit')) body = { items: [] };
   else if (s.includes('/functions/runs')) body = [];
-  else if (s.includes('/functions')) body = [{ id:'F1', name:'Fn', description:'', steps:[
+  // The functions endpoint returns raw mongoose documents, so `_id` is what
+  // the page reads. A fixture carrying only `id` made every row key undefined
+  // and React fell back to index — which reconciles the wrong row when a
+  // function is deleted. The fixture was the thing that was wrong.
+  else if (s.includes('/functions')) body = [{ _id:'F1', id:'F1', name:'Fn', description:'', steps:[
       { kind:'patch', label:'step', serverId:'S1', objectKind:'outgoing', targetId:'x', patch:{} }] }];
   else if (s.includes('/playlists')) body = [];
   else if (/\/categories\/[^/]+\/state/.test(s)) body = { state: { 'S1:udp:O1': { found: true, paused: false, serverName: 'Srv' } } };

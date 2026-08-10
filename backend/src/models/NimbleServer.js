@@ -62,6 +62,33 @@ const serverSchema = new mongoose.Schema({
   // Minutes east of UTC for this box, so a fleet spanning zones stays
   // comparable. 0 means "treat the stamps as UTC".
   logTzOffsetMinutes: { type: Number, default: 0 },
+  // iter20 m1 — where this box physically is, for delivery-network planning.
+  //
+  // Two provenances kept apart on purpose. `source` says whether the country
+  // came from the offline DB-IP database or from a person; `coordsSource` says
+  // the same about the coordinates, separately, because the two do not arrive
+  // together: the Country edition resolves a country and carries no
+  // coordinates at all. Collapsing them into one field is how a globe ends up
+  // showing a marker nobody can account for.
+  //
+  // Neither is authoritative over the other — a manual entry always wins and
+  // is never overwritten by a resolve, since the operator knows which rack the
+  // machine is in and DB-IP is inferring it from a routing prefix.
+  geo: {
+    countryCode: { type: String, default: '' },     // ISO-3166 alpha-2
+    countryName: { type: String, default: '' },
+    city: { type: String, default: '' },
+    lat: { type: Number, default: null },
+    lon: { type: Number, default: null },
+    source: { type: String, enum: ['', 'auto', 'manual'], default: '' },
+    coordsSource: { type: String, enum: ['', 'auto', 'manual'], default: '' },
+    // What was actually looked up. `host` may be a name, and which address it
+    // resolved to is the difference between a useful answer and a puzzling one.
+    resolvedIp: { type: String, default: '' },
+    resolvedAt: { type: Date, default: null },
+    edition: { type: String, default: '' },
+    release: { type: String, default: '' },
+  },
   // Operator-defined position in the servers list.
   order: { type: Number, default: 0 },
   wmspanelServerId: { type: String, default: '' },

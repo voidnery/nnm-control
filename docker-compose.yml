@@ -20,6 +20,7 @@ services:
       - SETUP_TOKEN=${SETUP_TOKEN}
       - ZABBIX_TOKEN=${ZABBIX_TOKEN}
       - MEDIA_SPOOL_DIR=/var/lib/nnm-control/media-spool
+      - GEOIP_DIR=/var/lib/nnm-control/geoip
       - HOST_FS=/host
     volumes:
       - /:/host:ro
@@ -28,6 +29,10 @@ services:
       # is how a panel takes its own Mongo down, and this is the one place an
       # operator can look at, measure and cap.
       - media_spool:/var/lib/nnm-control/media-spool
+      # iter20 m1 — the offline geolocation database. Its own volume so that
+      # re-pulling a 124 MB City edition cannot crowd out queued media, and so
+      # an operator can drop it without touching anything else.
+      - geoip_db:/var/lib/nnm-control/geoip
     depends_on:
       - mongo
 
@@ -42,5 +47,6 @@ services:
       - backend
 
 volumes:
+  geoip_db:
   mongo_data:
   media_spool:

@@ -29,5 +29,11 @@ export const PERMISSIONS = [
   { key: 'functions.manage',  label: 'Functions: create / edit engineering functions' },
   { key: 'functions.execute', label: 'Functions: execute assigned functions' },
   { key: 'audit.view',        label: 'Audit: view the action log' },
+  // iter20 m1 — delivery networks. Separate from wmsobjects.* because a
+  // network is a plan the panel holds, not an object on a Nimble box, and
+  // separate from servers.manage because editing the topology does not imply
+  // being allowed to change credentials of the machines in it.
+  { key: 'cdn.view',          label: 'Delivery: view networks, node roles and geography' },
+  { key: 'cdn.manage',        label: 'Delivery: create / edit networks and node roles' },
 ];
 export const PERMISSION_KEYS = PERMISSIONS.map(p => p.key);

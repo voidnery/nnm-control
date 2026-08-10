@@ -1,5 +1,63 @@
 # Changelog
 
+### v0.61.0 — iter20 m1: roles and geography
+The panel now holds a delivery network as an object of its own, and knows
+where each server physically is without asking anyone.
+
+- **Roles are written down.** Nimble has no notion of "this box is an edge" — a
+  server becomes one because somebody pointed a route at an origin, and the
+  only record of that intent lived in whoever set it up. A network now carries
+  its nodes with roles (ingest, origin, mid, edge, gateway) and their
+  upstreams, so later milestones can compare the plan against what the servers
+  actually report instead of drawing a topology from configuration and calling
+  it the truth. Direction is enforced at the API: an origin cannot pull from an
+  edge, a node cannot feed itself, and a cycle through otherwise legal edges is
+  refused. An unwired edge is a warning, not a refusal — a network is normally
+  incomplete while it is being built.
+- **Country is resolved offline.** DB-IP Lite, CC BY 4.0, fetched into its own
+  volume on demand. The request goes out from the panel, not from the managed
+  servers: DB-IP sees a download, not a lookup, and nothing about the fleet
+  leaves the building.
+- **Country Lite is the default, and that is not a compromise.** It is 7.9 MB
+  against City's 124 MB *and* DB-IP rates it more accurate — index 81 against
+  77 — because city granularity adds error it does not remove. City earns its
+  size only if approximate coordinates are wanted, and the trade-off is stated
+  beside the selector rather than in a manual.
+- **No invented coordinates.** With the Country edition loaded there are no
+  coordinates at all, so the panel sets the country and says so, rather than
+  placing a marker on a country centroid that no data backs. Real centroids
+  arrive in m7 computed from Natural Earth geometry.
+- **Two provenances, kept apart.** `source` covers the country, `coordsSource`
+  the coordinates, separately, because they do not arrive together. A value
+  entered by hand is marked as the operator's and is never overwritten by a
+  later lookup — DB-IP infers a location from a routing prefix, the operator
+  knows which rack the machine is in. Latitude and longitude are set or cleared
+  together: half a coordinate is not a position.
+- **The page was two things in one list.** Distribution now separates the
+  delivery network — the plan, held by the panel — from account objects (ABR
+  ladders, aliases, origin apps) that live in WMSPanel and apply to whatever
+  servers are ticked. It was impossible to tell which settings described a
+  topology and which were global.
+- **Attribution is a build gate.** CC BY 4.0 requires a link back to db-ip.com
+  wherever results are shown, so the link is in the page and the audit fails
+  without it.
+
+The downloader is tested without a network, because none of what can go wrong
+with it needs one: the release-candidate order, a 404 on the 1st of the month
+falling back a month, the year boundary, a body that lies about its
+content-length, an interrupted download leaving no partial file, a working
+database surviving a failed update, and a download that gunzips cleanly and is
+not a database being refused before it replaces anything. 26 new checks.
+
+**Two gate findings, neither of them in this milestone's code.**
+`pages-smoke` had been reporting a missing React key. It was in FunctionsPage,
+where every row's key was `fn._id` — and the smoke fixture supplied only `id`,
+so every key was `undefined` and React fell back to index. The page was right:
+that endpoint returns raw mongoose documents. **The fixture was lying about the
+shape of the API**, which is precisely how a smoke test stays green while
+production does not. And `audit:version` aside, the glyph-verb rule caught a
+text Edit button in the new panel — the convention held.
+
 ### v0.60.0 — editing a scenario now looks like the scenario
 The read-only view drew a pipeline the way it is operated: source → processing
 → encoders, one card per pipeline. Both screens that *change* a scenario threw

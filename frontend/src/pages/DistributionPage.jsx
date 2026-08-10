@@ -5,6 +5,7 @@ import { backdropClose } from '../components/Modal.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from '../components/IconButton.jsx';
+import DeliveryNetworkPanel from '../components/DeliveryNetworkPanel.jsx';
 
 // Account-level distribution: ABR ladders, application aliases, origin apps.
 // server_ids are edited as checkboxes of mapped panel servers and displayed
@@ -44,6 +45,7 @@ export default function DistributionPage() {
   const [abrModal, setAbrModal] = useState(null);
   const [aliasModal, setAliasModal] = useState(null);
   const [originModal, setOriginModal] = useState(null);
+  const [view, setView] = useState('network');
 
   const load = async () => {
     setError('');
@@ -114,6 +116,23 @@ export default function DistributionPage() {
       <h1>{t('page.distribution.title')}</h1>
       <div className="sub">{t('page.distribution.sub')}</div>
       {error && <div className="error-box">{error}</div>}
+
+      {/* Two different things live on this page and used to be one list.
+          A delivery network is the operator's plan, held by the panel. ABR
+          ladders, aliases and origin apps are account-level objects that live
+          in WMSPanel and apply to whatever servers are ticked. Mixing them
+          made it impossible to tell which settings described a topology and
+          which were global. */}
+      <div className="row" style={{ gap: 6, marginBottom: 12 }}>
+        {['network', 'objects'].map(v => (
+          <button key={v} className={'tagchip' + (view === v ? ' on' : '')} onClick={() => setView(v)}>
+            {t('dist.view.' + v)}
+          </button>
+        ))}
+      </div>
+
+      {view === 'network' && <DeliveryNetworkPanel servers={servers} onServersChanged={load} />}
+      {view === 'objects' && <>
 
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>ABR
@@ -227,7 +246,9 @@ export default function DistributionPage() {
         </table>
       </div>
 
-      {abrModal && (
+      </>}
+
+      {view === 'objects' && abrModal && (
         <div className="modal-back" {...backdropClose(() => setAbrModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{abrModal.id ? `Edit ABR ${abrModal.application}/${abrModal.stream}` : 'New ABR'}</h3>
@@ -260,7 +281,7 @@ export default function DistributionPage() {
         </div>
       )}
 
-      {aliasModal && (
+      {view === 'objects' && aliasModal && (
         <div className="modal-back" {...backdropClose(() => setAliasModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{aliasModal.id ? `Edit aliases of ${aliasModal.application}` : 'New alias set'}</h3>
@@ -284,7 +305,7 @@ export default function DistributionPage() {
         </div>
       )}
 
-      {originModal && (
+      {view === 'objects' && originModal && (
         <div className="modal-back" {...backdropClose(() => setOriginModal(null))}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>{originModal.id ? `Edit origin app ${originModal.application}` : 'New origin app'}</h3>
