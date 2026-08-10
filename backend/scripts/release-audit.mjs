@@ -93,6 +93,28 @@ if (!/tag_name:\s*v\$\{\{\s*needs\.meta\.outputs\.version/.test(wf)) {
   notes.push('the release tag is derived from package.json, not typed');
 }
 
+// Pushing to ghcr is refused, temporarily, by a secondary rate limit — and it
+// arrives as `denied: permission_denied` with HTTP 403, wording that reads as
+// a credentials failure and is not one. It is earned by release frequency, so
+// it will happen again the next time several fixes ship in a day. A release
+// that had nothing wrong with it must not die on it.
+const pushes = (wf.match(/uses: docker\/build-push-action/g) || []).length;
+if (pushes < 2) {
+  fail('the image push has no retry; a secondary rate limit from ghcr would '
+     + 'fail a release for a reason that resolves itself in two minutes');
+} else if (!/steps\.push\.outcome == 'failure'/.test(wf)) {
+  fail('there are two push steps but the second is not conditional on the '
+     + 'first failing — that pushes twice on every release');
+} else {
+  notes.push('the image push retries once after a rate limit');
+}
+if (!/max-parallel:\s*1/.test(wf)) {
+  fail('the image matrix runs in parallel; two jobs pushing to ghcr at once is '
+     + 'half of what earns the rate limit in the first place');
+} else {
+  notes.push('images are pushed one at a time');
+}
+
 // One deb per Release. build-apt-repo pulls the published pool back in, so a
 // glob over dist/ attaches every historical version to every Release.
 const attach = wf.slice(wf.indexOf('action-gh-release'));

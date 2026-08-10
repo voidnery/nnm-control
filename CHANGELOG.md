@@ -1,5 +1,34 @@
 # Changelog
 
+### v0.62.5 — a release that failed for no fault of its own
+The v0.62.4 push to ghcr was refused:
+
+    denied: permission_denied: HTTP 403 "Forbidden"
+    "You have exceeded a secondary rate limit. Please wait a few minutes…"
+
+Nothing was wrong with the build. GitHub throttles pushes when they come too
+fast, and six releases in a day — each pushing two images under two tags, with
+the matrix running both at once — is fast. The wording is the trap:
+`permission_denied` reads as a credentials problem and sends you to check
+secrets that are fine.
+
+- **The push retries once, after two minutes.** The layers are built and cached
+  by the first attempt, so a retry costs the push and not the build. The same
+  shape already used for `setup-buildx`, for the same reason: a step that fails
+  for a reason that resolves itself should not fail a release.
+- **Images are pushed one at a time.** Two jobs pushing to ghcr in the same
+  second is half of what earns the limit. The images are small; the serial
+  cost is about a minute.
+- **`audit:release` grows two rules**, because this will recur the next time
+  several fixes ship in a day: the push must have a retry, the retry must be
+  conditional on the first attempt failing rather than pushing twice always,
+  and the matrix must not run in parallel. Proven by contradiction.
+
+Worth noting that the failure was clean. The tag is created last, in the final
+job, so a release that dies mid-way leaves no tag — and the next push to main
+simply does the whole thing again. That ordering was chosen in v0.59.2 for
+exactly this, and this is the first time it earned its keep.
+
 ### v0.62.4 — a route was written and there was nowhere to see it
 The first live route landed and read back matching. The next question — where
 is it — had no answer in the panel: it showed intent and never state.

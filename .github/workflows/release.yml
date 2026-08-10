@@ -132,6 +132,10 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     strategy:
+      # One image at a time. Two jobs pushing to ghcr in the same second is
+      # half of what earns a secondary rate limit, and the images are small
+      # enough that the serial cost is a minute.
+      max-parallel: 1
       matrix:
         include:
           - name: api
@@ -169,7 +173,33 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      # Pushing to ghcr can be refused by a *secondary* rate limit, which
+      # arrives as `denied: permission_denied` with HTTP 403 — wording that
+      # reads like a credentials problem and is not one. It is temporary and
+      # earned by release frequency, so the answer is to wait and try once
+      # more rather than to fail a release that has nothing wrong with it.
+      #
+      # The layers are already built and cached by the first attempt, so the
+      # retry costs the push, not the build.
+      - id: push
+        uses: docker/build-push-action@v6
+        continue-on-error: true
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ needs.meta.outputs.version }}
+            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:latest
+          cache-from: type=gha,scope=nc-${{ matrix.name }}
+          cache-to: type=gha,scope=nc-${{ matrix.name }},mode=max
+      - if: steps.push.outcome == 'failure'
+        name: Wait out the rate limit
+        run: |
+          echo "push refused; GitHub asks for a few minutes before retrying" >> "$GITHUB_STEP_SUMMARY"
+          sleep 120
+      - if: steps.push.outcome == 'failure'
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           platforms: linux/amd64
