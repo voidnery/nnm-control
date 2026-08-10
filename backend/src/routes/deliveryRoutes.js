@@ -78,8 +78,22 @@ deliveryRoutesRouter.post('/networks/:id/apply', requirePerm('cdn.manage'), asyn
         const r = await wmspanel.routeCreate(c, {
           from: item.from, to: item.to, servers: [item.wmspanelServerId],
         });
-        const id = r?.route?.id || r?.id || '';
-        if (!id) throw new Error('WMSPanel accepted the route but returned no id');
+        let id = r?.route?.id || r?.id || '';
+        if (!id) {
+          // The reference says a create answers with the route, but this
+          // account had none to learn from, and a response without an id is
+          // not proof that nothing was written — treating it as a failure
+          // would roll back a route that exists. Look for it instead.
+          const back = await wmspanel.routeList(c).catch(() => ({ routes: [] }));
+          const found = (back.routes || []).find(x =>
+            x.to === item.to && (x.servers || []).map(String).includes(item.wmspanelServerId));
+          if (!found) {
+            const e = new Error('WMSPanel returned no id and the route is not in the list afterwards');
+            e.upstream = r;
+            throw e;
+          }
+          id = found.id;
+        }
         created.push(id);
 
         // Read back. The account had no routes at all before this, so the
@@ -110,7 +124,11 @@ deliveryRoutesRouter.post('/networks/:id/apply', requirePerm('cdn.manage'), asyn
         try { await wmspanel.routeDelete(c, id); undone.push(id); }
         catch (err) { steps.push({ step: `rollback ${id}`, ok: false, error: err.message }); }
       }
+      // What WMSPanel actually said, carried through rather than collapsed
+      // into a status code: the client puts the parsed upstream body on
+      // `data`, and it is the only thing that names the real cause.
       steps.push({ step: label, ok: false, error: e.message,
+                   upstreamError: e.data ?? e.upstream ?? undefined,
                    rolledBack: undone.length ? `${undone.length} route(s) removed` : undefined });
       break;
     }

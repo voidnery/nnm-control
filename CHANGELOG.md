@@ -1,5 +1,34 @@
 # Changelog
 
+### v0.62.2 — the apply failed and said nothing about it
+The plan reached the servers, the apply came back "HTTP 502", and that was the
+entire message. The read-back, the rollback and the per-route steps all ran and
+all worked; none of it was on screen.
+
+- **Two files disagreed about one property name.** `api.js` attaches the parsed
+  response body to `err.data`; the routes panel read `e.body`. Every failure
+  therefore arrived as a bare status line with the useful part — which route
+  stopped it, what WMSPanel replied, what was rolled back — discarded on the
+  way. A blocked plan had the same fate, so the 422 findings were never
+  reaching the operator either.
+- **What WMSPanel said now reaches the step.** The client already parsed the
+  upstream body; it was being collapsed into a status code one layer up. It is
+  the only thing that names the real cause, so it travels with the step.
+- **A create that returns no id is no longer assumed to have failed.** The
+  reference says the response carries the route, but this account had none to
+  learn from, and a missing id is not proof that nothing was written — rolling
+  back on that assumption would delete a route that exists. The list is re-read
+  and the route looked for before anything is undone.
+
+**A new gate asserts the error contract from both ends**, because this class of
+bug is invisible to every check that looks at one side: what `api.js` names the
+property, and that the panel reads that same name. Proven by contradiction in
+both directions — the reader drifting, and the writer renaming.
+
+The first version of that check passed on a file where the only mention of the
+property was the comment explaining it. Comments are stripped before matching
+now; a gate that a sentence can satisfy is not a gate.
+
 ### v0.62.1 — the save that threw away the topology
 Adding a server to a network and pressing Save answered "Internal server
 error", and the plan then reported "this network has no edges yet" about a

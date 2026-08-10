@@ -182,5 +182,57 @@ check('a disabled edge is left out', () => {
   assert.equal(p.planned.length, 0);
 });
 
+
+console.log('\nA FAILED APPLY REACHES THE OPERATOR:');
+
+// The plan, the read-back and the rollback all existed and all worked, and
+// none of it was visible: the panel read the response body off `e.body` while
+// api.js puts it on `e.data`, so a failed apply arrived as "HTTP 502" with the
+// steps — which route stopped it, what WMSPanel said, what was rolled back —
+// discarded on the way. Two files disagreeing about one property name threw
+// away the entire point of running a plan.
+//
+// So the contract is asserted from both ends rather than trusted.
+const readFile = (await import('node:fs')).readFileSync;
+const FRONT = new URL('../../frontend/src/', import.meta.url);
+const apiSrc = readFile(new URL('api.js', FRONT), 'utf8');
+const panelSrc = readFile(new URL('components/DeliveryRoutesPanel.jsx', FRONT), 'utf8');
+// Comments explain the contract and would satisfy a check for it. Stripped, so
+// the assertion looks at what runs — the first version of this check passed on
+// a file whose only mention of the property was the sentence describing it.
+const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const panelCode = stripComments(panelSrc);
+
+check('api.js attaches the response body to a named property', () => {
+  const m = apiSrc.match(/err\.(\w+)\s*=\s*data;/);
+  assert.ok(m, 'api.js no longer attaches the parsed body to the error');
+  assert.equal(m[1], 'data');
+});
+
+check('the panel reads the same property api.js writes', () => {
+  const m = apiSrc.match(/err\.(\w+)\s*=\s*data;/);
+  const prop = m[1];
+  assert.ok(new RegExp(`e\\.${prop}`).test(panelCode),
+    `the panel does not read e.${prop}, so every failure would arrive as a bare status line`);
+});
+
+check('a failed apply renders its steps, not just its status', () => {
+  assert.ok(/d\.steps/.test(panelCode), 'the steps of a failed apply are not shown');
+  assert.ok(/setReport\(d\)/.test(panelCode));
+});
+
+check("what WMSPanel said is carried to the step, not collapsed into a code", () => {
+  const routes = readFile(new URL('../src/routes/deliveryRoutes.js', import.meta.url), 'utf8');
+  assert.ok(/upstreamError:/.test(stripComments(routes)), 'the upstream body never reaches the step');
+  assert.ok(/upstreamError/.test(panelCode), 'the step carries it and the panel drops it');
+});
+
+check('a create with no id looks for the route before calling it a failure', () => {
+  // A response without an id is not proof that nothing was written, and
+  // rolling back on that assumption would delete a route that exists.
+  const routes = readFile(new URL('../src/routes/deliveryRoutes.js', import.meta.url), 'utf8');
+  assert.ok(/routeList\(c\)\.catch/.test(stripComments(routes)), 'the missing-id path does not re-read the list');
+});
+
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');
 process.exit(failures ? 1 : 0);

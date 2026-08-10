@@ -33,10 +33,18 @@ export default function DeliveryRoutesPanel({ network, dirty = false }) {
       if (what === 'plan') setPlan(r);
       else { setReport(r); setPlan(r.plan || plan); push({ type: r.ok ? 'ok' : 'warn', message: t('cdn.applied', { n: r.applied }) }); }
     } catch (e) {
-      // A blocked plan comes back 422 with the findings attached — that is the
+      // The response body is on `e.data` — reading `e.body` meant every
+      // failure arrived as a bare status line while the thing worth reading,
+      // the per-route steps and the upstream message, was thrown away.
+      const d = e.data || {};
+      // A blocked plan comes back 422 with the findings attached: that is the
       // answer, not a failure to get one.
-      if (e.body?.problems) { setPlan(e.body); setError(''); }
-      else setError(e.message);
+      if (d.problems) setPlan(d);
+      // A failed apply comes back 502 with the steps that got as far as they
+      // did, which route stopped it, what WMSPanel said, and what was rolled
+      // back. That is the whole point of running it through a plan.
+      if (d.steps) setReport(d);
+      setError(d.steps || d.problems ? '' : (e.message || String(e)));
     } finally { setBusy(false); }
   };
 
@@ -119,6 +127,11 @@ export default function DeliveryRoutesPanel({ network, dirty = false }) {
               {s.verified ? ` — ${s.verified}` : ''}
               {s.error ? ` — ${s.error}` : ''}
               {s.rolledBack ? ` · ${s.rolledBack}` : ''}
+              {s.upstreamError && (
+                <div className="mono" style={{ fontSize: 11, marginLeft: 14, wordBreak: 'break-all' }}>
+                  {t('cdn.upstreamSaid')} {typeof s.upstreamError === 'string' ? s.upstreamError : JSON.stringify(s.upstreamError)}
+                </div>
+              )}
             </div>
           ))}
         </div>
