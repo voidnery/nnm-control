@@ -1,5 +1,40 @@
 # Changelog
 
+### v0.62.1 — the save that threw away the topology
+Adding a server to a network and pressing Save answered "Internal server
+error", and the plan then reported "this network has no edges yet" about a
+topology sitting on screen. Both were one bug.
+
+- **Client-side node ids are minted server-side now.** A node the operator has
+  just added has no id, so the page invents a temporary one. That string went
+  straight into `_id` — and into the `upstream` of whatever pointed at it —
+  where mongoose refused the cast. The save never landed, which is why the plan
+  was right: the *stored* network had no nodes. Ids are minted on the server
+  and every upstream reference is rewritten through the same map, so a brand
+  new edge can point at a brand new origin in a single save. A reference to a
+  node that is no longer in the payload is dropped rather than carried as a
+  dangling id.
+- **A failed save says which field is wrong.** It reached the operator as a
+  bare 500, which manages to be both alarming and uninformative.
+- **The plan will not run over unsaved edits.** It is computed from what is
+  stored, so pressing it over pending changes could only ever answer about a
+  different network than the one being looked at. It now says so and waits.
+- **Geography moved to its own tab.** Deciding which box is an edge and
+  checking that a box is in the country you think it is are different jobs done
+  at different times; stacking them made the page open with fourteen rows of
+  geography before the thing the operator came for.
+
+**A new gate: `audit:attribution`.** Splitting the panel in two left the DB-IP
+link behind in the half that no longer renders geolocation — and DB-IP's
+CC BY 4.0 grant requires that link on pages showing its results. Nothing
+checked it; the click gate caught it only by accident, because the component
+was left referenced rather than deleted. Now the check is explicit: whichever
+component renders geolocation results must render the link and the licence it
+is granted under, and the service and the page must attribute the same source.
+Proven by contradiction three ways. An earlier comment claimed this gate
+existed when it did not — that has been true and false in the same file for a
+version, which is its own small lesson.
+
 ### v0.62.0 — iter20 m2: from a network on paper to routes on servers
 m1 recorded which box is an origin and which is an edge. This turns that into
 the Nimble routes that actually make it so — and, more usefully, into the list

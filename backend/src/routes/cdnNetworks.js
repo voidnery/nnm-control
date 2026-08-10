@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { DeliveryNetwork, ROLES, ALLOWED_UPSTREAM } from '../models/DeliveryNetwork.js';
 import { NimbleServer } from '../models/NimbleServer.js';
@@ -99,10 +100,33 @@ cdnNetworkRouter.put('/networks/:id', requirePerm('cdn.manage'), async (req, res
   if (b.description !== undefined) n.description = String(b.description);
   if (b.audience !== undefined) n.audience = b.audience === 'public' ? 'public' : 'internal';
   if (Array.isArray(b.nodes)) {
-    n.nodes = b.nodes.map(x => ({
-      _id: x.id || undefined,
+    // A node the operator has just added does not have an id yet, so the page
+    // gives it a temporary one. Putting that string into _id — and into the
+    // upstream of whatever points at it — makes mongoose fail the cast, and the
+    // save died as a bare 500 that took the whole topology with it. The ids are
+    // minted here instead, and every upstream reference is rewritten through
+    // the same map so a brand new edge can point at a brand new origin in one
+    // save.
+    const idMap = new Map();
+    const minted = b.nodes.map(x => {
+      const raw = String(x.id ?? '');
+      const oid = mongoose.isValidObjectId(raw)
+        ? new mongoose.Types.ObjectId(raw)
+        : new mongoose.Types.ObjectId();
+      if (raw) idMap.set(raw, oid);
+      return { x, oid };
+    });
+    const resolveUp = (u) => {
+      const raw = String(u);
+      if (idMap.has(raw)) return idMap.get(raw);
+      return mongoose.isValidObjectId(raw) ? new mongoose.Types.ObjectId(raw) : null;
+    };
+    n.nodes = minted.map(({ x, oid }) => ({
+      _id: oid,
       server: x.server, role: x.role,
-      upstream: Array.isArray(x.upstream) ? x.upstream : [],
+      // A reference to a node that is no longer in the payload is dropped
+      // rather than carried as a dangling id.
+      upstream: (Array.isArray(x.upstream) ? x.upstream : []).map(resolveUp).filter(Boolean),
       weight: Number.isFinite(Number(x.weight)) ? Number(x.weight) : 100,
       enabled: x.enabled !== false,
       notes: String(x.notes || ''),
@@ -115,7 +139,14 @@ cdnNetworkRouter.put('/networks/:id', requirePerm('cdn.manage'), async (req, res
   // building it in one sitting or not at all.
   const blocking = problems.filter(p => p.severity !== 'warning');
   if (blocking.length) return res.status(422).json({ error: 'invalid topology', problems });
-  await n.save();
+  try {
+    await n.save();
+  } catch (e) {
+    // Named, not swallowed. A save that fails validation used to reach the
+    // operator as "Internal server error", which says nothing about which
+    // field is wrong or that their edits were not stored.
+    return res.status(422).json({ error: `network could not be saved: ${e.message}` });
+  }
   await logEvent(req, 'cdn.network.update', { id: n.id, nodes: n.nodes.length });
   res.json({ ...pub(n), problems });
 });

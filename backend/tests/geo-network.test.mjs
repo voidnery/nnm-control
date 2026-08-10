@@ -261,6 +261,55 @@ check('the gateway is a role but carries no media upstream', () => {
   assert.deepEqual(ALLOWED_UPSTREAM.gateway, []);
 });
 
+
+console.log('\nNODE IDS SURVIVE A SAVE:');
+
+// A node the operator has just added has no id, so the page invents one. It
+// used to go straight into _id and into the upstream of whatever pointed at
+// it — and mongoose refused the cast, so the save died as a bare 500 that took
+// the whole topology with it, and the plan then reported "no edges" about a
+// network the operator could see on screen.
+const mongoose = (await import('mongoose')).default;
+const mintIds = (nodes) => {
+  const idMap = new Map();
+  const minted = nodes.map(x => {
+    const raw = String(x.id ?? '');
+    const oid = mongoose.isValidObjectId(raw) ? new mongoose.Types.ObjectId(raw) : new mongoose.Types.ObjectId();
+    if (raw) idMap.set(raw, oid);
+    return { x, oid };
+  });
+  const up = (u) => idMap.get(String(u))
+    || (mongoose.isValidObjectId(String(u)) ? new mongoose.Types.ObjectId(String(u)) : null);
+  return minted.map(({ x, oid }) => ({
+    _id: oid, server: x.server, role: x.role,
+    upstream: (x.upstream || []).map(up).filter(Boolean),
+  }));
+};
+
+check('a temporary id becomes a real one', () => {
+  const out = mintIds([{ id: 'new-1786365344729-abc12', server: 's1', role: 'edge' }]);
+  assert.ok(mongoose.isValidObjectId(out[0]._id));
+});
+
+check('a brand new edge can point at a brand new origin in one save', () => {
+  const out = mintIds([
+    { id: 'new-a', server: 's1', role: 'origin', upstream: [] },
+    { id: 'new-b', server: 's2', role: 'edge', upstream: ['new-a'] },
+  ]);
+  assert.equal(String(out[1].upstream[0]), String(out[0]._id));
+});
+
+check('an existing id is kept, not replaced', () => {
+  const real = new mongoose.Types.ObjectId().toString();
+  const out = mintIds([{ id: real, server: 's1', role: 'origin' }]);
+  assert.equal(String(out[0]._id), real);
+});
+
+check('a reference to a node that is gone is dropped, not carried', () => {
+  const out = mintIds([{ id: 'new-b', server: 's2', role: 'edge', upstream: ['new-vanished'] }]);
+  assert.deepEqual(out[0].upstream, []);
+});
+
 await fs.rm(TMP, { recursive: true, force: true });
 console.log(failures ? `\n${failures} geo/topology check(s) failed` : '\nall geo & topology checks passed');
 process.exit(failures ? 1 : 0);

@@ -13,7 +13,7 @@ import { useConfirm } from '../confirm.jsx';
 // findings refuse the apply button rather than warning next to an enabled one.
 const SEV = { block: 'err', warn: 'warn', note: '' };
 
-export default function DeliveryRoutesPanel({ network }) {
+export default function DeliveryRoutesPanel({ network, dirty = false }) {
   const { t } = useI18n();
   const { can } = useAuth();
   const { push } = useToast();
@@ -60,9 +60,9 @@ export default function DeliveryRoutesPanel({ network }) {
       <div className="hint" style={{ fontSize: 11 }}>{t('cdn.channelsHint')}</div>
 
       <div className="row" style={{ gap: 8, marginTop: 8 }}>
-        <button onClick={() => run('plan')} disabled={busy || !list.length}>{t('cdn.showPlan')}</button>
+        <button onClick={() => run('plan')} disabled={busy || !list.length || dirty}>{t('cdn.showPlan')}</button>
         {can('cdn.manage') && (
-          <button className="primary" onClick={apply} disabled={busy || !plan || blocked || !work.length}>
+          <button className="primary" onClick={apply} disabled={busy || !plan || blocked || !work.length || dirty}>
             {busy ? '…' : t('cdn.apply', { n: work.length })}
           </button>
         )}
