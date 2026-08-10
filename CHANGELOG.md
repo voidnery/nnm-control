@@ -1,5 +1,40 @@
 # Changelog
 
+### v0.63.0 — iter20 m3: stored is not delivering
+m2 could write a route and prove WMSPanel stored it. A route can be stored,
+correct, pointing at an origin that has nothing on it — and every screen the
+panel had would have looked fine. This answers the narrower question: is this
+edge serving what I think, from where I think.
+
+- **What the servers say, beside what the plan says.** Each box in the network
+  is read directly over the native Nimble API — no WMSPanel quota, so it can be
+  asked as often as an operator wants to look — and every application gets a
+  verdict that maps to a next action: flowing, not reaching the edge, no route,
+  nothing published yet.
+- **"Could not ask" is kept apart from "nothing there".** An unreachable edge
+  reports as unreachable, not as empty, and a missing reading prints as a dash
+  rather than a zero. Zero is a claim; the panel does not get to make it about
+  a box that did not answer. An unreachable *origin* does not turn a serving
+  edge into a fault either — those are two separate facts.
+- **Drift is surfaced, not omitted.** Routes on an edge that no listed
+  application accounts for, and routes left on a box whose role has since
+  changed, are shown. `/test1/` on the real fleet is exactly this: left over
+  from the first successful write. A view of "what is on my network" that shows
+  only the plan is showing the plan.
+- **A route can be deleted from the panel that created it.** Writing without
+  unwriting left the operator in WMSPanel, three menus deep and one server at a
+  time, to undo what this page did. The confirmation names the consequence —
+  delivery stops at the next sync and viewers notice — because "are you sure"
+  about an invisible outcome is not a confirmation.
+
+Cache hit rates would be the obvious next thing to show and there is no
+confirmed endpoint for them, so they are absent rather than estimated.
+
+13 new checks on state, 4 more on the panel; every rule that decides a verdict
+proven by contradiction. One of those contradictions appeared to pass at first
+— the fault was quoting in the throwaway script that ran it, not the gate. A
+check that seems not to bite is worth re-running by hand before it is believed.
+
 ### v0.62.5 — a release that failed for no fault of its own
 The v0.62.4 push to ghcr was refused:
 

@@ -163,6 +163,11 @@ window.fetch = (u) => {
     attribution:{ text:'IP Geolocation by DB-IP', url:'https://db-ip.com' } }), text:()=>Promise.resolve('{}') });
   // iter20 m2 - the plan endpoint. Without it the routes panel renders against
   // undefined the moment a network is selected.
+  if (/\/networks\/[^/]+\/state$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    rows:[{ edge:'Nimble RU-2', origin:'selectel(24/7)', application:'test2', routeId:'r1',
+            edgeStreams:1, edgeBandwidth:880000, originStreams:1, originBandwidth:900000, verdict:'flowing' }],
+    drift:[{ code:'unplanned-route', edge:'Nimble RU-2', from:'/test1/', to:'79.98.187.66:8081/test1/', routeId:'r0' }],
+    unreachable:[], summary:{ flowing:1, broken:0, unknown:0 } }), text:()=>Promise.resolve('{}') });
   if (/\/networks\/[^/]+\/(plan|apply)$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     planned:[{ action:'create', application:'kp_24-7', server:'Nimble RU-2', from:'/kp_24-7/',
                to:'10.0.0.10:8081/kp_24-7/', portSource:'nimble-default' }],

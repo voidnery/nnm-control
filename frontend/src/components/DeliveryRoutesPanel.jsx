@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
+import IconButton from './IconButton.jsx';
 
 // What the network implies, before anything is written.
 //
@@ -12,6 +13,15 @@ import { useConfirm } from '../confirm.jsx';
 // which server, and every reason it might not behave as it reads. Blocking
 // findings refuse the apply button rather than warning next to an enabled one.
 const SEV = { block: 'err', warn: 'warn', note: '' };
+const VERDICT = {
+  flowing: 'live', 'origin-only': 'err', 'no-route': 'err',
+  'nothing-upstream': '', 'edge-unreachable': 'warn', 'origin-unknown': 'warn',
+};
+// Bits per second as the operator reads them, and a dash rather than "0 bps"
+// when there is no reading at all.
+const fmtBw = (bps) => (bps === null || bps === undefined) ? '—'
+  : bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbps`
+  : bps >= 1e3 ? `${(bps / 1e3).toFixed(0)} kbps` : `${bps} bps`;
 
 export default function DeliveryRoutesPanel({ network, servers = [], dirty = false }) {
   const { t } = useI18n();
@@ -28,6 +38,10 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   // the panel showed intent and never state, and WMSPanel's own list lives
   // three menus away and per server.
   const [live, setLive] = useState(null);
+  // What the servers say, as opposed to what is configured. Asked over the
+  // native Nimble API, so it costs no WMSPanel quota and can be refreshed as
+  // often as the operator wants to look.
+  const [state, setState] = useState(null);
 
   const loadLive = async () => {
     try { const r = await api('/cdn/routes'); setLive(Array.isArray(r?.routes) ? r.routes : []); }
@@ -43,12 +57,32 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
 
   const list = channels.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
 
+  const loadState = async () => {
+    if (!list.length) { setState(null); return; }
+    setBusy(true);
+    try { setState(await api(`/cdn/networks/${network.id}/state`, { method: 'POST', body: { channels: list } })); }
+    catch (e) { setError(e.data?.error || e.message); }
+    finally { setBusy(false); }
+  };
+
+  const removeRoute = async (r) => {
+    // Deleting a route stops delivery on that edge the moment Nimble syncs.
+    // Viewers notice; the confirmation says so rather than asking "are you
+    // sure" about something whose consequence is invisible from here.
+    if (!(await confirm({ message: t('cdn.confirmDelete2', { from: r.from, to: r.to }) }))) return;
+    setBusy(true); setError('');
+    try { await api(`/cdn/routes/${r.id}`, { method: 'DELETE' }); await loadLive(); await loadState();
+          push({ type: 'ok', message: t('cdn.routeDeleted') }); }
+    catch (e) { setError(e.data?.error || e.message); }
+    finally { setBusy(false); }
+  };
+
   const run = async (what) => {
     setBusy(true); setError(''); if (what === 'plan') setReport(null);
     try {
       const r = await api(`/cdn/networks/${network.id}/${what}`, { method: 'POST', body: { channels: list } });
       if (what === 'plan') setPlan(r);
-      else { setReport(r); setPlan(r.plan || plan); await loadLive(); push({ type: r.ok ? 'ok' : 'warn', message: t('cdn.applied', { n: r.applied }) }); }
+      else { setReport(r); setPlan(r.plan || plan); await loadLive(); await loadState(); push({ type: r.ok ? 'ok' : 'warn', message: t('cdn.applied', { n: r.applied }) }); }
     } catch (e) {
       // The response body is on `e.data` — reading `e.body` meant every
       // failure arrived as a bare status line while the thing worth reading,
@@ -86,6 +120,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
 
       <div className="row" style={{ gap: 8, marginTop: 8 }}>
         <button onClick={() => run('plan')} disabled={busy || !list.length || dirty}>{t('cdn.showPlan')}</button>
+        <button onClick={loadState} disabled={busy || !list.length}>{t('cdn.checkState')}</button>
         {can('cdn.manage') && (
           <button className="primary" onClick={apply} disabled={busy || !plan || blocked || !work.length || dirty}>
             {busy ? '…' : t('cdn.apply', { n: work.length })}
@@ -135,6 +170,44 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         </table>
       )}
 
+      {state && (
+        <div style={{ marginTop: 14 }}>
+          <b>{t('cdn.stateTitle')}</b>
+          <div className="hint" style={{ fontSize: 11 }}>{t('cdn.stateHint')}</div>
+          {state.unreachable?.length > 0 && (
+            <div className="hint" style={{ marginTop: 4 }}>
+              {t('cdn.unreachable')} {state.unreachable.join(', ')}
+            </div>
+          )}
+          <table style={{ marginTop: 6 }}>
+            <thead>
+              <tr><th>{t('cdn.edgeCol')}</th><th>{t('cdn.channels')}</th>
+                  <th>{t('cdn.onOrigin')}</th><th>{t('cdn.onEdge')}</th><th>{t('cdn.verdict')}</th></tr>
+            </thead>
+            <tbody>
+              {state.rows.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.edge}</td>
+                  <td className="mono" style={{ fontSize: 12 }}>{r.application}</td>
+                  {/* A dash where a count would be: the box could not be asked,
+                      and printing 0 would be a claim we cannot make. */}
+                  <td style={{ fontSize: 12 }}>{r.originStreams === null ? '—' : `${r.originStreams} · ${fmtBw(r.originBandwidth)}`}</td>
+                  <td style={{ fontSize: 12 }}>{r.edgeStreams === null ? '—' : `${r.edgeStreams} · ${fmtBw(r.edgeBandwidth)}`}</td>
+                  <td><span className={'badge ' + VERDICT[r.verdict]}>{t('cdn.v.' + r.verdict)}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {state.drift?.map((d, i) => (
+            <div key={i} className="hint" style={{ marginTop: 4 }}>
+              <span className="badge warn">{t('cdn.driftTag')}</span>{' '}
+              {t('cdn.drift.' + d.code)}
+              {d.edge && <> · {d.edge}</>} · <span className="mono">{d.from} → {d.to}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ marginTop: 14 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <b>{t('cdn.liveRoutes')}</b>
@@ -142,17 +215,18 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         </div>
         <div className="hint" style={{ fontSize: 11 }}>{t('cdn.liveRoutesHint')}</div>
         <table style={{ marginTop: 6 }}>
-          <thead><tr><th>{t('cdn.from')}</th><th>{t('cdn.to')}</th><th>{t('cdn.onServers')}</th></tr></thead>
+          <thead><tr><th>{t('cdn.from')}</th><th>{t('cdn.to')}</th><th>{t('cdn.onServers')}</th><th /></tr></thead>
           <tbody>
             {(live || []).map(r => (
               <tr key={r.id}>
                 <td className="mono" style={{ fontSize: 12 }}>{r.from}</td>
                 <td className="mono" style={{ fontSize: 12 }}>{r.to}</td>
                 <td style={{ fontSize: 12 }}>{(r.servers || []).map(nameOf).join(', ') || '—'}</td>
+                <td>{can('cdn.manage') && <IconButton action="remove" danger disabled={busy} onClick={() => removeRoute(r)} />}</td>
               </tr>
             ))}
-            {live && !live.length && <tr><td colSpan={3} className="hint">{t('cdn.noLiveRoutes')}</td></tr>}
-            {!live && <tr><td colSpan={3} className="hint">{t('sd.loading')}</td></tr>}
+            {live && !live.length && <tr><td colSpan={4} className="hint">{t('cdn.noLiveRoutes')}</td></tr>}
+            {!live && <tr><td colSpan={4} className="hint">{t('sd.loading')}</td></tr>}
           </tbody>
         </table>
       </div>

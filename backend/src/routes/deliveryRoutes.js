@@ -5,6 +5,8 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { planRoutes } from '../services/deliveryPlan.js';
+import { networkState, indexStreams } from '../services/networkState.js';
+import { nimble } from '../services/nimbleClient.js';
 import { logEvent } from '../services/audit.js';
 
 export const deliveryRoutesRouter = Router();
@@ -24,8 +26,40 @@ const proxy = (fn) => async (req, res) => {
 deliveryRoutesRouter.get('/routes', requirePerm('cdn.view'), proxy(async () =>
   wmspanel.routeList(await cfg())));
 
-deliveryRoutesRouter.delete('/routes/:objId', requirePerm('cdn.manage'), proxy(async rq =>
-  wmspanel.routeDelete(await cfg(), rq.params.objId)));
+deliveryRoutesRouter.delete('/routes/:objId', requirePerm('cdn.manage'), async (req, res) => {
+  try {
+    const r = await wmspanel.routeDelete(await cfg(), req.params.objId);
+    await logEvent(req, 'cdn.route.delete', { routeId: req.params.objId });
+    res.json(r);
+  } catch (e) {
+    res.status(e.code === 'NO_CREDS' ? 409 : 502).json({ error: e.message, upstream: e.data ?? null });
+  }
+});
+
+// What the servers say, next to what the plan says. Reads live_streams_status
+// off each box directly — the native API, so it costs no WMSPanel quota and can
+// be asked as often as an operator wants to look.
+deliveryRoutesRouter.post('/networks/:id/state', requirePerm('cdn.view'), async (req, res) => {
+  const g = await gather(req.params.id);
+  if (g.error) return res.status(404).json({ error: g.error });
+  const channels = (Array.isArray(req.body?.channels) ? req.body.channels : [])
+    .map(x => String(x).trim()).filter(Boolean);
+
+  // Only the boxes this network actually uses, and each one asked once even
+  // when it appears as the upstream of several edges.
+  const wanted = new Set((g.network.nodes || []).map(n => String(n.server)));
+  const targets = g.servers.filter(s => wanted.has(String(s._id)));
+  const live = {};
+  await Promise.all(targets.map(async (s) => {
+    // A box that cannot be reached is a finding, not an absence of streams:
+    // null says "asked and failed", undefined would say "never asked".
+    try { live[String(s._id)] = indexStreams(await nimble.liveStreams(s)); }
+    catch { live[String(s._id)] = null; }
+  }));
+
+  const unreachable = targets.filter(s => live[String(s._id)] === null).map(s => s.name);
+  res.json({ ...networkState({ ...g, channels, live }), channels, unreachable });
+});
 
 async function gather(networkId) {
   const network = await DeliveryNetwork.findById(networkId);

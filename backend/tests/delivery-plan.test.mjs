@@ -262,5 +262,35 @@ check('WMSPanel server ids are shown as fleet names', () => {
   assert.ok(/wmspanelServerId/.test(panelCode) && /nameOf/.test(panelCode));
 });
 
+console.log('\nSTATE AND DELETION REACH THE PANEL:');
+
+check('the panel asks the servers, not only the plan', () => {
+  assert.ok(/networks\/\$\{network\.id\}\/state/.test(panelCode), 'nothing reads live state');
+  assert.ok(/loadState/.test(panelCode));
+});
+
+check('a route can be removed from the panel that created it', () => {
+  // A panel that writes and cannot unwrite leaves the operator in WMSPanel,
+  // three menus deep, per server, to undo what this page did.
+  assert.ok(/method: 'DELETE'/.test(panelCode), 'no delete call');
+  assert.ok(/confirmDelete2/.test(panelCode), 'deletion is not confirmed');
+});
+
+check('the confirmation says what a viewer will notice', () => {
+  // "Are you sure" about an invisible consequence is not a confirmation.
+  const dict = readFile(new URL('i18n.jsx', FRONT), 'utf8');
+  const ru = dict.match(/'cdn\.confirmDelete2':\s*'([^']+)'/g) || [];
+  assert.ok(ru.length === 2, 'the confirmation is missing from a dictionary');
+  assert.ok(ru.every(x => /viewers|зрител/i.test(x)),
+    'the confirmation does not mention that delivery stops');
+});
+
+check('a missing reading is a dash, never a zero', () => {
+  // Printing 0 where a box could not be asked is a claim the panel cannot
+  // make, and it is the difference between "nothing is streaming" and "we do
+  // not know".
+  assert.ok(/=== null \? '—'/.test(panelCode), 'null readings are not distinguished from zero');
+});
+
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');
 process.exit(failures ? 1 : 0);
