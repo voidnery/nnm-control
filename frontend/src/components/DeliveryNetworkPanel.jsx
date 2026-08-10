@@ -5,6 +5,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from './IconButton.jsx';
+import DeliveryRoutesPanel from './DeliveryRoutesPanel.jsx';
 
 // The delivery network: which box is an ingest, an origin, an edge, and where
 // each one physically is.
@@ -361,6 +362,8 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
           </>
         )}
       </div>
+
+      {net && <DeliveryRoutesPanel network={net} />}
 
       {geoEdit && (
         <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setGeoEdit(null)}>

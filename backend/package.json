@@ -1,13 +1,13 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.61.0",
+  "version": "0.62.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "test:functions": "node tests/function-actions.test.mjs",
     "test:stats": "node tests/stats-collector.test.mjs",
-    "test": "npm run audit:release && npm run audit:installer && npm run audit:dockerfile && npm run audit:shadow && npm run audit:routes && npm run audit:undef && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl && npm run test:lifecycle && npm run test:host && npm run test:join && npm run test:playlist",
+    "test": "npm run audit:release && npm run audit:installer && npm run audit:dockerfile && npm run audit:shadow && npm run audit:routes && npm run audit:undef && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl && npm run test:lifecycle && npm run test:host && npm run test:join && npm run test:geo && npm run test:delivery && npm run test:playlist",
     "test:template": "node tests/transcoder-template.test.mjs",
     "test:fleet": "node tests/transcoder-fleet.test.mjs",
     "test:playback": "node tests/playback-endpoints.test.mjs",
@@ -30,7 +30,9 @@
     "audit:dockerfile": "node scripts/dockerfile-audit.mjs",
     "audit:installer": "node scripts/installer-audit.mjs",
     "test:playlist": "node tests/playlist-file.test.mjs",
-    "audit:release": "node scripts/release-audit.mjs"
+    "audit:release": "node scripts/release-audit.mjs",
+    "test:geo": "node tests/geo-network.test.mjs",
+    "test:delivery": "node tests/delivery-plan.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

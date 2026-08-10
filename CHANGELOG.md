@@ -1,5 +1,60 @@
 # Changelog
 
+### v0.62.0 — iter20 m2: from a network on paper to routes on servers
+m1 recorded which box is an origin and which is an edge. This turns that into
+the Nimble routes that actually make it so — and, more usefully, into the list
+of reasons it might not do what the operator reads.
+
+- **The plan is a first-class thing.** A network plus a list of applications
+  produces the exact `from` and `to` that would be written, on which server,
+  with which action (create / update / already right). It is computed with no
+  side effects, so it can be looked at as often as wanted, and it is recomputed
+  server-side before an apply: the fleet can change between reading a plan and
+  pressing the button, and that change is invisible.
+- **HTTP Origin and caching cannot both be on, and the panel now refuses.**
+  Softvelum state it plainly — HLS re-streaming is not cached while HTTP Origin
+  mode is enabled. This fleet already runs HTTP Origin: `blastdotakk` across
+  three servers, RU-2 among them. Route that application to RU-2 as a caching
+  edge and every viewer fetches every chunk from the origin. It works, it
+  reports nothing, and origin traffic multiplies by the audience. Blocking, per
+  server rather than globally, and not a problem on the origin itself, which is
+  the normal setup.
+- **An assumed port is labelled as assumed.** Nimble's HTTP port is not exposed
+  by any WMSPanel endpoint, so an origin without one set gets the documented
+  default — and the plan says which number it used and where it came from,
+  beside the URL it produced. An assumed port yields a route that resolves and
+  never serves.
+- **Apply reads back what it wrote.** The account had no routes at all, so the
+  create response shape is unproven; a create that reports success and stores a
+  different target is exactly the failure worth paying a call to exclude.
+  Rollback removes only what this run created — an update is left and reported,
+  because restoring the previous target would mean inventing it.
+- **Re-running a plan does not duplicate it.** An identical route is kept, the
+  same path pointing elsewhere becomes an update with the old target shown, and
+  a route on a different server is not treated as this one.
+
+Built and tested on the fleet's own topology: selectel(24/7) as origin,
+Nimble RU-2 and RU-3 — the two boxes already named "Только Раздача" — as edges.
+That naming is the whole argument for m1: the intent existed, in a place no
+program could read. 16 new checks; the four that matter proven by contradiction
+(severity downgraded, the HTTP Origin check removed, an assumed port passed off
+as configured, deduplication removed).
+
+**The API reconnaissance tool was hiding its own failures, and leaking.**
+A run that returned 52 identical `FAILED` lines turned out to be one cause:
+WMSPanel matches the caller's IP against a whitelist, and the script had been
+run from a workstation instead of the panel host. It could not say so because
+`curl -f` discards the body, which is where WMSPanel explains itself. It now
+reports the HTTP status and the response, stops at the first refusal instead of
+turning one cause into fifty lines, names the three things to check in order,
+and defaults to api.wmspanel.com — where all 505 documented examples point.
+
+Worse, its header claimed the output contained no credentials. True of the API
+keys, false of everything else: the successful run carried 121 republish
+logins and passwords, push credentials, licence keys and **live Twitch stream
+keys**. Secrets are now redacted on write and listed in `_redactions.txt`,
+verified against the real dump format.
+
 ### v0.61.0 — iter20 m1: roles and geography
 The panel now holds a delivery network as an object of its own, and knows
 where each server physically is without asking anyone.

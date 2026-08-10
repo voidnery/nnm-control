@@ -193,6 +193,19 @@ export const wmspanel = {
   originAppCreate: (cfg, body) => call(cfg, `/origin_apps`, { method: 'POST', body }),
   originAppUpdate: (cfg, id, patch) => call(cfg, `/origin_apps/${id}`, { method: 'PUT', body: patch }),
   originAppDelete: (cfg, id) => call(cfg, `/origin_apps/${id}`, { method: 'DELETE' }),
+  // Nimble routes (account-level, iter20 m2).
+  //
+  // Paths confirmed against the official reference, not remembered: the
+  // trailing slash on the collection is what the documented examples use, and
+  // the fleet's own account returned {"status":"Ok","routes":[]} on GET — an
+  // empty list, so no live example of a populated route exists yet. Field
+  // shapes below come from the reference; the first apply is the first real
+  // proof, which is why the deployment plan verifies by reading back.
+  routeList:   (cfg) => call(cfg, `/routes/`),
+  routeGet:    (cfg, id) => call(cfg, `/routes/${id}`),
+  routeCreate: (cfg, body) => call(cfg, `/routes/`, { method: 'POST', body }),
+  routeUpdate: (cfg, id, patch) => call(cfg, `/routes/${id}`, { method: 'PUT', body: patch }),
+  routeDelete: (cfg, id) => call(cfg, `/routes/${id}`, { method: 'DELETE' }),
   // RTMP interfaces (view)
   rtmpInterfaceList: (cfg, sid) => call(cfg, `/server/${sid}/rtmp/interface`),
   rtmpInterfaceCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/rtmp/interface`, { method: 'POST', body }),

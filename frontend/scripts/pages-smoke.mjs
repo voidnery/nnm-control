@@ -157,6 +157,13 @@ window.fetch = (u) => {
     ], updatedAt:new Date().toISOString() }],
     roles:['ingest','origin','mid','edge','gateway'],
     attribution:{ text:'IP Geolocation by DB-IP', url:'https://db-ip.com' } }), text:()=>Promise.resolve('{}') });
+  // iter20 m2 - the plan endpoint. Without it the routes panel renders against
+  // undefined the moment a network is selected.
+  if (/\/networks\/[^/]+\/(plan|apply)$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    planned:[{ action:'create', application:'kp_24-7', server:'Nimble RU-2', from:'/kp_24-7/',
+               to:'http://10.0.0.10:8081/kp_24-7/', portSource:'nimble-default' }],
+    problems:[{ code:'origin-http-port-assumed', severity:'warn', server:'selectel(24/7)', port:8081 }],
+    blocking:[], summary:{ create:1, update:0, keep:0 } }), text:()=>Promise.resolve('{}') });
   if (/\/geoip$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     present:true, edition:'country', release:'2026-08', size:8.1e6, hasCoordinates:false,
     editions:[{ id:'country', label:'DB-IP Country Lite', approxBytes:7.9e6, accuracyIndex:81, hasCoordinates:false },
