@@ -1,9 +1,26 @@
-# Release pipeline: on tag vX.Y.Z —
-#   1) build & push api/web images to ghcr.io (public),
-#   2) build the .deb,
-#   3) build a signed APT repository and publish it to the gh-pages branch
-#      (served by GitHub Pages at https://<owner>.github.io/nnm-control/apt),
-#   4) attach the .deb to a GitHub Release.
+# Release pipeline.
+#
+# The version lives in package.json and nowhere else. Pushing to `main` with a
+# version that has not been released yet *is* the release: this job resolves
+# the version, checks nothing is already published under it, builds, publishes
+# and creates the tag itself.
+#
+# That is a deliberate reversal. Releases used to start from a hand-typed tag
+# that had to equal package.json, and three releases in a row died because it
+# did not — v1.8.7 against 0.59.0, v0.59.0 against 0.59.1, v0.59.1 against
+# 0.59.0. Every one of those was a person retyping a number a file already
+# knew. Nothing here asks for it now.
+#
+# A tag push still works, for a deliberate re-release, and is still checked
+# against package.json. Pushes to `main` that do not change the version are a
+# no-op: the jobs skip and the run is green.
+#
+#   1) meta      — resolve the version, decide whether there is a release,
+#   2) images    — build & push api/web images to ghcr.io (public),
+#   3) apt-repo  — build the .deb, build a signed APT repository, publish it to
+#                  the gh-pages branch (served by GitHub Pages at
+#                  https://<owner>.github.io/nnm-control/apt), create the
+#                  GitHub Release and attach that one .deb.
 #
 # Required repository setup (one-time):
 #   - Settings -> Pages: deploy from branch "gh-pages", folder "/ (root)".
@@ -17,7 +34,9 @@ name: release
 
 on:
   push:
+    branches: ['main']
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -36,7 +55,72 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Resolved once and consumed by both jobs. It used to be computed twice, in
+  # two copies of the same shell block — which is the same drift this check
+  # exists to catch, one level up.
+  meta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.v.outputs.release }}
+      version: ${{ steps.v.outputs.version }}
+      deb_version: ${{ steps.v.outputs.deb_version }}
+      deb_file: ${{ steps.v.outputs.deb_file }}
+      owner: ${{ steps.v.outputs.owner }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          set -euo pipefail
+          # Single source of truth. Both package.json files must agree, since
+          # only one of them is read here and the other is what the panel
+          # reports about itself.
+          pkgver="$(node -p "require('./frontend/package.json').version")"
+          bever="$(node -p "require('./backend/package.json').version")"
+          if [ "$bever" != "$pkgver" ]; then
+            echo "::error::backend/package.json ($bever) disagrees with frontend/package.json ($pkgver); bump both"
+            exit 1
+          fi
+
+          release=true
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            # A tag push names the release explicitly, so it must be right.
+            raw="${GITHUB_REF_NAME}"
+            tag="${raw#v}"
+            tag="${tag#[.\-_]}"
+            if [ "$tag" != "$pkgver" ]; then
+              echo "::error::tag '$raw' -> '$tag' does not match package.json ($pkgver). You do not need to tag at all: push the version bump to main and the release tag is created for you."
+              exit 1
+            fi
+          else
+            # A branch push releases only if this version is not out already.
+            # Without this every unrelated commit to main would re-publish the
+            # same version, and the pool assertion downstream would fail the
+            # run — noisy, and eventually ignored.
+            if git ls-remote --exit-code origin "refs/tags/v$pkgver" >/dev/null 2>&1; then
+              echo "v$pkgver is already released — nothing to do." >> "$GITHUB_STEP_SUMMARY"
+              release=false
+            fi
+          fi
+
+          # Docker tags cannot contain a colon, so images carry the bare
+          # version. The .deb carries a Debian epoch (1:) so the 0.x scheme
+          # sorts above the stray 1.x versions already in the pool and
+          # `apt upgrade` offers it; postinst strips the epoch back off for
+          # the image tag it pulls.
+          {
+            echo "release=$release"
+            echo "version=$pkgver"
+            echo "deb_version=1:$pkgver"
+            echo "deb_file=nnm-control_${pkgver}_all.deb"
+            echo "owner=${GITHUB_REPOSITORY_OWNER,,}"
+          } >> "$GITHUB_OUTPUT"
+          [ "$release" = true ] && echo "releasing $pkgver (deb 1:$pkgver)" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
   images:
+    needs: meta
+    if: needs.meta.outputs.release == 'true'
     runs-on: ubuntu-latest
     # A hung network step should cost minutes, not the six hours a job is
     # allowed by default.
@@ -56,28 +140,6 @@ jobs:
             context: ./frontend
     steps:
       - uses: actions/checkout@v4
-      - id: meta
-        run: |
-          # Single source of truth for the version is frontend/package.json.
-          # The tag only *names* the release; if it disagrees with package.json,
-          # the two-scheme drift that stranded apt upgrades is back — so fail
-          # loudly here rather than ship a mislabelled build.
-          raw="${GITHUB_REF_NAME}"
-          tag="${raw#v}"
-          tag="${tag#[.\-_]}"
-          pkgver="$(node -p "require('./frontend/package.json').version")"
-          if [ "$tag" != "$pkgver" ]; then
-            echo "::error::tag '$raw' -> '$tag' does not match frontend/package.json ($pkgver); tag the release to match package.json"
-            exit 1
-          fi
-          # Docker tags cannot contain a colon, so images carry the bare
-          # version. The .deb carries a Debian epoch (1:) so the 0.x scheme
-          # sorts above the stray 1.x versions already in the pool and
-          # `apt upgrade` offers it; postinst strips the epoch back off for
-          # the image tag it pulls.
-          echo "image_tag=$pkgver" >> "$GITHUB_OUTPUT"
-          echo "deb_version=1:$pkgver" >> "$GITHUB_OUTPUT"
-          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
       # Sign in to Docker Hub first when credentials exist, so pulling the
       # BuildKit image is not an anonymous, rate-limited request. Skipped
       # entirely when the secrets are absent.
@@ -113,50 +175,44 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ steps.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ steps.meta.outputs.image_tag }}
-            ghcr.io/${{ steps.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:latest
+            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ needs.meta.outputs.version }}
+            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:latest
           cache-from: type=gha,scope=nc-${{ matrix.name }}
           cache-to: type=gha,scope=nc-${{ matrix.name }},mode=max
 
   apt-repo:
-    needs: images
+    needs: [meta, images]
+    if: needs.meta.outputs.release == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - id: meta
-        run: |
-          # Single source of truth for the version is frontend/package.json.
-          # The tag only *names* the release; if it disagrees with package.json,
-          # the two-scheme drift that stranded apt upgrades is back — so fail
-          # loudly here rather than ship a mislabelled build.
-          raw="${GITHUB_REF_NAME}"
-          tag="${raw#v}"
-          tag="${tag#[.\-_]}"
-          pkgver="$(node -p "require('./frontend/package.json').version")"
-          if [ "$tag" != "$pkgver" ]; then
-            echo "::error::tag '$raw' -> '$tag' does not match frontend/package.json ($pkgver); tag the release to match package.json"
-            exit 1
-          fi
-          # Docker tags cannot contain a colon, so images carry the bare
-          # version. The .deb carries a Debian epoch (1:) so the 0.x scheme
-          # sorts above the stray 1.x versions already in the pool and
-          # `apt upgrade` offers it; postinst strips the epoch back off for
-          # the image tag it pulls.
-          echo "image_tag=$pkgver" >> "$GITHUB_OUTPUT"
-          echo "deb_version=1:$pkgver" >> "$GITHUB_OUTPUT"
-          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      # The existing pool, taken from the branch rather than from the Pages
+      # URL. Pages is a CDN with its own deployment queue; reading the pool
+      # from there means a lagging cache silently drops older versions out of
+      # the index while their files are still on the branch — rollback breaks
+      # and nothing reports an error. On the first release the branch does not
+      # exist yet, which is not a failure.
+      - id: pool
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
       - name: Install packaging tools
         run: sudo apt-get update && sudo apt-get install -y dpkg-dev apt-utils gnupg
       - name: Import GPG key
         run: echo "${{ secrets.APT_GPG_PRIVATE_KEY }}" | gpg --batch --import
       - name: Build deb
-        run: packaging/build-deb.sh "${{ steps.meta.outputs.deb_version }}" "${{ steps.meta.outputs.owner }}"
+        run: packaging/build-deb.sh "${{ needs.meta.outputs.deb_version }}" "${{ needs.meta.outputs.owner }}"
       - name: Build APT repo
         env:
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
-          # Lets build-apt-repo pull the already-published pool back in, so a
-          # rebuild keeps every prior .deb (rollback) instead of shipping one.
-          APT_PUBLIC_BASE: https://${{ steps.meta.outputs.owner }}.github.io/nnm-control/apt
+          APT_POOL_DIR: ${{ steps.pool.outcome == 'success' && format('{0}/gh-pages', github.workspace) || '' }}
+          # Fallback only: used when the branch checkout above did not happen.
+          APT_PUBLIC_BASE: https://${{ needs.meta.outputs.owner }}.github.io/nnm-control/apt
         run: packaging/build-apt-repo.sh "${{ secrets.APT_GPG_KEY_ID }}"
       - name: Publish repo to gh-pages
         uses: peaceiris/actions-gh-pages@v4
@@ -164,7 +220,13 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./public
           keep_files: true
-      - name: Attach deb to GitHub Release
+      # The tag is created here, from the version, at the end — so a release
+      # that failed halfway leaves no tag and the next push to main retries it.
+      # One file: `dist/` also holds the preserved pool by this point, so a
+      # glob would attach every historical version to every Release.
+      - name: Tag and publish the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.deb
+          tag_name: v${{ needs.meta.outputs.version }}
+          name: v${{ needs.meta.outputs.version }}
+          files: dist/${{ needs.meta.outputs.deb_file }}

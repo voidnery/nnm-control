@@ -1,5 +1,60 @@
 # Changelog
 
+### v0.59.2 — releasing stops being something a person can get wrong
+v0.59.0 made the version single-source and made CI refuse a tag that disagrees
+with `package.json`. The gate is right; the process around it was not, and
+three releases died in a row without a single line of panel code being at
+fault:
+
+| tag pushed | `package.json` on that commit | |
+|---|---|---|
+| `v1.8.7` | 0.59.0 | old scheme against a new tree |
+| `v0.59.0` | 0.59.1 | tag from before the bump the same change carried |
+| `v0.59.1` | 0.59.0 | the revert took the bump with it |
+
+Every one of those was a person retyping a number that a file already knew, so
+the number is no longer asked for.
+
+- **A version bump pushed to `main` is the release.** The workflow resolves the
+  version from `package.json`, checks that `v<version>` is not already tagged,
+  builds, publishes, and creates the tag itself at the end. Nothing to type,
+  nothing to keep in sync. A push to `main` that does not change the version
+  skips every job and stays green.
+- **The tag path still exists and is still strict**, for a deliberate
+  re-release — and its error now says that tagging was never required.
+- **The tag is created last.** A release that fails halfway leaves no tag, so
+  the next push to `main` retries the whole thing rather than needing a tag
+  deleted first.
+- **The version is resolved once.** The two jobs each carried their own copy of
+  the same shell block — the same drift the block exists to catch, one level
+  up. A `meta` job resolves it and both consume its outputs, and it compares
+  the two `package.json` files, which nothing did.
+- **The pool comes from the branch, not the CDN.** `build-apt-repo.sh` read the
+  existing pool through the Pages URL, and Pages is a CDN with a deployment
+  queue already observed lagging and cancelling. A stale read drops older
+  versions out of the rebuilt index while their files sit on the branch —
+  rollback breaks and nothing reports an error. The job checks `gh-pages` out
+  and reads the pool from disk; the URL stays as a fallback.
+- **A release that cannot be installed is refused before it is signed.** apt
+  offers an upgrade only when the new version sorts strictly above the
+  installed one, and `0.59.x` sorts *below* the `1.8.x` in this pool — so a
+  release that loses the epoch publishes cleanly, reports success and reaches
+  no server. The repo build compares against every version already in the pool
+  and stops.
+- **One `.deb` per Release.** v0.59.0 started pulling the published pool back
+  into `dist/`, and the Release step globbed `dist/*.deb` — so every historical
+  version would have been attached to every Release, growing each time. The
+  preserved pool is staged outside `dist/` and the Release names one file.
+- **A new gate: `audit:release`.** Ten rules over the workflow, the packaging
+  scripts and `postinst`. All ten proven by contradiction.
+
+Verified in a container rather than only read: the decision block run against a
+real git remote in all five cases (new version, matching tag, two mismatched
+tags, already-released version); the deb built with the epoch; the repository
+assembled against the real `gh-pages` pool, signed, and resolved by a live
+`apt` — `Candidate: 1:0.59.2` above `1.8.5`, InRelease accepted without
+warning, `apt install nnm-control=1.8.5` still available.
+
 ### v0.59.0 — the release the panel could actually deliver, and the editor it hid
 Two independent faults, both about work that existed but never reached a screen.
 
