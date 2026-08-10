@@ -246,5 +246,21 @@ check('a create with no id looks for the route before calling it a failure', () 
   assert.ok(/routeList\(c\)\.catch/.test(stripComments(routes)), 'the missing-id path does not re-read the list');
 });
 
+check('the panel shows the routes that exist, not only the ones it would make', () => {
+  // A route was written, reported "read-back matches", and there was nowhere
+  // in the panel to see it: the page showed intent and never state, and
+  // WMSPanel's own list is three menus away and one server at a time.
+  assert.ok(/api\('\/cdn\/routes'\)/.test(panelCode), 'the panel never asks what exists');
+  assert.ok(/loadLive/.test(panelCode));
+  // Refreshed after a write, or the list is stale exactly when it is read.
+  assert.ok(/await loadLive\(\)/.test(panelCode), 'the list is not refreshed after an apply');
+});
+
+check('WMSPanel server ids are shown as fleet names', () => {
+  // "6a18e008dc73c6feb3a4f1e9" tells an operator nothing about which box a
+  // route landed on.
+  assert.ok(/wmspanelServerId/.test(panelCode) && /nameOf/.test(panelCode));
+});
+
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');
 process.exit(failures ? 1 : 0);

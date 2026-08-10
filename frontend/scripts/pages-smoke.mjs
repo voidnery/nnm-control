@@ -150,6 +150,10 @@ window.fetch = (u) => {
   // iter20 m1 - the delivery network and the geolocation database. Without
   // these the Distribution page renders its network view against undefined
   // and the whole page comes back empty.
+  // iter20 m2 - the routes that actually exist, now shown under the plan.
+  if (/\/cdn\/routes$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    status:'Ok', routes:[{ id:'r1', from:'/test2/', to:'79.98.187.66:8081/test2/',
+                           servers:['6a18e008dc73c6feb3a4f1e9'] }] }), text:()=>Promise.resolve('{}') });
   if (/\/cdn\/networks$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     networks:[{ id:'N1', name:'Prod', description:'', audience:'public', nodes:[
       { id:'n1', server:'S1', role:'origin', upstream:[], weight:100, enabled:true, notes:'' },

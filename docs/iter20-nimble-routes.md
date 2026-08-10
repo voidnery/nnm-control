@@ -52,9 +52,20 @@ for it in the route object, and the scheme cannot carry it because `to` has no
 scheme. Until a route created through the UI can be read back and inspected,
 the panel does not offer it.
 
-## What a created route returns — unknown
+## What a created route returns — confirmed
 
-The reference says the response carries the route. That has not been observed
-here, so the apply path treats a missing id by re-reading the list and looking
-for the route rather than assuming nothing was written — undoing on that
-assumption would delete a route that exists.
+The response does carry the route: the first successful write read back with a
+`to` identical to the one sent. The missing-id fallback stays anyway, because
+one observation is not a guarantee and undoing on a wrong assumption would
+delete a route that exists.
+
+## Where a route appears afterwards — confirmed
+
+In WMSPanel: **Nimble Streamer → Edit Nimble routes**, with the server picked
+at the top of the page. Routes are held per server, so a route written for one
+edge is invisible while another is selected. The Nimble instances themselves
+receive it on the ~30s sync, not immediately.
+
+Worth stating because it is the first question after a successful write, and
+the panel used to have no answer: it showed what it would do and never what
+was there.

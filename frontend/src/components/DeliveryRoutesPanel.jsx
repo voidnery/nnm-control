@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
@@ -13,7 +13,7 @@ import { useConfirm } from '../confirm.jsx';
 // findings refuse the apply button rather than warning next to an enabled one.
 const SEV = { block: 'err', warn: 'warn', note: '' };
 
-export default function DeliveryRoutesPanel({ network, dirty = false }) {
+export default function DeliveryRoutesPanel({ network, servers = [], dirty = false }) {
   const { t } = useI18n();
   const { can } = useAuth();
   const { push } = useToast();
@@ -23,6 +23,23 @@ export default function DeliveryRoutesPanel({ network, dirty = false }) {
   const [report, setReport] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // What is actually on the account, as opposed to what a plan would do about
+  // it. Without this the operator applies a route and has nowhere to look:
+  // the panel showed intent and never state, and WMSPanel's own list lives
+  // three menus away and per server.
+  const [live, setLive] = useState(null);
+
+  const loadLive = async () => {
+    try { const r = await api('/cdn/routes'); setLive(Array.isArray(r?.routes) ? r.routes : []); }
+    catch { setLive([]); }
+  };
+  useEffect(() => { loadLive(); }, [network.id]);
+
+  // WMSPanel ids mean nothing to a person; the fleet knows the names.
+  const nameOf = useMemo(() => {
+    const m = new Map(servers.filter(s => s.wmspanelServerId).map(s => [String(s.wmspanelServerId), s.name]));
+    return (id) => m.get(String(id)) || String(id).slice(-6);
+  }, [servers]);
 
   const list = channels.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
 
@@ -31,7 +48,7 @@ export default function DeliveryRoutesPanel({ network, dirty = false }) {
     try {
       const r = await api(`/cdn/networks/${network.id}/${what}`, { method: 'POST', body: { channels: list } });
       if (what === 'plan') setPlan(r);
-      else { setReport(r); setPlan(r.plan || plan); push({ type: r.ok ? 'ok' : 'warn', message: t('cdn.applied', { n: r.applied }) }); }
+      else { setReport(r); setPlan(r.plan || plan); await loadLive(); push({ type: r.ok ? 'ok' : 'warn', message: t('cdn.applied', { n: r.applied }) }); }
     } catch (e) {
       // The response body is on `e.data` — reading `e.body` meant every
       // failure arrived as a bare status line while the thing worth reading,
@@ -117,6 +134,28 @@ export default function DeliveryRoutesPanel({ network, dirty = false }) {
           </tbody>
         </table>
       )}
+
+      <div style={{ marginTop: 14 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <b>{t('cdn.liveRoutes')}</b>
+          <button onClick={loadLive} disabled={busy}>{t('action.refresh')}</button>
+        </div>
+        <div className="hint" style={{ fontSize: 11 }}>{t('cdn.liveRoutesHint')}</div>
+        <table style={{ marginTop: 6 }}>
+          <thead><tr><th>{t('cdn.from')}</th><th>{t('cdn.to')}</th><th>{t('cdn.onServers')}</th></tr></thead>
+          <tbody>
+            {(live || []).map(r => (
+              <tr key={r.id}>
+                <td className="mono" style={{ fontSize: 12 }}>{r.from}</td>
+                <td className="mono" style={{ fontSize: 12 }}>{r.to}</td>
+                <td style={{ fontSize: 12 }}>{(r.servers || []).map(nameOf).join(', ') || '—'}</td>
+              </tr>
+            ))}
+            {live && !live.length && <tr><td colSpan={3} className="hint">{t('cdn.noLiveRoutes')}</td></tr>}
+            {!live && <tr><td colSpan={3} className="hint">{t('sd.loading')}</td></tr>}
+          </tbody>
+        </table>
+      </div>
 
       {report && (
         <div className="panel" style={{ marginTop: 10 }}>

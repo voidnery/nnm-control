@@ -1,5 +1,21 @@
 # Changelog
 
+### v0.62.4 — a route was written and there was nowhere to see it
+The first live route landed and read back matching. The next question — where
+is it — had no answer in the panel: it showed intent and never state.
+
+- **The routes that exist are listed, under the plan.** Every route on the
+  account, with the fleet's names in place of WMSPanel ids, refreshed after an
+  apply so it is not stale exactly when it is read.
+- **Where to look outside the panel is written down**, because it is not
+  guessable: WMSPanel holds routes per server, under Nimble Streamer → Edit
+  Nimble routes, and a route written for one edge is invisible while another
+  server is selected. The Nimble instances get it on the ~30s sync.
+- `docs/iter20-nimble-routes.md` moves "what a created route returns" from
+  unknown to confirmed — the response does carry the route. The missing-id
+  fallback stays: one observation is not a guarantee, and undoing on a wrong
+  assumption would delete a route that exists.
+
 ### v0.62.3 — the target was never a URL
 The first live `POST /v1/routes/` answered:
 

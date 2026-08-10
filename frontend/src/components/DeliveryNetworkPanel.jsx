@@ -204,7 +204,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
           has no edges" about a topology the operator could see in front of
           them. */}
       {net && dirty && <div className="panel hint">{t('cdn.unsavedFirst')}</div>}
-      {net && <DeliveryRoutesPanel network={net} dirty={dirty} />}
+      {net && <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} />}
 
     </div>
   );
