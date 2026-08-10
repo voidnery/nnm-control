@@ -19,6 +19,19 @@ const VERDICT = {
 };
 // Bits per second as the operator reads them, and a dash rather than "0 bps"
 // when there is no reading at all.
+// Which path produced this number. An agent is preferred but the client falls
+// back to a direct dial when it cannot answer, so "there is an agent" and "the
+// agent answered this" are different, and only the second is worth printing.
+function Via({ probe }) {
+  const { t } = useI18n();
+  if (!probe) return null;
+  return (
+    <div className="hint" style={{ fontSize: 10 }}>
+      {t(probe.transport === 'agent' ? 'cdn.viaAgent' : 'cdn.viaDirect')}
+    </div>
+  );
+}
+
 const fmtBw = (bps) => (bps === null || bps === undefined) ? '—'
   : bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbps`
   : bps >= 1e3 ? `${(bps / 1e3).toFixed(0)} kbps` : `${bps} bps`;
@@ -174,11 +187,13 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         <div style={{ marginTop: 14 }}>
           <b>{t('cdn.stateTitle')}</b>
           <div className="hint" style={{ fontSize: 11 }}>{t('cdn.stateHint')}</div>
-          {state.unreachable?.length > 0 && (
-            <div className="hint" style={{ marginTop: 4 }}>
-              {t('cdn.unreachable')} {state.unreachable.join(', ')}
+          {state.unreachable?.length > 0 && state.unreachable.map((u, i) => (
+            <div key={i} className="hint" style={{ marginTop: 4 }}>
+              <span className="badge warn">{t('cdn.unreachable')}</span>{' '}
+              <b>{u.server}</b> — {t('cdn.reason.' + u.reason)}
+              {u.error && <span className="mono" style={{ fontSize: 11 }}> · {u.error}</span>}
             </div>
-          )}
+          ))}
           <table style={{ marginTop: 6 }}>
             <thead>
               <tr><th>{t('cdn.edgeCol')}</th><th>{t('cdn.channels')}</th>
@@ -191,8 +206,14 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
                   <td className="mono" style={{ fontSize: 12 }}>{r.application}</td>
                   {/* A dash where a count would be: the box could not be asked,
                       and printing 0 would be a claim we cannot make. */}
-                  <td style={{ fontSize: 12 }}>{r.originStreams === null ? '—' : `${r.originStreams} · ${fmtBw(r.originBandwidth)}`}</td>
-                  <td style={{ fontSize: 12 }}>{r.edgeStreams === null ? '—' : `${r.edgeStreams} · ${fmtBw(r.edgeBandwidth)}`}</td>
+                  <td style={{ fontSize: 12 }}>
+                    {r.originStreams === null ? '—' : `${r.originStreams} · ${fmtBw(r.originBandwidth)}`}
+                    <Via probe={r.originProbe} />
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    {r.edgeStreams === null ? '—' : `${r.edgeStreams} · ${fmtBw(r.edgeBandwidth)}`}
+                    <Via probe={r.edgeProbe} />
+                  </td>
                   <td><span className={'badge ' + VERDICT[r.verdict]}>{t('cdn.v.' + r.verdict)}</span></td>
                 </tr>
               ))}

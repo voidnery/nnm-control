@@ -55,13 +55,23 @@ async function viaAgent(server, path, extraQuery) {
   return out?.json ?? null;
 }
 
-async function call(server, path, { method = 'GET', body, extraQuery } = {}) {
+// Whether a read went through the agent or dialled the server. Reported rather
+// than assumed: the agent is preferred, but `call` falls back to a direct
+// attempt when the agent cannot answer, so "there is an agent" and "the agent
+// answered this" are different statements. A panel that shows a reading
+// without saying which one it is asks the operator to trust a number whose
+// provenance it knows and did not say.
+export { agentIsLive };
+
+async function call(server, path, { method = 'GET', body, extraQuery, meta } = {}) {
   // Reads go through the agent when there is one. Writes do not: they are
   // control, they are rarer, and routing them through a task queue would put a
   // long-poll cycle between an operator and a change they are watching for.
   if (method === 'GET' && !body && agentIsLive(server)) {
     try {
-      return await viaAgent(server, path, extraQuery);
+      const out = await viaAgent(server, path, extraQuery);
+      if (meta) meta.transport = 'agent';
+      return out;
     } catch (e) {
       // The agent being unable to answer does not mean the server is
       // unreachable — fall through and try directly, which is what a server on
@@ -85,6 +95,7 @@ async function call(server, path, { method = 'GET', body, extraQuery } = {}) {
       if (fromNimble) throw e;
     }
   }
+  if (meta) meta.transport = 'direct';
   const url = buildUrl(server, path, extraQuery);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -111,7 +122,7 @@ async function call(server, path, { method = 'GET', body, extraQuery } = {}) {
 
 export const nimble = {
   serverStatus:     (s) => call(s, '/manage/server_status'),
-  liveStreams:      (s) => call(s, '/manage/live_streams_status'),
+  liveStreams:      (s, meta) => call(s, '/manage/live_streams_status', { meta }),
   sessions:         (s) => call(s, '/manage/sessions'),
   deleteSessions:   (s, ids) => call(s, '/manage/sessions/delete', { method: 'POST', body: ids }),
   rtmpSettings:     (s) => call(s, '/manage/rtmp_settings'),

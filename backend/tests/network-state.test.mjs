@@ -6,7 +6,7 @@
 // distinctions that decide what an operator does next — and especially about
 // keeping "we asked and there is nothing" apart from "we could not ask".
 import assert from 'node:assert/strict';
-import { networkState, indexStreams } from '../src/services/networkState.js';
+import { networkState, indexStreams, probeReason } from '../src/services/networkState.js';
 
 let failures = 0;
 const check = (name, fn) => {
@@ -133,6 +133,58 @@ check('a route on servers outside this network is not this network\'s drift', ()
     network: NET, servers: SERVERS, existingRoutes: [ROUTE, elsewhere], channels: ['test2'], live: {},
   });
   assert.ok(!s.drift.some(x => x.routeId === 'r8'));
+});
+
+console.log('\nPROVENANCE TRAVELS WITH THE READING:');
+
+check('a row says which path answered', () => {
+  const s = networkState({
+    network: NET, servers: SERVERS, existingRoutes: [ROUTE], channels: ['test2'],
+    live: { origin: streams(['test2', 's', 900]), ru2: streams(['test2', 's', 880]) },
+    probe: { origin: { ok: true, transport: 'direct', hadAgent: false },
+             ru2: { ok: true, transport: 'agent', hadAgent: true } },
+  });
+  assert.equal(s.rows[0].edgeProbe.transport, 'agent');
+  assert.equal(s.rows[0].originProbe.transport, 'direct');
+});
+
+check('a reading with no probe is null, not assumed to be direct', () => {
+  const s = networkState({
+    network: NET, servers: SERVERS, existingRoutes: [ROUTE], channels: ['test2'],
+    live: { origin: streams(), ru2: streams() },
+  });
+  assert.equal(s.rows[0].edgeProbe, null);
+});
+
+check('a failed read carries why, not just that', () => {
+  // Three different jobs hide behind one word: install an agent, look at an
+  // agent that is running, look at Nimble. The panel used to say
+  // "unreachable" and leave the operator to guess which.
+  const s = networkState({
+    network: NET, servers: SERVERS, existingRoutes: [ROUTE], channels: ['test2'],
+    live: { origin: streams(['test2', 's', 900]), ru2: null },
+    probe: { ru2: { ok: false, hadAgent: false, transport: 'direct',
+                    reason: 'no-agent-and-direct-failed', error: 'connect ETIMEDOUT' } },
+  });
+  const r = s.rows[0];
+  assert.equal(r.verdict, 'edge-unreachable');
+  assert.equal(r.edgeProbe.reason, 'no-agent-and-direct-failed');
+  assert.match(r.edgeProbe.error, /ETIMEDOUT/);
+});
+
+check('a refusal from Nimble is not blamed on the transport', () => {
+  // The panel would otherwise send an operator to check an agent that is
+  // working perfectly, about a server that answered them.
+  assert.equal(probeReason(new Error('Nimble API HTTP 401'), true), 'nimble-refused');
+  assert.equal(probeReason(new Error('nimble returned 500 for /manage/live_streams_status'), false), 'nimble-refused');
+});
+
+check('no agent and no answer says to install an agent', () => {
+  assert.equal(probeReason(new Error('connect ETIMEDOUT'), false), 'no-agent-and-direct-failed');
+});
+
+check('an agent that is running and silent is its own case', () => {
+  assert.equal(probeReason(new Error('task timed out'), true), 'agent-and-direct-failed');
 });
 
 console.log(failures ? `\n${failures} network-state check(s) failed` : '\nall network-state checks passed');

@@ -165,9 +165,11 @@ window.fetch = (u) => {
   // undefined the moment a network is selected.
   if (/\/networks\/[^/]+\/state$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     rows:[{ edge:'Nimble RU-2', origin:'selectel(24/7)', application:'test2', routeId:'r1',
-            edgeStreams:1, edgeBandwidth:880000, originStreams:1, originBandwidth:900000, verdict:'flowing' }],
+            edgeStreams:1, edgeBandwidth:880000, originStreams:1, originBandwidth:900000, verdict:'flowing',
+            edgeProbe:{ ok:true, transport:'agent', hadAgent:true },
+            originProbe:{ ok:true, transport:'direct', hadAgent:false } }],
     drift:[{ code:'unplanned-route', edge:'Nimble RU-2', from:'/test1/', to:'79.98.187.66:8081/test1/', routeId:'r0' }],
-    unreachable:[], summary:{ flowing:1, broken:0, unknown:0 } }), text:()=>Promise.resolve('{}') });
+    unreachable:[{ server:'NimbleRU-3', ok:false, hadAgent:false, transport:'direct', reason:'no-agent-and-direct-failed', error:'connect ETIMEDOUT' }], summary:{ flowing:1, broken:0, unknown:1 } }), text:()=>Promise.resolve('{}') });
   if (/\/networks\/[^/]+\/(plan|apply)$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     planned:[{ action:'create', application:'kp_24-7', server:'Nimble RU-2', from:'/kp_24-7/',
                to:'10.0.0.10:8081/kp_24-7/', portSource:'nimble-default' }],

@@ -16,6 +16,18 @@
 
 const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
 
+// Why a box could not be read, split by what the operator would do about it.
+// One word — "unreachable" — covers three different jobs: install an agent,
+// look at an agent that is already running, or look at Nimble. Lives here
+// rather than in the route so it can be checked without a server.
+export function probeReason(error, hadAgent) {
+  const msg = String(error?.message || error || '');
+  // Nimble answered, and answered with a refusal: the transport is fine and
+  // sending the operator to look at the agent would waste their time.
+  if (/^Nimble API HTTP/.test(msg) || /^nimble returned \d+ for /.test(msg)) return 'nimble-refused';
+  return hadAgent ? 'agent-and-direct-failed' : 'no-agent-and-direct-failed';
+}
+
 // A stream index keyed by application, from a live_streams_status response.
 // Shapes vary across Nimble versions, hence the alternatives — all of them
 // already handled by the collector this borrows from.
@@ -43,7 +55,7 @@ const totalBw = (entries) => (entries || []).reduce((a, e) => a + (e.bandwidth |
 // `live` maps a server's own id to the parsed live_streams_status of that box,
 // or to null when it could not be reached — which is itself a finding and is
 // reported as one rather than as "nothing is streaming".
-export function networkState({ network, servers, existingRoutes = [], channels = [], live = {} }) {
+export function networkState({ network, servers, existingRoutes = [], channels = [], live = {}, probe = {} }) {
   const byId = new Map(servers.map(s => [String(s._id ?? s.id), s]));
   const nodeById = new Map((network.nodes || []).map(n => [String(n.id ?? n._id), n]));
   const edges = (network.nodes || []).filter(n => n.role === 'edge' && n.enabled !== false);
@@ -64,8 +76,10 @@ export function networkState({ network, servers, existingRoutes = [], channels =
     const originNode = (edge.upstream || []).map(u => nodeById.get(String(u))).filter(Boolean)[0];
     const originServer = originNode ? byId.get(String(originNode.server)) : null;
 
-    const edgeStreams = live[String(edgeServer._id ?? edgeServer.id)];
-    const originStreams = originServer ? live[String(originServer._id ?? originServer.id)] : undefined;
+    const edgeKey = String(edgeServer._id ?? edgeServer.id);
+    const originKey = originServer ? String(originServer._id ?? originServer.id) : null;
+    const edgeStreams = live[edgeKey];
+    const originStreams = originKey ? live[originKey] : undefined;
 
     const routesHere = existingRoutes.filter(r => (r.servers || []).map(String).includes(wsid));
 
@@ -90,6 +104,11 @@ export function networkState({ network, servers, existingRoutes = [], channels =
         routeId: route?.id || null, to: route?.to || null,
         edgeStreams: onEdge?.length ?? null, edgeBandwidth: onEdge ? totalBw(onEdge) : null,
         originStreams: onOrigin?.length ?? null, originBandwidth: onOrigin ? totalBw(onOrigin) : null,
+        // Which path answered, and why it did not when it did not. A reading
+        // whose provenance is known and unsaid asks for trust the panel has no
+        // right to request.
+        edgeProbe: probe[edgeKey] || null,
+        originProbe: originKey ? (probe[originKey] || null) : null,
         verdict,
       });
     }

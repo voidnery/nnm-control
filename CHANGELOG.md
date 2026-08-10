@@ -1,5 +1,32 @@
 # Changelog
 
+### v0.63.1 — a reading whose provenance was known and unsaid
+m3 read each box over the native Nimble API and showed the numbers without
+saying where they came from. The client prefers the agent and falls back to a
+direct dial when the agent cannot answer, so "there is an agent" and "the agent
+answered this" are different statements, and the panel was making neither.
+
+- **Each reading says which path produced it** — via the agent, or dialled
+  directly. The client now reports its transport instead of the caller
+  inferring it from whether an agent looked alive, which would have been a
+  guess dressed as a fact in exactly the cases that matter.
+- **"Unreachable" was three different jobs wearing one word.** No agent and the
+  direct dial failed means install an agent. An agent that is running and
+  silent means look at the agent. A refusal from Nimble means the transport is
+  fine and the server is the thing to look at — and the old wording would have
+  sent an operator to debug an agent that was working perfectly. Each is named,
+  and the reason travels with the box that could not be read.
+- **A gate, so the rule stops living in memory.** Native reads in the delivery
+  path must go through the shared client, because that is the single place
+  preferring the agent — one bare `fetch` here would opt out of it silently and
+  permanently. The check refuses a `fetch(` in either delivery file and
+  requires the transport to be collected rather than assumed.
+
+The classification moved out of the route and into the service so it could be
+checked without a server. It had been sitting in the route, and the
+contradiction that should have caught it collapsing into one word passed —
+because nothing tested it. A rule with no test is a comment.
+
 ### v0.63.0 — iter20 m3: stored is not delivering
 m2 could write a route and prove WMSPanel stored it. A route can be stored,
 correct, pointing at an origin that has nothing on it — and every screen the

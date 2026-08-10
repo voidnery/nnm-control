@@ -5,8 +5,8 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { planRoutes } from '../services/deliveryPlan.js';
-import { networkState, indexStreams } from '../services/networkState.js';
-import { nimble } from '../services/nimbleClient.js';
+import { networkState, indexStreams, probeReason } from '../services/networkState.js';
+import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { logEvent } from '../services/audit.js';
 
 export const deliveryRoutesRouter = Router();
@@ -50,15 +50,30 @@ deliveryRoutesRouter.post('/networks/:id/state', requirePerm('cdn.view'), async 
   const wanted = new Set((g.network.nodes || []).map(n => String(n.server)));
   const targets = g.servers.filter(s => wanted.has(String(s._id)));
   const live = {};
+  const probe = {};
   await Promise.all(targets.map(async (s) => {
-    // A box that cannot be reached is a finding, not an absence of streams:
-    // null says "asked and failed", undefined would say "never asked".
-    try { live[String(s._id)] = indexStreams(await nimble.liveStreams(s)); }
-    catch { live[String(s._id)] = null; }
+    const id = String(s._id);
+    const hadAgent = agentIsLive(s);
+    const meta = {};
+    try {
+      // Reads go through the shared native client, never a bare fetch from
+      // here: the client is what prefers the agent, and the rule "the panel
+      // does not dial a server that has an agent" only holds while every
+      // caller goes through it. audit checks that this file has no fetch.
+      live[id] = indexStreams(await nimble.liveStreams(s, meta));
+      probe[id] = { ok: true, transport: meta.transport || 'direct', hadAgent };
+    } catch (e) {
+      // A box that cannot be reached is a finding, not an absence of streams:
+      // null says "asked and failed", undefined would say "never asked".
+      live[id] = null;
+      probe[id] = { ok: false, hadAgent, transport: meta.transport || (hadAgent ? 'agent' : 'direct'),
+                    reason: probeReason(e, hadAgent), error: String(e?.message || e).slice(0, 200) };
+    }
   }));
 
-  const unreachable = targets.filter(s => live[String(s._id)] === null).map(s => s.name);
-  res.json({ ...networkState({ ...g, channels, live }), channels, unreachable });
+  const unreachable = targets.filter(s => live[String(s._id)] === null)
+    .map(s => ({ server: s.name, ...probe[String(s._id)] }));
+  res.json({ ...networkState({ ...g, channels, live, probe }), channels, unreachable });
 });
 
 async function gather(networkId) {

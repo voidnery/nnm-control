@@ -292,5 +292,28 @@ check('a missing reading is a dash, never a zero', () => {
   assert.ok(/=== null \? '—'/.test(panelCode), 'null readings are not distinguished from zero');
 });
 
+console.log('\nNATIVE READS GO THROUGH THE AGENT-PREFERRING CLIENT:');
+
+check('the CDN path contains no bare fetch to a server', () => {
+  // The rule "the panel does not dial a server that has an agent" lives in one
+  // place — nimbleClient, which prefers the agent and falls back only for
+  // servers without one. It holds only while every caller goes through it, and
+  // a single `fetch(` here would quietly opt out of it forever.
+  const routes = readFile(new URL('../src/routes/deliveryRoutes.js', import.meta.url), 'utf8');
+  const state = readFile(new URL('../src/services/networkState.js', import.meta.url), 'utf8');
+  for (const [name, src] of [['deliveryRoutes.js', routes], ['networkState.js', state]]) {
+    assert.ok(!/\bfetch\s*\(/.test(stripComments(src)),
+      `${name} dials a server itself instead of going through nimbleClient`);
+  }
+  assert.ok(/from '\.\.\/services\/nimbleClient\.js'/.test(routes),
+    'the state endpoint does not use the shared native client at all');
+});
+
+check('the transport is asked for, not assumed', () => {
+  const routes = stripComments(readFile(new URL('../src/routes/deliveryRoutes.js', import.meta.url), 'utf8'));
+  assert.ok(/liveStreams\(s, meta\)/.test(routes), 'the read does not collect its transport');
+  assert.ok(/agentIsLive/.test(routes), 'nothing distinguishes a box with an agent from one without');
+});
+
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');
 process.exit(failures ? 1 : 0);
