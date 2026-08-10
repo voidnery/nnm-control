@@ -1,5 +1,5 @@
-built:   2026-08-10T14:30:51Z
-run:     31398307571
-commit:  7ecfdec0efb524efee231c0dd9afabcfabadc21a
-release: nnm-control_0.62.5_all.deb  (Version: 1:0.62.5)
-pool:    9 package(s)
+built:   2026-08-10T15:04:48Z
+run:     31401419776
+commit:  060c70ae8654b5a5f3251fd2e28c698121372f40
+release: nnm-control_0.63.0_all.deb  (Version: 1:0.63.0)
+pool:    10 package(s)
