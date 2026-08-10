@@ -48,8 +48,20 @@ check('a route claims a path on any address the edge answers on', () => {
   assert.equal(routeFrom('//weird//'), '/weird/');
 });
 
-check('the target carries the origin, its port and the application', () => {
-  assert.equal(routeTo('10.0.0.10', 8081, 'kp_24-7'), 'http://10.0.0.10:8081/kp_24-7/');
+check('the target is host:port and a path, not a URL', () => {
+  // Learned from the first live write, not from the reference. WMSPanel
+  // answered the URL form with "Target Domain and Port must be specified
+  // (e.g 127.0.0.1:8080)" — the scheme hid both from its parser.
+  assert.equal(routeTo('10.0.0.10', 8081, 'kp_24-7'), '10.0.0.10:8081/kp_24-7/');
+});
+
+check('no scheme survives in a target', () => {
+  // The single character that cost a release cycle. Asserted separately so it
+  // cannot come back through some other formatting change.
+  for (const host of ['10.0.0.10', 'origin.example.com']) {
+    assert.ok(!routeTo(host, 8081, 'app').includes('://'),
+      'a scheme in `to` makes WMSPanel see neither domain nor port');
+  }
 });
 
 check('an unset http port falls back to the documented default and says so', () => {
@@ -65,7 +77,7 @@ check('two edges and one channel plan two routes', () => {
   assert.deepEqual(p.blocking, []);
   const hosts = p.planned.map(x => x.wmspanelServerId).sort();
   assert.deepEqual(hosts, ['6a18e008dc73c6feb3a4f1e9', '6a4227ddc12a819680841f26'].sort());
-  assert.ok(p.planned.every(x => x.to === 'http://10.0.0.10:8081/kp_24-7/'));
+  assert.ok(p.planned.every(x => x.to === '10.0.0.10:8081/kp_24-7/'));
 });
 
 check('the assumed port is reported as an assumption, not silently used', () => {
@@ -131,7 +143,7 @@ check('HTTP Origin on the origin itself is not a problem', () => {
 console.log('\nRE-RUNNING A PLAN DOES NOT DUPLICATE IT:');
 
 const EXISTING = [{
-  id: 'r1', from: '/kp_24-7/', to: 'http://10.0.0.10:8081/kp_24-7/',
+  id: 'r1', from: '/kp_24-7/', to: '10.0.0.10:8081/kp_24-7/',
   servers: ['6a18e008dc73c6feb3a4f1e9'],
 }];
 
@@ -142,11 +154,11 @@ check('an identical route is kept, not created again', () => {
 });
 
 check('the same path pointing elsewhere is an update, and the old target is shown', () => {
-  const moved = [{ ...EXISTING[0], to: 'http://10.0.0.99:8081/kp_24-7/' }];
+  const moved = [{ ...EXISTING[0], to: '10.0.0.99:8081/kp_24-7/' }];
   const p = planRoutes({ network: BASE, servers: SERVERS, channels: ['kp_24-7'], existingRoutes: moved });
   const u = p.planned.find(x => x.action === 'update');
   assert.ok(u);
-  assert.equal(u.was, 'http://10.0.0.99:8081/kp_24-7/');
+  assert.equal(u.was, '10.0.0.99:8081/kp_24-7/');
   assert.equal(u.routeId, 'r1');
 });
 

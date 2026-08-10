@@ -1,5 +1,35 @@
 # Changelog
 
+### v0.62.3 — the target was never a URL
+The first live `POST /v1/routes/` answered:
+
+    HTTP 200
+    {"status":"Error","message":"Target Domain and Port must be specified (e.g 127.0.0.1:8080)"}
+
+`to` is host, port and path — `79.98.187.66:8081/test1/` — with no scheme. The
+`http://` hid both the domain and the port from WMSPanel's parser.
+
+The reference is not wrong; it is incomplete in a way that reads as complete.
+Every populated example it gives points at `file:///var/www/video/`, which is
+the VOD special case, and building the general form from it produced something
+plausible and rejected. The vendor's own UI splits the field into "Domain to"
+and "Path to", which is the same fact seen from the other side.
+
+- **The scheme is gone, and a check exists so it cannot come back** through
+  some later formatting change. One character, one release cycle.
+- **HTTPS origins are not offered.** `to` has no scheme, so it cannot express
+  one; the reference documents an SSL option in the dialog but no field for it
+  in the object, and this account has no route to read back. Left unsupported
+  rather than guessed at.
+- **`docs/iter20-nimble-routes.md`** records what the live API accepts,
+  separated into what a real response confirmed and what is still unknown. The
+  thing worth keeping is not the answer but which parts were observed.
+
+Worth noting for anything else built on this API: the error came back with
+**HTTP 200**. A client that trusts the status code would have recorded a route
+that does not exist. `wmspanelClient` checks the body's `status`, which is the
+only reason this surfaced as a failure instead of a phantom success.
+
 ### v0.62.2 — the apply failed and said nothing about it
 The plan reached the servers, the apply came back "HTTP 502", and that was the
 entire message. The read-back, the rollback and the per-route steps all ran and

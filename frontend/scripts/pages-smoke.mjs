@@ -161,7 +161,7 @@ window.fetch = (u) => {
   // undefined the moment a network is selected.
   if (/\/networks\/[^/]+\/(plan|apply)$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     planned:[{ action:'create', application:'kp_24-7', server:'Nimble RU-2', from:'/kp_24-7/',
-               to:'http://10.0.0.10:8081/kp_24-7/', portSource:'nimble-default' }],
+               to:'10.0.0.10:8081/kp_24-7/', portSource:'nimble-default' }],
     problems:[{ code:'origin-http-port-assumed', severity:'warn', server:'selectel(24/7)', port:8081 }],
     blocking:[], summary:{ create:1, update:0, keep:0 } }), text:()=>Promise.resolve('{}') });
   if (/\/geoip$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({

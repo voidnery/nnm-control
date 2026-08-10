@@ -23,8 +23,24 @@ const trimSlashes = s => String(s || '').replace(/^\/+|\/+$/g, '');
 // through whatever DNS the operator later points at it.
 export const routeFrom = (application) => `/${trimSlashes(application)}/`;
 
+// NOT a URL. WMSPanel refused `http://79.98.187.66:8081/test1/` with
+//
+//   {"status":"Error","message":"Target Domain and Port must be specified
+//    (e.g 127.0.0.1:8080)"}
+//
+// — the scheme hid both from its parser. The target is host:port followed by
+// the path, which also matches how the vendor's own UI splits the field into
+// "Domain to" and "Path to". The `file:///` form in the API reference is the
+// VOD special case, and reading the reference alone is what produced the
+// wrong shape here: the only populated examples it shows are for serving
+// files off a disk.
+//
+// The scheme being absent also means this cannot express an origin reached
+// over HTTPS. The reference documents an SSL option in the UI but no field
+// for it here, and this account has no route to learn from, so it is left
+// unsupported rather than guessed at.
 export const routeTo = (originHost, port, application) =>
-  `http://${originHost}:${port}/${trimSlashes(application)}/`;
+  `${originHost}:${port}/${trimSlashes(application)}/`;
 
 // Which address of the origin an edge should pull from. A WMSPanel server may
 // answer on several (`custom_ips`), and the panel must not silently pick one:
