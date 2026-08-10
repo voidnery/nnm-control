@@ -1525,6 +1525,12 @@ check('the shape is video_pipelines and audio_pipelines, side by side', () => {
   }
 });
 
+// The documented-field map, read as a set so neither order nor quoting matters.
+const documented = (src, io) => {
+  const m = src.match(new RegExp(io + ":\\s*\\[([^\\]]*)\\]"));
+  return m ? m[1].split(',').map(x => x.trim().replace(/['\"]/g, '')).filter(Boolean) : [];
+};
+
 check('every forward flag the real output carries is offered', () => {
   // The video output here has forward_sei_timecodes and the editor's list did
   // not — set in WMSPanel and invisible in the panel, which is how an editor
@@ -1544,8 +1550,16 @@ check('params are an array on an output and a string on a filter', () => {
   // ScenarioEditor documents the filter's params (a string) as editable and
   // leaves the output's params (an array) fixed in WMSPanel, so the two shapes
   // are never confused for one another.
-  assert.ok(ed.includes("filter: ['params', 'name']"), 'filter params/name are editable');
-  assert.ok(ed.includes("output: ['app', 'stream']"), 'output params (the array) stays fixed');
+  //
+  // Read out of the source as a set rather than matched as a literal: the two
+  // assertions this replaces named the exact array text, so reordering the
+  // fields broke a check that cares about neither order nor spelling. That is
+  // the same fault v0.58.1 found in the SRT merge checks.
+  assert.deepEqual(new Set(documented(ed, 'filter')), new Set(['name', 'params']),
+    'filter name and params are the editable pair');
+  assert.ok(!documented(ed, 'output').includes('params'),
+    'output params (the array) stays fixed');
+  assert.deepEqual(new Set(documented(ed, 'output')), new Set(['app', 'stream']));
 });
 
 check('the detail response is wrapped', () => {
@@ -1569,18 +1583,22 @@ check('an audio filter shows its name and params', () => {
   // ScenarioEditor documents name and params for every filter regardless of
   // kind, and its element loop walks audio pipelines too — so an audio filter
   // gets both, which PipelineEditor used to show for video only.
-  assert.ok(ed2.includes("filter: ['params', 'name']"));
+  assert.ok(documented(ed2, 'filter').includes('name') && documented(ed2, 'filter').includes('params'));
   assert.ok(ed2.includes("['audio', graph.audio"), 'audio pipelines are walked');
 });
 
 check('the forwarding flags are one folded question', () => {
   // Seven or eight checkboxes that ask one thing, on a stage with five real
   // fields — they were most of what the form showed.
-  assert.ok(ed2.includes('const [fwdOpen, setFwdOpen]'));
-  assert.ok(ed2.includes("t('tc.forwarding')"));
+  assert.ok(ed2.includes('const [fwdOpen, setFwdOpen]'), 'the block folds');
   // Counted while folded: scanning a pipeline, what matters is that something
-  // is forwarded, not which.
-  assert.ok(ed2.includes('keys.filter(k => cur(k)).length'));
+  // is forwarded, not which. Located by what it does — the previous version
+  // matched the expression verbatim and went red on a variable rename.
+  const foldLine = ed2.split('\n').find(l => l.includes("t('tc.forwarding')"));
+  assert.ok(foldLine, 'the fold carries the forwarding label');
+  const countVar = (ed2.match(/const (\w+) = keys\.filter\([^\n]*\)\.length/) || [])[1];
+  assert.ok(countVar, 'the enabled flags are counted');
+  assert.ok(foldLine.includes(countVar), 'the count is on the fold, not hidden inside it');
 });
 
 check('forwarding edits are gated behind an explicit opt-in', () => {

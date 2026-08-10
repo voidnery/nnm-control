@@ -1,5 +1,58 @@
 # Changelog
 
+### v0.60.0 — editing a scenario now looks like the scenario
+The read-only view drew a pipeline the way it is operated: source → processing
+→ encoders, one card per pipeline. Both screens that *change* a scenario threw
+that away and rendered a single table of every element of every pipeline of
+both kinds. A scenario with four decoders, six filters and one encoder became
+eleven rows, and nothing on a row said which stage it was, which pipeline it
+belonged to, or whether it was video or audio.
+
+- **One layout, three screens.** `PipelineBoard` is now the only place a
+  pipeline is laid out, and the scenario view, the editor and the clone wizard
+  all render through it. They differ in what goes inside a node, not in what
+  the picture is — so a change to the shape of a scenario can no longer appear
+  in one screen and not the others.
+- **Fields live on the node they belong to.** `app` and `stream` are edited on
+  the decoder card in the source column; the encoder's are edited on its card
+  in the encoder column, under its codec. The forwarding flags stay folded
+  behind their count, on the node rather than in a cell. An edited node is
+  marked, so what is pending is visible without reading the diff.
+- **The processing stage is no longer missing from editing.** Filters were
+  rows in the table with a caption; they are now the middle column, with the
+  split and its undocumented branch assignment carried across exactly as the
+  read-only view states it. The fan-out itself is labelled as fixed in
+  WMSPanel instead of offered as a field.
+- **The clone wizard shows what it is cloning.** Eight rows reading "Source"
+  became the pipelines they came from, with the filters shown dimmed and
+  marked as copied as-is. Retargeting the wrong encoder in this dialog creates
+  a second scenario writing over the first one's output, and the flat table
+  gave the operator nothing to catch that with.
+- **Bulk retargeting, visibly.** A clone almost always moves every decoder to
+  one application, every encoder to another, and needs new output stream names
+  so the copy does not collide with the original. Three helpers do that in one
+  go — and they write into the per-node fields, so what the boards show is
+  what gets sent. Nothing is applied invisibly at submit time.
+- **A filter and a search on the editor**, matching the scenario view, because
+  a fleet scenario is wider than a screen.
+- **A new gate: `audit:board`.** It renders all three screens against a real
+  scenario shape and asserts the structure is on screen — one card per
+  pipeline, three stage headings each, decoders before encoders in document
+  order, the processing stage present, every endpoint an editable node — and
+  that a flat element table does not come back. Proven by contradiction on
+  four separate regressions.
+- **Three assertions rewritten as outcomes.** They matched the editor's source
+  verbatim — `filter: ['params', 'name']` and `keys.filter(k => cur(k)).length`
+  — so reordering two field names and renaming a local broke checks that care
+  about neither. They now read the documented-field map as a set and locate the
+  flag count by what it does. This is the same fault v0.58.1 found in the SRT
+  merge checks; it had simply not been swept for elsewhere.
+- **`audit:version` named a variable, not an invariant.** It asserted the
+  workflow contained `image_tag=$pkgver`; the rename to `version` changed
+  nothing it cares about and it went red anyway. It now checks that the output
+  feeding the ghcr tag is the bare version and that the tag expression never
+  reaches for the epoched one.
+
 ### v0.59.2 — releasing stops being something a person can get wrong
 v0.59.0 made the version single-source and made CI refuse a tag that disagrees
 with `package.json`. The gate is right; the process around it was not, and

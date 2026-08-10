@@ -600,5 +600,33 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .gbranchbox { border: 1px dashed var(--line); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
 .gbranch-h { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
 .gbranch-note { font-size: 10px; line-height: 1.3; }
+
+/* Pipeline board: the same layout read-only (scenario) and editable (edit,
+   clone). A card wraps the columns so each pipeline is a titled unit instead
+   of rows of an undifferentiated table. */
+.gpipe-card { border: 1px solid var(--line); border-radius: 8px; background: var(--bg-panel); margin-bottom: 10px; }
+.gpipe-card > .gpipe { border: none; background: none; margin: 0; border-radius: 0; }
+.gpipe-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.gpipe-name { font-size: 12px; color: var(--text); }
+.gcol.edit { min-width: 250px; }
+.gnode.edit { padding: 7px 9px; }
+.gnode.changed { border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+.gnode.copied { opacity: .7; border-style: dashed; }
+.gnode-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.gnode-role { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+.gnode-aside { font-size: 10px; color: var(--text-dim); text-align: right; word-break: break-all; }
+.gnode-from { font-size: 11px; color: var(--text-dim); margin-bottom: 5px; word-break: break-all; }
+.gfield { display: flex; flex-direction: column; gap: 2px; margin: 0 0 5px; }
+.gfield > span { font-size: 10px; color: var(--text-dim); }
+.gfield > input { font-size: 12px; padding: 3px 6px; width: 100%; }
+.gnode-fold { margin-top: 2px; }
+.gnode-fold > button { font-size: 11px; padding: 1px 6px; }
+.gnode-flags { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.gnode-flags label { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 11px; }
+.gbulk { margin-bottom: 10px; }
+.gbulk-h { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+.gbulk .gfield { min-width: 130px; margin-bottom: 0; }
+
 .badge.ok { border-color: var(--ok); color: var(--ok); }
 .badge.warn { border-color: var(--warn); color: var(--warn); }

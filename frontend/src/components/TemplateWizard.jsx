@@ -3,12 +3,20 @@ import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import Modal from './Modal.jsx';
-import { ioLabel, codecLabel } from '../lib/pipelineLayout.js';
+import { ioLabel, codecLabel, filterLabel } from '../lib/pipelineLayout.js';
+import PipelineBoard, { GNode, GField } from './PipelineBoard.jsx';
 
 // Build a new scenario from an existing one, staying inside what the API can
 // actually persist: clone, retarget decoder/encoder app+stream, name it, and
 // optionally push it to more servers. Authoring new pipelines is not possible
 // through the API at all, and the wizard says so rather than pretending.
+//
+// Laid out as the scenario it is copying, for the same reason the editor is:
+// a flat table of eight "Source" rows says nothing about which pipeline each
+// one feeds, and this dialog is where retargeting the wrong one silently
+// creates a second scenario writing over the first one's output.
+const elementKey = (kind, pipelineId, io, ioId) => `${kind}|${pipelineId}|${io}|${ioId}`;
+
 export default function TemplateWizard({ template, servers, onClose, onCreated }) {
   const { t } = useI18n();
   const { push } = useToast();
@@ -19,6 +27,9 @@ export default function TemplateWizard({ template, servers, onClose, onCreated }
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
+  const [bulkInApp, setBulkInApp] = useState('');
+  const [bulkOutApp, setBulkOutApp] = useState('');
+  const [bulkSuffix, setBulkSuffix] = useState('');
 
   useEffect(() => {
     api(`/wmspanel/transcoders/${template.id}/graph`).then(setGraph).catch(e => setError(e.message));
@@ -31,7 +42,7 @@ export default function TemplateWizard({ template, servers, onClose, onCreated }
       for (const p of list) {
         for (const io of ['input', 'output']) {
           for (const e of p[`${io}s`] || []) {
-            out.push({ key: `${kind}|${p.id}|${io}|${e.id}`, kind, pipelineId: p.id, io, ioId: e.id, elem: e });
+            out.push({ key: elementKey(kind, p.id, io, e.id), kind, pipelineId: p.id, io, ioId: e.id, elem: e });
           }
         }
       }
@@ -49,15 +60,29 @@ export default function TemplateWizard({ template, servers, onClose, onCreated }
     const app = r.app ?? el.elem.app;
     const stream = r.stream ?? el.elem.stream;
     if (app === el.elem.app && stream === el.elem.stream) return [];
-    return [{ kind: el.kind, pipelineId: el.pipelineId, io: el.io, ioId: el.ioId, app, stream,
+    return [{ key: el.key, kind: el.kind, pipelineId: el.pipelineId, io: el.io, ioId: el.ioId, app, stream,
               from: `${el.elem.app}/${el.elem.stream}`, to: `${app}/${stream}` }];
   }), [elements, rewrites]);
+
+  const changedKeys = useMemo(() => new Set(changes.map(c => c.key)), [changes]);
+
+  // Bulk helpers write into the same per-element fields the operator can see
+  // and correct. Nothing is applied invisibly at submit time: what the boards
+  // show is what gets sent.
+  const bulk = (io, mutate) => setRewrites(r => {
+    const next = { ...r };
+    for (const el of elements.filter(e => e.io === io)) {
+      const cur = next[el.key] || {};
+      next[el.key] = mutate({ app: cur.app ?? el.elem.app ?? '', stream: cur.stream ?? el.elem.stream ?? '' });
+    }
+    return next;
+  });
 
   const run = async () => {
     setBusy(true); setError(''); setReport(null);
     try {
       const body = {
-        name, rewrites: changes.map(({ from, to, ...c }) => c),
+        name, rewrites: changes.map(({ from, to, key, ...c }) => c),
         serversToApply: targets,
       };
       const r = await api(`/wmspanel/transcoders/${template.id}/from-template`, { method: 'POST', body });
@@ -70,6 +95,37 @@ export default function TemplateWizard({ template, servers, onClose, onCreated }
       if (e.body) setReport(e.body);
     } finally { setBusy(false); }
   };
+
+  const endpoint = (kind, pipelineId, io, el) => {
+    const key = elementKey(kind, pipelineId, io, el.id);
+    const r = rewrites[key] || {};
+    const nodeKind = io === 'input' ? 'in' : (kind === 'audio' ? 'out audio' : 'out');
+    const untargetable = !el.app && !el.stream;
+    return (
+      <GNode key={key} kind={nodeKind + ' edit'} changed={changedKeys.has(key)}
+             role={io === 'input' ? t('tg.source') : t('tg.encoders')}
+             aside={io === 'output' ? codecLabel(el) : String(el.type || '')}>
+        <div className="gnode-from mono">{ioLabel(el)}</div>
+        <GField label="app" value={r.app ?? el.app ?? ''} onChange={v => setField(key, 'app', v)} />
+        <GField label="stream" value={r.stream ?? el.stream ?? ''} onChange={v => setField(key, 'stream', v)} />
+        {untargetable && <div className="hint" style={{ fontSize: 10 }}>{t('tw.noTarget')}</div>}
+      </GNode>
+    );
+  };
+
+  const board = (pl, kind, n) => (
+    <PipelineBoard
+      key={`${kind}${n}:${pl.id || ''}`} pipeline={pl} kind={kind} index={n} edit
+      renderInput={i => endpoint(kind, pl.id, 'input', i)}
+      renderFilter={(f, { section, index: fn }) => (
+        <GNode key={`${section}${fn}`} kind={(section === 'split' ? 'split' : 'flt') + ' copied'}
+               role={t('tw.copied')} aside={String(f.type || '')}>
+          <div className="gnode-title mono">{filterLabel(f)}</div>
+        </GNode>
+      )}
+      renderOutput={o => endpoint(kind, pl.id, 'output', o)}
+    />
+  );
 
   return (
     <Modal onClose={onClose} size="xwide">
@@ -84,33 +140,37 @@ export default function TemplateWizard({ template, servers, onClose, onCreated }
 
           <div className="gsection">{t('tw.retarget')}</div>
           <div className="hint" style={{ marginBottom: 6 }}>{t('tw.retargetHint')}</div>
-          <div className="panel">
-            <table>
-              <thead><tr>
-                <th>{t('tw.element')}</th><th>{t('tw.current')}</th><th>app</th><th>stream</th>
-              </tr></thead>
-              <tbody>
-                {elements.map(el => {
-                  const r = rewrites[el.key] || {};
-                  return (
-                    <tr key={el.key}>
-                      <td>
-                        <span className="badge">{el.kind}</span>{' '}
-                        <span className="hint">{el.io === 'input' ? t('tg.source') : t('tg.encoders')}</span>
-                        {el.io === 'output' && <div className="hint">{codecLabel(el.elem)}</div>}
-                      </td>
-                      <td className="mono" style={{ fontSize: 12 }}>{ioLabel(el.elem)}</td>
-                      <td><input className="mono" value={r.app ?? el.elem.app ?? ''}
-                                 onChange={e => setField(el.key, 'app', e.target.value)} /></td>
-                      <td><input className="mono" value={r.stream ?? el.elem.stream ?? ''}
-                                 onChange={e => setField(el.key, 'stream', e.target.value)} /></td>
-                    </tr>
-                  );
-                })}
-                {elements.length === 0 && <tr><td colSpan={4} className="hint">{t('tc.noPipelines')}</td></tr>}
-              </tbody>
-            </table>
+
+          <div className="panel gbulk">
+            <div className="gbulk-h">{t('tw.bulk')}</div>
+            <div className="hint" style={{ fontSize: 11, marginBottom: 6 }}>{t('tw.bulkHint')}</div>
+            <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+              <label className="gfield">
+                <span>{t('tw.bulkInApp')}</span>
+                <input className="mono" value={bulkInApp} onChange={e => setBulkInApp(e.target.value)} />
+              </label>
+              <button disabled={!bulkInApp.trim()}
+                      onClick={() => bulk('input', v => ({ ...v, app: bulkInApp.trim() }))}>{t('action.apply')}</button>
+              <label className="gfield">
+                <span>{t('tw.bulkOutApp')}</span>
+                <input className="mono" value={bulkOutApp} onChange={e => setBulkOutApp(e.target.value)} />
+              </label>
+              <button disabled={!bulkOutApp.trim()}
+                      onClick={() => bulk('output', v => ({ ...v, app: bulkOutApp.trim() }))}>{t('action.apply')}</button>
+              <label className="gfield">
+                <span>{t('tw.bulkSuffix')}</span>
+                <input className="mono" value={bulkSuffix} onChange={e => setBulkSuffix(e.target.value)} />
+              </label>
+              <button disabled={!bulkSuffix.trim()}
+                      onClick={() => bulk('output', v => ({ ...v, stream: v.stream + bulkSuffix.trim() }))}>{t('action.apply')}</button>
+            </div>
           </div>
+
+          {(graph.video || []).map((pl, n) => board(pl, 'video', n))}
+          {(graph.audio || []).map((pl, n) => board(pl, 'audio', n))}
+          {!(graph.video || []).length && !(graph.audio || []).length && (
+            <div className="panel hint">{t('tc.noPipelines')}</div>
+          )}
 
           <div className="gsection">{t('tw.apply')}</div>
           <div className="hint" style={{ marginBottom: 6 }}>{t('tw.applyHint')}</div>

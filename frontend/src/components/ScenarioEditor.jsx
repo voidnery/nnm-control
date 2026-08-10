@@ -3,14 +3,15 @@ import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
-import { filterLabel, codecLabel } from '../lib/pipelineLayout.js';
+import { filterLabel, codecLabel, ioLabel } from '../lib/pipelineLayout.js';
+import PipelineBoard, { GNode, GField } from './PipelineBoard.jsx';
 
 // Editing inside the boundary the vendor documents: app/stream on decoders and
 // encoders, and parameters of existing filters. Anything else in an element is
 // shown but not editable by default — the PUT might accept it, yet presenting
 // undocumented fields as supported is how operators end up trusting a change
 // that silently does nothing.
-const DOCUMENTED = { input: ['app', 'stream'], output: ['app', 'stream'], filter: ['params', 'name'] };
+const DOCUMENTED = { input: ['app', 'stream'], output: ['app', 'stream'], filter: ['name', 'params'] };
 
 // Forwarding flags sit on inputs and outputs, and the set differs by kind and
 // direction — checked against a real pipeline rather than remembered, since a
@@ -29,6 +30,8 @@ const FWD = {
 };
 const fwdKeys = (io, kind) => (FWD[io] && FWD[io][kind]) || [];
 
+const elementKey = (kind, pipelineId, io, ioId) => `${kind}|${pipelineId}|${io}|${ioId}`;
+
 export default function ScenarioEditor({ transcoderId }) {
   const { t } = useI18n();
   const { push } = useToast();
@@ -40,6 +43,7 @@ export default function ScenarioEditor({ transcoderId }) {
   const [error, setError] = useState('');
   const [fwdOpen, setFwdOpen] = useState({});  // key -> bool (forwarding block expanded)
   const [allowUndoc, setAllowUndoc] = useState(false);
+  const [query, setQuery] = useState('');
 
   const load = async () => {
     try { setGraph(await api(`/wmspanel/transcoders/${transcoderId}/graph`)); setError(''); }
@@ -47,6 +51,8 @@ export default function ScenarioEditor({ transcoderId }) {
   };
   useEffect(() => { load(); }, [transcoderId]);
 
+  // Flat list of every editable element, kept for the diff. The screen itself
+  // is drawn per pipeline; this is only the index the diff walks.
   const elements = useMemo(() => {
     if (!graph) return [];
     const out = [];
@@ -54,7 +60,7 @@ export default function ScenarioEditor({ transcoderId }) {
       for (const p of list) {
         for (const io of ['input', 'filter', 'output']) {
           for (const e of p[`${io}s`] || []) {
-            out.push({ key: `${kind}|${p.id}|${io}|${e.id}`, kind, pipelineId: p.id, io, ioId: e.id, elem: e });
+            out.push({ key: elementKey(kind, p.id, io, e.id), kind, pipelineId: p.id, io, ioId: e.id, elem: e });
           }
         }
       }
@@ -73,9 +79,12 @@ export default function ScenarioEditor({ transcoderId }) {
       if (JSON.stringify(v) !== JSON.stringify(el.elem[f] ?? '')) set[f] = v;
     }
     if (!Object.keys(set).length) return [];
-    return [{ kind: el.kind, pipelineId: el.pipelineId, io: el.io, ioId: el.ioId, set,
+    return [{ key: el.key, label: `${el.kind}/${t('se.io.' + el.io)} ${ioLabel(el.elem)}`,
+              kind: el.kind, pipelineId: el.pipelineId, io: el.io, ioId: el.ioId, set,
               before: Object.fromEntries(Object.keys(set).map(f => [f, el.elem[f] ?? ''])) }];
-  }), [elements, edits]);
+  }), [elements, edits, t]);
+
+  const changedKeys = useMemo(() => new Set(diff.map(d => d.key)), [diff]);
 
   // A change is undocumented when its field is not in the documented set for
   // that element type — today that means the forwarding flags. The backend
@@ -90,7 +99,8 @@ export default function ScenarioEditor({ transcoderId }) {
     setBusy(true); setError(''); setReport(null);
     try {
       const r = await api(`/wmspanel/transcoders/${transcoderId}/apply-edits`, {
-        method: 'POST', body: { edits: diff.map(({ before, ...d }) => d), allowUndocumented: hasUndoc && allowUndoc },
+        method: 'POST',
+        body: { edits: diff.map(({ before, key, label, ...d }) => d), allowUndocumented: hasUndoc && allowUndoc },
       });
       setReport(r);
       if (r.ok) { push({ type: 'ok', message: t('se.applied', { n: r.applied }) }); setEdits({}); setAllowUndoc(false); }
@@ -102,72 +112,99 @@ export default function ScenarioEditor({ transcoderId }) {
   if (error && !graph) return <div className="error-box">{error}</div>;
   if (!graph) return <div className="hint">{t('sd.loading')}</div>;
 
+  // An endpoint node: the two documented fields as real fields, the fixed
+  // facts as a caption, and the forwarding flags folded behind a count.
+  const endpoint = (kind, pipelineId, io, el) => {
+    const key = elementKey(kind, pipelineId, io, el.id);
+    const e = edits[key] || {};
+    const cur = f => (e[f] ?? el[f] ?? '');
+    const keys = fwdKeys(io, kind);
+    const curFlag = f => (e[f] ?? el[f]);
+    const on = keys.filter(k => curFlag(k)).length;
+    const nodeKind = io === 'input' ? 'in' : (kind === 'audio' ? 'out audio' : 'out');
+    return (
+      <GNode key={key} kind={nodeKind + ' edit'} changed={changedKeys.has(key)}
+             role={t('se.io.' + io)}
+             aside={io === 'output' ? codecLabel(el) : String(el.type || '')}>
+        {DOCUMENTED[io].map(f => (
+          <GField key={f} label={f} value={cur(f)} onChange={v => setField(key, f, v)} />
+        ))}
+        {keys.length > 0 && (
+          <div className="gnode-fold">
+            <button onClick={() => setFwdOpen(v => ({ ...v, [key]: !v[key] }))}>
+              {fwdOpen[key] ? '▾' : '▸'} {t('tc.forwarding')}{on > 0 ? ` · ${on}` : ''}
+            </button>
+            {fwdOpen[key] && (
+              <div className="gnode-flags">
+                {keys.map(k => (
+                  <label key={k}>
+                    <input type="checkbox" checked={Boolean(curFlag(k))}
+                           onChange={ev => setField(key, k, ev.target.checked)} />
+                    {t('tc.' + k) !== 'tc.' + k ? t('tc.' + k) : k.replace(/^forward_/, '')}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </GNode>
+    );
+  };
+
+  const filterNode = (kind, pipelineId, section, f) => {
+    const key = elementKey(kind, pipelineId, 'filter', f.id);
+    const e = edits[key] || {};
+    const cur = fl => (e[fl] ?? f[fl] ?? '');
+    return (
+      <GNode key={key} kind={(section === 'split' ? 'split' : 'flt') + ' edit'}
+             changed={changedKeys.has(key)}
+             role={t('se.io.filter')} aside={String(f.type || '')}>
+        <div className="gnode-title mono">{filterLabel(f)}</div>
+        {section === 'split'
+          ? <div className="hint" style={{ fontSize: 11 }}>{t('se.splitFixed')}</div>
+          : DOCUMENTED.filter.map(fl => (
+              <GField key={fl} label={fl} value={cur(fl)} onChange={v => setField(key, fl, v)} />
+            ))}
+      </GNode>
+    );
+  };
+
+  const match = pl => !query ||
+    JSON.stringify([...(pl.inputs || []), ...(pl.outputs || [])]).toLowerCase().includes(query.toLowerCase());
+  const video = (graph.video || []).filter(match);
+  const audio = (graph.audio || []).filter(match);
+
+  const board = (pl, kind, n) => (
+    <PipelineBoard
+      key={`${kind}${n}:${pl.id || ''}`} pipeline={pl} kind={kind} index={n} edit
+      renderInput={i => endpoint(kind, pl.id, 'input', i)}
+      renderFilter={(f, { section }) => filterNode(kind, pl.id, section, f)}
+      renderOutput={o => endpoint(kind, pl.id, 'output', o)}
+    />
+  );
+
   return (
     <div>
       <p className="hint">{t('se.intro')}</p>
       {error && <div className="error-box">{error}</div>}
 
-      <div className="panel" style={{ maxHeight: '48vh', overflow: 'auto' }}>
-        <table>
-          <thead><tr>
-            <th>{t('tw.element')}</th><th>{t('se.editable')}</th><th>{t('se.fixed')}</th>
-          </tr></thead>
-          <tbody>
-            {elements.map(el => {
-              const fields = DOCUMENTED[el.io] || [];
-              const e = edits[el.key] || {};
-              const fixed = el.io === 'output' ? codecLabel(el.elem)
-                : el.io === 'filter' ? String(el.elem.type || '')
-                : String(el.elem.type || '');
-              const keys = fwdKeys(el.io, el.kind);
-              const cur = f => (edits[el.key]?.[f] ?? el.elem[f]);
-              const on = keys.filter(k => cur(k)).length;
-              return (
-                <tr key={el.key}>
-                  <td>
-                    <span className="badge">{el.kind}</span>{' '}
-                    <span className="hint">{t('se.io.' + el.io)}</span>
-                    {el.io === 'filter' && <div className="hint mono" style={{ fontSize: 11 }}>{filterLabel(el.elem)}</div>}
-                  </td>
-                  <td>
-                    <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                      {fields.map(f => (
-                        <label key={f} style={{ margin: 0, fontSize: 11 }}>
-                          {f}
-                          <input className="mono" style={{ width: 150, fontSize: 12 }}
-                                 value={e[f] ?? el.elem[f] ?? ''}
-                                 onChange={ev => setField(el.key, f, ev.target.value)} />
-                        </label>
-                      ))}
-                      {!fields.length && <span className="hint">—</span>}
-                    </div>
-                    {keys.length > 0 && (
-                      <div style={{ marginTop: 6 }}>
-                        <button style={{ fontSize: 11 }}
-                                onClick={() => setFwdOpen(v => ({ ...v, [el.key]: !v[el.key] }))}>
-                          {t('tc.forwarding')}{on > 0 ? ` · ${on}` : ''} {fwdOpen[el.key] ? '▾' : '▸'}
-                        </button>
-                        {fwdOpen[el.key] && (
-                          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 4, marginTop: 4 }}>
-                            {keys.map(k => (
-                              <label key={k} style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0, fontSize: 11 }}>
-                                <input type="checkbox" checked={Boolean(cur(k))}
-                                       onChange={ev => setField(el.key, k, ev.target.checked)} />
-                                {t('tc.' + k) !== 'tc.' + k ? t('tc.' + k) : k.replace(/^forward_/, '')}
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="hint" style={{ fontSize: 12 }}>{fixed || '—'}</td>
-                </tr>
-              );
-            })}
-            {!elements.length && <tr><td colSpan={3} className="hint">{t('tc.noPipelines')}</td></tr>}
-          </tbody>
-        </table>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span className="hint">{t('tg.counts', { v: (graph.video || []).length, a: (graph.audio || []).length })}</span>
+        <div className="row" style={{ gap: 8 }}>
+          <input style={{ maxWidth: 220 }} placeholder={t('tg.filter')}
+                 value={query} onChange={e => setQuery(e.target.value)} />
+          <button onClick={load} disabled={busy}>{t('action.refresh')}</button>
+        </div>
+      </div>
+
+      <div style={{ maxHeight: '52vh', overflow: 'auto' }}>
+        {video.length > 0 && <div className="gsection">{t('tg.video')}</div>}
+        {video.map((pl, n) => board(pl, 'video', n))}
+        {audio.length > 0 && <div className="gsection">{t('tg.audio')}</div>}
+        {audio.map((pl, n) => board(pl, 'audio', n))}
+        {!video.length && !audio.length && (
+          <div className="panel hint">{query ? t('tg.noMatch') : t('tc.noPipelines')}</div>
+        )}
       </div>
 
       {diff.length > 0 && (
@@ -175,7 +212,7 @@ export default function ScenarioEditor({ transcoderId }) {
           <span className="picked-tag">{t('se.diff')}</span>
           {diff.map((d, i) => (
             <div key={i} className="mono" style={{ fontSize: 12 }}>
-              {d.kind}/{d.io}: {Object.keys(d.set).map(f => `${f}: ${d.before[f] || '∅'} → ${d.set[f]}`).join(', ')}
+              {d.label}: {Object.keys(d.set).map(f => `${f}: ${d.before[f] || '∅'} → ${d.set[f]}`).join(', ')}
             </div>
           ))}
         </div>

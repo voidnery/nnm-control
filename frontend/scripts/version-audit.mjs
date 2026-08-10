@@ -69,14 +69,20 @@ check('release fails when the tag disagrees with package.json',
   /!=\s*"\$pkgver"/.test(wf) && /exit 1/.test(wf) ? 'yes' : 'no', 'yes');
 check('deb version carries the Debian epoch',
   /deb_version=1:\$pkgver/.test(wf) ? 'yes' : 'no', 'yes');
+// Named by what it must be, not by which variable happens to carry it: the
+// output feeding the ghcr tag must be the bare version, and the tag expression
+// must not reach for the epoched one. Asserting the variable name instead is
+// how this check went red on a rename that changed nothing it cares about.
+const bareOut = /^\s*echo "(image_tag|version)=\$pkgver"/m.test(wf);
+const ghcrTag = /nnm-control-\$\{\{ matrix\.name \}\}:\$\{\{ [^}]*\.(image_tag|version) \}\}/.test(wf);
 check('docker image tag is epoch-free',
-  /image_tag=\$pkgver/.test(wf) ? 'yes' : 'no', 'yes');
+  bareOut && ghcrTag && !/nnm-control-[^\n]*deb_version/.test(wf) ? 'yes' : 'no', 'yes');
 check('postinst strips the epoch for NC_VERSION',
   /NCV="\$\{NCV#\*:\}"/.test(postinst) ? 'yes' : 'no', 'yes');
 check('deb filename is built epoch-free',
   /FILEVER="\$\{VERSION#\*:\}"/.test(buildDeb) && /nnm-control_\$\{FILEVER\}_all\.deb/.test(buildDeb) ? 'yes' : 'no', 'yes');
 check('apt pool is preserved across releases',
-  /APT_PUBLIC_BASE/.test(wf) ? 'yes' : 'no', 'yes');
+  /APT_POOL_DIR|APT_PUBLIC_BASE/.test(wf) ? 'yes' : 'no', 'yes');
 
 console.log(bad ? `\n${bad} failed` : `\nversion audit: OK (${fePkg.version})`);
 process.exit(bad ? 1 : 0);
