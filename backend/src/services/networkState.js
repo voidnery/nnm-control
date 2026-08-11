@@ -91,13 +91,19 @@ export function networkState({ network, servers, existingRoutes = [], channels =
 
       // The verdict is about what an operator would do next, so "we could not
       // ask" is kept apart from "we asked and there is nothing".
+      // An HLS re-streaming route pulls nothing until a viewer asks, so an
+      // edge with a route and no stream is at rest, not broken. This block used
+      // to call that "not reaching viewers" and paint it red, which described
+      // the normal state of every correctly configured edge on the fleet as a
+      // fault. Whether delivery actually works is a question only the watch
+      // probe can answer — it is not inferable from here at all, and this no
+      // longer pretends otherwise.
       let verdict;
       if (!route) verdict = 'no-route';
-      else if (edgeStreams === undefined || edgeStreams === null) verdict = 'edge-unreachable';
-      else if (onEdge.length) verdict = 'flowing';
-      else if (originStreams && onOrigin.length) verdict = 'origin-only';
+      else if (onEdge?.length) verdict = 'flowing';            // somebody is watching
       else if (originStreams && !onOrigin.length) verdict = 'nothing-upstream';
-      else verdict = 'origin-unknown';
+      else if (edgeStreams === undefined || edgeStreams === null) verdict = 'edge-unreachable';
+      else verdict = 'idle';                                    // routed, at rest
 
       rows.push({
         edge: edgeServer.name, origin: originServer?.name || null, application: app,
@@ -141,7 +147,8 @@ export function networkState({ network, servers, existingRoutes = [], channels =
     rows, drift,
     summary: {
       flowing: rows.filter(r => r.verdict === 'flowing').length,
-      broken: rows.filter(r => ['no-route', 'origin-only'].includes(r.verdict)).length,
+      idle: rows.filter(r => r.verdict === 'idle').length,
+      broken: rows.filter(r => r.verdict === 'no-route').length,
       unknown: rows.filter(r => ['edge-unreachable', 'origin-unknown'].includes(r.verdict)).length,
     },
   };

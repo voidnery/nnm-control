@@ -6,7 +6,10 @@ import { chooseEdge, viewerUrl, routingTable } from '../services/arbiter.js';
 import { lookup as geoLookup } from '../services/geoip.js';
 import { networkState, indexStreams } from '../services/networkState.js';
 import { nimble } from '../services/nimbleClient.js';
+import { wmspanel } from '../services/wmspanelClient.js';
+import { Settings } from '../models/Settings.js';
 import { logEvent } from '../services/audit.js';
+const cfg = async () => (await Settings.load()).wmspanel;
 
 export const arbiterRouter = Router();
 
@@ -17,12 +20,17 @@ async function edgesOf(networkId, channel) {
   if (!network) return { error: 'Network not found' };
   const servers = await NimbleServer.find();
   const byId = new Map(servers.map(s => [String(s._id), s]));
+  const g0Routes = await wmspanel.routeList(await cfg()).then(r => r.routes || []).catch(() => null);
 
   const edgeNodes = (network.nodes || []).filter(n => n.role === 'edge' && n.enabled !== false);
   const edges = [];
   for (const n of edgeNodes) {
     const s = byId.get(String(n.server));
     if (!s) continue;
+    // Configured routes decide eligibility; live streams are a reading. See
+    // the deadlock documented in arbiter.candidates().
+    const routes = g0Routes === null ? undefined : g0Routes.filter(r => (r.servers || []).map(String).includes(String(s.wmspanelServerId)))
+      .map(r => String(r.from || '').replace(/^\/+|\/+$/g, ''));
     let channels, healthy = true;
     try {
       const idx = indexStreams(await nimble.liveStreams(s));
@@ -38,7 +46,7 @@ async function edgesOf(networkId, channel) {
     edges.push({
       name: s.name, host: s.host, publicHost: s.playbackEndpoints?.[0]?.host || '',
       httpPort: s.httpPort || 8081,
-      weight: n.weight ?? 100, enabled: n.enabled !== false, healthy,
+      weight: n.weight ?? 100, enabled: n.enabled !== false, healthy, routes,
       lat: s.geo?.lat ?? null, lon: s.geo?.lon ?? null,
       channels,
     });

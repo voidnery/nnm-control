@@ -1,5 +1,52 @@
 # Changelog
 
+### v0.68.0 — the delivery worked; the panel was the thing that was broken
+An operator started a stream, opened the edge URL, watched the video, and the
+panel said "no healthy edge serving this application". The infrastructure was
+right for three milestones and the panel was wrong about it.
+
+**An HLS re-streaming route is a request mapping, not a running transfer.**
+Softvelum document it plainly: paths are mapped `/from*` → `/to*`, and the
+playlist is fetched from the origin when a user connects. Until somebody asks,
+the edge pulls nothing, holds nothing and reports nothing. Everything below
+follows from having built three milestones on the opposite assumption.
+
+- **The arbiter deadlocked itself.** It required an edge to be *already
+  streaming* a channel to be eligible for it — so an idle edge served nothing,
+  was not a candidate, got sent no viewers, and stayed idle. m5 could not hand
+  out a single link on a working network. Eligibility is now the configured
+  route; what the edge happens to be streaming is a reading, not a gate.
+- **"Not reaching viewers", in red, was the resting state of every correct
+  edge.** It is now "at rest", in no colour at all, with a sentence explaining
+  that a re-streaming route pulls nothing until asked.
+- **The panel can now be the viewer.** A watch probe fetches the playlist the
+  way a player would — the only honest test of delivery in a pull model, and
+  one that warms the cache, so it pays for itself. It reads the answer properly:
+  a master playlist is success rather than an empty media playlist, an HTML
+  error page returned with 200 is named as such, and two readings a few seconds
+  apart distinguish a live edge from one serving the same frozen playlist
+  forever. 404 is a missing route, 5xx points at the origin, a timeout is not a
+  refusal.
+- **Three facts instead of one verdict**: configured, serves when asked, in
+  use. They answer three different questions, and the middle one — the only one
+  a pull-based edge can be asked — was being inferred from the third.
+- **Live mode and a one-line summary**, so a tab left open during a broadcast
+  answers "is anything wrong" at a glance.
+
+Sent from the panel deliberately: it is outside the edge, which is the vantage
+point a viewer has. Routing it through the agent would have the edge fetch from
+itself and test a loop.
+
+**Three gates were wrong about their own rules.** The m3 gate banned every bare
+`fetch` in the delivery path — it was written to keep management reads going
+through the agent-preferring client, and as written it would have forbidden the
+one request that finally told the truth. Narrowed to management paths, with
+every remaining bare fetch required to be the viewer probe. Its first
+replacement then passed against a hand-built path string, because the helper
+was still imported elsewhere in the file; bound to the call that produces the
+path. And a check listing the verdicts by hand went stale the moment one was
+renamed — replaced by one that reads them out of the service.
+
 ### v0.67.0 — iter20 m5: the arbiter Softvelum leave you to write
 Their documented answer to load balancing is that you build an arbiter: a
 service that reads the Nimble API for load, optionally locates the viewer, and

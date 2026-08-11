@@ -38,6 +38,11 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   // often as the operator wants to look.
   const [state, setState] = useState(null);
   const [showLive, setShowLive] = useState(false);
+  const [watch, setWatch] = useState({});        // "edge|app" -> probe result
+  const [streamName, setStreamName] = useState('');
+  // Live mode, the same shape the transcoder graph uses: an operator during a
+  // broadcast wants the tab open and answering, not a button to keep pressing.
+  const [autoRefresh, setAutoRefresh] = useState(false);
   // Offered rather than demanded. The page used to open with an empty field
   // and three disabled buttons, expecting the operator to know the names —
   // which live on the origin, so the panel goes and reads them.
@@ -87,6 +92,26 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
     catch (e) { setError(e.data?.error || e.message); }
     finally { setBusy(false); }
   };
+
+  // Be the viewer. This is the only question a pull-based edge can be asked,
+  // since a re-streaming route holds nothing until somebody requests it.
+  const watchNow = async (application) => {
+    if (!streamName.trim()) return;
+    setBusy(true); setError('');
+    try {
+      const r = await api(`/cdn/networks/${network.id}/watch`, {
+        method: 'POST', body: { application, stream: streamName.trim() },
+      });
+      setWatch(w => ({ ...w, ...Object.fromEntries(r.results.map(x => [`${x.server}|${application}`, x])) }));
+    } catch (e) { setError(e.data?.error || e.message); }
+    finally { setBusy(false); }
+  };
+
+  useEffect(() => {
+    if (!autoRefresh || !list.length) return;
+    const id = setInterval(() => { loadState(); }, 10_000);
+    return () => clearInterval(id);
+  }, [autoRefresh, channels]);
 
   const run = async (what) => {
     setBusy(true); setError(''); if (what === 'plan') setReport(null);
@@ -230,13 +255,29 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       )}
 
       <div className="gsection">{t('cdn.step3')}</div>
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={loadState} disabled={busy || !list.length}>{t('cdn.checkState')}</button>
+        <input className="mono" style={{ maxWidth: 200 }} placeholder={t('cdn.streamName')}
+               value={streamName} onChange={e => setStreamName(e.target.value)} />
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0, fontSize: 12 }}>
+          <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
+          {t('cdn.liveMode')}
+        </label>
         {!state && <span className="hint">{t('cdn.stateWhy')}</span>}
       </div>
+      <div className="hint" style={{ fontSize: 11 }}>{t('cdn.streamNameHint')}</div>
 
       {state && (
         <div style={{ marginTop: 10 }}>
+          {/* One line, always the same shape, so a glance during a broadcast
+              answers "is anything wrong" without reading the boards. */}
+          <div className="picked-row" style={{ marginBottom: 8 }}>
+            <span className="picked-tag">{t('cdn.summary')}</span>
+            {t('cdn.summaryLine', {
+              flowing: state.summary.flowing, idle: state.summary.idle ?? 0,
+              broken: state.summary.broken, unknown: state.summary.unknown,
+            })}
+          </div>
           <div className="hint" style={{ fontSize: 11 }}>{t('cdn.stateHint')}</div>
           {state.unreachable?.length > 0 && state.unreachable.map((u, i) => (
             <div key={i} className="hint" style={{ marginTop: 4 }}>

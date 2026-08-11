@@ -6,6 +6,7 @@ import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { planRoutes } from '../services/deliveryPlan.js';
 import { networkState, indexStreams, probeReason } from '../services/networkState.js';
+import { playlistPath, parsePlaylist, movedOn, classifyProbe } from '../services/playlistProbe.js';
 import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { logEvent } from '../services/audit.js';
 
@@ -70,6 +71,68 @@ deliveryRoutesRouter.get('/networks/:id/applications', requirePerm('cdn.view'), 
     }
   }));
   res.json({ applications: [...found.values()].sort((a, b) => a.application.localeCompare(b.application)), asked });
+});
+
+// Be the viewer.
+//
+// Three milestones inferred delivery from what an edge was streaming, and an
+// HLS re-streaming route streams nothing until asked — so an idle edge read as
+// broken and a working network could not hand out a link. The only honest test
+// is to fetch the playlist, which is also what warms the cache, so the check
+// pays for itself.
+//
+// Sent from the panel on purpose: it is outside the edge, which is the vantage
+// point a viewer has. Asking the edge to fetch from itself would test a loop.
+deliveryRoutesRouter.post('/networks/:id/watch', requirePerm('cdn.view'), async (req, res) => {
+  const g = await gather(req.params.id);
+  if (g.error) return res.status(404).json({ error: g.error });
+  const application = String(req.body?.application || '').trim();
+  const stream = String(req.body?.stream || '').trim();
+  if (!application || !stream) {
+    return res.status(400).json({ error: 'application-and-stream-required', code: 'application-and-stream-required' });
+  }
+
+  const byId = new Map(g.servers.map(x => [String(x._id), x]));
+  const path = playlistPath(application, stream);
+  const targets = [];
+  for (const n of g.network.nodes || []) {
+    if (!['origin', 'edge', 'mid'].includes(n.role) || n.enabled === false) continue;
+    const srv = byId.get(String(n.server));
+    if (srv) targets.push({ role: n.role, server: srv });
+  }
+
+  const once = async (url) => {
+    const started = Date.now();
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000), redirect: 'follow' });
+      const text = r.status === 200 ? await r.text() : '';
+      return { status: r.status, ms: Date.now() - started, playlist: r.status === 200 ? parsePlaylist(text) : null };
+    } catch (e) {
+      return { error: String(e?.message || e), ms: Date.now() - started };
+    }
+  };
+
+  const results = await Promise.all(targets.map(async ({ role, server }) => {
+    const url = `http://${server.host}:${server.httpPort || 8081}${path}`;
+    const first = await once(url);
+    // A second reading, a moment later, is the only way to tell a live edge
+    // from one serving the same frozen playlist forever. Skipped when the
+    // first attempt already failed — there is nothing to compare.
+    let second = null;
+    if (first.status === 200 && first.playlist?.valid && first.playlist.kind === 'media') {
+      await new Promise(r => setTimeout(r, Math.min(6000, (first.playlist.targetDuration || 4) * 1000 + 500)));
+      second = await once(url);
+    }
+    const advanced = second ? movedOn(first.playlist, second.playlist) : null;
+    return {
+      role, server: server.name, url,
+      status: first.status ?? null, ms: first.ms,
+      playlist: first.playlist || null,
+      verdict: classifyProbe({ ...first, advanced }),
+    };
+  }));
+
+  res.json({ path, application, stream, results, at: new Date().toISOString() });
 });
 
 // What the servers say, next to what the plan says. Reads live_streams_status

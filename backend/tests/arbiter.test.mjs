@@ -13,9 +13,12 @@ const check = (name, fn) => {
   catch (e) { console.log(`  ✗ ${name}: ${e.message}`); failures++; }
 };
 
+// `routes` is what the edge is configured to serve; `channels` is what it
+// happens to be streaming this second. Only the first decides eligibility —
+// see the deadlock described in candidates().
 const E = (name, over = {}) => ({
   name, host: `10.0.0.${name.length}`, httpPort: 8081, weight: 100,
-  enabled: true, healthy: true, channels: ['test2'], ...over,
+  enabled: true, healthy: true, routes: ['test2'], channels: [], ...over,
 });
 const FRA = E('fra', { lat: 50.11, lon: 8.68, connections: 400 });
 const AMS = E('ams', { lat: 52.37, lon: 4.90, connections: 100 });
@@ -32,17 +35,23 @@ const LISBON = { lat: 38.72, lon: -9.14 };
 
 console.log('\nWHO IS EVEN A CANDIDATE:');
 
-check('an edge serving nothing is not a candidate', () => {
-  // It can be up, reachable and serving nothing at all. Sending viewers there
-  // produces a player that spins forever, which is worse than an error.
+check('an idle edge with a route is a candidate', () => {
+  // The bug this replaces: requiring the edge to be *already streaming* the
+  // channel deadlocked the whole arbiter. A re-streaming route pulls nothing
+  // until a viewer asks, so no viewer ever got sent and the edge never woke.
   const idle = E('idle', { channels: [] });
-  assert.deepEqual(candidates([FRA, idle], { channel: 'test2' }).map(e => e.name), ['fra']);
+  assert.equal(candidates([idle], { channel: 'test2' }).length, 1);
 });
 
-check('an edge nobody checked is still a candidate', () => {
-  // `undefined` means state collection did not run, not that the edge is
-  // empty. Excluding it would shrink the network every time a poll failed.
-  const unchecked = E('unchecked', { channels: undefined });
+check('an edge with no route for the channel is not a candidate', () => {
+  const other = E('other', { routes: ['something-else'] });
+  assert.deepEqual(candidates([FRA, other], { channel: 'test2' }).map(e => e.name), ['fra']);
+});
+
+check('an edge whose routes were not read is still a candidate', () => {
+  // `undefined` means the panel could not ask, not that the edge has none.
+  // Excluding it would shrink the network every time a poll failed.
+  const unchecked = E('unchecked', { routes: undefined });
   assert.equal(candidates([unchecked], { channel: 'test2' }).length, 1);
 });
 

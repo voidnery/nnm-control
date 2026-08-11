@@ -18,16 +18,22 @@ import { distanceKm } from './referencePoints.js';
 // not seen it fail, and it is actually serving the channel. The third is the
 // one that matters: an edge can be up, reachable and serving nothing, and
 // sending viewers to it produces a player that spins forever.
-export function candidates(edges, { channel = '', requireChannel = true } = {}) {
+export function candidates(edges, { channel = '' } = {}) {
   return edges.filter(e => {
     if (e.enabled === false) return false;
     if (e.healthy === false) return false;
-    if (requireChannel && channel) {
-      // `undefined` means nobody looked. Excluding an edge because the panel
-      // did not check it would quietly shrink the network every time state
-      // collection failed.
-      if (e.channels && !e.channels.includes(channel)) return false;
-    }
+    // Having a route for the channel is what makes an edge able to serve it.
+    //
+    // This used to require the edge to be *already streaming* the channel, and
+    // that was a deadlock of the panel's own making: an HLS re-streaming route
+    // pulls nothing until a viewer asks, so an idle edge served nothing, was
+    // therefore not a candidate, was therefore sent no viewers, and therefore
+    // stayed idle. The first release of m5 could not hand out a single link on
+    // a working network.
+    //
+    // What the edge is currently serving is a reading, not a gate. `undefined`
+    // still means nobody looked, and an edge nobody looked at stays in.
+    if (channel && e.routes && !e.routes.includes(channel)) return false;
     return true;
   });
 }

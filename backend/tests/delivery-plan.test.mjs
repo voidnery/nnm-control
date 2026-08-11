@@ -313,19 +313,42 @@ check('a missing reading never renders as a number', () => {
 
 console.log('\nNATIVE READS GO THROUGH THE AGENT-PREFERRING CLIENT:');
 
-check('the CDN path contains no bare fetch to a server', () => {
-  // The rule "the panel does not dial a server that has an agent" lives in one
-  // place — nimbleClient, which prefers the agent and falls back only for
-  // servers without one. It holds only while every caller goes through it, and
-  // a single `fetch(` here would quietly opt out of it forever.
-  const routes = readFile(new URL('../src/routes/deliveryRoutes.js', import.meta.url), 'utf8');
-  const state = readFile(new URL('../src/services/networkState.js', import.meta.url), 'utf8');
-  for (const [name, src] of [['deliveryRoutes.js', routes], ['networkState.js', state]]) {
-    assert.ok(!/\bfetch\s*\(/.test(stripComments(src)),
-      `${name} dials a server itself instead of going through nimbleClient`);
-  }
+check('management reads go through the agent-preferring client', () => {
+  // The rule is about the *management API*: it lives in one place —
+  // nimbleClient, which prefers the agent and falls back only for servers
+  // without one — and it holds only while every caller goes through it.
+  //
+  // Not about every outbound request. The watch probe is a plain HTTP GET to
+  // the playback port, from outside the edge, because that is precisely what a
+  // viewer does; routing it through the agent would have the edge fetch from
+  // itself and test a loop. The first version of this check banned `fetch(`
+  // outright and would have forbidden the one thing that finally told the
+  // truth about delivery.
+  const routes = stripComments(readFile(new URL('../src/routes/deliveryRoutes.js', import.meta.url), 'utf8'));
+  const state = stripComments(readFile(new URL('../src/services/networkState.js', import.meta.url), 'utf8'));
+
+  assert.ok(!/\bfetch\s*\(/.test(state), 'networkState.js dials a server itself');
+  // No management path may be reached by hand.
+  assert.ok(!/fetch\([^)]*\/manage\//.test(routes),
+    'deliveryRoutes.js reaches the management API without nimbleClient');
   assert.ok(/from '\.\.\/services\/nimbleClient\.js'/.test(routes),
     'the state endpoint does not use the shared native client at all');
+
+  // Every bare fetch in this file must be the viewer probe: aimed at the
+  // playback port, at a path the playlist helper built.
+  const bare = [...routes.matchAll(/\bfetch\s*\(([^;]{0,120})/g)].map(m => m[1]);
+  for (const call of bare) {
+    assert.ok(/url/.test(call), `an unrecognised bare fetch: ${call.slice(0, 60)}`);
+  }
+  // Bound to the helper actually producing the path that gets fetched, not to
+  // the helper merely being imported: inlining the path string satisfied
+  // "playlistPath appears in the file" while quietly dropping the one place
+  // the path is defined, so the probe and the plan could drift apart.
+  if (bare.length) {
+    assert.ok(/const path = playlistPath\(/.test(routes),
+      'the probed path is built by hand instead of by the shared helper');
+    assert.ok(/httpPort \|\| 8081/.test(routes), 'the probe does not aim at the playback port');
+  }
 });
 
 check('the transport is asked for, not assumed', () => {
@@ -350,16 +373,9 @@ check('delivery is drawn as a flow, not tabulated', () => {
   assert.ok(/originCol|routeCol|edgeCol/.test(boardCode), 'the stages are unlabelled');
 });
 
-check('every verdict has a sentence, in both languages', () => {
-  // "origin-only" means nothing until it is read as "the origin has this and
-  // the edge does not". A tag is a label; the operator needs the consequence.
-  const verdicts = ['flowing', 'origin-only', 'no-route', 'nothing-upstream',
-                    'edge-unreachable', 'origin-unknown'];
-  for (const v of verdicts) {
-    const hits = (dict.match(new RegExp(`'cdn\\.explain\\.${v}':`, 'g')) || []).length;
-    assert.equal(hits, 2, `cdn.explain.${v} is missing from a dictionary`);
-  }
-});
+// Superseded: this listed the verdicts by hand and went stale the moment
+// 'origin-only' was replaced by 'idle'. The version further down reads them
+// out of the service, which cannot go stale in the same way.
 
 check('the applications are offered, not demanded', () => {
   // The page opened with an empty field and disabled buttons, expecting the
@@ -429,6 +445,54 @@ check('the written routes are reference, not part of the flow', () => {
                                                      panelCode.indexOf('showLive') + 80)),
     'the written-routes list does not start folded');
   assert.ok(/setShowLive\(v => !v\)/.test(panelCode), 'the fold cannot be toggled');
+});
+
+console.log('\nCONFIGURED, WORKS, IN USE — THREE FACTS:');
+
+check('the board states each of the three separately', () => {
+  // They answer three different questions and were crushed into one verdict.
+  // The middle one is the only question a pull-based edge can be asked, and it
+  // used to be inferred from the third — which is how a working network read
+  // as broken for three milestones.
+  for (const k of ['cdn.f.configured', 'cdn.f.works', 'cdn.f.inUse']) {
+    assert.ok(new RegExp(`t\\('${k}'\\)`).test(boardCode), `${k} is not shown`);
+  }
+});
+
+check('an unchecked edge says so rather than looking broken', () => {
+  assert.ok(/cdn\.notChecked/.test(boardCode));
+});
+
+check('"at rest" is not painted as an error', () => {
+  // The single change that matters most: a routed edge with no viewers is the
+  // resting state of every correct edge on the fleet.
+  const tone = boardCode.slice(boardCode.indexOf('const TONE'), boardCode.indexOf('const WATCH_TONE'));
+  assert.ok(/idle:\s*''/.test(tone), 'idle carries a tone that reads as a fault');
+  assert.ok(!/origin-only/.test(boardCode), 'the old alarming verdict is still rendered');
+});
+
+check('every verdict the service can produce has a sentence, in both languages', () => {
+  // Read from the service rather than listed here, so a verdict added later
+  // cannot reach the screen as a raw key.
+  const svc = readFile(new URL('../src/services/networkState.js', import.meta.url), 'utf8');
+  const verdicts = [...new Set([...stripComments(svc).matchAll(/verdict = '([a-z-]+)'/g)].map(m => m[1]))];
+  assert.ok(verdicts.length >= 4, `only found ${verdicts.length} verdicts`);
+  for (const v of verdicts) {
+    assert.equal((dict.match(new RegExp(`'cdn\\.explain\\.${v}':`, 'g')) || []).length, 2,
+      `cdn.explain.${v} is missing from a dictionary`);
+  }
+});
+
+check('the viewer probe is reachable from the panel', () => {
+  assert.ok(/networks\/\$\{network\.id\}\/watch/.test(panelCode), 'nothing asks the edge as a viewer');
+  assert.ok(/streamName/.test(panelCode), 'there is no way to say which stream to ask for');
+});
+
+check('live mode refreshes and stops', () => {
+  // An operator during a broadcast wants the tab answering, not a button to
+  // keep pressing — and an interval that is never cleared is a leak.
+  assert.ok(/setInterval/.test(panelCode), 'there is no live refresh');
+  assert.ok(/clearInterval/.test(panelCode), 'the live refresh is never stopped');
 });
 
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');

@@ -57,13 +57,21 @@ check('content on both sides is flowing', () => {
   assert.equal(r.edgeBandwidth, 880);
 });
 
-check('on the origin but not the edge is the route not working', () => {
-  // The case the whole milestone exists for: everything m2 could see looks
-  // right, and nothing reaches viewers.
+check('a routed edge with nobody watching is idle, not broken', () => {
+  // This asserted 'origin-only' and the UI painted it red. An HLS re-streaming
+  // route pulls nothing until a viewer asks, so this is the resting state of
+  // every correctly configured edge — and calling it a fault sent the operator
+  // to debug a network that was working, which is exactly what happened.
   const r = state({ live: { origin: streams(['test2', 's', 900]), ru2: streams() } }).rows[0];
-  assert.equal(r.verdict, 'origin-only');
+  assert.equal(r.verdict, 'idle');
   assert.equal(r.originBandwidth, 900);
   assert.equal(r.edgeStreams, 0);
+});
+
+check('idle is counted apart from broken', () => {
+  const s = state({ live: { origin: streams(['test2', 's', 900]), ru2: streams() } });
+  assert.equal(s.summary.idle, 1);
+  assert.equal(s.summary.broken, 0, 'a resting edge must not raise the broken count');
 });
 
 check('nothing on either side is named as nothing upstream', () => {
