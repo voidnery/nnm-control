@@ -374,5 +374,50 @@ check('a box with no reading still explains itself on the board', () => {
   assert.ok(/cdn\.reason\./.test(boardCode), 'a failed read shows no reason on the board');
 });
 
+console.log('\nTHE PAGE HAS A SHAPE, NOT A STACK:');
+
+const netSrc = stripComments(readFile(new URL('components/DeliveryNetworkPanel.jsx', FRONT), 'utf8'));
+
+check('a network shows one job at a time', () => {
+  // Four panels stacked vertically, each growing downwards on every button
+  // press, is a page nobody can hold in view. Topology, delivery and
+  // measurement happen at different moments and are now separate tabs.
+  assert.ok(/'topology', 'delivery', 'probes'/.test(netSrc), 'the second-level tabs are gone');
+  for (const tab of ['topology', 'delivery', 'probes']) {
+    assert.ok(new RegExp(`tab === '${tab}'`).test(netSrc), `nothing renders on the ${tab} tab`);
+  }
+});
+
+check('unsaved topology is visible from the other tabs', () => {
+  // The plan is computed from what is stored. An operator who edited the
+  // topology and moved to Delivery has no way to see that what they are
+  // planning against is not what is on their screen — so the tab carries the
+  // mark.
+  const tabBar = netSrc.slice(netSrc.indexOf("'topology', 'delivery', 'probes'"));
+  assert.ok(/dirty/.test(tabBar.slice(0, 600)), 'the topology tab does not mark unsaved changes');
+});
+
+check('the delivery steps are ordered, not three equal buttons', () => {
+  for (const k of ['cdn.step1', 'cdn.step2', 'cdn.step3']) {
+    assert.ok(new RegExp(`t\\('${k}'\\)`).test(panelCode), `${k} is not rendered as a step heading`);
+  }
+  // Plan before apply: the apply button is disabled until a plan exists, and
+  // says why rather than sitting greyed out for no stated reason.
+  assert.ok(/cdn\.planFirst/.test(panelCode), 'nothing explains why apply is disabled');
+});
+
+check('the written routes are reference, not part of the flow', () => {
+  // Folded, with the count showing, so it is never a surprise that something
+  // is there — but it is not competing with the three steps for attention.
+  //
+  // Checked as state that starts closed and can be toggled, not merely as a
+  // name that appears: a `const showLive = true` satisfies "showLive exists"
+  // and unfolds the list permanently, which is the thing being prevented.
+  assert.ok(/useState\(false\)/.test(panelCode.slice(panelCode.indexOf('showLive') - 60,
+                                                     panelCode.indexOf('showLive') + 80)),
+    'the written-routes list does not start folded');
+  assert.ok(/setShowLive\(v => !v\)/.test(panelCode), 'the fold cannot be toggled');
+});
+
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');
 process.exit(failures ? 1 : 0);

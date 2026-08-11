@@ -1,5 +1,71 @@
 # Changelog
 
+### v0.65.0 — the page had everything and no shape
+Four panels stacked vertically, each growing downwards on every button press,
+with three buttons side by side as equals and the order between them something
+the operator was expected to already know. Every fact was present. Nothing was
+findable.
+
+- **One job at a time.** A network now has second-level tabs — Topology,
+  Delivery, Measurements — because those are three jobs done at three
+  different moments: building it, running it, checking it. Stacking them meant
+  the page had to be scrolled to be understood, and understood to be scrolled.
+- **Unsaved topology follows you.** The plan is computed from what is stored,
+  so an operator who edited nodes and moved to Delivery had no way to see that
+  what they were planning against was not what they had on screen. The
+  Topology tab carries a mark until it is saved.
+- **Delivery is three numbered steps**: what to deliver, set up the routes, is
+  it arriving. Each step's result appears under that step rather than at the
+  bottom of the page, and the apply button says why it is disabled instead of
+  sitting greyed out for no stated reason. "Check state" belonged to a
+  different question all along and has moved to its own step.
+- **The written routes fold away.** Reference material, with its count visible
+  so it is never a surprise that something is there, but no longer competing
+  with the three steps for attention.
+- **The network header is one line**: which network, its audience, its
+  description. Everything that edits those properties is behind the pencil.
+
+Four layout rules gated and proven by contradiction. The last of the four
+passed at first against `const showLive = true` — which satisfies "showLive
+exists" while unfolding the list permanently, the exact thing being prevented.
+Now checked as state that starts closed and can be toggled. That is the third
+gate in this iteration whose first version tested the presence of a name rather
+than the behaviour behind it.
+
+### v0.64.1 — a button that worked and a dialog that was not one
+Two faults reported as one confusing page, and neither was where it looked.
+
+- **Resolve worked the whole time.** It read the country, wrote it to the
+  database, and `GET /servers` never returned the `geo` field at all — so the
+  table it was meant to fill re-read a payload that had never carried it. The
+  only symptom was a button that appeared to do nothing, which is exactly what
+  a dead control looks like. The field is returned now.
+- **The location editor was not a dialog.** It was hand-written markup using
+  `modal-backdrop`, a class the stylesheet does not define — the project's is
+  `modal-back`. It compiled, rendered and passed every gate, and appeared as a
+  plain box in the page flow below the table it was editing. Both dialogs now
+  go through the shared `Modal`.
+- **A network could not be named.** Creating one posted a placeholder and the
+  field to change it existed nowhere, so every network was "New network"
+  forever. Name, description and audience are asked once, in a dialog, before
+  the network exists — and the same dialog edits them afterwards. Audience
+  stops being a pair of buttons floating above an unrelated table of nodes and
+  becomes what it is: a property of the network, shown where the network is
+  described.
+
+**A new gate: `audit:dialog`**, covering the shape both of these share — a
+thing that exists on one side of a boundary and not the other, with neither
+side obviously broken. It refuses an overlay class the stylesheet does not
+define, refuses a component that assembles its own backdrop instead of using
+`Modal`, and requires every `geo` field the server model persists to survive
+the projection in `GET /servers`. Proven by contradiction three ways.
+
+Worth noting what did not catch these. The click gate presses every button and
+saw nothing wrong: the handler was bound and it ran. The render smoke saw a
+component that rendered. The i18n audit saw keys that resolved. Everything was
+individually correct — which is the whole reason this class of fault needs its
+own check rather than more of the existing ones.
+
 ### v0.64.0 — iter20 m4: measuring paths the panel is not on
 Whether an edge in Amsterdam can reach an origin in Moscow is a fact about
 those two machines. The panel sits on neither, so it asks the agent on one of

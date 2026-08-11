@@ -5,6 +5,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from './IconButton.jsx';
+import Modal from './Modal.jsx';
 import DeliveryRoutesPanel from './DeliveryRoutesPanel.jsx';
 import ProbePanel from './ProbePanel.jsx';
 
@@ -34,7 +35,13 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [draft, setDraft] = useState(null);      // local copy of the nodes being edited
+  const [draft, setDraft] = useState(null);
+  const [newNet, setNewNet] = useState(null);   // the create dialog, or null
+  // Second-level tabs inside a network. Topology, delivery and measurement are
+  // three jobs done at different moments — building it, running it, checking
+  // it — and stacking them vertically meant the page grew downwards on every
+  // button press until nothing could be held in view at once.
+  const [tab, setTab] = useState('topology');      // local copy of the nodes being edited
 
   const load = async () => {
     setError('');
@@ -65,10 +72,26 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
     finally { setBusy(false); }
   };
 
+  // Creating a network used to POST a placeholder name with no way to change
+  // it — the field to rename it did not exist anywhere on the page, so every
+  // network was called "New network" forever. The properties that identify a
+  // network are asked for once, in a dialog, before it exists.
   const createNetwork = () => act(async () => {
-    const n = await api('/cdn/networks', { method: 'POST', body: { name: t('cdn.newName'), audience: 'internal' } });
+    const n = await api('/cdn/networks', {
+      method: 'POST',
+      body: { name: newNet.name.trim(), description: newNet.description, audience: newNet.audience },
+    });
+    setNewNet(null);
     setSelected(n.id);
-  });
+  }, t('cdn.created'));
+
+  const renameNetwork = () => act(async () => {
+    await api(`/cdn/networks/${net.id}`, {
+      method: 'PUT',
+      body: { name: newNet.name.trim(), description: newNet.description, audience: newNet.audience },
+    });
+    setNewNet(null);
+  }, t('cdn.saved'));
 
   const saveNodes = () => act(async () => {
     const r = await api(`/cdn/networks/${net.id}`, { method: 'PUT', body: { nodes: draft } });
@@ -76,10 +99,6 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
       push({ type: 'warn', message: t('cdn.savedWithWarnings', { n: r.problems.length }) });
     }
   }, t('cdn.saved'));
-
-  const setAudience = (audience) => act(async () => {
-    await api(`/cdn/networks/${net.id}`, { method: 'PUT', body: { audience } });
-  });
 
   const removeNetwork = () => act(async () => {
     if (!(await confirm({ message: t('cdn.confirmDelete', { name: net.name }) }))) return;
@@ -110,32 +129,50 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
     <div>
       {error && <div className="error-box">{error}</div>}
 
-      <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>{t('cdn.networks')}</h2>
-          <div className="row" style={{ gap: 8 }}>
-            <select value={selected} onChange={e => setSelected(e.target.value)} style={{ maxWidth: 260 }}>
-              <option value="">{t('cdn.pickNetwork')}</option>
-              {networks.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-            </select>
-            {canManage && <button onClick={createNetwork} disabled={busy}>{t('cdn.newNetwork')}</button>}
-          </div>
+      {/* Which network, and what it is — one line. Everything that edits these
+          properties lives in the dialog behind the pencil. */}
+      <div className="panel" style={{ paddingBottom: 8 }}>
+        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={selected} onChange={e => setSelected(e.target.value)} style={{ maxWidth: 260 }}>
+            <option value="">{t('cdn.pickNetwork')}</option>
+            {networks.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+          </select>
+          {net && <span className="badge">{t('cdn.audience.' + net.audience)}</span>}
+          {net?.description && <span className="hint">{net.description}</span>}
+          <div style={{ flex: 1 }} />
+          {canManage && net && (
+            <IconButton action="edit"
+                        onClick={() => setNewNet({ mode: 'edit', name: net.name, description: net.description || '', audience: net.audience })} />
+          )}
+          {canManage && (
+            <button onClick={() => setNewNet({ mode: 'create', name: '', description: '', audience: 'internal' })}
+                    disabled={busy}>{t('cdn.newNetwork')}</button>
+          )}
         </div>
 
-        {!net ? (
-          <div className="hint" style={{ marginTop: 8 }}>{t('cdn.noNetwork')}</div>
-        ) : (
-          <>
-            <div className="row" style={{ gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-              <span className="hint">{t('cdn.audience')}</span>
-              {['internal', 'public'].map(a => (
-                <button key={a} className={'tagchip' + (net.audience === a ? ' on' : '')}
-                        disabled={!canManage || busy} onClick={() => setAudience(a)}>
-                  {t('cdn.audience.' + a)}
-                </button>
-              ))}
-              <span className="hint">{t('cdn.audienceHint')}</span>
-            </div>
+        {net && (
+          <div className="row" style={{ gap: 6, marginTop: 10 }}>
+            {['topology', 'delivery', 'probes'].map(v => (
+              <button key={v} className={'tagchip' + (tab === v ? ' on' : '')} onClick={() => setTab(v)}>
+                {t('cdn.tab.' + v)}
+                {/* Unsaved topology is the one thing worth carrying across
+                    tabs: the plan is computed from what is stored, and an
+                    operator on another tab has no way to see that it is not. */}
+                {v === 'topology' && dirty && <span className="badge warn" style={{ marginLeft: 6 }}>•</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {!net ? (
+        <div className="panel hint">{t('cdn.noNetwork')}</div>
+      ) : (
+        <>
+          {tab === 'topology' && (
+          <div className="panel">
+            <h2 style={{ marginTop: 0 }}>{t('cdn.tab.topology')}</h2>
+            <div className="hint">{t('cdn.topologyHint')}</div>
 
             <table style={{ marginTop: 10 }}>
               <thead>
@@ -196,17 +233,48 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
                 <button onClick={removeNetwork} disabled={busy}>{t('cdn.deleteNetwork')}</button>
               </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+          )}
+
+          {tab === 'delivery' && dirty && <div className="panel hint">{t('cdn.unsavedFirst')}</div>}
+          {tab === 'delivery' && <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} />}
+          {tab === 'probes' && <ProbePanel network={net} />}
+        </>
+      )}
 
       {/* The plan is computed from what is stored, not from what is on screen.
           Pressing "show plan" over unsaved edits used to answer "this network
           has no edges" about a topology the operator could see in front of
           them. */}
-      {net && dirty && <div className="panel hint">{t('cdn.unsavedFirst')}</div>}
-      {net && <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} />}
-      {net && <ProbePanel network={net} />}
+      {newNet && (
+        <Modal onClose={() => setNewNet(null)}>
+          <h3>{t(newNet.mode === 'create' ? 'cdn.newNetwork' : 'cdn.editNetwork')}</h3>
+          <label>{t('cdn.netName')}</label>
+          <input autoFocus value={newNet.name} placeholder={t('cdn.netNamePh')}
+                 onChange={e => setNewNet({ ...newNet, name: e.target.value })} />
+          <label>{t('cdn.netDescription')}</label>
+          <input value={newNet.description}
+                 onChange={e => setNewNet({ ...newNet, description: e.target.value })} />
+          <label>{t('cdn.audience')}</label>
+          <div className="row" style={{ gap: 6 }}>
+            {['internal', 'public'].map(a => (
+              <button key={a} className={'tagchip' + (newNet.audience === a ? ' on' : '')}
+                      onClick={() => setNewNet({ ...newNet, audience: a })}>
+                {t('cdn.audience.' + a)}
+              </button>
+            ))}
+          </div>
+          <div className="hint" style={{ marginTop: 4 }}>{t('cdn.audienceHint')}</div>
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <button onClick={() => setNewNet(null)}>{t('action.cancel')}</button>
+            <button className="primary" disabled={busy || !newNet.name.trim()}
+                    onClick={newNet.mode === 'create' ? createNetwork : renameNetwork}>
+              {t(newNet.mode === 'create' ? 'action.create' : 'action.save')}
+            </button>
+          </div>
+        </Modal>
+      )}
+
 
     </div>
   );

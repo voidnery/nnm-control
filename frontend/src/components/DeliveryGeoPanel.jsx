@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import IconButton from './IconButton.jsx';
+import Modal from './Modal.jsx';
 
 // Where the fleet physically is, and the database that answers it.
 //
@@ -203,35 +204,38 @@ export default function DeliveryGeoPanel({ servers, onServersChanged }) {
         </table>
       </div>
 
+      {/* A real dialog, through the shared component. This was hand-rolled
+          markup using a class name that does not exist in the stylesheet
+          (`modal-backdrop` against the project's `modal-back`), so it rendered
+          as a plain box in the page flow — below the table it was editing, and
+          reachable only by scrolling. */}
       {geoEdit && (
-        <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setGeoEdit(null)}>
-          <div className="modal">
-            <h3>{t('cdn.editGeo', { name: geoEdit.name })}</h3>
-            <p className="hint">{t('cdn.editGeoHint')}</p>
-            <label>{t('cdn.countryCode')}</label>
-            <input className="mono" maxLength={2} value={geoEdit.countryCode}
-                   onChange={e => setGeoEdit({ ...geoEdit, countryCode: e.target.value.toUpperCase() })} />
-            <label>{t('cdn.countryName')}</label>
-            <input value={geoEdit.countryName} onChange={e => setGeoEdit({ ...geoEdit, countryName: e.target.value })} />
-            <label>{t('cdn.city')}</label>
-            <input value={geoEdit.city} onChange={e => setGeoEdit({ ...geoEdit, city: e.target.value })} />
-            <div className="row" style={{ gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <label>{t('cdn.lat')}</label>
-                <input className="mono" value={geoEdit.lat} onChange={e => setGeoEdit({ ...geoEdit, lat: e.target.value })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label>{t('cdn.lon')}</label>
-                <input className="mono" value={geoEdit.lon} onChange={e => setGeoEdit({ ...geoEdit, lon: e.target.value })} />
-              </div>
+        <Modal onClose={() => setGeoEdit(null)}>
+          <h3>{t('cdn.editGeo', { name: geoEdit.name })}</h3>
+          <p className="hint">{t('cdn.editGeoHint')}</p>
+          <label>{t('cdn.countryCode')}</label>
+          <input className="mono" maxLength={2} value={geoEdit.countryCode}
+                 onChange={e => setGeoEdit({ ...geoEdit, countryCode: e.target.value.toUpperCase() })} />
+          <label>{t('cdn.countryName')}</label>
+          <input value={geoEdit.countryName} onChange={e => setGeoEdit({ ...geoEdit, countryName: e.target.value })} />
+          <label>{t('cdn.city')}</label>
+          <input value={geoEdit.city} onChange={e => setGeoEdit({ ...geoEdit, city: e.target.value })} />
+          <div className="row" style={{ gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label>{t('cdn.lat')}</label>
+              <input className="mono" value={geoEdit.lat} onChange={e => setGeoEdit({ ...geoEdit, lat: e.target.value })} />
             </div>
-            <div className="hint">{t('cdn.coordsPairHint')}</div>
-            <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-              <button onClick={() => setGeoEdit(null)}>{t('action.cancel')}</button>
-              <button className="primary" onClick={saveGeo} disabled={busy}>{t('action.save')}</button>
+            <div style={{ flex: 1 }}>
+              <label>{t('cdn.lon')}</label>
+              <input className="mono" value={geoEdit.lon} onChange={e => setGeoEdit({ ...geoEdit, lon: e.target.value })} />
             </div>
           </div>
-        </div>
+          <div className="hint">{t('cdn.coordsPairHint')}</div>
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <button onClick={() => setGeoEdit(null)}>{t('action.cancel')}</button>
+            <button className="primary" onClick={saveGeo} disabled={busy}>{t('action.save')}</button>
+          </div>
+        </Modal>
       )}
     </div>
   );

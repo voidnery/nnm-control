@@ -28,6 +28,21 @@ const pub = (s) => ({
   order: s.order ?? 0, httpPort: s.httpPort || 0,
   playbackEndpoints: (s.playbackEndpoints || []).map(e => ({ label: e.label || '', host: e.host, hlsPort: e.hlsPort, rtmpPort: e.rtmpPort, ssl: Boolean(e.ssl) })),
   syncedFromWmspanel: Boolean(s.syncedFromWmspanel), wmspanelStatus: s.wmspanelStatus || '', lastSyncAt: s.lastSyncAt, createdAt: s.createdAt,
+  // iter20 m1 stored a resolved location and nothing ever sent it back. The
+  // Resolve button worked, wrote the country, and the table it was supposed to
+  // fill re-read a payload that had never carried the field — so the only
+  // symptom was a button that appeared to do nothing at all. A field the panel
+  // writes and does not return is invisible in exactly the way that looks like
+  // a broken control.
+  geo: {
+    countryCode: s.geo?.countryCode || '', countryName: s.geo?.countryName || '',
+    city: s.geo?.city || '',
+    lat: typeof s.geo?.lat === 'number' ? s.geo.lat : null,
+    lon: typeof s.geo?.lon === 'number' ? s.geo.lon : null,
+    source: s.geo?.source || '', coordsSource: s.geo?.coordsSource || '',
+    resolvedIp: s.geo?.resolvedIp || '', resolvedAt: s.geo?.resolvedAt || null,
+    edition: s.geo?.edition || '', release: s.geo?.release || '',
+  },
 });
 
 serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {

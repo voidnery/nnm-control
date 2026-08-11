@@ -37,6 +37,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   // native Nimble API, so it costs no WMSPanel quota and can be refreshed as
   // often as the operator wants to look.
   const [state, setState] = useState(null);
+  const [showLive, setShowLive] = useState(false);
   // Offered rather than demanded. The page used to open with an empty field
   // and three disabled buttons, expecting the operator to know the names —
   // which live on the origin, so the panel goes and reads them.
@@ -123,12 +124,11 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       <div className="hint">{t('cdn.routesHint')}</div>
       {error && <div className="error-box">{error}</div>}
 
-      <ol className="hint" style={{ margin: '4px 0 10px 18px', padding: 0 }}>
-        <li>{t('cdn.step1')}</li>
-        <li>{t('cdn.step2')}</li>
-        <li>{t('cdn.step3')}</li>
-      </ol>
-
+      {/* Numbered, because the three buttons used to sit side by side as
+          equals and the order between them was something the operator had to
+          already know. Each step's result appears under that step, not at the
+          bottom of the page. */}
+      <div className="gsection">{t('cdn.step1')}</div>
       <label>{t('cdn.channels')}</label>
       {found && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -153,14 +153,19 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
              onChange={e => setChannels(e.target.value)} />
       <div className="hint" style={{ fontSize: 11 }}>{t('cdn.channelsHint')}</div>
 
-      <div className="row" style={{ gap: 8, marginTop: 8 }}>
+      {/* Numbered, because these used to sit side by side as equals and the
+          order between them was something the operator had to already know.
+          The check-state button belonged to a different question and has moved
+          to its own step. */}
+      <div className="gsection">{t('cdn.step2')}</div>
+      <div className="row" style={{ gap: 8 }}>
         <button onClick={() => run('plan')} disabled={busy || !list.length || dirty}>{t('cdn.showPlan')}</button>
-        <button onClick={loadState} disabled={busy || !list.length}>{t('cdn.checkState')}</button>
         {can('cdn.manage') && (
           <button className="primary" onClick={apply} disabled={busy || !plan || blocked || !work.length || dirty}>
             {busy ? '…' : t('cdn.apply', { n: work.length })}
           </button>
         )}
+        {!plan && <span className="hint">{t('cdn.planFirst')}</span>}
       </div>
 
       {plan?.problems?.length > 0 && (
@@ -205,9 +210,33 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         </table>
       )}
 
+      {report && (
+        <div className="panel" style={{ marginTop: 10 }}>
+          <b>{report.ok ? t('cdn.applyDone', { n: report.applied }) : t('cdn.applyStopped', { n: report.applied })}</b>
+          {report.steps?.map((s, i) => (
+            <div key={i} className="hint" style={{ fontSize: 12 }}>
+              {s.ok ? '✓' : '✗'} {s.step}
+              {s.verified ? ` — ${s.verified}` : ''}
+              {s.error ? ` — ${s.error}` : ''}
+              {s.rolledBack ? ` · ${s.rolledBack}` : ''}
+              {s.upstreamError && (
+                <div className="mono" style={{ fontSize: 11, marginLeft: 14, wordBreak: 'break-all' }}>
+                  {t('cdn.upstreamSaid')} {typeof s.upstreamError === 'string' ? s.upstreamError : JSON.stringify(s.upstreamError)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="gsection">{t('cdn.step3')}</div>
+      <div className="row" style={{ gap: 8 }}>
+        <button onClick={loadState} disabled={busy || !list.length}>{t('cdn.checkState')}</button>
+        {!state && <span className="hint">{t('cdn.stateWhy')}</span>}
+      </div>
+
       {state && (
-        <div style={{ marginTop: 14 }}>
-          <b>{t('cdn.stateTitle')}</b>
+        <div style={{ marginTop: 10 }}>
           <div className="hint" style={{ fontSize: 11 }}>{t('cdn.stateHint')}</div>
           {state.unreachable?.length > 0 && state.unreachable.map((u, i) => (
             <div key={i} className="hint" style={{ marginTop: 4 }}>
@@ -227,13 +256,18 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         </div>
       )}
 
-      <div style={{ marginTop: 14 }}>
+      {/* Reference, not part of the flow: folded away so the three steps above
+          are what the page is, with the count visible so it is never a
+          surprise that something is there. */}
+      <div style={{ marginTop: 16 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <b>{t('cdn.liveRoutes')}</b>
-          <button onClick={loadLive} disabled={busy}>{t('action.refresh')}</button>
+          <button onClick={() => setShowLive(v => !v)}>
+            {showLive ? '▾' : '▸'} {t('cdn.liveRoutes')}{live ? ` · ${live.length}` : ''}
+          </button>
+          {showLive && <button onClick={loadLive} disabled={busy}>{t('action.refresh')}</button>}
         </div>
-        <div className="hint" style={{ fontSize: 11 }}>{t('cdn.liveRoutesHint')}</div>
-        <table style={{ marginTop: 6 }}>
+        {showLive && <div className="hint" style={{ fontSize: 11 }}>{t('cdn.liveRoutesHint')}</div>}
+        {showLive && <table style={{ marginTop: 6 }}>
           <thead><tr><th>{t('cdn.from')}</th><th>{t('cdn.to')}</th><th>{t('cdn.onServers')}</th><th /></tr></thead>
           <tbody>
             {(live || []).map(r => (
@@ -247,27 +281,9 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
             {live && !live.length && <tr><td colSpan={4} className="hint">{t('cdn.noLiveRoutes')}</td></tr>}
             {!live && <tr><td colSpan={4} className="hint">{t('sd.loading')}</td></tr>}
           </tbody>
-        </table>
+        </table>}
       </div>
 
-      {report && (
-        <div className="panel" style={{ marginTop: 10 }}>
-          <b>{report.ok ? t('cdn.applyDone', { n: report.applied }) : t('cdn.applyStopped', { n: report.applied })}</b>
-          {report.steps?.map((s, i) => (
-            <div key={i} className="hint" style={{ fontSize: 12 }}>
-              {s.ok ? '✓' : '✗'} {s.step}
-              {s.verified ? ` — ${s.verified}` : ''}
-              {s.error ? ` — ${s.error}` : ''}
-              {s.rolledBack ? ` · ${s.rolledBack}` : ''}
-              {s.upstreamError && (
-                <div className="mono" style={{ fontSize: 11, marginLeft: 14, wordBreak: 'break-all' }}>
-                  {t('cdn.upstreamSaid')} {typeof s.upstreamError === 'string' ? s.upstreamError : JSON.stringify(s.upstreamError)}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
