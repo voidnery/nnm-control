@@ -69,3 +69,24 @@ receive it on the ~30s sync, not immediately.
 Worth stating because it is the first question after a successful write, and
 the panel used to have no answer: it showed what it would do and never what
 was there.
+
+
+## Custom ports are not in the API — confirmed absent
+
+WMSPanel's server dialog holds custom domains *and* custom ports (`Custom
+ports: HTTP 8081,25541`). Only the domains come back from the API:
+
+    GET /v1/server        -> id, name, kind, status, ip, custom_ips
+    GET /v1/server/{id}   -> id, name, kind, status, ip
+
+No port field on either, and the account's second HTTP port appears in **no
+response across all 104 endpoint dumps**. So a port set in WMSPanel cannot be
+read by anything built on its API, and a panel that needs one has to be told
+separately.
+
+Worth stating plainly because the opposite assumption is natural and wrong:
+"it is configured in WMSPanel" does not imply "it is available over the
+WMSPanel API".
+
+`custom_ips`, on the other hand, is exactly the public name an edge needs for a
+redirect gateway, and is now read on every sync.

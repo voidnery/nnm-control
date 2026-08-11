@@ -44,7 +44,12 @@ async function edgesOf(networkId, channel) {
       healthy = false;
     }
     edges.push({
-      name: s.name, host: s.host, publicHost: s.playbackEndpoints?.[0]?.host || '',
+      name: s.name, host: s.host,
+      // A public name, from wherever the operator already put one. WMSPanel's
+      // custom domains count: they are the same answer to the same question,
+      // and requiring it to be retyped as a playback endpoint is how the panel
+      // told an operator their edges had no names while WMSPanel listed three.
+      publicHost: s.playbackEndpoints?.[0]?.host || s.wmspanelDomains?.[0] || '',
       httpPort: s.httpPort || 8081,
       weight: n.weight ?? 100, enabled: n.enabled !== false, healthy, routes,
       lat: s.geo?.lat ?? null, lon: s.geo?.lon ?? null,

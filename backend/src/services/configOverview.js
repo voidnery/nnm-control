@@ -60,7 +60,13 @@ export function configOverview({ network, servers, originApps = [], routes = [],
     // network writes aims at Nimble's documented default — which is a guess
     // that happens to be right until it is not, and then produces a route
     // that resolves and never serves.
-    if (n.role === 'origin' && !(Number(s.httpPort) > 0)) add('origin-port-guessed', 'warn', s.name);
+    // Not "you forgot": WMSPanel holds custom ports in its own dialog and its
+    // API returns none of them — checked against a full inventory of the
+    // account, where the operator's second HTTP port appears in no response at
+    // all. The panel cannot read it and has to be told separately, and saying
+    // "not set" to someone who set it in WMSPanel sends them to look where it
+    // already is.
+    if (n.role === 'origin' && !(Number(s.httpPort) > 0)) add('origin-port-unknown', 'warn', s.name);
 
     // Without an agent the panel dials the box directly. It works while the
     // box is reachable, and stops silently the first time one sits behind NAT.
@@ -70,6 +76,11 @@ export function configOverview({ network, servers, originApps = [], routes = [],
     }
 
     // "Nearest" over an edge with no position is a policy that cannot rank it.
+    // A redirect gateway needs a name per edge. WMSPanel may already have one.
+    if (n.role === 'edge' && gw.mode === 'redirect'
+        && !(s.playbackEndpoints || []).length && (s.wmspanelDomains || []).length) {
+      add('edge-domain-available', 'note', s.name, { domain: s.wmspanelDomains[0] });
+    }
     if (n.role === 'edge' && gw.policy === 'nearest'
         && !(Number.isFinite(s.geo?.lat) && Number.isFinite(s.geo?.lon))) {
       add('edge-without-coordinates', 'warn', s.name);
@@ -129,7 +140,9 @@ export function configOverview({ network, servers, originApps = [], routes = [],
   // names of their own. It is the configuration people set up believing it
   // hides them.
   if (gw.mode === 'redirect') {
-    const bare = edges.map(node).filter(s => s && !(s.playbackEndpoints || []).length).map(s => s.name);
+    const bare = edges.map(node)
+      .filter(s => s && !(s.playbackEndpoints || []).length && !(s.wmspanelDomains || []).length)
+      .map(s => s.name);
     if (bare.length) add('redirect-reveals-edges', 'warn', bare.join(', '));
   }
 

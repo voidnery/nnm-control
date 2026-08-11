@@ -62,6 +62,13 @@ const serverSchema = new mongoose.Schema({
   // Minutes east of UTC for this box, so a fleet spanning zones stays
   // comparable. 0 means "treat the stamps as UTC".
   logTzOffsetMinutes: { type: Number, default: 0 },
+  // The names WMSPanel knows this box by. Read-only, refreshed on sync: they
+  // are the operator's answer to "how is this server addressed publicly", and
+  // a redirect gateway needs exactly that to stop revealing edge IPs.
+  //
+  // Their absence is why the panel used to ask for a playback endpoint before
+  // it would admit an edge had a name.
+  wmspanelDomains: { type: [String], default: [] },
   // iter20 m1 — where this box physically is, for delivery-network planning.
   //
   // Two provenances kept apart on purpose. `source` says whether the country

@@ -1,5 +1,35 @@
 # Changelog
 
+### v0.72.0 — "the ports are set in WMSPanel"
+They are. WMSPanel's server dialog holds custom domains and custom ports, and
+the panel was reporting the origin's HTTP port as unset while the operator was
+looking at it in the other window.
+
+Checked rather than assumed, against the full inventory of the account:
+
+    GET /v1/server        -> id, name, kind, status, ip, custom_ips
+    GET /v1/server/{id}   -> id, name, kind, status, ip
+
+**No port field on either endpoint**, and the account's second HTTP port
+appears in no response across all 104 dumps. A port set in WMSPanel cannot be
+read by anything built on its API. The natural assumption — configured in
+WMSPanel therefore available from WMSPanel — is simply false here, and it is
+now written down in `docs/iter20-nimble-routes.md` so the next person does not
+spend an afternoon on it.
+
+- **The finding says what is true.** "The panel does not know the origin's HTTP
+  port", and why: you may well have set it, its API returns none, so the panel
+  needs its own copy. Telling someone a thing is unset when they set it sends
+  them to look where it already is.
+- **The domains, which the API *does* return, are read on every sync.**
+  `custom_ips` is exactly the public name an edge needs, and the panel was
+  demanding it be retyped as a playback endpoint before it would admit an edge
+  had a name — while WMSPanel listed three for it. A redirect gateway now uses
+  them, and the "this redirect reveals your edges by address" warning correctly
+  falls silent when a domain exists.
+- **And it is offered where it helps**: with a redirect gateway configured, an
+  edge whose WMSPanel domain the panel knows gets a note pointing at it.
+
 ### v0.71.1 — the ladder was right and too tall
 v0.71.0 fixed a flat hierarchy by raising everything, which is the wrong half
 of the fix. The ratios were correct and the whole panel felt shouted: a dense

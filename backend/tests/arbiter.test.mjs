@@ -168,6 +168,15 @@ check('a redirect gateway with named edges exposes only names', () => {
   assert.equal(u.exposes, 'edge-name');
 });
 
+check('a WMSPanel domain is used as the public name when there is no endpoint', () => {
+  // Same question, same answer, different field. Requiring it to be retyped as
+  // a playback endpoint is how the panel told an operator their edges had no
+  // names while WMSPanel listed three.
+  const named = { ...FRA, publicHost: 'ed-fra.cdn.example.com' };
+  const u = viewerUrl({ mode: 'redirect', domain: 'cdn.example.com', edge: named, channel: 'c', stream: 's' });
+  assert.equal(u.exposes, 'edge-name');
+});
+
 check('proxy mode exposes nothing', () => {
   const u = viewerUrl({ mode: 'proxy', domain: 'cdn.example.com', edge: FRA, channel: 'test2', stream: 's' });
   assert.equal(u.exposes, 'nothing');

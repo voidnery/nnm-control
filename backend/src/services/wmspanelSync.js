@@ -39,6 +39,9 @@ export async function syncServersFromWmspanel({ force = false } = {}) {
       existing.name = ws.name || existing.name;
       existing.tags = Array.isArray(ws.tags) ? ws.tags : existing.tags;
       existing.wmspanelStatus = ws.status || '';
+      // Refreshed every sync rather than only on creation: a domain added in
+      // WMSPanel should reach the panel without anyone retyping it.
+      existing.wmspanelDomains = (ws.custom_ips || []).filter(Boolean);
       existing.syncedFromWmspanel = true;
       existing.lastSyncAt = new Date();
       if (!existing.host) existing.host = pickHost();
@@ -52,6 +55,7 @@ export async function syncServersFromWmspanel({ force = false } = {}) {
         token: '',
         tags: Array.isArray(ws.tags) ? ws.tags : [],
         wmspanelServerId: ws.id,
+        wmspanelDomains: (ws.custom_ips || []).filter(Boolean),
         syncedFromWmspanel: true,
         wmspanelStatus: ws.status || '',
         lastSyncAt: new Date(),

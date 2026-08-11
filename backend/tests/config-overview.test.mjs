@@ -107,9 +107,34 @@ check('HTTP Origin on the origin alone is not reported', () => {
   assert.equal(has(r, 'http-origin-on-edge'), false);
 });
 
-check('an unset origin port is surfaced, because every route guesses it', () => {
+check('an unknown origin port is surfaced, because every route guesses it', () => {
+  // Renamed from "not set". The operator had set it — in WMSPanel, whose API
+  // returns custom ports on no endpoint at all, verified against a full
+  // inventory of the account. Telling someone a thing is unset when they set
+  // it sends them to look where it already is.
   const servers = SERVERS.map(s => (s._id === 'o' ? { ...s, httpPort: 0 } : s));
-  assert.ok(has(base({ servers }), 'origin-port-guessed'));
+  assert.ok(has(base({ servers }), 'origin-port-unknown'));
+});
+
+check('a WMSPanel domain counts as a name for a redirect gateway', () => {
+  // The panel used to say the edges had no names while WMSPanel listed three
+  // for them. Same question, same answer, different field.
+  const servers = [S('o', 'origin-box'), S('e2', 'edge-box', { wmspanelDomains: ['ed.cdn.x'] }), S('gw', 'gw-box')];
+  const r = configOverview({
+    network: NET({ gateway: { mode: 'redirect', policy: 'weighted', node: 'gw', domain: 'cdn.x' } }),
+    servers, geo: GEO,
+  });
+  assert.equal(has(r, 'redirect-reveals-edges'), false, JSON.stringify(r.findings));
+});
+
+check('and it is offered when the redirect gateway is on', () => {
+  const servers = [S('o', 'origin-box'), S('e2', 'edge-box', { wmspanelDomains: ['ed.cdn.x'] }), S('gw', 'gw-box')];
+  const r = configOverview({
+    network: NET({ gateway: { mode: 'redirect', policy: 'weighted', node: 'gw', domain: 'cdn.x' } }),
+    servers, geo: GEO,
+  });
+  const f = r.findings.find(x => x.code === 'edge-domain-available');
+  assert.equal(f?.domain, 'ed.cdn.x');
 });
 
 check('"nearest" over an edge with no coordinates is a policy that cannot run', () => {
