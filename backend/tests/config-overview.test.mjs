@@ -55,16 +55,49 @@ check('the settings themselves are returned, not only the problems', () => {
 
 console.log('\nCOMBINATIONS NO SINGLE SCREEN CAN CATCH:');
 
-check('HTTP Origin on an edge is surfaced as blocking', () => {
+check('HTTP Origin on an edge is surfaced as blocking, when it is delivered here', () => {
   // Valid on the account objects page, valid on the topology page, and
   // together they mean the edge does not cache: every viewer fetches every
   // chunk from the origin. Nothing on either screen mentions the other.
-  const r = base({ originApps: [{ application: 'blastdotakk', server_ids: ['W-e2'] }] });
+  const r = base({ channels: ['blastdotakk'], routes: [{ id: 'r', from: '/blastdotakk/', to: 'x', servers: ['W-e2'] }],
+                   originApps: [{ application: 'blastdotakk', server_ids: ['W-e2'] }] });
   const f = r.findings.find(x => x.code === 'http-origin-on-edge');
   assert.ok(f, JSON.stringify(r.findings));
   assert.equal(f.severity, 'block');
   assert.equal(f.application, 'blastdotakk');
   assert.match(f.subject, /RU-2/);
+});
+
+check('an application this network does not deliver is a note, not a block', () => {
+  // blastdotakk was in HTTP Origin mode on a box that happens to be an edge
+  // here, and the panel reported it in red on a network that does not carry
+  // it. Red that usually means nothing teaches an operator to ignore red.
+  const r = base({ originApps: [{ application: 'blastdotakk', server_ids: ['W-e2'] }] });
+  assert.equal(r.counts.block, 0, JSON.stringify(r.findings));
+  assert.ok(has(r, 'http-origin-on-edge-maybe'));
+});
+
+check('an origin is not asked what it takes content from', () => {
+  // An origin is fed by whatever publishes into it — an encoder, vMix, an SRT
+  // caller — none of which the panel models. "Takes content from nothing"
+  // about an origin describes the normal case and demands an action that does
+  // not exist. It was the first thing an operator asked about, on a network
+  // that was delivering video at the time.
+  const net = NET({ nodes: [
+    { id: 'n-o', role: 'origin', server: 'o', upstream: [], enabled: true },
+    { id: 'n-2', role: 'edge', server: 'e2', upstream: ['n-o'], enabled: true },
+  ] });
+  const r = configOverview({ network: net, servers: SERVERS, geo: GEO });
+  assert.equal(has(r, 'node-without-upstream'), false, JSON.stringify(r.findings));
+});
+
+check('an edge with nothing above it is still asked', () => {
+  // The rule narrowed, it did not go away.
+  const net = NET({ nodes: [
+    { id: 'n-o', role: 'origin', server: 'o', upstream: [], enabled: true },
+    { id: 'n-2', role: 'edge', server: 'e2', upstream: [], enabled: true },
+  ] });
+  assert.ok(has(configOverview({ network: net, servers: SERVERS, geo: GEO }), 'node-without-upstream'));
 });
 
 check('HTTP Origin on the origin alone is not reported', () => {
@@ -152,8 +185,9 @@ check('a route nobody planned is a note, not a fault', () => {
 console.log('\nORDER AND SEVERITY:');
 
 check('blocking findings come first', () => {
-  const r = base({ originApps: [{ application: 'a', server_ids: ['W-e2'] }], channels: ['test2'], routes: [] });
-  assert.equal(r.findings[0].severity, 'block');
+  const r = base({ channels: ['a'], routes: [],
+                   originApps: [{ application: 'a', server_ids: ['W-e2'] }] });
+  assert.equal(r.findings[0].severity, 'block', JSON.stringify(r.findings.map(f => [f.code, f.severity])));
 });
 
 check('a missing agent is a note, not a warning', () => {

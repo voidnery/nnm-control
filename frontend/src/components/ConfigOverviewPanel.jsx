@@ -65,7 +65,14 @@ export default function ConfigOverviewPanel({ network, channels = '' }) {
         <div className="hint">{t('cfg.allClear')}</div>
       ) : (
         <>
-          <div className="hint" style={{ fontSize: 11, marginBottom: 6 }}>
+          {/* What is actually required of the operator, said first. A list of
+              observations reads as a list of demands unless it says which of
+              them are demands — and here that is usually none. */}
+          <div className="hint" style={{ fontSize: 12, marginBottom: 8 }}>
+            {data.counts.block
+              ? t('cfg.mustFix', { n: data.counts.block })
+              : t('cfg.nothingRequired')}
+            {' '}
             {t('cfg.counts', { block: data.counts.block, warn: data.counts.warn, note: data.counts.note })}
           </div>
           {data.findings.map((f, i) => (

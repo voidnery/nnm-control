@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.70.1 — a page of demands, most of them invented
+An operator opened "At a glance" on a network that was delivering video and
+asked what the panel wanted from them. Two of the three things it appeared to
+want were faults of mine.
+
+- **An origin was asked what it takes content from.** It is fed by whatever
+  publishes into it — an encoder, vMix, an SRT caller — none of which the panel
+  models. "Takes content from nothing" about an origin describes the normal
+  case and demands an action that does not exist. The rule now applies to mids
+  and edges, which genuinely are fed from inside the network.
+- **An unrelated application in HTTP Origin mode was reported in red.**
+  `blastdotakk` happened to be in that mode on a box that is an edge in this
+  network, and this network does not carry it. The finding is real only when
+  the application is actually delivered here; otherwise it is worth a note —
+  route it through this edge later and it will not cache. Red that usually
+  means nothing teaches an operator that red means nothing.
+- **The list says what is required before it says what is true.** It opens with
+  "nothing is required of you — the list below is observations, not tasks", or
+  with the count that does need attention. A list of observations reads as a
+  list of demands unless it says which of them are demands.
+
+That leaves one real item on that operator's screen: the origin has no HTTP
+port set, so every route this network writes aims at a guessed number.
+
 ### v0.70.0 — iter20 m7: the network on a globe
 Vector coastlines rather than a photographic texture: sharp at any zoom, no
 multi-megabyte image to ship, no licence to track — and a glowing wireframe

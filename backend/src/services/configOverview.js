@@ -38,7 +38,13 @@ export function configOverview({ network, servers, originApps = [], routes = [],
   if (!origins.length) add('no-origin', 'block', network?.name || '');
   if (!edges.length) add('no-edges', 'warn', network?.name || '');
   for (const n of nodes) {
-    if (['origin', 'mid', 'edge'].includes(n.role) && !(n.upstream || []).length) {
+    // Only a mid or an edge is fed from inside this network. An origin is fed
+    // by whatever publishes into it — an encoder, vMix, an SRT caller — none
+    // of which the panel models, so "takes content from nothing" about an
+    // origin describes the normal case and demands an action that does not
+    // exist. It was the first thing an operator asked about on a network that
+    // was working.
+    if (['mid', 'edge'].includes(n.role) && !(n.upstream || []).length) {
       add('node-without-upstream', 'warn', node(n)?.name || String(n.id));
     }
   }
@@ -76,13 +82,21 @@ export function configOverview({ network, servers, originApps = [], routes = [],
   // not cached while HTTP Origin mode is on, and nothing on either screen says
   // the two are related.
   const edgeWmsIds = new Set(edges.map(n => node(n)?.wmspanelServerId).filter(Boolean).map(String));
+  const wantedApps = channels.map(trim).filter(Boolean);
   for (const oa of originApps) {
     const on = (oa.server_ids || []).map(String).filter(id => edgeWmsIds.has(id));
     if (!on.length) continue;
     const names = [...edgeWmsIds].filter(id => on.includes(id))
       .map(id => servers.find(s => String(s.wmspanelServerId) === id)?.name)
       .filter(Boolean);
-    add('http-origin-on-edge', 'block', names.join(', '), { application: oa.application });
+    // Blocking only when this network actually delivers that application.
+    // An unrelated app in HTTP Origin mode on a box that happens to be an edge
+    // here costs nothing, and reporting it in red taught the operator that red
+    // means "probably nothing". Without a channel list the panel does not know
+    // which it is, and says so instead of picking the alarming reading.
+    const delivered = wantedApps.includes(trim(oa.application));
+    add(delivered ? 'http-origin-on-edge' : 'http-origin-on-edge-maybe',
+        delivered ? 'block' : 'note', names.join(', '), { application: oa.application });
   }
 
   // ------------------------------------------------------------- the routes
