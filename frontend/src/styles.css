@@ -67,20 +67,19 @@ html, body, #root { height: 100%; margin: 0; }
 
      Micro and meta are not steps in the hierarchy; they are de-emphasis, and
      sit deliberately close to the body size. */
-  --fs-micro: 11.5px;   /* uppercase eyebrow labels, nothing else */
-  --fs-meta: 13px;      /* hints, table headers, captions */
-  --fs-body: 15px;
-  --fs-lead: 19px;      /* section headings, figures worth reading first */
-  --fs-h2: 24px;
-  --fs-h1: 30px;
+  --fs-micro: 11px;     /* uppercase eyebrow labels, nothing else */
+  --fs-meta: 12.5px;    /* hints, table headers, captions */
+  --fs-body: 14px;
+  --fs-lead: 17.5px;    /* headings: panel titles and section titles */
+  --fs-h1: 22px;        /* the page title, once */
 
   /* Spacing with rhythm rather than one value everywhere. */
-  --sp-1: 6px;  --sp-2: 10px;  --sp-3: 14px;  --sp-4: 20px;  --sp-5: 28px;
+  --sp-1: 5px;  --sp-2: 9px;  --sp-3: 13px;  --sp-4: 17px;  --sp-5: 24px;
 }
 
 body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: var(--fs-body); }
 a { color: var(--accent); text-decoration: none; }
-code, .mono { font-family: var(--mono); font-size: 13.5px; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
 
 .layout { display: flex; min-height: 100%; }
 .sidebar {
@@ -121,12 +120,15 @@ code, .mono { font-family: var(--mono); font-size: 13.5px; }
 .userbox .mono { color: var(--text); }
 
 .main { flex: 1; padding: 22px 26px; min-width: 0; }
-h1 { font-size: var(--fs-h1); margin: 0 0 6px; font-weight: 650; letter-spacing: -0.02em; }
-h2 { font-size: var(--fs-h2); margin: var(--sp-5) 0 var(--sp-2); font-weight: 620; letter-spacing: -0.01em; color: var(--text); }
+h1 { font-size: var(--fs-h1); margin: 0 0 4px; font-weight: 640; letter-spacing: -0.015em; }
+/* One heading step, used by both panel titles and section titles. The ladder
+   that matters is body → heading; a second heading size between them was the
+   thing that made every page feel oversized without adding any clarity. */
+h2 { font-size: var(--fs-lead); margin: var(--sp-4) 0 var(--sp-2); font-weight: 620; letter-spacing: -0.01em; color: var(--text); }
 .sub { color: var(--text-dim); margin-bottom: var(--sp-4); font-size: var(--fs-meta); max-width: 72ch; }
 
-.panel { background: var(--bg-panel); border: 1px solid var(--line); border-radius: 10px;
-         padding: var(--sp-4) 22px; margin-bottom: var(--sp-3); }
+.panel { background: var(--bg-panel); border: 1px solid var(--line); border-radius: 8px;
+         padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-3); }
 /* A region inside a panel, without being a second card. Nested cards read as
    two competing containers and neither wins; a rule and some air do the same
    job and stay quiet. */
@@ -284,13 +286,13 @@ tr.tally td:first-child { box-shadow: inset 3px 0 0 var(--tally-live); }
 .lamp.off { background: var(--danger); box-shadow: 0 0 6px rgba(224,69,69,.55); }
 .lamp.warn{ background: var(--warn); }
 
-.badge { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 12px;
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11.5px;
          font-family: var(--mono); border: 1px solid var(--line); color: var(--text-dim); }
 .badge.live { color: #ffb4b4; border-color: #5c2a2a; background: #2a1416; }
 
 button, .btn {
   background: var(--bg-raise); color: var(--text); border: 1px solid var(--line);
-  border-radius: 7px; padding: 8px 15px; cursor: pointer; font-size: 14px; font-family: var(--sans);
+  border-radius: 6px; padding: 7px 13px; cursor: pointer; font-size: 13px; font-family: var(--sans);
 }
 /* Buttons that sit next to each other need space between them whichever way
    they end up. Two in a table cell rely on the whitespace between JSX
@@ -315,7 +317,7 @@ button:disabled { opacity: .5; cursor: default; }
 
 input, select, textarea {
   background: var(--bg); color: var(--text); border: 1px solid var(--line);
-  border-radius: 7px; padding: 9px 12px; font-size: 14.5px; width: 100%; font-family: var(--sans);
+  border-radius: 6px; padding: 7px 10px; font-size: 13px; width: 100%; font-family: var(--sans);
 }
 textarea { resize: vertical; min-height: 60px; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent-dim); }
@@ -340,7 +342,7 @@ label { display: block; font-size: var(--fs-meta); color: var(--text-dim); margi
 .metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 
 .error-box { background: #2a1416; border: 1px solid #5c2a2a; color: #ffb4b4;
-             border-radius: 7px; padding: 11px 14px; margin: var(--sp-2) 0; font-size: var(--fs-body); }
+             border-radius: 6px; padding: 9px 12px; margin: var(--sp-2) 0; font-size: var(--fs-body); }
 .hint { color: var(--text-dim); font-size: var(--fs-meta); line-height: 1.5; max-width: 78ch; }
 .perm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin-top: 6px; }
 .perm-grid label { display: flex; gap: 8px; align-items: center; margin: 3px 0; font-size: 13px; color: var(--text); }
@@ -603,7 +605,7 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Transcoder scenario graph */
 .gsection { font-size: var(--fs-lead); font-weight: 600; letter-spacing: -0.01em;
-  color: var(--text); margin: var(--sp-5) 0 var(--sp-2); }
+  color: var(--text); margin: var(--sp-4) 0 var(--sp-2); }
 .gsection:first-child { margin-top: 0; }
 /* The uppercase micro-label is still useful, but for column and field labels
    inside a block, not for the block's own heading. */
@@ -667,8 +669,10 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
    should be readable across the room; the findings are prose and read at body
    size, with only their fixes stepped down. */
 .cfg-grid { display: grid; gap: var(--sp-4) var(--sp-5); margin-top: var(--sp-3);
-  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
-.cfg-value { font-size: var(--fs-lead); font-weight: 550; margin-top: 4px; line-height: 1.25; }
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* The figure is the thing worth reading, so it gets the heading step —
+   this is the one place a value outranks body text on purpose. */
+.cfg-value { font-size: var(--fs-lead); font-weight: 550; margin-top: 3px; line-height: 1.25; }
 .cfg-lead { font-size: var(--fs-body); margin-bottom: var(--sp-3); }
 .cfg-finding { padding: var(--sp-3) 0; border-top: 1px solid var(--line); }
 .cfg-finding:first-of-type { border-top: none; padding-top: var(--sp-1); }
@@ -679,4 +683,4 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
   border-radius: 8px; padding: var(--sp-3) var(--sp-3); margin: var(--sp-1) 0; border-top: none; }
 
 .globe-zoom { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
-.globe-zoom button { width: 34px; height: 34px; padding: 0; font-size: var(--fs-lead); line-height: 1; }
+.globe-zoom button { width: 30px; height: 30px; padding: 0; font-size: var(--fs-lead); line-height: 1; }

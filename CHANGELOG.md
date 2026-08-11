@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.71.1 — the ladder was right and too tall
+v0.71.0 fixed a flat hierarchy by raising everything, which is the wrong half
+of the fix. The ratios were correct and the whole panel felt shouted: a dense
+operator tool is read at a desk all day, next to a vMix window, and 15px body
+with a 30px page title is a poster.
+
+Back to the compact sizes, with the two things that were actually wrong left
+fixed:
+
+- **14 → 17.5 → 22.** Three rungs instead of five. The ladder that matters is
+  body → heading; the second heading size wedged between them added no clarity
+  and cost the page its density. Panel titles and section titles share one
+  step, distinguished by where they sit rather than by being different sizes.
+- **A section heading is still bigger than its own contents**, which is the
+  fault that started this: `.gsection` was 11px over a 14px body.
+- **"At a glance" keeps its layout.** The grid, the spacing between facts, the
+  findings at body size in the text colour rather than 13px grey. That was the
+  part that was hard to read, and none of it needed the type to grow.
+- Buttons, inputs, badges, mono text and panel padding are all back where they
+  were.
+
+`audit:type` grows a ceiling to match its floor. It could already catch a
+hierarchy too flat to read and would have passed 15 → 19 → 24 → 30 happily —
+correct ratios, unusable page. A gate that only guards one direction is half a
+gate.
+
 ### v0.71.0 — a hierarchy that was not one
 The pages were hard to use and there was nothing to point at, because the fault
 was not in any single rule. It was in the numbers: `h2` at 15px over a 14px

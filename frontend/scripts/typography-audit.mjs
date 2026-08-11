@@ -29,7 +29,11 @@ const px = (name) => {
 
 console.log('THE SCALE HAS STEPS:');
 
-const ladder = ['fs-body', 'fs-lead', 'fs-h2', 'fs-h1'];
+// Three rungs, not five. The ladder that matters is body → heading; a second
+// heading size wedged between them made every page feel oversized and added no
+// clarity, which is what an operator meant by "everything got bigger and it is
+// not a joy".
+const ladder = ['fs-body', 'fs-lead', 'fs-h1'];
 const sizes = ladder.map(px);
 if (sizes.some(v => v === null)) {
   fail(`the scale is not declared: ${ladder.filter((_, i) => sizes[i] === null).join(', ')} missing`);
@@ -50,6 +54,19 @@ if (meta && body && meta >= body) fail('fs-meta is not smaller than the body; de
 else if (micro && meta && micro >= meta) fail('fs-micro is not smaller than fs-meta');
 else ok('de-emphasis sizes sit below the body size');
 
+console.log('\nTHE SCALE STAYS COMPACT:');
+
+// The other direction, and the one an operator actually complained about.
+// A ladder with correct ratios can still be far too large: 15 → 19 → 24 → 30
+// passed every check above and made the whole panel feel shouted. A dense
+// operator tool is read at a desk, all day, next to a vMix window — so the
+// body has a ceiling, and the page title is not allowed to become a banner.
+if (body && body > 15) fail(`the body is ${body}px; above 15 a dense tool starts feeling shouted`);
+else ok(`body at ${body}px`);
+const h1 = px('fs-h1');
+if (h1 && h1 > 24) fail(`the page title is ${h1}px, which is a banner, not a heading`);
+else ok(`page title at ${h1}px`);
+
 console.log('\nHEADINGS ARE BIGGER THAN WHAT THEY HEAD:');
 
 // The specific failure that made the pages unreadable: a section heading set
@@ -58,7 +75,7 @@ const block = (sel) => {
   const i = css.indexOf(sel + ' {');
   return i === -1 ? '' : css.slice(i, css.indexOf('}', i));
 };
-for (const [sel, floor] of [['.gsection', 'fs-lead'], ['h2', 'fs-h2'], ['h1', 'fs-h1']]) {
+for (const [sel, floor] of [['.gsection', 'fs-lead'], ['h2', 'fs-lead'], ['h1', 'fs-h1']]) {
   const b = block(sel);
   if (!b) { fail(`${sel} is not defined`); continue; }
   if (!b.includes(`var(--${floor})`)) {
