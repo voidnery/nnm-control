@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Editing a scenario has to look like the scenario.
 //
 // The read-only view drew source -> processing -> encoders per pipeline. Both
@@ -14,8 +16,6 @@
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 

@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // A function parameter that shadows a state variable in the same component.
 //
 // `upload(file)` shadowed `const [file] = useState(...)`, the playlist being
@@ -8,8 +10,6 @@
 // shadowed the function that built a response. The same mistake arrived on the
 // frontend by a different route, so the check follows it.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const files = [];

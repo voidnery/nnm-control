@@ -39,6 +39,7 @@ import { cdnNetworkRouter } from './routes/cdnNetworks.js';
 import { deliveryRoutesRouter } from './routes/deliveryRoutes.js';
 import { probeRouter } from './routes/probes.js';
 import { arbiterRouter } from './routes/arbiter.js';
+import { channelRouter } from './routes/channels.js';
 import { auditRouter } from './routes/audit.js';
 import { auditMutations } from './services/audit.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
@@ -94,6 +95,7 @@ app.use('/api/cdn', cdnNetworkRouter);
 app.use('/api/cdn', deliveryRoutesRouter);
 app.use('/api/cdn', probeRouter);
 app.use('/api/cdn', arbiterRouter);
+app.use('/api/cdn', channelRouter);
 app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {

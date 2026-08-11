@@ -7,6 +7,7 @@ import { useConfirm } from '../confirm.jsx';
 import IconButton from '../components/IconButton.jsx';
 import DeliveryNetworkPanel from '../components/DeliveryNetworkPanel.jsx';
 import DeliveryGeoPanel from '../components/DeliveryGeoPanel.jsx';
+import ChannelsPanel from '../components/ChannelsPanel.jsx';
 
 // Account-level distribution: ABR ladders, application aliases, origin apps.
 // server_ids are edited as checkboxes of mapped panel servers and displayed
@@ -46,7 +47,7 @@ export default function DistributionPage() {
   const [abrModal, setAbrModal] = useState(null);
   const [aliasModal, setAliasModal] = useState(null);
   const [originModal, setOriginModal] = useState(null);
-  const [view, setView] = useState('network');
+  const [view, setView] = useState('channels');
 
   const load = async () => {
     setError('');
@@ -125,13 +126,14 @@ export default function DistributionPage() {
           made it impossible to tell which settings described a topology and
           which were global. */}
       <div className="row" style={{ gap: 6, marginBottom: 12 }}>
-        {['network', 'geo', 'objects'].map(v => (
+        {['channels', 'network', 'geo', 'objects'].map(v => (
           <button key={v} className={'tagchip' + (view === v ? ' on' : '')} onClick={() => setView(v)}>
             {t('dist.view.' + v)}
           </button>
         ))}
       </div>
 
+      {view === 'channels' && <ChannelsPanel />}
       {view === 'network' && <DeliveryNetworkPanel servers={servers} onServersChanged={load} />}
       {view === 'geo' && <DeliveryGeoPanel servers={servers} onServersChanged={load} />}
       {view === 'objects' && <>

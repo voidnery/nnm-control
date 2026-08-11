@@ -1,7 +1,9 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 
-const SRC = '/home/claude/nnm-control/frontend/src';
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 
 // Tags on this server span several tabs; the RTMP Pull tab must only ever
 // offer its own vocabulary.

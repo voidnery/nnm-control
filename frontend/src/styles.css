@@ -684,3 +684,23 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 
 .globe-zoom { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
 .globe-zoom button { width: 30px; height: 30px; padding: 0; font-size: var(--fs-lead); line-height: 1; }
+
+/* Globe: the answer sits beside the thing you clicked, not under it. Collapses
+   to one column where there is no room for two, which is the only honest thing
+   to do with a fixed-width reading column. */
+.globe-layout { display: grid; grid-template-columns: minmax(240px, 300px) 1fr; gap: var(--sp-4); margin-top: var(--sp-3); }
+.globe-aside { min-width: 0; }
+.globe-row { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--sp-2); padding: var(--sp-1) 0; border-top: 1px solid var(--line); }
+.globe-row:first-child { border-top: none; }
+.globe-row > .hint { grid-column: 1 / -1; }
+@media (max-width: 900px) { .globe-layout { grid-template-columns: 1fr; } }
+
+/* Channels: a row is a summary, its detail is the links. Clicking a row is the
+   only interaction, so the row says so by cursor and by hover. */
+.ch-row { cursor: pointer; }
+.ch-row:hover > td { background: var(--bg-raise); }
+.ch-detail { background: var(--bg); padding: var(--sp-3) var(--sp-4) !important; }
+.ch-link { padding: var(--sp-1) 0; }
+.ch-url { word-break: break-all; }
+
+.ch-picker { display: flex; gap: var(--sp-1); flex-wrap: wrap; margin-top: var(--sp-2); }

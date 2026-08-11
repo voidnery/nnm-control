@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Typographic hierarchy, checkable.
 //
 // What this replaces was not a bug anyone could point at. Every rule was
@@ -12,8 +14,6 @@
 // by way of an inline style, which is how a scale erodes — one `fontSize: 10`
 // at a time, each of them locally reasonable.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const css = readFileSync(path.join(SRC, 'styles.css'), 'utf8');

@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Buttons that can end up touching.
 //
 // Two buttons in a table cell are spaced only by the whitespace between JSX
@@ -8,8 +10,6 @@
 // Checks the rule exists rather than every call site, because the rule is what
 // makes the next cell right without anyone remembering.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const css = readFileSync(path.join(SRC, 'styles.css'), 'utf8');

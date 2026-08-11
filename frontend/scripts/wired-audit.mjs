@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // State that nothing renders, and handlers nothing calls.
 //
 // Twice now an edit has added a `useState` and its dialog while the control
@@ -13,8 +15,6 @@
 // gates something that can never appear. That is a missing control, every
 // time.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const files = [];

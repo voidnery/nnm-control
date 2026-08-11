@@ -270,7 +270,62 @@ export default function GlobePanel({ network, servers = [] }) {
           {t(failed === 'webgl' ? 'globe.noWebgl' : 'globe.failed')}
         </div>
       )}
-      <div style={{ position: 'relative', marginTop: 14 }}>
+      {/* Side by side. The answer used to appear below the globe, which put
+          it off-screen at the moment it arrived: you click a place, the thing
+          you clicked for renders under the fold, and the globe you are still
+          looking at says nothing. Reading and pointing belong next to each
+          other. */}
+      <div className="globe-layout">
+      <div className="globe-aside">
+        {!picked && <div className="hint">{t('globe.clickPrompt')}</div>}
+        {picked && (
+          <>
+            <div className="gsection" style={{ marginTop: 0 }}>{picked.name || t('globe.openSea')}</div>
+            <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+              {picked.cc && <span className="badge">{picked.cc}</span>}
+              <span className="mono hint">{picked.lat.toFixed(2)}, {picked.lon.toFixed(2)}</span>
+            </div>
+            {!picked.exact && <div className="hint" style={{ marginTop: 4 }}>{t('globe.nearest')}</div>}
+            <button className="primary" style={{ marginTop: 10 }} disabled={busy} onClick={measure}>
+              {busy ? '…' : t('globe.measure')}
+            </button>
+            <div className="hint" style={{ marginTop: 6 }}>{t('globe.measureHint')}</div>
+
+            {probe?.error && <div className="error-box">{probe.error}</div>}
+            {probe?.rows?.length > 0 && (
+              <div className="inset">
+                {probe.rows.map((r, i) => (
+                  <div key={i} className="globe-row">
+                    <div>{r.from}</div>
+                    <div className="hint">{r.label} · {r.distanceKm} km</div>
+                    <div>{r.ok
+                      ? <b>{r.minMs} ms</b>
+                      : <span className="badge err">{t('pr.noAnswer')}</span>}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {probe && !probe.rows?.length && !probe.error && (
+              <div className="hint inset">{t('globe.nothingToMeasure')}</div>
+            )}
+            {probe?.suspect?.length > 0 && (
+              <div className="hint" style={{ marginTop: 6 }}>
+                {t('globe.suspect')} {probe.suspect.map(s => s.label).join(', ')}
+              </div>
+            )}
+            {probe?.skipped?.length > 0 && (
+              <div className="hint" style={{ marginTop: 4 }}>
+                {t('pr.skippedTitle')} {probe.skipped.map(s => s.node).join(', ')}
+              </div>
+            )}
+          </>
+        )}
+        {unplaced.length > 0 && (
+          <div className="hint inset">{t('globe.unplaced')} {unplaced.map(x => x.s.name).join(', ')}</div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative' }}>
         <div ref={mountRef} style={{ minHeight: 360 }} />
         {ready && (
           <div className="globe-zoom">
@@ -279,59 +334,8 @@ export default function GlobePanel({ network, servers = [] }) {
           </div>
         )}
       </div>
+      </div>
       {!ready && !failed && <div className="hint">{t('globe.loading')}</div>}
-
-      {unplaced.length > 0 && (
-        <div className="hint" style={{ marginTop: 8 }}>
-          {t('globe.unplaced')} {unplaced.map(x => x.s.name).join(', ')}
-        </div>
-      )}
-
-      {picked && (
-        <div className="inset">
-          <div className="row" style={{ gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-            <b>{picked.name || t('globe.openSea')}</b>
-            {picked.cc && <span className="badge">{picked.cc}</span>}
-            {!picked.exact && <span className="hint">{t('globe.nearest')}</span>}
-            <span className="mono hint" style={{ fontSize: 12 }}>
-              {picked.lat.toFixed(2)}, {picked.lon.toFixed(2)}
-            </span>
-            <button disabled={busy} onClick={measure}>{busy ? '…' : t('globe.measure')}</button>
-          </div>
-          <div className="hint" style={{ marginTop: 4 }}>{t('globe.measureHint')}</div>
-
-          {probe?.error && <div className="error-box">{probe.error}</div>}
-          {probe?.rows?.length > 0 && (
-            <table style={{ marginTop: 8 }}>
-              <thead><tr>
-                <th>{t('globe.fromNode')}</th><th>{t('globe.toPoint')}</th><th>{t('globe.rtt')}</th>
-              </tr></thead>
-              <tbody>
-                {probe.rows.map((r, i) => (
-                  <tr key={i}>
-                    <td>{r.from}</td>
-                    <td>{r.label} <span className="hint">{r.distanceKm} km</span></td>
-                    <td>{r.ok ? <b>{r.minMs} ms</b> : <span className="badge err">{t('pr.noAnswer')}</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {probe && !probe.rows?.length && !probe.error && (
-            <div className="hint" style={{ marginTop: 6 }}>{t('globe.nothingToMeasure')}</div>
-          )}
-          {probe?.suspect?.length > 0 && (
-            <div className="hint" style={{ marginTop: 6 }}>
-              {t('globe.suspect')} {probe.suspect.map(s => s.label).join(', ')}
-            </div>
-          )}
-          {probe?.skipped?.length > 0 && (
-            <div className="hint" style={{ marginTop: 4 }}>
-              {t('pr.skippedTitle')} {probe.skipped.map(s => s.node).join(', ')}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Natural Earth is public domain and asks for nothing; DB-IP's licence
           asks for a link wherever its results are shown, and the coordinates

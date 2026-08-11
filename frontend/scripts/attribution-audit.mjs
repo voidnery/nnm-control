@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // The attribution DB-IP's licence requires, checked like any other invariant.
 //
 // The geolocation database is CC BY 4.0: free to use in this application on
@@ -12,8 +14,6 @@
 // So: whichever component renders geolocation results must render the link,
 // and the link must point where the licence says.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 

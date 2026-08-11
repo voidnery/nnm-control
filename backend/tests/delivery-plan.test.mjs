@@ -380,9 +380,16 @@ check('delivery is drawn as a flow, not tabulated', () => {
 check('the applications are offered, not demanded', () => {
   // The page opened with an empty field and disabled buttons, expecting the
   // operator to know names that live on the origin.
+  //
+  // The mechanism changed in iter21 m2 and the rule did not: what the origin
+  // publishes is still read and still one click away, but the click now makes
+  // a channel rather than appending text to a box that forgot it. The old
+  // assertion named `toggleApp`, which is the implementation, so it went red
+  // about a page that had got better.
   assert.ok(/networks\/\$\{network\.id\}\/applications/.test(panelCode),
     'nothing reads which applications exist upstream');
-  assert.ok(/toggleApp/.test(panelCode), 'a discovered application cannot be clicked into the field');
+  assert.ok(/addChannel\(a\.application/.test(panelCode),
+    'a discovered application cannot be turned into a channel in one click');
 });
 
 check('a box with no reading still explains itself on the board', () => {
@@ -485,7 +492,10 @@ check('every verdict the service can produce has a sentence, in both languages',
 
 check('the viewer probe is reachable from the panel', () => {
   assert.ok(/networks\/\$\{network\.id\}\/watch/.test(panelCode), 'nothing asks the edge as a viewer');
-  assert.ok(/streamName/.test(panelCode), 'there is no way to say which stream to ask for');
+  // The stream used to be typed into a field beside the place that already
+  // knew it. It comes from the channel now — same requirement, better source.
+  assert.ok(/body: \{ application, stream \}/.test(panelCode),
+    'the probe has no stream to ask for');
 });
 
 check('live mode refreshes and stops', () => {

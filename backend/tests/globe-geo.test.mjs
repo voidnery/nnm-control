@@ -176,5 +176,30 @@ check('the licences the data carries are on the page that shows it', () => {
   assert.ok(/db-ip\.com/.test(globe), 'DB-IP results are shown without its required link');
 });
 
+check('the answer is beside the globe, not below it', () => {
+  // It used to render under the canvas, which put it off-screen at the exact
+  // moment it arrived: you click a place, and the thing you clicked for lands
+  // below the fold while the globe you are still looking at says nothing.
+  const css = readFile('../../frontend/src/styles.css');
+  assert.ok(/\.globe-layout \{[^}]*grid-template-columns/.test(css), 'the globe has no side column');
+  assert.ok(/globe-aside/.test(globe), 'nothing renders into the side column');
+  assert.ok(/@media[^{]*max-width[^{]*\)\s*\{\s*\.globe-layout \{ grid-template-columns: 1fr/.test(css),
+    'two fixed columns with no narrow fallback');
+});
+
+check('the measurement lands in the same column as the place', () => {
+  // Splitting them would recreate the problem one level down.
+  // By position rather than by slicing on a class name that also appears in
+  // the stylesheet reference: the side column opens, the results are rendered,
+  // and only then does the canvas mount. Anything after the canvas is back
+  // below the fold.
+  const aside = globe.indexOf('globe-aside');
+  const results = globe.indexOf('probe?.rows');
+  const canvas = globe.indexOf('ref={mountRef}');
+  assert.ok(aside !== -1 && results !== -1 && canvas !== -1, 'one of the three anchors is gone');
+  assert.ok(aside < results && results < canvas,
+    'the probe results are not between the side column and the canvas');
+});
+
 console.log(failures ? `\n${failures} globe-geometry check(s) failed` : '\nall globe-geometry checks passed');
 process.exit(failures ? 1 : 0);

@@ -1,10 +1,12 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Mounts every top-level page with providers + router and sample API data.
 // The tab-level smoke never covered these, so a crash in ServersPage/UsersPage/
 // etc. could ship unnoticed.
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 
-const SRC = '/home/claude/nnm-control/frontend/src';
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 
 const PAGES = [
   ['DashboardPage','/'], ['ServersPage','/servers'], ['ServerDetailPage','/servers/S1'],
@@ -154,6 +156,19 @@ window.fetch = (u) => {
   if (/\/cdn\/routes$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     status:'Ok', routes:[{ id:'r1', from:'/test2/', to:'79.98.187.66:8081/test2/',
                            servers:['6a18e008dc73c6feb3a4f1e9'] }] }), text:()=>Promise.resolve('{}') });
+  if (/\/channels\/overview$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    routesRead:true,
+    rows:[{ channel:{ id:'C1', application:'test2', stream:'test_stream', label:'', kind:'production', network:'N1', name:'test2/test_stream' },
+            network:{ id:'N1', name:'Prod', audience:'internal' },
+            edges:[{ name:'RU-2', healthy:true, routed:true, serving:false }],
+            links:{ path:'/test2/test_stream',
+                    production:{ url:'http://10.0.0.2:8081/test2/test_stream/playlist.m3u8', exposes:'edge-address',
+                                 resolvedTo:'RU-2', reason:'only-candidate', stable:true, mode:'direct', policy:'nearest' },
+                    productionReason:null, whenAllDown:'fail',
+                    tests:[{ edge:'RU-2', url:'http://10.0.0.2:8081/test2/test_stream/playlist.m3u8', exposes:'edge-address', routed:true, healthy:true }] } },
+          { channel:{ id:'C2', application:'povtor_tennis', stream:'main', label:'', kind:'production', network:null, name:'povtor_tennis/main' },
+            network:null, edges:[], links:null, code:'not-delivered' }] }), text:()=>Promise.resolve('{}') });
+  if (/\/cdn\/channels$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({ channels:[] }), text:()=>Promise.resolve('{}') });
   if (/\/cdn\/networks$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     networks:[{ id:'N1', name:'Prod', description:'', audience:'public', nodes:[
       { id:'n1', server:'S1', role:'origin', upstream:[], weight:100, enabled:true, notes:'' },

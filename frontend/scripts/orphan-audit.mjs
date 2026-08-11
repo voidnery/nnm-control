@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // A component file that nothing imports.
 //
 // dead-import-audit catches a name imported and never used *inside* a file.
@@ -10,8 +12,6 @@
 // reached. This gate is the contradiction of that: every component must have at
 // least one inbound import, or it is not in the running app.
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 

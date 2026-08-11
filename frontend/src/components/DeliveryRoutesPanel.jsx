@@ -23,7 +23,11 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   const { can } = useAuth();
   const { push } = useToast();
   const confirm = useConfirm();
-  const [channels, setChannels] = useState('');
+  // The applications used to be typed into a box every visit and forgotten.
+  // They are channels now: stored, named, and shared with the dashboard, so
+  // this tab shows a list rather than asking the same question again.
+  const [chans, setChans] = useState(null);
+  const [sel, setSel] = useState('');
   const [plan, setPlan] = useState(null);
   const [report, setReport] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -39,7 +43,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   const [state, setState] = useState(null);
   const [showLive, setShowLive] = useState(false);
   const [watch, setWatch] = useState({});        // "edge|app" -> probe result
-  const [streamName, setStreamName] = useState('');
+
   // Live mode, the same shape the transcoder graph uses: an operator during a
   // broadcast wants the tab open and answering, not a button to keep pressing.
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -52,12 +56,28 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
     try { setFound(await api(`/cdn/networks/${network.id}/applications`)); }
     catch { setFound({ applications: [], asked: [] }); }
   };
-  useEffect(() => { loadApps(); }, [network.id]);
+  const loadChannels = async () => {
+    try {
+      const r = await api('/cdn/channels');
+      const mine = (r.channels || []).filter(c => String(c.network) === String(network.id));
+      setChans(mine);
+      setSel(cur => (mine.some(c => c.id === cur) ? cur : (mine[0]?.id || '')));
+    } catch { setChans([]); }
+  };
+  useEffect(() => { loadApps(); loadChannels(); }, [network.id]);
 
-  const toggleApp = (app) => setChannels(cur => {
-    const parts = cur.split(/[\s,]+/).filter(Boolean);
-    return parts.includes(app) ? parts.filter(x => x !== app).join(' ') : [...parts, app].join(' ');
-  });
+  // Adding a channel from what the origin is actually publishing: the stream
+  // name is right there, and typing it again is how it gets typed wrong.
+  const addChannel = async (application, stream) => {
+    setBusy(true); setError('');
+    try {
+      await api('/cdn/channels', { method: 'POST', body: { application, stream, network: network.id } });
+      await loadChannels();
+    } catch (e) { setError(e.data?.code === 'channel-exists' ? t('ch.exists') : e.message); }
+    finally { setBusy(false); }
+  };
+
+
 
   const loadLive = async () => {
     try { const r = await api('/cdn/routes'); setLive(Array.isArray(r?.routes) ? r.routes : []); }
@@ -71,7 +91,9 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
     return (id) => m.get(String(id)) || String(id).slice(-6);
   }, [servers]);
 
-  const list = channels.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+  // The plan and the state work per application; the detail works per channel.
+  const list = [...new Set((chans || []).map(c => c.application))];
+  const selected = (chans || []).find(c => c.id === sel) || null;
 
   const loadState = async () => {
     if (!list.length) { setState(null); return; }
@@ -96,11 +118,12 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   // Be the viewer. This is the only question a pull-based edge can be asked,
   // since a re-streaming route holds nothing until somebody requests it.
   const watchNow = async (application) => {
-    if (!streamName.trim()) return;
+    const stream = (chans || []).find(c => c.application === application)?.stream;
+    if (!stream) return;
     setBusy(true); setError('');
     try {
       const r = await api(`/cdn/networks/${network.id}/watch`, {
-        method: 'POST', body: { application, stream: streamName.trim() },
+        method: 'POST', body: { application, stream },
       });
       setWatch(w => ({ ...w, ...Object.fromEntries(r.results.map(x => [`${x.server}|${application}`, x])) }));
     } catch (e) { setError(e.data?.error || e.message); }
@@ -154,34 +177,30 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
           already know. Each step's result appears under that step, not at the
           bottom of the page. */}
       <div className="gsection">{t('cdn.step1')}</div>
-      <label>{t('cdn.channels')}</label>
-      {found && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-          {found.applications.length === 0 && (
-            <span className="hint">{t('cdn.noAppsFound')}</span>
-          )}
-          {found.applications.map(a => (
-            <button key={a.application}
-                    className={'tagchip' + (list.includes(a.application) ? ' on' : '')}
-                    onClick={() => toggleApp(a.application)}>
-              {a.application} <span className="hint">· {t('cdn.nStreams', { n: a.streams })}</span>
-            </button>
-          ))}
-          {found.asked?.filter(x => !x.ok).map((x, i) => (
-            <span key={i} className="hint" >
-              {x.server}: {t('cdn.reason.' + x.reason)}
-            </span>
-          ))}
+      {/* A list, not a text box. What is delivered here is a property of the
+          network now, so the page can show it instead of asking. */}
+      <div className="ch-picker">
+        {(chans || []).map(c => (
+          <button key={c.id} className={'tagchip' + (sel === c.id ? ' on' : '')} onClick={() => setSel(c.id)}>
+            {c.label || `${c.application}/${c.stream}`}
+          </button>
+        ))}
+        {chans && !chans.length && <span className="hint">{t('cdn.noChannels')}</span>}
+      </div>
+      {found?.applications?.length > 0 && can('cdn.manage') && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          <span className="hint">{t('cdn.addFromOrigin')}</span>
+          {found.applications
+            .filter(a => !(chans || []).some(c => c.application === a.application))
+            .map(a => (
+              <button key={a.application} disabled={busy}
+                      onClick={() => addChannel(a.application, a.streams?.[0]?.stream || a.application)}>
+                + {a.application}
+              </button>
+            ))}
         </div>
       )}
-      <input className="mono" placeholder="kp_24-7 blastdotakk" value={channels}
-             onChange={e => setChannels(e.target.value)} />
-      <div className="hint" >{t('cdn.channelsHint')}</div>
 
-      {/* Numbered, because these used to sit side by side as equals and the
-          order between them was something the operator had to already know.
-          The check-state button belonged to a different question and has moved
-          to its own step. */}
       <div className="gsection">{t('cdn.step2')}</div>
       <div className="row" style={{ gap: 8 }}>
         <button onClick={() => run('plan')} disabled={busy || !list.length || dirty}>{t('cdn.showPlan')}</button>
@@ -257,15 +276,15 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       <div className="gsection">{t('cdn.step3')}</div>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={loadState} disabled={busy || !list.length}>{t('cdn.checkState')}</button>
-        <input className="mono" style={{ maxWidth: 200 }} placeholder={t('cdn.streamName')}
-               value={streamName} onChange={e => setStreamName(e.target.value)} />
+        {/* From the channel. The stream name was typed here every time, next
+            to the place that already knew it. */}
+        {selected && <span className="mono hint">{selected.application}/{selected.stream}</span>}
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0, fontSize: 12 }}>
           <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
           {t('cdn.liveMode')}
         </label>
         {!state && <span className="hint">{t('cdn.stateWhy')}</span>}
       </div>
-      <div className="hint" >{t('cdn.streamNameHint')}</div>
 
       {state && (
         <div style={{ marginTop: 10 }}>

@@ -1,5 +1,7 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-const SRC='/home/claude/nnm-control/frontend/src';
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 import { writeFileSync, rmSync } from 'fs';
 const out = '/tmp/.playback-bundle.mjs';
 await build({ stdin:{contents:`

@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Two state writes in one handler that both derive from the same prop or the
 // same state value: React has not re-rendered between them, so the second
 // discards the first.
@@ -11,8 +13,6 @@
 // within one arrow body. That is the shape that loses data; a setter taking a
 // whole patch, or two different setters, is fine.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const files = [];

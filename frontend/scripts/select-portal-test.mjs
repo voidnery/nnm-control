@@ -1,6 +1,8 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
-const SRC = '/home/claude/nnm-control/frontend/src';
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const entry = `
 import React from 'react';
 import { createRoot } from 'react-dom/client';

@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // A call whose path no router serves.
 //
 // The playlist panel called `/nimble/:id/agent/...` for every one of fourteen
@@ -10,8 +12,6 @@
 // and the request is well-formed. It only shows at runtime, on a server in a
 // particular mode.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // The frontend AND the standalone tools. Fixing the panel and leaving the
 // diagnostic pointed at the wrong router is what happened here: the tool then

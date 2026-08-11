@@ -22,6 +22,11 @@ const GLYPH = {
   history: '◷',
   up: '↑',
   down: '↓',
+  // iter21 m2 — handing a link to somebody, and watching it. Both are verbs
+  // that appear beside a URL, where a text button would be wider than the URL
+  // is readable.
+  copy: '⧉',
+  play: '▷',
 };
 
 export default function IconButton({ action, label, danger, disabled, onClick, title }) {

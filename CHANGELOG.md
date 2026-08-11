@@ -1,5 +1,114 @@
 # Changelog
 
+### v0.74.0 — iter21 m2: a list instead of a question
+Channels existed as a model; nothing showed them. Delivery still opened with an
+empty text box, and the answer to "what is being delivered and where" was
+somewhere between four tabs and the operator's memory.
+
+**A dashboard, one row per channel** — the first thing the Distribution page
+opens on now. What it is, which network carries it, what each edge is doing
+with it, and the links to hand somebody. Click a row and the links unfold.
+
+- **A channel delivered by nothing gets a row too.** It is the state worth
+  seeing before an event rather than during one, and it was invisible.
+- **The production link says which edge it resolves to right now**, and
+  whether it can resolve elsewhere for another viewer. Handing a policy result
+  to a partner as though it were a fixed address is how a link that worked
+  stops working for somebody else.
+- **Test links, one per edge**, straight past the policy and the gateway, each
+  flagged if that edge has no route for the channel — otherwise it 404s and
+  the edge looks broken.
+- **Copy tells the truth.** `navigator.clipboard` is absent over plain HTTP;
+  the toast follows what actually happened rather than assuming, which is a
+  trap this codebase has fallen into before.
+- Every link plays in place, through the same player the Streams tab uses.
+
+**The delivery tab stopped asking.** The applications come from the network's
+stored channels, shown as a list; what the origin is publishing is still one
+click away, but the click now creates a channel instead of appending text to a
+box that forgot it. The stream name for the viewer probe comes from the
+channel — it was being typed into a field beside the place that already knew
+it.
+
+**Two gates from v0.63.2 went red about a page that had got better.** They
+named `toggleApp` and `streamName` — the implementations, not the rules. The
+rules were "what the origin publishes is one click away" and "the probe knows
+which stream to ask for", and both still hold by better means. Rewritten
+against the outcome; a gate bound to a mechanism outlives the mechanism and
+then argues for it.
+
+### v0.73.0 — iter21 m1: the channel the panel never had
+"Which streams go through which network" was a question the panel could not
+answer about its own configuration. Its model was network → nodes → routes; an
+application was typed into a box to compute a plan and forgotten the moment the
+page changed. Nothing connected a stream to a network, so nothing could list
+them, and a viewer's link had nothing to hang on.
+
+- **A channel is one application and one stream.** `test2/test_stream` and
+  `test2/other` are two channels: watched separately, healthy separately, and a
+  link points at one of them. Unique on that pair, deliberately — the same
+  stream delivered by two networks makes "the production link for this channel"
+  ambiguous, and an ambiguous answer to that is worse than a missing one. A
+  stream that must reach two audiences is a topology question, not two records
+  claiming one name.
+- **A channel with no network is a row, not an absence.** A stream that exists
+  on an origin and is delivered by nothing was invisible, and it is exactly the
+  thing worth seeing before an event rather than during one.
+- **Two kinds of link, because they answer different questions.** The
+  production link goes through the configured mode and policy: it is what a
+  viewer gets, and it changes when the configuration does. A test link goes
+  straight at one named edge, past the policy and past the gateway — "does RU-3
+  serve this" cannot be asked of a link that might resolve to RU-2.
+- **Both say what they reveal**, so that pasting a URL into a chat with a
+  partner is not accidentally pasting the address of an origin. The production
+  link also says which edge it resolved to *now*, and whether it can move
+  between viewers at all: printing a policy result as though it were a fixed
+  address is how an operator ends up debugging the wrong machine.
+- **A test link to an edge with no route for that channel is flagged.** It
+  resolves and 404s, and the operator concludes the edge is broken. Unknown
+  routes stay null: "we did not read them" is not "there are none".
+- **Test links survive when the production link cannot be made**, which is
+  precisely the moment they are wanted.
+
+The link generator touches nothing: no fetch, no await. A generator that
+reaches out mid-computation cannot be reasoned about and cannot be tested
+without a fleet. 12 new checks, five proven by contradiction.
+
+Next: the dashboard row per channel, and the delivery tab as a list of channels
+with a detail beside it rather than a page that grows downwards.
+
+**Eight frontend gates only ran on one machine.** Verifying the release archive
+from a clean extraction — rather than from the directory it was built in —
+turned up an absolute path to the authoring machine in `pages-smoke`,
+`render-smoke`, `select-portal-test`, `pipeline-layout-test`,
+`playback-url-test`, `ui-components-test`, `stats-chart-test` and
+`clipboard-audit`. Extracted anywhere else, every one of them failed to resolve
+React and the suite went red for a reason having nothing to do with the code.
+
+They passed for a year because the project always sat in the same directory.
+Nothing caught it because the suite was never run anywhere else — not in CI,
+which builds images and does not run it, and not on the operator's machine.
+All eight now resolve from their own location, and `audit:portable` refuses a
+developer home directory or an absolute path naming the repository. It
+deliberately allows `/var/log/nimble` and its like: those are data about a
+Nimble box, not paths a script opens, and a check that flags them teaches
+people to ignore it.
+
+### v0.72.1 — the answer was below the question
+Clicking a place on the globe rendered the result under the canvas, which put
+it off-screen at the exact moment it arrived: you click, and the thing you
+clicked for lands below the fold while the globe you are still looking at says
+nothing.
+
+The place, the measure button and the per-node results now sit in a column
+beside the globe, and the whole exchange stays in view. One column on a narrow
+screen, since two fixed columns with no fallback is just a different way of
+hiding things.
+
+Gated by position rather than by class name: the side column opens, the results
+render, and only then does the canvas mount. Anything after the canvas is below
+the fold again, whatever it is called.
+
 ### v0.72.0 — "the ports are set in WMSPanel"
 They are. WMSPanel's server dialog holds custom domains and custom ports, and
 the panel was reporting the origin's HTTP port as unset while the operator was

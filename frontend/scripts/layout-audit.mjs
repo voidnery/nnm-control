@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // A flex row with `justify-content: space-between` and exactly two children
 // means "identity on the left, controls on the right". Give it a third and the
 // browser spreads all three evenly, which is how the Agents page ended up with
@@ -7,8 +9,6 @@
 // It reads the same, it survives a control being added, and it cannot drift
 // into the middle of the page.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 

@@ -1,9 +1,11 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // The chart drew identifiers and raw cumulative totals on one axis, which made
 // every real series flatten to zero. These checks pin the classification and the
 // rate conversion that fixed it.
 import { build } from 'esbuild';
 import { rmSync } from 'fs';
-const SRC = '/home/claude/nnm-control/frontend/src';
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const out = '/tmp/.stats-bundle.mjs';
 await build({ stdin: { contents: `export { classify, toRate } from '${SRC}/pages/StatsTab.jsx';`,
   resolveDir: SRC, loader: 'jsx' }, bundle: true, format: 'esm', outfile: out, jsx: 'automatic', logLevel: 'silent' });

@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // No machine word reaches a person without an explanation.
 //
 // A route answered `{"error":"not-found"}`, the page put that string in a red
@@ -15,8 +17,6 @@
 // code being added months from now, reaching a user as a bare string, and
 // nobody noticing because it renders perfectly.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const BACKEND = path.resolve(SRC, '../../backend/src');

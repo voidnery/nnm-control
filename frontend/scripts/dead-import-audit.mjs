@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Imports nothing uses.
 //
 // Removing the Raw view left `DataView` and `CopyJsonButton` imported and
@@ -6,8 +8,6 @@
 // carries it forever. This is how a page accumulates the artefacts of three
 // previous versions of itself.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const files = [];

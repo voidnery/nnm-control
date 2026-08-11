@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Two faults that every existing gate was blind to, made checkable.
 //
 // The first: a dialog written by hand with `modal-backdrop` — a class the
@@ -14,8 +16,6 @@
 // The pattern behind both is the same: a thing that exists on one side of a
 // boundary and not the other, where neither side is obviously broken.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const BACKEND = path.resolve(SRC, '../../backend/src');

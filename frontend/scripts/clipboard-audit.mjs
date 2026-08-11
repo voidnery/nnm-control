@@ -1,11 +1,12 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Six copy buttons used `navigator.clipboard?.writeText(...)` and then showed
 // an unconditional "copied" toast. Outside a secure context that API is
 // undefined, so the optional chain made every one of them a silent no-op that
 // still claimed success. This refuses a return to that pattern.
 import { readFileSync, readdirSync } from 'node:fs';
-import path from 'node:path';
 
-const SRC = '/home/claude/nnm-control/frontend/src';
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
 const files = [];
 (function walk(d) {
   for (const e of readdirSync(d, { withFileTypes: true })) {
