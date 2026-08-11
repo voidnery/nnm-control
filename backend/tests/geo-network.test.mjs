@@ -165,10 +165,15 @@ await check('the city edition carries coordinates and says so', async () => {
   assert.ok(Math.abs(r.lat - 51.51) < 0.1 && Math.abs(r.lon - -0.09) < 0.1);
 });
 
-await check('an unroutable address is a miss, not a crash', async () => {
+await check('an unroutable address is named, not merely missed', async () => {
+  // This asserted 'not-found' until the address scope was introduced. It was
+  // never wrong that the lookup fails; it was wrong that the failure had the
+  // same name as a public address absent from the database, which is a
+  // different problem with a different fix.
   const r = await geoip.lookup('127.0.0.1');
   assert.equal(r.ok, false);
-  assert.equal(r.reason, 'not-found');
+  assert.equal(r.reason, 'private-address');
+  assert.equal(r.scope, 'loopback');
 });
 
 await check('a malformed address is reported, not thrown', async () => {
@@ -308,6 +313,45 @@ check('an existing id is kept, not replaced', () => {
 check('a reference to a node that is gone is dropped, not carried', () => {
   const out = mintIds([{ id: 'new-b', server: 's2', role: 'edge', upstream: ['new-vanished'] }]);
   assert.deepEqual(out[0].upstream, []);
+});
+
+console.log('\nA PRIVATE ADDRESS IS NOT A MISSING ONE:');
+
+check('LAN addresses are named as such', () => {
+  // The distinction the whole error rework rests on. A public address missing
+  // today might appear in next month's release; 192.168.200.129 never will,
+  // from any vendor, ever — so "not found" sends the operator to re-download a
+  // database instead of typing in a city.
+  for (const ip of ['192.168.200.129', '10.0.0.5', '172.16.4.1', 'fd00::1', '::ffff:192.168.1.1']) {
+    assert.equal(geoip.addressScope(ip), 'private', ip);
+  }
+});
+
+check('the boundaries of the private ranges are respected', () => {
+  // 172.16/12 ends at 172.31. Getting this wrong turns a public host into an
+  // unresolvable one, silently.
+  assert.equal(geoip.addressScope('172.31.255.255'), 'private');
+  assert.equal(geoip.addressScope('172.32.0.1'), 'public');
+  assert.equal(geoip.addressScope('192.169.0.1'), 'public');
+});
+
+check('loopback, link-local and CGNAT are each their own answer', () => {
+  assert.equal(geoip.addressScope('127.0.0.1'), 'loopback');
+  assert.equal(geoip.addressScope('169.254.1.1'), 'link-local');
+  assert.equal(geoip.addressScope('100.64.0.1'), 'cgnat');
+  assert.equal(geoip.addressScope('::1'), 'loopback');
+});
+
+check('real public addresses still resolve', () => {
+  assert.equal(geoip.addressScope('79.98.187.66'), 'public');
+  assert.equal(geoip.addressScope('2a00:1450::1'), 'public');
+});
+
+await check('a lookup of a LAN address says private, not not-found', async () => {
+  const r = await geoip.lookup('192.168.200.129');
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'private-address');
+  assert.equal(r.scope, 'private');
 });
 
 await fs.rm(TMP, { recursive: true, force: true });

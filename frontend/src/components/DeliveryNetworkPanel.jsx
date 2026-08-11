@@ -8,6 +8,7 @@ import IconButton from './IconButton.jsx';
 import Modal from './Modal.jsx';
 import DeliveryRoutesPanel from './DeliveryRoutesPanel.jsx';
 import ProbePanel from './ProbePanel.jsx';
+import GatewayPanel from './GatewayPanel.jsx';
 
 // The delivery network: which box is an ingest, an origin, an edge, and where
 // each one physically is.
@@ -152,7 +153,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
 
         {net && (
           <div className="row" style={{ gap: 6, marginTop: 10 }}>
-            {['topology', 'delivery', 'probes'].map(v => (
+            {['topology', 'delivery', 'gateway', 'probes'].map(v => (
               <button key={v} className={'tagchip' + (tab === v ? ' on' : '')} onClick={() => setTab(v)}>
                 {t('cdn.tab.' + v)}
                 {/* Unsaved topology is the one thing worth carrying across
@@ -238,6 +239,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
 
           {tab === 'delivery' && dirty && <div className="panel hint">{t('cdn.unsavedFirst')}</div>}
           {tab === 'delivery' && <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} />}
+          {tab === 'gateway' && <GatewayPanel network={net} servers={servers} />}
           {tab === 'probes' && <ProbePanel network={net} />}
         </>
       )}

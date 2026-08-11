@@ -53,7 +53,14 @@ geoipRouter.post('/servers/:id/geo/resolve', requirePerm('cdn.manage'), async (r
   catch (e) { return res.status(422).json({ error: `cannot resolve ${server.host}: ${e.message}` }); }
 
   const r = await lookup(ip);
-  if (!r.ok) return res.status(r.reason === 'no-database' ? 409 : 422).json({ error: r.reason, ip, via });
+  if (!r.ok) {
+    // The code is the whole message. Every one of these has a different cause
+    // and a different fix, and the panel is expected to say which — a raw
+    // "not-found" at the top of a page tells an operator nothing about whether
+    // to update a database, edit a hostname, or type the location in.
+    return res.status(r.reason === 'no-database' ? 409 : 422)
+      .json({ error: r.reason, code: r.reason, scope: r.scope, ip, via, server: server.name, host: server.host });
+  }
 
   const manualCountry = server.geo?.source === 'manual';
   const manualCoords = server.geo?.coordsSource === 'manual';

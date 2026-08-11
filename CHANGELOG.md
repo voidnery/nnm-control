@@ -1,5 +1,100 @@
 # Changelog
 
+### v0.67.0 — iter20 m5: the arbiter Softvelum leave you to write
+Their documented answer to load balancing is that you build an arbiter: a
+service that reads the Nimble API for load, optionally locates the viewer, and
+hands back a URL. Every operator writes it again. The panel already polls the
+fleet, already holds the topology, already knows where each box is — it was the
+arbiter all along and only lacked the last step.
+
+- **All three link modes, with their price attached.** Straight to the edge
+  costs nothing and puts the edge's address in the viewer's URL. A redirect
+  gateway carries no media so a cheap box will do — but the 302 target is still
+  an edge address, so hiding the edges needs a DNS name on each. A proxy
+  gateway reveals nothing and now needs the bandwidth of an edge, because that
+  is what it has become. The trade-off is the operator's; the panel's job is to
+  state it, including on the preview, where the exposure of the actual URL is
+  labelled.
+- **Four policies, and each admits when it cannot run.** "Nearest" needs
+  coordinates on the edges and a located viewer; without either it falls back
+  to weight *and says which fallback happened*. A nearest that quietly becomes
+  whichever is how a delivery network develops a favourite continent nobody
+  chose.
+- **An edge that is serving nothing is not a candidate.** It can be up,
+  reachable and idle, and sending viewers there produces a player that spins
+  forever — worse than an error. But an edge the panel *failed to ask* stays in
+  the pool: shrinking the network on a failed poll would be a larger fault than
+  the poll.
+- **No healthy edge returns nothing, never a dead one**, and what happens then
+  is a decision made once in the open — refuse, or send everyone to the origin.
+- **The choice is a pure function.** No clock, no network, no database inside
+  it. A decision that sends viewers somewhere has to be reproducible and
+  arguable, and the preview returns the full comparison — the runners-up and
+  their distances — because "why would this viewer go to Frankfurt" deserves an
+  answer.
+- **The routing table is pushed, not polled.** A gateway that asks the panel
+  per viewer turns a panel outage into a delivery outage, which is the
+  correlation this design has been avoiding since the conversation about
+  self-hosting.
+
+19 new checks, six proven by contradiction: handing out a dead edge, counting
+an idle one, a silent fallback, a redirect claiming to hide what it reveals,
+dropping an unpolled edge, and a routing table that cannot reproduce its own
+policy.
+
+**One test was wrong and the code was right** — it expected Amsterdam as
+nearest to Berlin on nothing but a hunch about the map; Frankfurt is 423 km,
+Amsterdam 576. Corrected against the function, with the distances written into
+the fixture so the next reader does not have to trust a hunch either.
+
+**And the layout gate forbade growth rather than the rule it cared about.** It
+matched the literal list `'topology', 'delivery', 'probes'` and went red the
+moment a fourth tab appeared, about a rule that had not changed. It now checks
+that the required tabs are present and that every declared tab renders
+something — which also catches a dead button, the thing the literal never
+could.
+
+Not yet: deploying nginx and the resolver onto a gateway VM, and issuing TLS
+for its domain. Those need the machine, and it does not exist yet.
+
+### v0.66.0 — "not-found", about a server at 192.168.200.129
+A route answered `{"error":"not-found"}`, the page put that string in a red bar
+at the top, and an operator read it about a machine on their own LAN. Every
+part of that was true. None of it said what happened, whose fault it was, or
+what to do — and the answer was "nothing is broken, type the city in", which is
+unguessable from the word displayed.
+
+- **A private address is not a missing one.** A public address absent from the
+  database might appear in next month's release; 192.168.200.129 never will,
+  from any vendor, ever. The two are now different answers, because they have
+  different fixes — and "not found" was sending the operator to re-download a
+  database. RFC1918, loopback, link-local, CGNAT and their IPv6 equivalents are
+  each classified, with the /12 boundary at 172.31 respected: getting that
+  wrong turns a public host unresolvable, silently.
+- **Failures are shown where the click was, not at the top of a long page**, as
+  a dialog with the sentence first, what to do second, and the raw detail
+  folded for whoever will fix the code. For a LAN address it also offers to
+  open the manual editor, since that is the actual next step.
+- **Bulk actions report outcomes, not counts.** "Resolved 11, failed 3" left
+  the operator to find which three and why, one server at a time — the work the
+  button existed to save. Each failure is listed with its server and its
+  reason.
+
+**This is the house pattern from now on, and it is enforced.** The contract has
+two halves: the API sends a stable `code`, and the dictionaries carry
+`err.<code>` and `err.<code>.fix` for it in both languages. `audit:errors`
+reads the codes out of the service source, so a code added months from now
+cannot reach a user as a bare string — which is the real failure mode, since it
+renders perfectly and nobody notices.
+
+Proven by contradiction four ways: a new code with no entry, an explanation
+with no fix, a code translated into one language only, and `explainError`
+falling back to the transport's own message.
+
+One older assertion changed meaning rather than breaking: it expected
+`not-found` for `127.0.0.1`. It was never wrong that the lookup fails — it was
+wrong that the failure shared a name with a different problem.
+
 ### v0.65.0 — the page had everything and no shape
 Four panels stacked vertically, each growing downwards on every button press,
 with three buttons side by side as equals and the order between them something

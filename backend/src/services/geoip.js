@@ -127,6 +127,38 @@ export function shape(record, edition) {
   };
 }
 
+// Addresses that no geolocation database can ever answer for, because they are
+// not on the public internet: RFC1918, loopback, link-local, carrier-grade NAT
+// and their IPv6 equivalents.
+//
+// This matters because the honest answer is completely different from "not in
+// the database". A public address that is missing might appear in next month's
+// release; 192.168.200.129 never will, from any vendor, ever — the operator
+// has to type the location in, and telling them "not found" sends them to
+// re-download a database instead.
+export function addressScope(ip) {
+  if (!net.isIP(ip)) return 'invalid';
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    if (a === 10) return 'private';
+    if (a === 127) return 'loopback';
+    if (a === 172 && b >= 16 && b <= 31) return 'private';
+    if (a === 192 && b === 168) return 'private';
+    if (a === 169 && b === 254) return 'link-local';
+    if (a === 100 && b >= 64 && b <= 127) return 'cgnat';
+    if (a === 0 || a >= 224) return 'reserved';
+    return 'public';
+  }
+  const low = ip.toLowerCase();
+  if (low === '::1') return 'loopback';
+  if (/^f[cd]/.test(low)) return 'private';        // fc00::/7 unique local
+  if (/^fe[89ab]/.test(low)) return 'link-local';  // fe80::/10
+  // An IPv4 address wearing an IPv6 hat is still that address.
+  const mapped = low.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return addressScope(mapped[1]);
+  return 'public';
+}
+
 export async function lookup(ip) {
   const r = await reader();
   if (!r) return { ok: false, reason: 'no-database' };
@@ -134,6 +166,8 @@ export async function lookup(ip) {
   // which is the same answer it gives for an address that is simply absent,
   // and those two need different words in front of an operator.
   if (!net.isIP(ip)) return { ok: false, reason: 'bad-address' };
+  const scope = addressScope(ip);
+  if (scope !== 'public') return { ok: false, reason: 'private-address', scope };
   const meta = await readMeta();
   let record;
   try { record = r.get(ip); }

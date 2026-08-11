@@ -380,11 +380,23 @@ const netSrc = stripComments(readFile(new URL('components/DeliveryNetworkPanel.j
 
 check('a network shows one job at a time', () => {
   // Four panels stacked vertically, each growing downwards on every button
-  // press, is a page nobody can hold in view. Topology, delivery and
-  // measurement happen at different moments and are now separate tabs.
-  assert.ok(/'topology', 'delivery', 'probes'/.test(netSrc), 'the second-level tabs are gone');
-  for (const tab of ['topology', 'delivery', 'probes']) {
+  // press, is a page nobody can hold in view. These are separate jobs done at
+  // separate moments and each gets a tab.
+  //
+  // The required set, not the exact list: this went red the moment a fifth tab
+  // was added, about a rule that had not changed. A gate matching a literal
+  // enumeration forbids growth rather than the thing it cares about.
+  const required = ['topology', 'delivery', 'probes'];
+  const declared = netSrc.match(/\{\[((?:'[a-z]+',?\s*)+)\]\.map\(v =>/)?.[1] || '';
+  const tabs = [...declared.matchAll(/'([a-z]+)'/g)].map(m => m[1]);
+  assert.ok(tabs.length >= required.length, `only ${tabs.length} tab(s) declared`);
+  for (const tab of required) {
+    assert.ok(tabs.includes(tab), `the ${tab} tab is no longer declared`);
     assert.ok(new RegExp(`tab === '${tab}'`).test(netSrc), `nothing renders on the ${tab} tab`);
+  }
+  // Every declared tab must render something, or it is a dead button.
+  for (const tab of tabs) {
+    assert.ok(new RegExp(`tab === '${tab}'`).test(netSrc), `the ${tab} tab renders nothing`);
   }
 });
 
@@ -393,7 +405,7 @@ check('unsaved topology is visible from the other tabs', () => {
   // topology and moved to Delivery has no way to see that what they are
   // planning against is not what is on their screen — so the tab carries the
   // mark.
-  const tabBar = netSrc.slice(netSrc.indexOf("'topology', 'delivery', 'probes'"));
+  const tabBar = netSrc.slice(netSrc.indexOf(".map(v => ("));
   assert.ok(/dirty/.test(tabBar.slice(0, 600)), 'the topology tab does not mark unsaved changes');
 });
 

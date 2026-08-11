@@ -38,6 +38,7 @@ import { geoipRouter } from './routes/geoip.js';
 import { cdnNetworkRouter } from './routes/cdnNetworks.js';
 import { deliveryRoutesRouter } from './routes/deliveryRoutes.js';
 import { probeRouter } from './routes/probes.js';
+import { arbiterRouter } from './routes/arbiter.js';
 import { auditRouter } from './routes/audit.js';
 import { auditMutations } from './services/audit.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
@@ -92,6 +93,7 @@ app.use('/api', geoipRouter);
 app.use('/api/cdn', cdnNetworkRouter);
 app.use('/api/cdn', deliveryRoutesRouter);
 app.use('/api/cdn', probeRouter);
+app.use('/api/cdn', arbiterRouter);
 app.use('/api/audit', auditRouter);
 
 app.use((err, _req, res, _next) => {

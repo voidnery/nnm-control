@@ -163,6 +163,11 @@ window.fetch = (u) => {
     attribution:{ text:'IP Geolocation by DB-IP', url:'https://db-ip.com' } }), text:()=>Promise.resolve('{}') });
   // iter20 m2 - the plan endpoint. Without it the routes panel renders against
   // undefined the moment a network is selected.
+  if (/\/gateway$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    gateway:{ enabled:false, mode:'direct', policy:'nearest', whenAllDown:'fail', domain:'', node:null } }), text:()=>Promise.resolve('{}') });
+  if (/resolve-preview$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    decision:{ edge:{ name:'Nimble RU-2' }, reason:'nearest', distanceKm:420, runnersUp:[{ edge:'RU-3', distanceKm:900 }] },
+    viewerFrom:'geoip', mode:'direct', url:'http://79.98.187.66:8081/test2/s/playlist.m3u8', exposes:'edge-address', via:'edge' }), text:()=>Promise.resolve('{}') });
   if (/\/probe\/matrix$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     cells:[{ from:'selectel(24/7)', to:'Nimble RU-3', ok:true, minMs:12.4, avgMs:13, maxMs:14, jitterMs:1.6, lossPct:0 },
            { from:'Nimble RU-3', to:'selectel(24/7)', ok:false, error:'ETIMEDOUT', minMs:null, lossPct:null }],

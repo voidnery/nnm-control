@@ -5,6 +5,8 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import IconButton from './IconButton.jsx';
 import Modal from './Modal.jsx';
+import ErrorDialog from './ErrorDialog.jsx';
+import { explainError } from '../lib/errors.js';
 
 // Where the fleet physically is, and the database that answers it.
 //
@@ -122,6 +124,7 @@ export default function DeliveryGeoPanel({ servers, onServersChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [geoEdit, setGeoEdit] = useState(null);
+  const [problem, setProblem] = useState(null);   // what went wrong, in full
 
   const load = async () => {
     try { setGeoDb(await api('/geoip')); setError(''); }
@@ -129,10 +132,13 @@ export default function DeliveryGeoPanel({ servers, onServersChanged }) {
   };
   useEffect(() => { load(); }, []);
 
+  // A failure is shown, not summarised into a line of code at the top of the
+  // page. `setError` remains for the load path, where there is nothing else on
+  // screen to attach an explanation to.
   const act = async (fn, ok) => {
     setBusy(true); setError('');
     try { await fn(); if (ok) push({ type: 'ok', message: ok }); await load(); }
-    catch (e) { setError(e.message); }
+    catch (e) { setProblem(explainError(e, t)); }
     finally { setBusy(false); }
   };
 
@@ -148,13 +154,24 @@ export default function DeliveryGeoPanel({ servers, onServersChanged }) {
   });
 
   const resolveAll = () => act(async () => {
-    let done = 0, failed = 0;
+    // Outcomes, not a count. "Resolved 11, failed 3" leaves the operator to
+    // find which three and why, one server at a time, which is the work this
+    // button existed to save.
+    let done = 0;
+    const failures = [];
     for (const s of servers) {
       try { await api(`/servers/${s.id}/geo/resolve`, { method: 'POST' }); done++; }
-      catch { failed++; }
+      catch (e) { failures.push({ server: s.name, host: s.host, ...explainError(e, t) }); }
     }
     onServersChanged?.();
-    push({ type: failed ? 'warn' : 'ok', message: t('cdn.resolvedAll', { done, failed }) });
+    if (failures.length) {
+      setProblem({
+        title: t('err.someFailed', { done, failed: failures.length }),
+        items: failures,
+      });
+    } else {
+      push({ type: 'ok', message: t('cdn.resolvedAll', { done, failed: 0 }) });
+    }
   });
 
   const saveGeo = () => act(async () => {
@@ -209,6 +226,15 @@ export default function DeliveryGeoPanel({ servers, onServersChanged }) {
           (`modal-backdrop` against the project's `modal-back`), so it rendered
           as a plain box in the page flow — below the table it was editing, and
           reachable only by scrolling. */}
+      {problem && <ErrorDialog problem={problem} onClose={() => setProblem(null)}
+                               onFix={problem.fixable ? () => {
+                                 const sv = servers.find(x => x.name === problem.server);
+                                 setProblem(null);
+                                 if (sv) setGeoEdit({ id: sv.id, name: sv.name,
+                                   countryCode: sv.geo?.countryCode || '', countryName: sv.geo?.countryName || '',
+                                   city: sv.geo?.city || '', lat: sv.geo?.lat ?? '', lon: sv.geo?.lon ?? '' });
+                               } : null} />}
+
       {geoEdit && (
         <Modal onClose={() => setGeoEdit(null)}>
           <h3>{t('cdn.editGeo', { name: geoEdit.name })}</h3>

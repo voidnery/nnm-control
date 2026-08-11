@@ -46,6 +46,49 @@ const nodeSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
 }, { _id: true });
 
+// How a viewer is given a URL, and what that choice costs.
+//
+// Three modes, and the panel offers all three because the trade-off is the
+// operator's to make, not ours:
+//
+//   direct   — the link points at an edge. No extra machine, nothing to run,
+//              and the edge's address is in the URL the viewer holds.
+//   redirect — a small node answers the link and 302s to the chosen edge. It
+//              carries no media, so a cheap box will do; but the redirect
+//              target is still an edge address, so hiding it needs a DNS name
+//              per edge. The panel says so rather than implying otherwise.
+//   proxy    — the node serves the media itself. Nothing about the edges is
+//              visible, and the node now needs the bandwidth of an edge,
+//              because that is what it has become.
+//
+// `node` is the server carrying the gateway in the last two modes. It needs an
+// agent: the panel pushes it a routing table so it decides locally, because a
+// gateway that asks the panel per viewer turns a panel outage into an outage.
+export const GATEWAY_MODES = ['direct', 'redirect', 'proxy'];
+
+// Which edge a viewer gets.
+//   nearest      — least great-circle distance from the viewer to the edge.
+//                  Needs coordinates on the edges and a geolocation database.
+//   least-loaded — fewest connections reported by the edge.
+//   weighted     — by the weight on each node.
+//   failover     — the first healthy edge in the operator's own order.
+export const GATEWAY_POLICIES = ['nearest', 'least-loaded', 'weighted', 'failover'];
+
+const gatewaySchema = new mongoose.Schema({
+  enabled: { type: Boolean, default: false },
+  mode: { type: String, enum: GATEWAY_MODES, default: 'direct' },
+  node: { type: mongoose.Schema.Types.ObjectId, ref: 'NimbleServer', default: null },
+  // The name viewers see. Without it a redirect gateway still works and still
+  // shows an address; the panel reports that rather than pretending.
+  domain: { type: String, default: '' },
+  policy: { type: String, enum: GATEWAY_POLICIES, default: 'nearest' },
+  // When no edge is healthy. Sending a viewer to a dead edge because the
+  // policy picked it is the failure this exists to prevent, and silently
+  // sending everyone to the origin is a different, larger one — so it is a
+  // decision, made once, in the open.
+  whenAllDown: { type: String, enum: ['fail', 'origin'], default: 'fail' },
+}, { _id: false });
+
 const networkSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
@@ -55,6 +98,7 @@ const networkSchema = new mongoose.Schema({
   // was configured first.
   audience: { type: String, enum: ['internal', 'public'], default: 'internal' },
   nodes: { type: [nodeSchema], default: [] },
+  gateway: { type: gatewaySchema, default: () => ({}) },
   createdBy: { type: String, default: '' },
 }, { timestamps: true });
 

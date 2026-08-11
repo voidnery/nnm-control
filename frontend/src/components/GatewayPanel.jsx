@@ -1,0 +1,164 @@
+import { useState } from 'react';
+import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
+import { useI18n } from '../i18n.jsx';
+import { useToast } from '../toast.jsx';
+import ErrorDialog from './ErrorDialog.jsx';
+import { explainError } from '../lib/errors.js';
+
+// How a viewer gets a link, and what that choice costs.
+//
+// The three modes are a real trade-off between money, exposure and moving
+// parts, and it is the operator's to make — so each is shown with its price
+// next to it rather than as three equal words in a dropdown. The one that
+// catches people is redirect without DNS names on the edges: it feels like it
+// hides the edges and it does not, because the 302 target is an address the
+// viewer receives. That is stated on the mode, and again on the preview.
+const MODES = ['direct', 'redirect', 'proxy'];
+const POLICIES = ['nearest', 'least-loaded', 'weighted', 'failover'];
+
+export default function GatewayPanel({ network, servers = [] }) {
+  const { t } = useI18n();
+  const { can } = useAuth();
+  const { push } = useToast();
+  const canManage = can('cdn.manage');
+
+  const [gw, setGw] = useState(network.gateway || { mode: 'direct', policy: 'nearest', whenAllDown: 'fail', domain: '', node: null });
+  const [preview, setPreview] = useState(null);
+  const [probe, setProbe] = useState({ channel: '', stream: '', viewerIp: '' });
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState(null);
+
+  const agents = servers.filter(s => s.agent?.enabled || s.hasAgent);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await api(`/cdn/networks/${network.id}/gateway`, { method: 'PUT', body: gw });
+      setGw(r.gateway);
+      push({ type: 'ok', message: t('gw.saved') });
+    } catch (e) { setProblem(explainError(e, t)); }
+    finally { setBusy(false); }
+  };
+
+  const runPreview = async () => {
+    setBusy(true);
+    try {
+      setPreview(await api(`/cdn/networks/${network.id}/resolve-preview`, {
+        method: 'POST', body: { ...probe },
+      }));
+    } catch (e) { setProblem(explainError(e, t)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="panel">
+      <h2 style={{ marginTop: 0 }}>{t('gw.title')}</h2>
+      <div className="hint">{t('gw.intro')}</div>
+      {problem && <ErrorDialog problem={problem} onClose={() => setProblem(null)} />}
+
+      <div className="gsection">{t('gw.modeTitle')}</div>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {MODES.map(m => (
+          <button key={m} className={'tagchip' + (gw.mode === m ? ' on' : '')}
+                  disabled={!canManage} onClick={() => setGw({ ...gw, mode: m })}>
+            {t('gw.mode.' + m)}
+          </button>
+        ))}
+      </div>
+      <div className="hint" style={{ marginTop: 6 }}>{t('gw.mode.' + gw.mode + '.cost')}</div>
+
+      {gw.mode !== 'direct' && (
+        <>
+          <label>{t('gw.node')}</label>
+          <select value={gw.node || ''} disabled={!canManage}
+                  onChange={e => setGw({ ...gw, node: e.target.value || null })}>
+            <option value="">{t('gw.pickNode')}</option>
+            {agents.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <div className="hint" style={{ fontSize: 11 }}>{t('gw.nodeHint')}</div>
+
+          <label>{t('gw.domain')}</label>
+          <input className="mono" placeholder="cdn.example.com" value={gw.domain || ''} disabled={!canManage}
+                 onChange={e => setGw({ ...gw, domain: e.target.value })} />
+          <div className="hint" style={{ fontSize: 11 }}>{t('gw.domainHint')}</div>
+        </>
+      )}
+
+      <div className="gsection">{t('gw.policyTitle')}</div>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {POLICIES.map(p => (
+          <button key={p} className={'tagchip' + (gw.policy === p ? ' on' : '')}
+                  disabled={!canManage} onClick={() => setGw({ ...gw, policy: p })}>
+            {t('gw.policy.' + p)}
+          </button>
+        ))}
+      </div>
+      <div className="hint" style={{ marginTop: 6 }}>{t('gw.policy.' + gw.policy + '.needs')}</div>
+
+      <label>{t('gw.whenAllDown')}</label>
+      <div className="row" style={{ gap: 8 }}>
+        {['fail', 'origin'].map(v => (
+          <button key={v} className={'tagchip' + (gw.whenAllDown === v ? ' on' : '')}
+                  disabled={!canManage} onClick={() => setGw({ ...gw, whenAllDown: v })}>
+            {t('gw.down.' + v)}
+          </button>
+        ))}
+      </div>
+      <div className="hint" style={{ fontSize: 11 }}>{t('gw.downHint')}</div>
+
+      {canManage && (
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
+          <button className="primary" onClick={save} disabled={busy}>{t('action.save')}</button>
+        </div>
+      )}
+
+      <div className="gsection">{t('gw.previewTitle')}</div>
+      <div className="hint" style={{ fontSize: 11 }}>{t('gw.previewHint')}</div>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+        <input className="mono" style={{ maxWidth: 160 }} placeholder={t('gw.channel')}
+               value={probe.channel} onChange={e => setProbe({ ...probe, channel: e.target.value })} />
+        <input className="mono" style={{ maxWidth: 160 }} placeholder={t('gw.stream')}
+               value={probe.stream} onChange={e => setProbe({ ...probe, stream: e.target.value })} />
+        <input className="mono" style={{ maxWidth: 180 }} placeholder={t('gw.viewerIp')}
+               value={probe.viewerIp} onChange={e => setProbe({ ...probe, viewerIp: e.target.value })} />
+        <button onClick={runPreview} disabled={busy || !probe.channel.trim()}>{t('gw.preview')}</button>
+      </div>
+
+      {preview && (
+        <div className="panel" style={{ marginTop: 10 }}>
+          {preview.url ? (
+            <>
+              <div className="mono" style={{ wordBreak: 'break-all' }}>{preview.url}</div>
+              {preview.redirectsTo && (
+                <div className="hint mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                  → {preview.redirectsTo}
+                </div>
+              )}
+              <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                <span className={'badge ' + (preview.exposes === 'nothing' ? 'live' : 'warn')}>
+                  {t('gw.exposes.' + preview.exposes)}
+                </span>
+                <span className="hint">
+                  {t('gw.chose', { edge: preview.decision.edge.name })} · {t('gw.why.' + preview.decision.reason)}
+                </span>
+              </div>
+              {preview.decision.runnersUp?.length > 0 && (
+                <div className="hint" style={{ fontSize: 11, marginTop: 4 }}>
+                  {t('gw.runnersUp')} {preview.decision.runnersUp
+                    .map(r => `${r.edge} (${r.distanceKm != null ? r.distanceKm + ' km' : r.connections})`)
+                    .join(', ')}
+                </div>
+              )}
+              {preview.degraded && <div className="hint">{t('gw.degraded.' + preview.degraded)}</div>}
+            </>
+          ) : (
+            <div className="error-box">
+              {t('gw.why.' + preview.decision.reason)} · {t('gw.down.' + preview.whenAllDown)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
