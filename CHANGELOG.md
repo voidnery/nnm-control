@@ -1,5 +1,126 @@
 # Changelog
 
+### v0.70.0 — iter20 m7: the network on a globe
+Vector coastlines rather than a photographic texture: sharp at any zoom, no
+multi-megabyte image to ship, no licence to track — and a glowing wireframe
+reads better than a satellite picture with data drawn on top of it.
+
+The polygons do double duty. Natural Earth 110m, public domain, reduced to
+175 countries and 155 kB, and they are both the drawing **and** the answer to
+"which country did the operator just click". A click is resolved by ray casting
+in longitude and latitude, locally, with no external service and no request.
+
+- **Nodes sit where they are, and only where that is known.** A server with no
+  coordinates is listed beside the globe as unplaced rather than dropped at
+  0,0 — which is in the Atlantic, and a marker nobody can account for is worse
+  than a marker missing.
+- **Links are great-circle arcs**, interpolated on the sphere. A straight line
+  between two projected points passes through the planet; it looks like a
+  tunnel because it is one.
+- **Click anywhere and measure.** The click resolves to a country, the country
+  selects reference points from m4, and each node with an agent is asked to
+  reach them. Latency only, and the panel says why: those hosts belong to
+  other people.
+- **Loaded only when opened.** three.js is 734 kB and the polygons another 155;
+  imported eagerly, every page of the panel would pay for a globe on one tab of
+  one page. The whole tab is a lazy chunk, and the main bundle is back where it
+  was.
+- **A browser with no WebGL is told so**, and pointed at the tabs carrying the
+  same facts, rather than shown a blank rectangle.
+
+The geometry is tested without a renderer, because "it looks fine" is how a
+globe with its markers mirrored east-west ships: the projection is checked
+against its own inverse, arcs are checked never to dip inside the sphere, and
+capitals are checked to land in their own countries — including one across the
+antimeridian, where ray casting on an unshifted ring answers plausible
+nonsense.
+
+**Two things the tests caught that a picture would not have.** The
+round-trip assertion compared a wrapped longitude against 180 instead of zero
+and failed at 0°,0° — the one place on earth where every coordinate is zero and
+nothing can be wrong. And 110m Natural Earth omits micro-states entirely, so a
+click on Singapore names Malaysia; that is asserted and documented rather than
+worked around, since the alternative is ten times the data for a globe showing
+fourteen servers.
+
+**The orphan gate called the globe dead code.** It only understood static
+imports, so the first component reached through `lazy(() => import(…))` looked
+unreferenced — exactly backwards, since it is lazy because it is expensive and
+real. It now follows dynamic imports too, and still catches a genuine orphan.
+
+### v0.69.0 — what is switched on, and what that quietly does
+The settings deciding how a delivery network behaves were spread across four
+tabs and two other pages, and several of them changed each other's meaning from
+somewhere the operator was not looking.
+
+A new first tab, **At a glance**, in two halves. The top is the settings
+themselves — audience, shape, link mode, policy, what happens when everything
+is down, domain, agents, routes, which geolocation database — so "what is
+enabled" is answered by reading rather than inferred backwards out of a list of
+complaints. The bottom is only what changes what happens.
+
+The findings worth having are the combinations no single screen can catch:
+
+- **HTTP Origin on an edge.** Valid on the account-objects page, valid on the
+  topology page, and together they mean the edge does not cache: every viewer
+  fetches every chunk from the origin. Neither screen mentions the other. On
+  the origin alone it is the normal setup and is not reported.
+- **An origin with no HTTP port**, because every route this network writes then
+  aims at a documented default — right until it is not, and then the route
+  resolves and never serves.
+- **"Nearest" over an edge with no coordinates** — a policy that cannot rank
+  it and silently falls back. Reported only under that policy: it is worth
+  saying when it changes what happens and not otherwise.
+- **A redirect gateway over edges with no names of their own**, which reveals
+  them by address — the configuration people set up believing it hides them.
+- **A gateway node with no agent**, which cannot be handed a routing table and
+  so cannot decide locally.
+
+Severity is chosen for what the operator should do, not for how bad it sounds:
+a missing agent is a note, not a warning. The panel has cried wolf enough this
+iteration.
+
+**The error contract now covers findings too.** Same shape as `err.<code>`:
+`cfg.<code>` and `cfg.<code>.fix`, both languages, read out of the service
+source by `audit:errors` — so a finding added later cannot reach the screen as
+a bare code, and one added without a fix cannot reach it at all. A finding with
+no fix is a complaint, and a panel full of complaints is one that gets scrolled
+past. Proven by contradiction both ways.
+
+17 new checks on the overview itself, including the pair that matters most: the
+same misconfiguration reported under one policy and silent under another.
+
+One fixture bug found by the gates and worth recording: the new endpoint's
+smoke fixture matched `/overview$`, which also matches `/agent-fleet/overview`,
+and answering that with the wrong shape blanked the agents page. A fixture can
+steal another page's endpoint, and only the click gate noticed.
+
+### v0.68.1 — the preview can now answer its own question
+The gateway preview produced a URL and stopped there, saying "weight was used"
+about a network with one edge.
+
+- **One candidate is named as such.** With a single eligible edge no policy
+  ran and nothing was compared; reporting a fallback described a comparison
+  that never happened. It is the sentence an operator with one edge reads on
+  every preview, so it was the most-read inaccuracy in the panel. The fallback
+  reasons still appear when there was a real choice — checked, because
+  silencing them everywhere would have been the easy version of this fix.
+- **The link can be checked where it is produced.** The panel made a URL and
+  the operator went to a player to find out whether it worked; it now asks the
+  same question itself and reports what came back — and asks about the edge the
+  arbiter actually chose, since probing every node and showing the first answer
+  would report on a machine the viewer will never touch.
+- **A player, in a dialog, and it is the existing one.** `HlsPlayer` from the
+  Streams tab is exported rather than a second player growing here: the hls.js
+  lazy import, the Safari native path and the error wording only need to be
+  right once. Under a redirect gateway it plays the target rather than the
+  front URL — feeding a player something that 302s tests the redirect, not the
+  media.
+
+Four gates, proven by contradiction, including the two that are easy to get
+subtly wrong: a check that matches the probe to the chosen edge, and one that
+fails if the player is handed the front URL.
+
 ### v0.68.0 — the delivery worked; the panel was the thing that was broken
 An operator started a stream, opened the edge URL, watched the video, and the
 panel said "no healthy edge serving this application". The infrastructure was

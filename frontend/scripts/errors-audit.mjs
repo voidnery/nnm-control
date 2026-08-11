@@ -52,6 +52,29 @@ for (const code of codes) {
   }
 }
 
+console.log('\nEVERY FINDING SAYS WHAT TO DO:');
+
+// The configuration overview follows the same contract as errors: a code, a
+// sentence, and a fix — in both languages. A finding with no fix is a
+// complaint, and a panel full of complaints is one the operator scrolls past.
+const overview = readFileSync(path.join(BACKEND, 'services/configOverview.js'), 'utf8');
+const findings = [...new Set([...overview.matchAll(/add\('([a-z-]+)'/g)].map(m => m[1]))];
+if (findings.length < 8) {
+  fail(`only ${findings.length} finding code(s) found; this check has lost its subject`);
+} else {
+  ok(`${findings.length} finding code(s) found`);
+}
+for (const code of findings) {
+  if (hasKey('cfg.' + code) < 2) {
+    fail(`cfg.${code} is missing from a dictionary — the operator would see the raw code`);
+  } else if (hasKey(`cfg.${code}.fix`) < 2) {
+    fail(`cfg.${code} says what is true but not what to do about it`);
+  }
+}
+if (findings.every(c => hasKey('cfg.' + c) === 2 && hasKey(`cfg.${c}.fix`) === 2)) {
+  ok('every finding explains itself and its fix, in both languages');
+}
+
 // The explanation has to be reachable: a component that catches a failure and
 // renders `e.message` puts the transport's words on screen instead.
 const errors = readFileSync(path.join(SRC, 'lib/errors.js'), 'utf8');

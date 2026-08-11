@@ -40,7 +40,15 @@ function resolveLocal(fromFile, spec) {
 const imported = new Set();
 for (const file of files) {
   const src = readFileSync(file, 'utf8');
-  for (const m of src.matchAll(/(?:import\s[^'"]*?from\s*|import\s*)['"]([^'"]+)['"]/g)) {
+  // Static imports, and dynamic ones. A component reached only through
+  // `lazy(() => import('./X.jsx'))` is as much part of the running app as any
+  // other — and this gate called the first such component dead, which is
+  // exactly backwards: it was lazy *because* it is expensive and real.
+  const patterns = [
+    /(?:import\s[^'"]*?from\s*|import\s*)['"]([^'"]+)['"]/g,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ];
+  for (const m of [...patterns.flatMap(re => [...src.matchAll(re)])]) {
     const target = resolveLocal(file, m[1]);
     if (target) imported.add(target);
   }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
@@ -9,6 +9,13 @@ import Modal from './Modal.jsx';
 import DeliveryRoutesPanel from './DeliveryRoutesPanel.jsx';
 import ProbePanel from './ProbePanel.jsx';
 import GatewayPanel from './GatewayPanel.jsx';
+import ConfigOverviewPanel from './ConfigOverviewPanel.jsx';
+
+// Lazy, and for two reasons rather than one. three.js is comparable in size to
+// the rest of the bundle put together, and the country polygons are another
+// 155 kB — imported statically they land in the main chunk and every page of
+// the panel pays for a globe on one tab of one page.
+const GlobePanel = lazy(() => import('./GlobePanel.jsx'));
 
 // The delivery network: which box is an ingest, an origin, an edge, and where
 // each one physically is.
@@ -42,7 +49,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
   // three jobs done at different moments — building it, running it, checking
   // it — and stacking them vertically meant the page grew downwards on every
   // button press until nothing could be held in view at once.
-  const [tab, setTab] = useState('topology');      // local copy of the nodes being edited
+  const [tab, setTab] = useState('overview');      // local copy of the nodes being edited
 
   const load = async () => {
     setError('');
@@ -153,7 +160,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
 
         {net && (
           <div className="row" style={{ gap: 6, marginTop: 10 }}>
-            {['topology', 'delivery', 'gateway', 'probes'].map(v => (
+            {['overview', 'topology', 'delivery', 'gateway', 'probes', 'globe'].map(v => (
               <button key={v} className={'tagchip' + (tab === v ? ' on' : '')} onClick={() => setTab(v)}>
                 {t('cdn.tab.' + v)}
                 {/* Unsaved topology is the one thing worth carrying across
@@ -170,6 +177,8 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
         <div className="panel hint">{t('cdn.noNetwork')}</div>
       ) : (
         <>
+          {tab === 'overview' && <ConfigOverviewPanel network={net} />}
+
           {tab === 'topology' && (
           <div className="panel">
             <h2 style={{ marginTop: 0 }}>{t('cdn.tab.topology')}</h2>
@@ -241,6 +250,11 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
           {tab === 'delivery' && <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} />}
           {tab === 'gateway' && <GatewayPanel network={net} servers={servers} />}
           {tab === 'probes' && <ProbePanel network={net} />}
+          {tab === 'globe' && (
+            <Suspense fallback={<div className="panel hint">{t('globe.loading')}</div>}>
+              <GlobePanel network={net} servers={servers} />
+            </Suspense>
+          )}
         </>
       )}
 

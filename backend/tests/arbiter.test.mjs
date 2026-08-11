@@ -90,6 +90,29 @@ check('failover takes the operator\'s own order', () => {
   assert.equal(r2.edge.name, 'ams', 'a dead first choice is skipped, not returned');
 });
 
+check('one candidate is named as such, not as a policy outcome', () => {
+  // A network with a single edge ran no comparison, and saying "weight was
+  // used" would describe one. This is what an operator with one edge sees on
+  // every preview, so it is the sentence most often read.
+  const r = chooseEdge([FRA], { policy: 'nearest', viewer: BERLIN, channel: 'test2' });
+  assert.equal(r.edge.name, 'fra');
+  assert.equal(r.reason, 'only-candidate');
+  assert.equal(r.considered, 1);
+});
+
+check('a fallback is still reported when there was a real choice', () => {
+  // The distinction only holds if two candidates still produce the fallback
+  // reason — otherwise this would have quietly silenced it everywhere.
+  const r = chooseEdge([FRA, AMS], { policy: 'nearest', viewer: null, channel: 'test2' });
+  assert.equal(r.reason, 'viewer-unlocated');
+});
+
+check('one candidate wins even when the policy could not have run', () => {
+  const flat = [{ ...FRA, lat: null, lon: null }];
+  const r = chooseEdge(flat, { policy: 'nearest', viewer: BERLIN, channel: 'test2' });
+  assert.equal(r.reason, 'only-candidate');
+});
+
 console.log('\nWHEN CHOOSING IS IMPOSSIBLE, IT SAYS SO:');
 
 check('an unlocated viewer falls back and admits it', () => {

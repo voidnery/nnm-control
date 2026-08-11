@@ -7,6 +7,8 @@ import { wmspanel } from '../services/wmspanelClient.js';
 import { planRoutes } from '../services/deliveryPlan.js';
 import { networkState, indexStreams, probeReason } from '../services/networkState.js';
 import { playlistPath, parsePlaylist, movedOn, classifyProbe } from '../services/playlistProbe.js';
+import { configOverview } from '../services/configOverview.js';
+import { status as geoStatus } from '../services/geoip.js';
 import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { logEvent } from '../services/audit.js';
 
@@ -71,6 +73,22 @@ deliveryRoutesRouter.get('/networks/:id/applications', requirePerm('cdn.view'), 
     }
   }));
   res.json({ applications: [...found.values()].sort((a, b) => a.application.localeCompare(b.application)), asked });
+});
+
+// Everything that is switched on, and everything that quietly is not.
+//
+// The settings deciding how this network behaves live on four tabs and two
+// other pages; several of them interact in ways invisible from either side.
+// Gathered here so "what is actually enabled" is one question with one answer.
+deliveryRoutesRouter.get('/networks/:id/overview', requirePerm('cdn.view'), async (req, res) => {
+  const g = await gather(req.params.id);
+  if (g.error) return res.status(404).json({ error: g.error });
+  const channels = String(req.query.channels || '').split(/[\s,]+/).filter(Boolean);
+  const geo = await geoStatus().catch(() => null);
+  res.json(configOverview({
+    network: g.network, servers: g.servers,
+    originApps: g.originApps, routes: g.existingRoutes, geo, channels,
+  }));
 });
 
 // Be the viewer.

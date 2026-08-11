@@ -163,6 +163,14 @@ window.fetch = (u) => {
     attribution:{ text:'IP Geolocation by DB-IP', url:'https://db-ip.com' } }), text:()=>Promise.resolve('{}') });
   // iter20 m2 - the plan endpoint. Without it the routes panel renders against
   // undefined the moment a network is selected.
+  // Scoped to the delivery network. A bare /overview$ also matches
+  // /agent-fleet/overview, and answering that with this shape blanked the
+  // agents page — a fixture stealing another page's endpoint.
+  if (/\/cdn\/networks\/[^/]+\/overview/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    summary:{ roles:{origin:1,edge:1}, gateway:{mode:'direct',policy:'nearest',whenAllDown:'fail',domain:'',node:''},
+              audience:'internal', geo:{present:true,edition:'city',hasCoordinates:true}, routes:2, agents:1, nodes:2 },
+    findings:[{ code:'node-without-agent', severity:'note', subject:'Nimble RU-2' }],
+    counts:{block:0,warn:0,note:1} }), text:()=>Promise.resolve('{}') });
   if (/\/gateway$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     gateway:{ enabled:false, mode:'direct', policy:'nearest', whenAllDown:'fail', domain:'', node:null } }), text:()=>Promise.resolve('{}') });
   if (/resolve-preview$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({

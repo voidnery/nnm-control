@@ -83,7 +83,10 @@ export function endpointLabel(e) {
 
 // hls.js is loaded on demand: the player is a rarely used surface and the
 // library is far larger than the rest of the page.
-function HlsPlayer({ url }) {
+// Exported so other surfaces play a stream through this one rather than
+// growing a second player: hls.js loading, the Safari native path, the error
+// wording and the lazy import all live here and only need to be right once.
+export function HlsPlayer({ url }) {
   const { t } = useI18n();
   const videoRef = useRef(null);
   const [error, setError] = useState('');

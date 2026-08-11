@@ -4,6 +4,8 @@ import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import ErrorDialog from './ErrorDialog.jsx';
+import Modal from './Modal.jsx';
+import { HlsPlayer } from './StreamPlayback.jsx';
 import { explainError } from '../lib/errors.js';
 
 // How a viewer gets a link, and what that choice costs.
@@ -28,6 +30,11 @@ export default function GatewayPanel({ network, servers = [] }) {
   const [probe, setProbe] = useState({ channel: '', stream: '', viewerIp: '' });
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState(null);
+  // Closing the loop. The panel produced a URL and the operator went to a
+  // player to find out whether it worked; it can ask the same question itself,
+  // and then play it here.
+  const [watch, setWatch] = useState(null);
+  const [playing, setPlaying] = useState('');
 
   const agents = servers.filter(s => s.agent?.enabled || s.hasAgent);
 
@@ -47,6 +54,19 @@ export default function GatewayPanel({ network, servers = [] }) {
       setPreview(await api(`/cdn/networks/${network.id}/resolve-preview`, {
         method: 'POST', body: { ...probe },
       }));
+    } catch (e) { setProblem(explainError(e, t)); }
+    finally { setBusy(false); }
+  };
+
+  const checkUrl = async () => {
+    setBusy(true); setWatch(null);
+    try {
+      const r = await api(`/cdn/networks/${network.id}/watch`, {
+        method: 'POST', body: { application: probe.channel.trim(), stream: probe.stream.trim() },
+      });
+      // The node the arbiter actually chose, not every node in the network:
+      // this answers "does the link I am looking at work".
+      setWatch(r.results.find(x => x.server === preview?.decision?.edge?.name) || r.results[0] || null);
     } catch (e) { setProblem(explainError(e, t)); }
     finally { setBusy(false); }
   };
@@ -125,6 +145,20 @@ export default function GatewayPanel({ network, servers = [] }) {
         <button onClick={runPreview} disabled={busy || !probe.channel.trim()}>{t('gw.preview')}</button>
       </div>
 
+      {/* The player the Streams tab already uses. A second one would be a
+          second place for hls.js loading, the Safari path and the error
+          wording to be wrong in. */}
+      {playing && (
+        <Modal onClose={() => setPlaying('')} size="wide">
+          <h3>{t('gw.playing')}</h3>
+          <div className="mono hint" style={{ fontSize: 12, wordBreak: 'break-all', marginBottom: 8 }}>{playing}</div>
+          <HlsPlayer url={playing} />
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
+            <button onClick={() => setPlaying('')}>{t('action.close')}</button>
+          </div>
+        </Modal>
+      )}
+
       {preview && (
         <div className="panel" style={{ marginTop: 10 }}>
           {preview.url ? (
@@ -151,6 +185,18 @@ export default function GatewayPanel({ network, servers = [] }) {
                 </div>
               )}
               {preview.degraded && <div className="hint">{t('gw.degraded.' + preview.degraded)}</div>}
+
+              <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button onClick={checkUrl} disabled={busy || !probe.stream.trim()}>{t('gw.checkUrl')}</button>
+                <button onClick={() => setPlaying(preview.redirectsTo || preview.url)}
+                        disabled={!probe.stream.trim()}>{t('gw.play')}</button>
+                {!probe.stream.trim() && <span className="hint">{t('gw.needStream')}</span>}
+                {watch && (
+                  <span className={'badge ' + (watch.verdict.ok ? 'live' : 'err')}>
+                    {t('cdn.w.' + watch.verdict.code)}{watch.ms != null ? ` · ${watch.ms} ms` : ''}
+                  </span>
+                )}
+              </div>
             </>
           ) : (
             <div className="error-box">

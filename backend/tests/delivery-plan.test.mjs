@@ -495,5 +495,39 @@ check('live mode refreshes and stops', () => {
   assert.ok(/clearInterval/.test(panelCode), 'the live refresh is never stopped');
 });
 
+console.log('\nTHE PREVIEW CLOSES ITS OWN LOOP:');
+
+const gwSrc = stripComments(readFile(new URL('components/GatewayPanel.jsx', FRONT), 'utf8'));
+
+check('the produced link can be checked without leaving the page', () => {
+  // The panel produced a URL and the operator went to a player to find out
+  // whether it worked. It can ask the same question itself.
+  assert.ok(/networks\/\$\{network\.id\}\/watch/.test(gwSrc), 'the preview cannot check its own link');
+});
+
+check('the check asks about the edge that was actually chosen', () => {
+  // Probing every node and showing the first answer would report on a machine
+  // the viewer will never touch.
+  assert.ok(/preview\?\.decision\?\.edge\?\.name/.test(gwSrc),
+    'the check does not match its result to the chosen edge');
+});
+
+check('there is one player, not two', () => {
+  // hls.js loading, the Safari native path, the lazy import and the error
+  // wording only need to be right once.
+  assert.ok(/import \{ HlsPlayer \} from '\.\/StreamPlayback\.jsx'/.test(gwSrc),
+    'the gateway panel does not reuse the existing player');
+  const own = readFile(new URL('components/StreamPlayback.jsx', FRONT), 'utf8');
+  assert.ok(/export function HlsPlayer/.test(own), 'the player is not exported for reuse');
+  assert.ok(!/hls\.js/.test(gwSrc), 'the gateway panel loads hls.js itself');
+});
+
+check('the player plays what the viewer would fetch', () => {
+  // Under a redirect gateway the front URL 302s; feeding the front URL to a
+  // player tests the redirect, not the media. The final target is what plays.
+  assert.ok(/preview\.redirectsTo \|\| preview\.url/.test(gwSrc),
+    'the player is given the front URL rather than the one the media comes from');
+});
+
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');
 process.exit(failures ? 1 : 0);

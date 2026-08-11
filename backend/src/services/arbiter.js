@@ -44,6 +44,12 @@ export function chooseEdge(edges, { policy = 'nearest', viewer = null, channel =
   const pool = candidates(edges, { channel });
   if (!pool.length) return { edge: null, reason: 'no-healthy-edge', considered: edges.length };
 
+  // With one candidate no policy ran and nothing was compared. Reporting
+  // "weight was used" here describes a comparison that never happened — the
+  // same small dishonesty this milestone has been removing everywhere else,
+  // and the one an operator with a single edge would read on every preview.
+  if (pool.length === 1) return { edge: pool[0], reason: 'only-candidate', considered: 1 };
+
   if (policy === 'nearest') {
     // Only edges whose position is known can be ranked by distance, and a
     // viewer whose position is unknown cannot rank anything. Falling through
