@@ -98,7 +98,7 @@ function GeoCell({ server, onEdit, onResolve, canManage, busy }) {
           </>
         ) : <span className="hint">{t('cdn.geoUnknown')}</span>}
       </div>
-      <div className="hint" style={{ fontSize: 11 }}>
+      <div className="hint" >
         {g.lat != null
           ? <>{g.lat.toFixed(3)}, {g.lon.toFixed(3)} · {t(g.coordsSource === 'manual' ? 'cdn.manual' : 'cdn.auto')}</>
           : t('cdn.noCoords')}

@@ -62,9 +62,16 @@ export default function GlobePanel({ network, servers = [] }) {
       const height = Math.round(Math.min(560, Math.max(360, width * 0.6)));
 
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100);
-      camera.position.set(0, 0.9, 3.1);
-      camera.lookAt(0, 0, 0);
+      const camera = new THREE.PerspectiveCamera(42, width / height, 0.05, 100);
+      // Distance from the centre, not a scale on the world: moving the camera
+      // keeps the markers the same size on screen while the planet grows,
+      // which is what "zoom in on the globe" means to the person asking.
+      const DIST = { min: 1.35, max: 4.6, now: 3.1 };
+      const place = () => {
+        camera.position.set(0, DIST.now * 0.29, DIST.now * 0.96);
+        camera.lookAt(0, 0, 0);
+      };
+      place();
 
       let renderer;
       try {
@@ -198,8 +205,22 @@ export default function GlobePanel({ network, servers = [] }) {
         setPicked({ lat, lon, cc: near?.cc || '', name: near?.name || '', exact: Boolean(exact) });
       };
 
+      // Wheel, pinch, and buttons. The wheel is damped and clamped: an
+      // untrimmed wheel handler on a globe either does nothing on a trackpad
+      // or throws the camera inside the planet on a mouse.
+      const zoomBy = (factor) => {
+        DIST.now = Math.min(DIST.max, Math.max(DIST.min, DIST.now * factor));
+        place();
+      };
+      stateRef.current.zoomBy = zoomBy;
+      const onWheel = (e) => {
+        e.preventDefault();
+        zoomBy(Math.exp(Math.max(-0.5, Math.min(0.5, e.deltaY * 0.0016))));
+      };
+
       const el = renderer.domElement;
       el.style.cursor = 'grab';
+      el.addEventListener('wheel', onWheel, { passive: false });
       el.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
@@ -216,6 +237,7 @@ export default function GlobePanel({ network, servers = [] }) {
       cleanup = () => {
         cancelAnimationFrame(raf);
         el.removeEventListener('pointerdown', onDown);
+        el.removeEventListener('wheel', onWheel);
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         renderer.dispose();
@@ -248,7 +270,15 @@ export default function GlobePanel({ network, servers = [] }) {
           {t(failed === 'webgl' ? 'globe.noWebgl' : 'globe.failed')}
         </div>
       )}
-      <div ref={mountRef} style={{ marginTop: 10, minHeight: 360 }} />
+      <div style={{ position: 'relative', marginTop: 14 }}>
+        <div ref={mountRef} style={{ minHeight: 360 }} />
+        {ready && (
+          <div className="globe-zoom">
+            <button title={t('globe.zoomIn')} onClick={() => stateRef.current.zoomBy?.(0.8)}>+</button>
+            <button title={t('globe.zoomOut')} onClick={() => stateRef.current.zoomBy?.(1.25)}>−</button>
+          </div>
+        )}
+      </div>
       {!ready && !failed && <div className="hint">{t('globe.loading')}</div>}
 
       {unplaced.length > 0 && (
@@ -258,8 +288,8 @@ export default function GlobePanel({ network, servers = [] }) {
       )}
 
       {picked && (
-        <div className="panel" style={{ marginTop: 10 }}>
-          <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <div className="inset">
+          <div className="row" style={{ gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
             <b>{picked.name || t('globe.openSea')}</b>
             {picked.cc && <span className="badge">{picked.cc}</span>}
             {!picked.exact && <span className="hint">{t('globe.nearest')}</span>}
@@ -268,7 +298,7 @@ export default function GlobePanel({ network, servers = [] }) {
             </span>
             <button disabled={busy} onClick={measure}>{busy ? '…' : t('globe.measure')}</button>
           </div>
-          <div className="hint" style={{ fontSize: 11, marginTop: 4 }}>{t('globe.measureHint')}</div>
+          <div className="hint" style={{ marginTop: 4 }}>{t('globe.measureHint')}</div>
 
           {probe?.error && <div className="error-box">{probe.error}</div>}
           {probe?.rows?.length > 0 && (

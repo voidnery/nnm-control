@@ -96,12 +96,12 @@ export default function GatewayPanel({ network, servers = [] }) {
             <option value="">{t('gw.pickNode')}</option>
             {agents.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <div className="hint" style={{ fontSize: 11 }}>{t('gw.nodeHint')}</div>
+          <div className="hint" >{t('gw.nodeHint')}</div>
 
           <label>{t('gw.domain')}</label>
           <input className="mono" placeholder="cdn.example.com" value={gw.domain || ''} disabled={!canManage}
                  onChange={e => setGw({ ...gw, domain: e.target.value })} />
-          <div className="hint" style={{ fontSize: 11 }}>{t('gw.domainHint')}</div>
+          <div className="hint" >{t('gw.domainHint')}</div>
         </>
       )}
 
@@ -125,7 +125,7 @@ export default function GatewayPanel({ network, servers = [] }) {
           </button>
         ))}
       </div>
-      <div className="hint" style={{ fontSize: 11 }}>{t('gw.downHint')}</div>
+      <div className="hint" >{t('gw.downHint')}</div>
 
       {canManage && (
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
@@ -134,7 +134,7 @@ export default function GatewayPanel({ network, servers = [] }) {
       )}
 
       <div className="gsection">{t('gw.previewTitle')}</div>
-      <div className="hint" style={{ fontSize: 11 }}>{t('gw.previewHint')}</div>
+      <div className="hint" >{t('gw.previewHint')}</div>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
         <input className="mono" style={{ maxWidth: 160 }} placeholder={t('gw.channel')}
                value={probe.channel} onChange={e => setProbe({ ...probe, channel: e.target.value })} />
@@ -160,7 +160,7 @@ export default function GatewayPanel({ network, servers = [] }) {
       )}
 
       {preview && (
-        <div className="panel" style={{ marginTop: 10 }}>
+        <div className="inset">
           {preview.url ? (
             <>
               <div className="mono" style={{ wordBreak: 'break-all' }}>{preview.url}</div>
@@ -178,7 +178,7 @@ export default function GatewayPanel({ network, servers = [] }) {
                 </span>
               </div>
               {preview.decision.runnersUp?.length > 0 && (
-                <div className="hint" style={{ fontSize: 11, marginTop: 4 }}>
+                <div className="hint" style={{ marginTop: 4 }}>
                   {t('gw.runnersUp')} {preview.decision.runnersUp
                     .map(r => `${r.edge} (${r.distanceKm != null ? r.distanceKm + ' km' : r.connections})`)
                     .join(', ')}

@@ -1,5 +1,46 @@
 # Changelog
 
+### v0.71.0 — a hierarchy that was not one
+The pages were hard to use and there was nothing to point at, because the fault
+was not in any single rule. It was in the numbers: `h2` at 15px over a 14px
+body, a ratio of 1.07, and `.gsection` at 11px — a section heading set *smaller
+than the text beneath it*. Everything was roughly the same size, so nothing
+led, and the eye had to read the whole page to find anything on it.
+
+- **A scale with real steps**: 15 → 19 → 24 → 30, each at least 1.25 from the
+  last, which is where a difference starts reading as deliberate rather than
+  accidental. Meta and micro sit below the body as de-emphasis; they are not
+  steps in the ladder and are not treated as any.
+- **Section headings are headings.** `.gsection` is the 19px step in the text
+  colour instead of an 11px grey eyebrow. The uppercase micro-label survives as
+  `.eyebrow`, for column and field labels, which is what it was always good at.
+- **"At a glance" was written entirely in `.hint`** — the statement and its fix
+  both 13px grey, everything equally quiet and nothing legible from across a
+  desk. The figures now read at the heading step, the findings at body size in
+  the text colour, and only the fixes stay quiet, because they are read second.
+  The nine facts sit in a grid rather than a wrapping row, so the labels land
+  in the same places on every visit.
+- **Result blocks stopped being cards inside cards.** A rule and some air do
+  the same job without two containers competing. Blocking findings get a tinted
+  field rather than a coloured edge.
+- **The globe zooms**, by wheel, and by two buttons for anyone without one. The
+  camera moves rather than the world scaling, so markers keep their size while
+  the planet grows — which is what "zoom in on the globe" means to the person
+  asking for it.
+
+**A new gate: `audit:type`.** This class of fault has no single line to blame,
+so the numbers are the only place it shows: the scale must keep its 1.25 steps,
+headings must be set from it, and nothing may undercut the smallest step with
+an inline size. That last rule found **24 places where I had done exactly
+that** — each one locally reasonable, and together the mechanism by which the
+hierarchy had flattened in the first place.
+
+Both of the gate's own first attempts were wrong, and both are worth recording.
+It counted panels per file and called two siblings a nest, which would have
+demanded a worse layout than the one it found. Then the nesting scan matched
+each panel against itself, so every file reported a fault — and a check that
+fires on everything is indistinguishable from one that fires on nothing.
+
 ### v0.70.1 — a page of demands, most of them invented
 An operator opened "At a glance" on a network that was delivering video and
 asked what the panel wanted from them. Two of the three things it appeared to

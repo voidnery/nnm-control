@@ -11,11 +11,14 @@ import { useI18n } from '../i18n.jsx';
 // object to trains the operator to scroll past all of it.
 const TONE = { block: 'err', warn: 'warn', note: '' };
 
-function Fact({ label, value, tone = '' }) {
+// A label and a figure. The label is the small one — it was the other way
+// round, with values at 13px under 10px labels, so the thing worth reading
+// was the thing hardest to read.
+function Fact({ label, value }) {
   return (
-    <div style={{ minWidth: 130 }}>
-      <div className="hint" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px' }}>{label}</div>
-      <div className={tone ? `badge ${tone}` : ''} style={{ fontSize: 13 }}>{value}</div>
+    <div>
+      <div className="eyebrow">{label}</div>
+      <div className="cfg-value">{value}</div>
     </div>
   );
 }
@@ -43,7 +46,10 @@ export default function ConfigOverviewPanel({ network, channels = '' }) {
       <h2 style={{ marginTop: 0 }}>{t('cfg.title')}</h2>
       <div className="hint">{t('cfg.intro')}</div>
 
-      <div className="row" style={{ gap: 18, flexWrap: 'wrap', marginTop: 12 }}>
+      {/* A grid rather than a wrapping row: nine facts in a row reflow into
+          ragged columns that never line up twice, and the eye has to re-find
+          the labels on every visit. */}
+      <div className="cfg-grid">
         <Fact label={t('cfg.f.audience')} value={t('cdn.audience.' + s.audience)} />
         <Fact label={t('cfg.f.shape')} value={t('cfg.shapeValue', {
           origin: s.roles.origin || 0, edge: s.roles.edge || 0, mid: s.roles.mid || 0,
@@ -68,27 +74,30 @@ export default function ConfigOverviewPanel({ network, channels = '' }) {
           {/* What is actually required of the operator, said first. A list of
               observations reads as a list of demands unless it says which of
               them are demands — and here that is usually none. */}
-          <div className="hint" style={{ fontSize: 12, marginBottom: 8 }}>
+          <div className="cfg-lead">
             {data.counts.block
               ? t('cfg.mustFix', { n: data.counts.block })
               : t('cfg.nothingRequired')}
             {' '}
             {t('cfg.counts', { block: data.counts.block, warn: data.counts.warn, note: data.counts.note })}
           </div>
+          {/* The finding itself reads at body size in the text colour. It was
+              wrapped in .hint, so the statement and its fix were both 13px
+              grey: everything equally quiet, and nothing legible at a glance.
+              Only the fix stays quiet, because it is read second. */}
           {data.findings.map((f, i) => (
-            <div key={i} className={f.severity === 'block' ? 'error-box' : 'hint'} style={{ marginBottom: 6 }}>
-              <div className="row" style={{ gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+            <div key={i} className={'cfg-finding' + (f.severity === 'block' ? ' blocking' : '')}>
+              <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
                 <span className={'badge ' + (TONE[f.severity] || '')}>{t('cdn.sev.' + f.severity)}</span>
-                <span>{t('cfg.' + f.code)}</span>
+                <span className="cfg-what">{t('cfg.' + f.code)}</span>
                 {f.subject && <b>{f.subject}</b>}
                 {f.application && <span className="mono">{f.application}</span>}
               </div>
-              {/* What to do, always — the same contract the error dialog keeps.
-                  A finding with no fix is a complaint. */}
-              <div style={{ fontSize: 11, marginTop: 2 }}>
+              {/* What to do, always. A finding with no fix is a complaint. */}
+              <div className="hint" style={{ marginTop: 4 }}>
                 {t('cfg.' + f.code + '.fix', { have: f.have, need: f.need })}
               </div>
-              {f.from && <div className="mono" style={{ fontSize: 11 }}>{f.from} → {f.to}</div>}
+              {f.from && <div className="mono hint" style={{ marginTop: 2 }}>{f.from} → {f.to}</div>}
             </div>
           ))}
         </>

@@ -38,7 +38,7 @@ function Reading({ streams, bandwidth, probe, t }) {
     return (
       <div>
         <div className="gnode-title">{t('cdn.noReading')}</div>
-        {probe?.reason && <div className="hint" style={{ fontSize: 10 }}>{t('cdn.reason.' + probe.reason)}</div>}
+        {probe?.reason && <div className="hint" >{t('cdn.reason.' + probe.reason)}</div>}
       </div>
     );
   }
@@ -47,7 +47,7 @@ function Reading({ streams, bandwidth, probe, t }) {
       <div className="gnode-title">{t('cdn.nStreams', { n: streams })}</div>
       <div className="gnode-sub mono">{fmtBw(bandwidth)}</div>
       {probe && (
-        <div className="hint" style={{ fontSize: 10 }}>
+        <div className="hint" >
           {t(probe.transport === 'agent' ? 'cdn.viaAgent' : 'cdn.viaDirect')}
         </div>
       )}
@@ -67,7 +67,7 @@ export default function DeliveryFlowBoard({ row, watch = null, onWatch = null, b
         {/* An agent missing on a box is not an error and is worth saying once,
             where the direct read it caused is visible. */}
         {row.edgeProbe?.transport === 'direct' && row.edgeProbe?.ok && (
-          <span className="hint" style={{ fontSize: 11 }}>{t('cdn.noAgentHere', { name: row.edge })}</span>
+          <span className="hint" >{t('cdn.noAgentHere', { name: row.edge })}</span>
         )}
       </div>
 
@@ -125,14 +125,14 @@ export default function DeliveryFlowBoard({ row, watch = null, onWatch = null, b
                 {t('cdn.w.' + watch.verdict.code)}
               </span>
             : <span className="badge">{t('cdn.notChecked')}</span>}
-          {watch?.ms != null && <span className="mono" style={{ fontSize: 10 }}> · {watch.ms} ms</span>}
+          {watch?.ms != null && <span className="mono" > · {watch.ms} ms</span>}
         </span>
         <span className="hint">
           {t('cdn.f.inUse')}{' '}
           <span className="badge">{row.edgeStreams ? t('cdn.watching') : t('cdn.resting')}</span>
         </span>
         {onWatch && (
-          <button style={{ fontSize: 11, padding: '1px 8px' }} disabled={busy} onClick={onWatch}>
+          <button style={{ padding: '1px 8px' }} disabled={busy} onClick={onWatch}>
             {t('cdn.watchNow')}
           </button>
         )}

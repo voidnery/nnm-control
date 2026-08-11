@@ -168,7 +168,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
             </button>
           ))}
           {found.asked?.filter(x => !x.ok).map((x, i) => (
-            <span key={i} className="hint" style={{ fontSize: 11 }}>
+            <span key={i} className="hint" >
               {x.server}: {t('cdn.reason.' + x.reason)}
             </span>
           ))}
@@ -176,7 +176,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       )}
       <input className="mono" placeholder="kp_24-7 blastdotakk" value={channels}
              onChange={e => setChannels(e.target.value)} />
-      <div className="hint" style={{ fontSize: 11 }}>{t('cdn.channelsHint')}</div>
+      <div className="hint" >{t('cdn.channelsHint')}</div>
 
       {/* Numbered, because these used to sit side by side as equals and the
           order between them was something the operator had to already know.
@@ -201,7 +201,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
               {t('cdn.problem.' + p.code) !== 'cdn.problem.' + p.code ? t('cdn.problem.' + p.code) : p.code}
               {p.server && <> · <b>{p.server}</b></>}
               {p.application && <> · <span className="mono">{p.application}</span></>}
-              {p.detail && <div style={{ fontSize: 11, marginTop: 2 }}>{p.detail}</div>}
+              {p.detail && <div style={{ marginTop: 2 }}>{p.detail}</div>}
             </div>
           ))}
         </div>
@@ -220,12 +220,12 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
                 <td className="mono" style={{ fontSize: 12 }}>{p.from}</td>
                 <td className="mono" style={{ fontSize: 12 }}>
                   {p.to}
-                  {p.was && <div className="hint" style={{ fontSize: 11 }}>{t('cdn.was')} {p.was}</div>}
+                  {p.was && <div className="hint" >{t('cdn.was')} {p.was}</div>}
                   {/* Where the two guessable parts came from, next to the value
                       they produced — the port especially, since an assumed one
                       produces a route that resolves and never serves. */}
                   {p.portSource === 'nimble-default' && (
-                    <div className="hint" style={{ fontSize: 11 }}>{t('cdn.portAssumed')}</div>
+                    <div className="hint" >{t('cdn.portAssumed')}</div>
                   )}
                 </td>
               </tr>
@@ -236,7 +236,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       )}
 
       {report && (
-        <div className="panel" style={{ marginTop: 10 }}>
+        <div className="inset">
           <b>{report.ok ? t('cdn.applyDone', { n: report.applied }) : t('cdn.applyStopped', { n: report.applied })}</b>
           {report.steps?.map((s, i) => (
             <div key={i} className="hint" style={{ fontSize: 12 }}>
@@ -245,7 +245,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
               {s.error ? ` — ${s.error}` : ''}
               {s.rolledBack ? ` · ${s.rolledBack}` : ''}
               {s.upstreamError && (
-                <div className="mono" style={{ fontSize: 11, marginLeft: 14, wordBreak: 'break-all' }}>
+                <div className="mono" style={{ marginLeft: 14, wordBreak: 'break-all' }}>
                   {t('cdn.upstreamSaid')} {typeof s.upstreamError === 'string' ? s.upstreamError : JSON.stringify(s.upstreamError)}
                 </div>
               )}
@@ -265,7 +265,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         </label>
         {!state && <span className="hint">{t('cdn.stateWhy')}</span>}
       </div>
-      <div className="hint" style={{ fontSize: 11 }}>{t('cdn.streamNameHint')}</div>
+      <div className="hint" >{t('cdn.streamNameHint')}</div>
 
       {state && (
         <div style={{ marginTop: 10 }}>
@@ -278,12 +278,12 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
               broken: state.summary.broken, unknown: state.summary.unknown,
             })}
           </div>
-          <div className="hint" style={{ fontSize: 11 }}>{t('cdn.stateHint')}</div>
+          <div className="hint" >{t('cdn.stateHint')}</div>
           {state.unreachable?.length > 0 && state.unreachable.map((u, i) => (
             <div key={i} className="hint" style={{ marginTop: 4 }}>
               <span className="badge warn">{t('cdn.unreachable')}</span>{' '}
               <b>{u.server}</b> — {t('cdn.reason.' + u.reason)}
-              {u.error && <span className="mono" style={{ fontSize: 11 }}> · {u.error}</span>}
+              {u.error && <span className="mono" > · {u.error}</span>}
             </div>
           ))}
           {state.rows.map((r, i) => <DeliveryFlowBoard key={i} row={r} />)}
@@ -307,7 +307,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
           </button>
           {showLive && <button onClick={loadLive} disabled={busy}>{t('action.refresh')}</button>}
         </div>
-        {showLive && <div className="hint" style={{ fontSize: 11 }}>{t('cdn.liveRoutesHint')}</div>}
+        {showLive && <div className="hint" >{t('cdn.liveRoutesHint')}</div>}
         {showLive && <table style={{ marginTop: 6 }}>
           <thead><tr><th>{t('cdn.from')}</th><th>{t('cdn.to')}</th><th>{t('cdn.onServers')}</th><th /></tr></thead>
           <tbody>

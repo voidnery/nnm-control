@@ -22,14 +22,14 @@ function Cell({ c, t }) {
     return (
       <td>
         <span className="badge err">{t('pr.noAnswer')}</span>
-        {c.error && <div className="hint mono" style={{ fontSize: 10 }}>{c.error}</div>}
+        {c.error && <div className="hint mono" >{c.error}</div>}
       </td>
     );
   }
   return (
     <td>
       <b>{fmtMs(c.minMs)}</b>
-      <div className="hint" style={{ fontSize: 10 }}>
+      <div className="hint" >
         {c.jitterMs ? t('pr.spread', { j: c.jitterMs }) : t('pr.steady')}
         {c.lossPct > 0 && <> · {t('pr.loss', { p: c.lossPct })}</>}
       </div>
