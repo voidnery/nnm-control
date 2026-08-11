@@ -5,6 +5,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from './IconButton.jsx';
+import DeliveryFlowBoard from './DeliveryFlowBoard.jsx';
 
 // What the network implies, before anything is written.
 //
@@ -17,25 +18,6 @@ const VERDICT = {
   flowing: 'live', 'origin-only': 'err', 'no-route': 'err',
   'nothing-upstream': '', 'edge-unreachable': 'warn', 'origin-unknown': 'warn',
 };
-// Bits per second as the operator reads them, and a dash rather than "0 bps"
-// when there is no reading at all.
-// Which path produced this number. An agent is preferred but the client falls
-// back to a direct dial when it cannot answer, so "there is an agent" and "the
-// agent answered this" are different, and only the second is worth printing.
-function Via({ probe }) {
-  const { t } = useI18n();
-  if (!probe) return null;
-  return (
-    <div className="hint" style={{ fontSize: 10 }}>
-      {t(probe.transport === 'agent' ? 'cdn.viaAgent' : 'cdn.viaDirect')}
-    </div>
-  );
-}
-
-const fmtBw = (bps) => (bps === null || bps === undefined) ? '—'
-  : bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbps`
-  : bps >= 1e3 ? `${(bps / 1e3).toFixed(0)} kbps` : `${bps} bps`;
-
 export default function DeliveryRoutesPanel({ network, servers = [], dirty = false }) {
   const { t } = useI18n();
   const { can } = useAuth();
@@ -55,6 +37,21 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   // native Nimble API, so it costs no WMSPanel quota and can be refreshed as
   // often as the operator wants to look.
   const [state, setState] = useState(null);
+  // Offered rather than demanded. The page used to open with an empty field
+  // and three disabled buttons, expecting the operator to know the names —
+  // which live on the origin, so the panel goes and reads them.
+  const [found, setFound] = useState(null);
+
+  const loadApps = async () => {
+    try { setFound(await api(`/cdn/networks/${network.id}/applications`)); }
+    catch { setFound({ applications: [], asked: [] }); }
+  };
+  useEffect(() => { loadApps(); }, [network.id]);
+
+  const toggleApp = (app) => setChannels(cur => {
+    const parts = cur.split(/[\s,]+/).filter(Boolean);
+    return parts.includes(app) ? parts.filter(x => x !== app).join(' ') : [...parts, app].join(' ');
+  });
 
   const loadLive = async () => {
     try { const r = await api('/cdn/routes'); setLive(Array.isArray(r?.routes) ? r.routes : []); }
@@ -126,7 +123,32 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       <div className="hint">{t('cdn.routesHint')}</div>
       {error && <div className="error-box">{error}</div>}
 
+      <ol className="hint" style={{ margin: '4px 0 10px 18px', padding: 0 }}>
+        <li>{t('cdn.step1')}</li>
+        <li>{t('cdn.step2')}</li>
+        <li>{t('cdn.step3')}</li>
+      </ol>
+
       <label>{t('cdn.channels')}</label>
+      {found && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+          {found.applications.length === 0 && (
+            <span className="hint">{t('cdn.noAppsFound')}</span>
+          )}
+          {found.applications.map(a => (
+            <button key={a.application}
+                    className={'tagchip' + (list.includes(a.application) ? ' on' : '')}
+                    onClick={() => toggleApp(a.application)}>
+              {a.application} <span className="hint">· {t('cdn.nStreams', { n: a.streams })}</span>
+            </button>
+          ))}
+          {found.asked?.filter(x => !x.ok).map((x, i) => (
+            <span key={i} className="hint" style={{ fontSize: 11 }}>
+              {x.server}: {t('cdn.reason.' + x.reason)}
+            </span>
+          ))}
+        </div>
+      )}
       <input className="mono" placeholder="kp_24-7 blastdotakk" value={channels}
              onChange={e => setChannels(e.target.value)} />
       <div className="hint" style={{ fontSize: 11 }}>{t('cdn.channelsHint')}</div>
@@ -194,31 +216,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
               {u.error && <span className="mono" style={{ fontSize: 11 }}> · {u.error}</span>}
             </div>
           ))}
-          <table style={{ marginTop: 6 }}>
-            <thead>
-              <tr><th>{t('cdn.edgeCol')}</th><th>{t('cdn.channels')}</th>
-                  <th>{t('cdn.onOrigin')}</th><th>{t('cdn.onEdge')}</th><th>{t('cdn.verdict')}</th></tr>
-            </thead>
-            <tbody>
-              {state.rows.map((r, i) => (
-                <tr key={i}>
-                  <td>{r.edge}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>{r.application}</td>
-                  {/* A dash where a count would be: the box could not be asked,
-                      and printing 0 would be a claim we cannot make. */}
-                  <td style={{ fontSize: 12 }}>
-                    {r.originStreams === null ? '—' : `${r.originStreams} · ${fmtBw(r.originBandwidth)}`}
-                    <Via probe={r.originProbe} />
-                  </td>
-                  <td style={{ fontSize: 12 }}>
-                    {r.edgeStreams === null ? '—' : `${r.edgeStreams} · ${fmtBw(r.edgeBandwidth)}`}
-                    <Via probe={r.edgeProbe} />
-                  </td>
-                  <td><span className={'badge ' + VERDICT[r.verdict]}>{t('cdn.v.' + r.verdict)}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {state.rows.map((r, i) => <DeliveryFlowBoard key={i} row={r} />)}
           {state.drift?.map((d, i) => (
             <div key={i} className="hint" style={{ marginTop: 4 }}>
               <span className="badge warn">{t('cdn.driftTag')}</span>{' '}

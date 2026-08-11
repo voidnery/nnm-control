@@ -1,5 +1,81 @@
 # Changelog
 
+### v0.64.0 — iter20 m4: measuring paths the panel is not on
+Whether an edge in Amsterdam can reach an origin in Moscow is a fact about
+those two machines. The panel sits on neither, so it asks the agent on one of
+them — which is the whole reason agents exist, and the reason a node without
+one cannot be measured *from*.
+
+- **Agent v20 carries `POST /probe`.** TCP connect time to a given host and
+  port, several attempts, min / max / average and how many answered. Not ICMP:
+  ping needs a raw socket, which means running the agent as root or shelling
+  out to a binary whose output differs per distro — and what an operator
+  actually needs is whether a connection to the port carrying the stream comes
+  up and how long it takes. The field is called `connectMs`, never "ping".
+- **No payload is transferred.** Throughput needs something to download and a
+  decision about what that costs on a live channel. This measures the path, not
+  its capacity, and the wording says so rather than implying more.
+- **A node with no agent is a gap with a reason, not a number.** The panel
+  could reach that box itself and produce a plausible latency — it would be the
+  panel's latency, presented as the edge's: the same shape of answer to a
+  different question. Three gaps are distinguished, because they have three
+  different fixes: no agent, an agent that is enabled and silent, and an agent
+  too old to probe. The fleet is never uniformly upgraded, and "no handler for
+  POST /probe" from a v19 agent must not read as a broken network.
+- **The spread is reported, not averaged away.** A path answering in 12 ms four
+  times and 900 ms once is not a 190 ms path, and the average is exactly the
+  number that makes it look like one. A target that never answered has no loss
+  figure at all — 100% loss and "no connection was ever made" look alike and
+  are not.
+
+**Reference points**, for measuring towards places we do not own. Country
+mirrors of the Ubuntu archive and cloud storage regional endpoints, each
+resolving to one region — no anycast, because 1.1.1.1 answers from whichever
+site is nearest the prober and measuring "towards Germany" against it measures
+nothing about Germany. Latency only: those hosts belong to other people, and
+pulling payload to measure our bandwidth would be spending theirs. Selection is
+by country first and great-circle distance second, so clicking western Germany
+measures to Germany rather than to a nearer host across the border.
+
+The list is a starting set, not an authority. A point that fails from *every*
+node is reported as a probably-stale entry of ours rather than as a region that
+has gone dark — the difference between an operator editing a hostname and an
+operator investigating a network that is fine.
+
+17 new checks, six of them proven by contradiction: probing an agentless node
+from the panel, collapsing the old-agent case into a failure, averaging away
+the spread, attributing 100% loss to something never reached, admitting an
+anycast host, and computing distance by subtracting coordinates.
+
+### v0.63.2 — every fact on screen, none of it legible
+The state view had columns for "on origin", "on edge" and a verdict. Reading it
+meant holding the direction of the flow in your head and mapping two numbers
+onto it — the job a picture does for free, and the one the transcoder screens
+have done since v0.60.0.
+
+- **Delivery is drawn as it runs**: origin → route → edge, three stages left to
+  right on the same board the transcoder screens use, with each reading on the
+  box it belongs to. The verdict is a sentence, not a tag: "origin-only" means
+  nothing until it is read as "the origin has this and the edge does not — the
+  route exists, so the edge is not managing to pull it".
+- **The applications are offered, not demanded.** The page opened with an empty
+  field and three disabled buttons, expecting the operator to know names that
+  live on the origin — so the panel goes and reads them, and they are one click
+  each. Typing still works for an application that exists in the plan before
+  anything is published under it.
+- **A missing agent is stated where its consequence is visible.** RU-2 has no
+  agent, so it is read by dialling it directly, and the board says so on the
+  row where that reading appears rather than in a footnote.
+
+**Two gates were testing their own location.** The dash-not-zero rule went red
+when the rendering moved to the new board, though the rule itself had not
+changed; rewritten to check whichever component renders readings. Then its
+contradiction passed anyway — a bandwidth formatter in the same file had a
+null check of its own, so a file-wide search matched a different rule that
+happened to look the same. Now bound to the stream count itself. Both of those
+were the check being wrong, not the code, and both only surfaced because the
+contradiction was run rather than assumed.
+
 ### v0.63.1 — a reading whose provenance was known and unsaid
 m3 read each box over the native Nimble API and showed the numbers without
 saying where they came from. The client prefers the agent and falls back to a

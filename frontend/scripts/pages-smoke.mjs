@@ -163,6 +163,13 @@ window.fetch = (u) => {
     attribution:{ text:'IP Geolocation by DB-IP', url:'https://db-ip.com' } }), text:()=>Promise.resolve('{}') });
   // iter20 m2 - the plan endpoint. Without it the routes panel renders against
   // undefined the moment a network is selected.
+  if (/\/probe\/matrix$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    cells:[{ from:'selectel(24/7)', to:'Nimble RU-3', ok:true, minMs:12.4, avgMs:13, maxMs:14, jitterMs:1.6, lossPct:0 },
+           { from:'Nimble RU-3', to:'selectel(24/7)', ok:false, error:'ETIMEDOUT', minMs:null, lossPct:null }],
+    skipped:[{ node:'Nimble RU-2', code:'no-agent' }], at:new Date().toISOString() }), text:()=>Promise.resolve('{}') });
+  if (/\/networks\/[^/]+\/applications$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    applications:[{ application:'test2', streams:1, servers:['selectel(24/7)'] }],
+    asked:[{ server:'selectel(24/7)', ok:true, transport:'agent' }] }), text:()=>Promise.resolve('{}') });
   if (/\/networks\/[^/]+\/state$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     rows:[{ edge:'Nimble RU-2', origin:'selectel(24/7)', application:'test2', routeId:'r1',
             edgeStreams:1, edgeBandwidth:880000, originStreams:1, originBandwidth:900000, verdict:'flowing',

@@ -13,6 +13,7 @@
 import http from 'node:http';
 import { createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
+import net from 'node:net';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
@@ -112,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 19;
+const AGENT_VERSION = 20;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -520,6 +521,68 @@ const routes = {
   // free: the address is 127.0.0.1, so the agent cannot possibly answer for a
   // different machine. A mismatched server record cost this project a dozen
   // releases; here it is impossible by construction.
+  // iter20 m4 — reachability and latency from *this* box.
+  //
+  // The panel cannot measure a path it is not on. Whether an edge in Frankfurt
+  // can reach an origin in Moscow is a fact about those two machines, and the
+  // only honest way to learn it is to ask one of them. That is what an agent
+  // is for.
+  //
+  // TCP connect time, not ICMP. Ping needs a raw socket, which means running
+  // the agent as root or shelling out to a binary whose output format differs
+  // per distro — and the number an operator actually cares about is whether a
+  // TCP connection to the port carrying the stream comes up, and how long it
+  // takes. That is what this measures, so it is what it reports: `connectMs`,
+  // never "ping".
+  //
+  // No payload is transferred. Throughput needs something to download and a
+  // decision about what that costs on a live channel; this measures the path,
+  // not its capacity, and says so.
+  async 'POST /probe'(_req, _url, body) {
+    const targets = Array.isArray(body?.targets) ? body.targets.slice(0, 64) : [];
+    const attempts = Math.min(Math.max(Number(body?.attempts) || 3, 1), 5);
+    const timeoutMs = Math.min(Math.max(Number(body?.timeoutMs) || 3000, 200), 10_000);
+
+    const once = (host, port) => new Promise((resolve) => {
+      const started = process.hrtime.bigint();
+      const sock = new net.Socket();
+      let done = false;
+      const finish = (ok, error) => {
+        if (done) return;
+        done = true;
+        sock.destroy();
+        resolve({ ok, error, ms: Number(process.hrtime.bigint() - started) / 1e6 });
+      };
+      sock.setTimeout(timeoutMs, () => finish(false, 'timeout'));
+      sock.once('error', (e) => finish(false, e.code || e.message));
+      sock.connect(port, host, () => finish(true, null));
+    });
+
+    const results = [];
+    for (const tgt of targets) {
+      const host = String(tgt?.host || '');
+      const port = Number(tgt?.port) || 0;
+      if (!host || !(port > 0 && port < 65536)) {
+        results.push({ id: tgt?.id ?? null, ok: false, error: 'bad target' });
+        continue;
+      }
+      const runs = [];
+      for (let i = 0; i < attempts; i++) runs.push(await once(host, port));
+      const good = runs.filter(r => r.ok).map(r => r.ms);
+      results.push({
+        id: tgt?.id ?? null, host, port,
+        attempts, okCount: good.length,
+        // Reported as a spread rather than one number: a path that answers in
+        // 12ms four times and 900ms once is not a 190ms path, and averaging it
+        // hides the thing worth seeing.
+        minMs: good.length ? Math.round(Math.min(...good) * 10) / 10 : null,
+        maxMs: good.length ? Math.round(Math.max(...good) * 10) / 10 : null,
+        avgMs: good.length ? Math.round((good.reduce((a, b) => a + b, 0) / good.length) * 10) / 10 : null,
+        error: good.length ? null : (runs.find(r => r.error)?.error || 'failed'),
+      });
+    }
+    return { ok: true, agent: AGENT_VERSION, attempts, timeoutMs, results };
+  },
   async 'POST /nimble'(req, url, task) {
     const rawPath = String(task?.path || '');
     // Read-only, and only Nimble's management surface. The task already comes

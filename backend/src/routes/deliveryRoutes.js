@@ -36,6 +36,42 @@ deliveryRoutesRouter.delete('/routes/:objId', requirePerm('cdn.manage'), async (
   }
 });
 
+// Which applications actually exist upstream.
+//
+// The page used to open with an empty text field and three disabled buttons,
+// and the operator was expected to know what to type. They do not: the names
+// live on the origin, so the panel can go and read them. Offered as a starting
+// point, not as the only choice — an application can exist in the plan before
+// anything is published under it.
+deliveryRoutesRouter.get('/networks/:id/applications', requirePerm('cdn.view'), async (req, res) => {
+  const g = await gather(req.params.id);
+  if (g.error) return res.status(404).json({ error: g.error });
+  const byId = new Map(g.servers.map(x => [String(x._id), x]));
+  const uppers = (g.network.nodes || [])
+    .filter(n => ['origin', 'mid', 'ingest'].includes(n.role) && n.enabled !== false)
+    .map(n => byId.get(String(n.server))).filter(Boolean);
+
+  const found = new Map();   // application -> { streams, servers:Set }
+  const asked = [];
+  await Promise.all(uppers.map(async (srv) => {
+    const meta = {};
+    try {
+      const idx = indexStreams(await nimble.liveStreams(srv, meta));
+      asked.push({ server: srv.name, ok: true, transport: meta.transport || 'direct' });
+      for (const [app, entries] of idx) {
+        const cur = found.get(app) || { application: app, streams: 0, servers: [] };
+        cur.streams += entries.length;
+        if (!cur.servers.includes(srv.name)) cur.servers.push(srv.name);
+        found.set(app, cur);
+      }
+    } catch (e) {
+      asked.push({ server: srv.name, ok: false, transport: meta.transport || 'direct',
+                   reason: probeReason(e, agentIsLive(srv)) });
+    }
+  }));
+  res.json({ applications: [...found.values()].sort((a, b) => a.application.localeCompare(b.application)), asked });
+});
+
 // What the servers say, next to what the plan says. Reads live_streams_status
 // off each box directly — the native API, so it costs no WMSPanel quota and can
 // be asked as often as an operator wants to look.

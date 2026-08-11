@@ -285,11 +285,30 @@ check('the confirmation says what a viewer will notice', () => {
     'the confirmation does not mention that delivery stops');
 });
 
-check('a missing reading is a dash, never a zero', () => {
+check('a missing reading never renders as a number', () => {
   // Printing 0 where a box could not be asked is a claim the panel cannot
   // make, and it is the difference between "nothing is streaming" and "we do
   // not know".
-  assert.ok(/=== null \? '—'/.test(panelCode), 'null readings are not distinguished from zero');
+  //
+  // Asserted across whichever component renders readings rather than against
+  // one file: this check went red when the rendering moved to the flow board
+  // and the rule had not changed at all. A gate tied to a location tests the
+  // location.
+  const renderers = ['components/DeliveryRoutesPanel.jsx', 'components/DeliveryFlowBoard.jsx']
+    .map(f => stripComments(readFile(new URL(f, FRONT), 'utf8')))
+    .filter(src => /streams/.test(src) && /Bandwidth|bandwidth/.test(src));
+  assert.ok(renderers.length, 'nothing renders readings any more');
+  // Every renderer, not any: `some` passes as soon as one file still has the
+  // check, which is how a rule survives in a file nobody looks at while the
+  // one on screen quietly drops it.
+  // Tied to the count itself. A loose "is there a null check anywhere in the
+  // file" passed while the guard around the stream count was gone, because a
+  // bandwidth formatter elsewhere in the same file had one — the check was
+  // matching a different rule that happened to look the same.
+  for (const src of renderers) {
+    assert.ok(/streams\s*(===|==)\s*(null|undefined)/.test(src),
+      'a component renders a stream count without distinguishing a missing reading from zero');
+  }
 });
 
 console.log('\nNATIVE READS GO THROUGH THE AGENT-PREFERRING CLIENT:');
@@ -313,6 +332,46 @@ check('the transport is asked for, not assumed', () => {
   const routes = stripComments(readFile(new URL('../src/routes/deliveryRoutes.js', import.meta.url), 'utf8'));
   assert.ok(/liveStreams\(s, meta\)/.test(routes), 'the read does not collect its transport');
   assert.ok(/agentIsLive/.test(routes), 'nothing distinguishes a box with an agent from one without');
+});
+
+console.log('\nTHE PAGE EXPLAINS ITSELF:');
+
+const boardSrc = readFile(new URL('components/DeliveryFlowBoard.jsx', FRONT), 'utf8');
+const boardCode = stripComments(boardSrc);
+const dict = readFile(new URL('i18n.jsx', FRONT), 'utf8');
+
+check('delivery is drawn as a flow, not tabulated', () => {
+  // The state was a table of "on origin / on edge / verdict": every fact
+  // present, none of it legible. Reading it meant holding the direction of the
+  // flow in your head and mapping two numbers onto it — the job a picture does
+  // for free, and the one the transcoder screens already do this way.
+  assert.ok(/gpipe-card/.test(boardCode) && /garrow/.test(boardCode),
+    'the flow board no longer uses the shared three-stage layout');
+  assert.ok(/originCol|routeCol|edgeCol/.test(boardCode), 'the stages are unlabelled');
+});
+
+check('every verdict has a sentence, in both languages', () => {
+  // "origin-only" means nothing until it is read as "the origin has this and
+  // the edge does not". A tag is a label; the operator needs the consequence.
+  const verdicts = ['flowing', 'origin-only', 'no-route', 'nothing-upstream',
+                    'edge-unreachable', 'origin-unknown'];
+  for (const v of verdicts) {
+    const hits = (dict.match(new RegExp(`'cdn\\.explain\\.${v}':`, 'g')) || []).length;
+    assert.equal(hits, 2, `cdn.explain.${v} is missing from a dictionary`);
+  }
+});
+
+check('the applications are offered, not demanded', () => {
+  // The page opened with an empty field and disabled buttons, expecting the
+  // operator to know names that live on the origin.
+  assert.ok(/networks\/\$\{network\.id\}\/applications/.test(panelCode),
+    'nothing reads which applications exist upstream');
+  assert.ok(/toggleApp/.test(panelCode), 'a discovered application cannot be clicked into the field');
+});
+
+check('a box with no reading still explains itself on the board', () => {
+  assert.ok(/cdn\.noReading/.test(boardCode));
+  assert.ok(/cdn\.reason\./.test(boardCode), 'a failed read shows no reason on the board');
 });
 
 console.log(failures ? `\n${failures} delivery-plan check(s) failed` : '\nall delivery-plan checks passed');

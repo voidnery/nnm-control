@@ -6,6 +6,7 @@ import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from './IconButton.jsx';
 import DeliveryRoutesPanel from './DeliveryRoutesPanel.jsx';
+import ProbePanel from './ProbePanel.jsx';
 
 // The delivery network: which box is an ingest, an origin, an edge, and where
 // each one physically is.
@@ -205,6 +206,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
           them. */}
       {net && dirty && <div className="panel hint">{t('cdn.unsavedFirst')}</div>}
       {net && <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} />}
+      {net && <ProbePanel network={net} />}
 
     </div>
   );
