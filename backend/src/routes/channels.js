@@ -9,6 +9,7 @@ import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { indexStreams } from '../services/networkState.js';
 import { channelLinks } from '../services/channelLinks.js';
 import { derivePlan, channelReadiness } from '../services/derivePlan.js';
+import { networkSteps } from '../services/networkSteps.js';
 import { logEvent } from '../services/audit.js';
 
 export const channelRouter = Router();
@@ -170,6 +171,14 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
   res.json({
     ...plan,
     channels: channels.map(c => ({ ...pub(c), readiness: channelReadiness({ channel: c, plan }) })),
+    // The six steps, computed from the same data rather than inferred by the
+    // page: a tick has to mean the thing is true, and two places working that
+    // out would eventually disagree about what green means.
+    //
+    // `watched` is not included. Whether content actually arrives is not
+    // derivable from configuration — it takes a probe — so the step is empty
+    // until the operator runs one, and the page passes the result back in.
+    steps: networkSteps({ network, servers, channels, derived: plan }),
   });
 });
 

@@ -10,6 +10,7 @@ import DeliveryRoutesPanel from './DeliveryRoutesPanel.jsx';
 import ProbePanel from './ProbePanel.jsx';
 import GatewayPanel from './GatewayPanel.jsx';
 import ConfigOverviewPanel from './ConfigOverviewPanel.jsx';
+import NetworkSetup from './NetworkSetup.jsx';
 
 // Lazy, and for two reasons rather than one. three.js is comparable in size to
 // the rest of the bundle put together, and the country polygons are another
@@ -49,7 +50,16 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
   // three jobs done at different moments — building it, running it, checking
   // it — and stacking them vertically meant the page grew downwards on every
   // button press until nothing could be held in view at once.
-  const [tab, setTab] = useState('overview');      // local copy of the nodes being edited
+  const [tab, setTab] = useState('setup');
+  // The derived plan drives the step states. Held here rather than inside the
+  // steps so that the tools below them see the same numbers.
+  const [derived, setDerived] = useState(null);
+  const loadDerived = async () => {
+    if (!selected) { setDerived(null); return; }
+    try { setDerived(await api(`/cdn/networks/${selected}/derived`)); }
+    catch { setDerived(null); }
+  };
+  useEffect(() => { loadDerived(); }, [selected, networks]);      // local copy of the nodes being edited
 
   const load = async () => {
     setError('');
@@ -123,8 +133,10 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
     ...n, upstream: n.upstream.filter(u => u !== id),
   })));
 
-  if (networks === null) return <div className="hint">{t('ds.loading')}</div>;
-
+  // The topology table, built here so it keeps the draft state it edits, and
+  // handed to the steps that need it. Steps one and two are two readings of
+  // the same table — who is in the network, and what each takes content from —
+  // so they share it rather than duplicating it.
   const inNetwork = new Set((draft || []).map(n => n.server));
   const free = servers.filter(s => !inNetwork.has(s.id));
   // Upstream options are filtered by role so an impossible edge cannot be
@@ -132,6 +144,73 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
   // convenience, not the guarantee.
   const upstreamFor = (node) => (draft || []).filter(o => o.id !== node.id &&
     ({ origin: ['ingest'], mid: ['origin'], edge: ['origin', 'mid'], ingest: [], gateway: [] }[node.role] || []).includes(o.role));
+
+  const topologyUI = (
+    <>
+      <table style={{ marginTop: 10 }}>
+        <thead>
+          <tr>
+            <th>{t('cdn.server')}</th><th>{t('cdn.role')}</th>
+            <th>{t('cdn.upstream')}</th><th>{t('cdn.where')}</th><th />
+          </tr>
+        </thead>
+        <tbody>
+          {(draft || []).map(n => {
+            const s = serverById.get(n.server);
+            const g = s?.geo || {};
+            return (
+              <tr key={n.id}>
+                <td>{s?.name || <span className="hint">{t('cdn.goneServer')}</span>}</td>
+                <td>
+                  <select value={n.role} disabled={!canManage}
+                          onChange={e => patchNode(n.id, { role: e.target.value, upstream: [] })}>
+                    {ROLE_ORDER.map(r => <option key={r} value={r}>{t('cdn.role.' + r)}</option>)}
+                  </select>
+                </td>
+                <td>
+                  {upstreamFor(n).length === 0
+                    ? <span className="hint">{n.role === 'ingest' || n.role === 'gateway' ? '—' : t('cdn.noUpstreamOption')}</span>
+                    : upstreamFor(n).map(o => (
+                        <label key={`${n.id}:${o.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0, fontSize: 12 }}>
+                          <input type="checkbox" disabled={!canManage}
+                                 checked={n.upstream.includes(o.id)}
+                                 onChange={() => patchNode(n.id, {
+                                   upstream: n.upstream.includes(o.id)
+                                     ? n.upstream.filter(x => x !== o.id) : [...n.upstream, o.id],
+                                 })} />
+                          {serverById.get(o.server)?.name || o.id} <span className="hint">{t('cdn.role.' + o.role)}</span>
+                        </label>
+                      ))}
+                </td>
+                <td className="hint" style={{ fontSize: 12 }}>
+                  {g.countryCode ? `${g.countryCode} ${g.city || ''}` : t('cdn.geoUnknown')}
+                </td>
+                <td>{canManage && <IconButton action="remove" danger onClick={() => dropNode(n.id)} />}</td>
+              </tr>
+            );
+          })}
+          {!(draft || []).length && <tr><td colSpan={5} className="hint">{t('cdn.emptyNetwork')}</td></tr>}
+        </tbody>
+      </table>
+
+      {canManage && (
+        <div className="row" style={{ gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value="" disabled={!free.length} onChange={e => e.target.value && addNode(e.target.value)}
+                  style={{ maxWidth: 240 }}>
+            <option value="">{free.length ? t('cdn.addNode') : t('cdn.allAdded')}</option>
+            {free.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setDraft(net.nodes.map(x => ({ ...x })))} disabled={!dirty}>{t('action.reset')}</button>
+          <button className="primary" onClick={saveNodes} disabled={busy || !dirty}>{t('action.save')}</button>
+          <button onClick={removeNetwork} disabled={busy}>{t('cdn.deleteNetwork')}</button>
+        </div>
+      )}
+    </>
+  );
+
+  if (networks === null) return <div className="hint">{t('ds.loading')}</div>;
+
 
   return (
     <div>
@@ -160,7 +239,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
 
         {net && (
           <div className="row" style={{ gap: 6, marginTop: 10 }}>
-            {['overview', 'topology', 'delivery', 'gateway', 'probes', 'globe'].map(v => (
+            {['setup', 'overview', 'probes', 'globe'].map(v => (
               <button key={v} className={'tagchip' + (tab === v ? ' on' : '')} onClick={() => setTab(v)}>
                 {t('cdn.tab.' + v)}
                 {/* Unsaved topology is the one thing worth carrying across
@@ -177,78 +256,22 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
         <div className="panel hint">{t('cdn.noNetwork')}</div>
       ) : (
         <>
-          {tab === 'overview' && <ConfigOverviewPanel network={net} />}
-
-          {tab === 'topology' && (
-          <div className="panel">
-            <h2 style={{ marginTop: 0 }}>{t('cdn.tab.topology')}</h2>
-            <div className="hint">{t('cdn.topologyHint')}</div>
-
-            <table style={{ marginTop: 10 }}>
-              <thead>
-                <tr>
-                  <th>{t('cdn.server')}</th><th>{t('cdn.role')}</th>
-                  <th>{t('cdn.upstream')}</th><th>{t('cdn.where')}</th><th />
-                </tr>
-              </thead>
-              <tbody>
-                {(draft || []).map(n => {
-                  const s = serverById.get(n.server);
-                  const g = s?.geo || {};
-                  return (
-                    <tr key={n.id}>
-                      <td>{s?.name || <span className="hint">{t('cdn.goneServer')}</span>}</td>
-                      <td>
-                        <select value={n.role} disabled={!canManage}
-                                onChange={e => patchNode(n.id, { role: e.target.value, upstream: [] })}>
-                          {ROLE_ORDER.map(r => <option key={r} value={r}>{t('cdn.role.' + r)}</option>)}
-                        </select>
-                      </td>
-                      <td>
-                        {upstreamFor(n).length === 0
-                          ? <span className="hint">{n.role === 'ingest' || n.role === 'gateway' ? '—' : t('cdn.noUpstreamOption')}</span>
-                          : upstreamFor(n).map(o => (
-                              <label key={`${n.id}:${o.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0, fontSize: 12 }}>
-                                <input type="checkbox" disabled={!canManage}
-                                       checked={n.upstream.includes(o.id)}
-                                       onChange={() => patchNode(n.id, {
-                                         upstream: n.upstream.includes(o.id)
-                                           ? n.upstream.filter(x => x !== o.id) : [...n.upstream, o.id],
-                                       })} />
-                                {serverById.get(o.server)?.name || o.id} <span className="hint">{t('cdn.role.' + o.role)}</span>
-                              </label>
-                            ))}
-                      </td>
-                      <td className="hint" style={{ fontSize: 12 }}>
-                        {g.countryCode ? `${g.countryCode} ${g.city || ''}` : t('cdn.geoUnknown')}
-                      </td>
-                      <td>{canManage && <IconButton action="remove" danger onClick={() => dropNode(n.id)} />}</td>
-                    </tr>
-                  );
-                })}
-                {!(draft || []).length && <tr><td colSpan={5} className="hint">{t('cdn.emptyNetwork')}</td></tr>}
-              </tbody>
-            </table>
-
-            {canManage && (
-              <div className="row" style={{ gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <select value="" disabled={!free.length} onChange={e => e.target.value && addNode(e.target.value)}
-                        style={{ maxWidth: 240 }}>
-                  <option value="">{free.length ? t('cdn.addNode') : t('cdn.allAdded')}</option>
-                  {free.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <div style={{ flex: 1 }} />
-                <button onClick={() => setDraft(net.nodes.map(x => ({ ...x })))} disabled={!dirty}>{t('action.reset')}</button>
-                <button className="primary" onClick={saveNodes} disabled={busy || !dirty}>{t('action.save')}</button>
-                <button onClick={removeNetwork} disabled={busy}>{t('cdn.deleteNetwork')}</button>
-              </div>
-            )}
-          </div>
+          {/* The six steps, with the existing panels slotted into them. The
+              panels did not change; where they are did. */}
+          {tab === 'setup' && (
+            <NetworkSetup network={net} servers={servers} derived={derived} onReload={loadDerived}
+                          children={{
+                            members: topologyUI,
+                            upstreams: topologyUI,
+                            channels: <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} only="channels" />,
+                            nimble: <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} only="nimble" />,
+                            links: <GatewayPanel network={net} servers={servers} />,
+                            verify: <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} only="verify" />,
+                          }} />
           )}
 
-          {tab === 'delivery' && dirty && <div className="panel hint">{t('cdn.unsavedFirst')}</div>}
-          {tab === 'delivery' && <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} />}
-          {tab === 'gateway' && <GatewayPanel network={net} servers={servers} />}
+          {tab === 'overview' && <ConfigOverviewPanel network={net} />}
+
           {tab === 'probes' && <ProbePanel network={net} />}
           {tab === 'globe' && (
             <Suspense fallback={<div className="panel hint">{t('globe.loading')}</div>}>

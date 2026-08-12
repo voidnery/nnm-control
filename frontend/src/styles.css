@@ -707,3 +707,25 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 
 .why-item { padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
 .why-item:first-of-type { border-top: none; }
+
+/* The setup steps. A row is a summary and a button; the open one is the only
+   thing on screen with any height, which is what stops the page growing. */
+.steps { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.step + .step { border-top: 1px solid var(--line); }
+.step-head { display: grid; grid-template-columns: auto auto 1fr auto; gap: var(--sp-2);
+  align-items: baseline; width: 100%; text-align: left; background: none; border: none;
+  padding: var(--sp-3) var(--sp-3); border-radius: 0; font-size: var(--fs-body); }
+.step-head:hover { background: var(--bg-raise); }
+.step.open .step-head { background: var(--bg-raise); }
+.step-mark { display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; font-size: var(--fs-meta);
+  background: var(--bg); border: 1px solid var(--line); color: var(--text-dim); align-self: center; }
+.step-mark.live { background: var(--ok, #2f7d54); border-color: transparent; color: #fff; }
+.step-mark.warn { background: var(--warn, #a97b28); border-color: transparent; color: #fff; }
+.step-title { font-weight: 550; }
+.step-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-chev { color: var(--text-dim); }
+.step-body { padding: 0 var(--sp-3) var(--sp-3); }
+/* The panels moved inside a step keep their own spacing but lose their card:
+   a card inside a step inside a card is three containers deep. */
+.step-body > .panel { border: none; background: none; padding: 0; margin: 0; }

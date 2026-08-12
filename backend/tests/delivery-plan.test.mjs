@@ -426,7 +426,12 @@ check('a network shows one job at a time', () => {
   // The required set, not the exact list: this went red the moment a fifth tab
   // was added, about a rule that had not changed. A gate matching a literal
   // enumeration forbids growth rather than the thing it cares about.
-  const required = ['topology', 'delivery', 'probes'];
+  // The required set moved in iter21 m4: topology, delivery and gateway became
+  // steps inside `setup` rather than tabs beside it, because six equal tabs
+  // answer "where is that setting" and never "what do I do next". What
+  // survived is the rule — one job at a time, every declared tab renders
+  // something — not the particular jobs.
+  const required = ['setup', 'probes'];
   const declared = netSrc.match(/\{\[((?:'[a-z]+',?\s*)+)\]\.map\(v =>/)?.[1] || '';
   const tabs = [...declared.matchAll(/'([a-z]+)'/g)].map(m => m[1]);
   assert.ok(tabs.length >= required.length, `only ${tabs.length} tab(s) declared`);

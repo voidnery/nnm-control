@@ -18,7 +18,11 @@ const VERDICT = {
   flowing: 'live', 'origin-only': 'err', 'no-route': 'err',
   'nothing-upstream': '', 'edge-unreachable': 'warn', 'origin-unknown': 'warn',
 };
-export default function DeliveryRoutesPanel({ network, servers = [], dirty = false }) {
+// `only` renders one step's worth of this panel. The panel is unchanged;
+// setup shows its three parts in three places, and the standalone view (no
+// `only`) still shows all of it.
+export default function DeliveryRoutesPanel({ network, servers = [], dirty = false, only = null }) {
+  const shows = (part) => !only || only === part;
   const { t } = useI18n();
   const { can } = useAuth();
   const { push } = useToast();
@@ -166,6 +170,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
           equals and the order between them was something the operator had to
           already know. Each step's result appears under that step, not at the
           bottom of the page. */}
+      {shows('channels') && <>
       <div className="gsection">{t('cdn.step1')}</div>
       {/* Shown, not edited. Channels were being created here *and* on the
           Channels tab, so an application had two homes and the operator had to
@@ -180,6 +185,8 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         {chans && !chans.length && <span className="hint">{t('cdn.noChannels')}</span>}
       </div>
       <div className="hint">{t('cdn.channelsLiveOn')}</div>
+      </>}
+      {shows('nimble') && <>
       <div className="gsection">{t('cdn.step2')}</div>
       {/* The operator is not asked to plan anything. The panel derives what
           Nimble needs and says so; the reasoning is one click away, because a
@@ -263,6 +270,9 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         </div>
       )}
 
+      </>}
+
+      {shows('verify') && <>
       <div className="gsection">{t('cdn.step3')}</div>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={loadState} disabled={busy || !list.length}>{t('cdn.checkState')}</button>
@@ -306,6 +316,9 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         </div>
       )}
 
+      </>}
+
+      {shows('nimble') && <>
       {/* Reference, not part of the flow: folded away so the three steps above
           are what the page is, with the count visible so it is never a
           surprise that something is there. */}
@@ -333,6 +346,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
           </tbody>
         </table>}
       </div>
+      </>}
 
     </div>
   );

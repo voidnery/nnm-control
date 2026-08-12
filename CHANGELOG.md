@@ -1,5 +1,51 @@
 # Changelog
 
+### v0.77.0 — iter21 m4: one window, six steps
+Everything needed to build a delivery network was there and spread across six
+equal tabs. That arrangement answers "where is that setting" and never "what do
+I do next" — and the second is the question somebody has the first time. An
+operator who had used it for a week still could not say what order to work in.
+
+**Setting up a network is now one screen and one ordered list:**
+
+    ✓ 1  What it is made of        4 servers
+    ✓ 2  Who takes content from whom   3 of 3 wired up
+    ✓ 3  What it carries           2 channels
+    !  4  What Nimble needs for that    2 to set up      [Set up]
+    ✓ 5  How a viewer gets a link  straight to the edge, nearest
+    ·  6  Does it actually arrive  not checked yet       [Check]
+
+- **A tick means the thing is true.** Every state comes from the same data the
+  rest of the panel already computes — not a checklist the operator ticks off.
+  A network with no channels derives nothing and is therefore trivially "in
+  sync"; that is `empty`, not `done`, because a green mark on a network that
+  delivers nothing is a lie in one character.
+- **Verification is never done on configuration alone.** Every step above it
+  can be right while nothing arrives, which is the entire reason the watch
+  probe exists.
+- **Three ways of not being done, kept apart**: nothing here yet, something
+  needs a decision, and the panel could not find out. Different sentences,
+  different next actions, and only one of them is the operator's problem.
+- **The steps do not block each other.** Step five opens whether or not step
+  four is finished; the panel says what is missing and gets out of the way. A
+  wizard that leads by the hand is intolerable the second time, and a network
+  is configured once and lived with for months.
+- **One step open at a time**, which is what stops the page growing downwards.
+  The panels were never too long — they were all on screen at once, and each
+  one grew when used.
+- The page opens on the first step wanting attention, **once**, and then leaves
+  the operator alone. Reopening a step under someone's cursor because the data
+  refreshed is the panel arguing with them.
+
+Nothing new was built: the existing panels are slotted into the steps
+unchanged. Measurements and the globe stay as tabs beside the list — they are
+not steps, they are what you look at when something is wrong.
+
+**The layout gate went red about the tabs it had been given in v0.65.0.** The
+rule it was written for — one job at a time, every declared tab renders
+something — still holds; the particular jobs moved inside. Rebound to the rule.
+That is the sixth gate this month to outlive the arrangement it named.
+
 ### v0.76.0 — iter21 m3 finished: one home per thing
 Channels could be created in two places — the Channels tab and the Delivery
 tab — so an application had two homes and the operator had to know which one
