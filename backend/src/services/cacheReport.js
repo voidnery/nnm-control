@@ -1,3 +1,4 @@
+import { amplification } from './cacheAmplification.js';
 // What Nimble says about its own cache.
 //
 // The cache is the heart of a delivery network: request coalescing is what
@@ -16,6 +17,48 @@
 // nowhere at all. So this reads whatever cache-shaped keys are actually
 // present, reports them by their real names, and says when it found nothing —
 // rather than showing zeros for fields that may never have existed.
+
+// The real field names, now known from a live fleet rather than guessed:
+//
+//   RamCacheSize=2735  FileCacheSize=0  MaxRamCacheSize=5096  MaxFileCacheSize=5096
+//
+// Two facts follow, and the second is the important one.
+//
+// First, these are occupancy and capacity, in the megabytes nimble.conf uses
+// for `ram_cache_size`. So "how full is the cache" is answerable exactly.
+//
+// Second — **there are no hit and miss counters.** Not in this version, not
+// under another name; the response carries sizes and nothing else. Cache hit
+// ratio therefore cannot be measured from `/manage/server_status`, and the
+// panel says so rather than continuing to look expectant. That is a definite
+// answer to a question that has been open since the CDN discussion, and it is
+// worth stating plainly instead of leaving a percentage field that will never
+// fill in.
+export const KNOWN_FIELDS = {
+  RamCacheSize: { role: 'used', store: 'ram', unit: 'MB' },
+  MaxRamCacheSize: { role: 'capacity', store: 'ram', unit: 'MB' },
+  FileCacheSize: { role: 'used', store: 'file', unit: 'MB' },
+  MaxFileCacheSize: { role: 'capacity', store: 'file', unit: 'MB' },
+};
+
+// Occupancy against capacity, per store, from whatever of the four are
+// present. A pair with no capacity yields no percentage — the same rule as
+// everywhere else: a number that needs two inputs is not reported on one.
+export function cacheStores(fields) {
+  const by = new Map();
+  for (const f of fields) {
+    const known = KNOWN_FIELDS[f.path.split('.').pop()];
+    if (!known) continue;
+    const cur = by.get(known.store) || { store: known.store, unit: known.unit };
+    cur[known.role] = f.value;
+    by.set(known.store, cur);
+  }
+  return [...by.values()].map(s => ({
+    ...s,
+    fullPct: (s.capacity > 0 && typeof s.used === 'number')
+      ? Math.round((s.used / s.capacity) * 1000) / 10 : null,
+  }));
+}
 
 // Keys worth surfacing, matched by meaning rather than by an exact name we do
 // not have. Deliberately broad: a field this misses is invisible, a field it
@@ -70,16 +113,27 @@ export const RESIDENT_CHUNKS = (durationSec) =>
 export function expectedCacheBytes(streams, { chunkSeconds = 6 } = {}) {
   const chunks = RESIDENT_CHUNKS(chunkSeconds);
   if (!chunks) return null;
+  // An idle edge reports its streams at zero bitrate — a re-streaming route
+  // pulls nothing until a viewer asks — so the sum comes to zero and the page
+  // said "the cache should hold about 0.0 MB", which is not a size, it is the
+  // absence of an input dressed as one.
+  const known = streams.filter(s => Number(s.bandwidth) > 0);
+  if (!known.length) {
+    return { bytes: null, chunksPerStream: chunks, chunkSeconds,
+             streams: streams.length, knownBitrates: 0, independentOfViewers: true };
+  }
   let bytes = 0;
-  for (const s of streams) {
-    const bps = Number(s.bandwidth) || 0;
-    bytes += chunks * chunkSeconds * bps / 8;
+  for (const s of known) {
+    bytes += chunks * chunkSeconds * (Number(s.bandwidth) || 0) / 8;
   }
   return {
     bytes: Math.round(bytes),
     chunksPerStream: chunks,
     chunkSeconds,
     streams: streams.length,
+    // How many of them actually contributed. Extrapolating the rest from an
+    // average would turn one measured stream into a confident total.
+    knownBitrates: known.length,
     // Stated because it is the counter-intuitive part and the reason this is
     // worth showing: cache size does not grow with the audience. A thousand
     // viewers of one stream need the same chunks as one viewer.
@@ -89,10 +143,21 @@ export function expectedCacheBytes(streams, { chunkSeconds = 6 } = {}) {
 
 // The whole picture for one server, honest about which parts are measured and
 // which are computed.
-export function cacheReport({ status, streams = [], chunkSeconds = 6 }) {
+export function cacheReport({ status, streams = [], chunkSeconds = 6, node = null, viewers = 0 }) {
   const fields = findCacheFields(status);
   const ratio = hitRatio(fields);
+  const stores = cacheStores(fields);
   return {
+    // Occupancy against capacity, which is what this Nimble actually reports.
+    stores,
+    // Hit ratio's question, asked in the form the data can answer: how much
+    // more went to viewers than came from the origin. Not called hit ratio,
+    // because it is not one.
+    amplification: amplification({ status, node, viewers }),
+    // Stated as a fact about the server, not as a gap in the panel: no version
+    // of `/manage/server_status` seen so far carries hit or miss counters, so
+    // the ratio is not measurable here by any amount of further looking.
+    ratioAvailable: ratio !== null,
     // Measured: whatever Nimble actually reported, named as it named it.
     reported: fields,
     // Derived from two reported counters, when both exist.

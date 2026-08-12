@@ -11,7 +11,7 @@
 // fields that existed nowhere — so this reads whatever cache-shaped keys are
 // present and names them, rather than reaching for names it does not have.
 import assert from 'node:assert/strict';
-import { findCacheFields, hitRatio, cacheReport, expectedCacheBytes, RESIDENT_CHUNKS }
+import { findCacheFields, hitRatio, cacheReport, cacheStores, expectedCacheBytes, RESIDENT_CHUNKS }
   from '../src/services/cacheReport.js';
 
 let failures = 0;
@@ -106,6 +106,71 @@ check('reported figures keep their own names in their own place', () => {
   assert.equal(r.hasAnyCacheData, true);
   assert.equal(r.hitRatio.ratio, 90);
   assert.ok(r.reported.some(f => f.path === 'cache.used'));
+});
+
+console.log('\nTHE REAL FIELDS, FROM THE REAL FLEET:');
+
+// RU-2 answered: RamCacheSize=2735 FileCacheSize=0 MaxRamCacheSize=5096
+// MaxFileCacheSize=5096. That is occupancy and capacity in megabytes — and no
+// hit or miss counters anywhere, which settles the question.
+const RU2 = { RamCacheSize: 2735, FileCacheSize: 0, MaxRamCacheSize: 5096, MaxFileCacheSize: 5096 };
+
+check('occupancy and capacity are paired per store', () => {
+  const s = cacheStores(findCacheFields(RU2));
+  const ram = s.find(x => x.store === 'ram');
+  assert.equal(ram.used, 2735);
+  assert.equal(ram.capacity, 5096);
+  assert.equal(ram.fullPct, 53.7);
+  assert.equal(ram.unit, 'MB');
+});
+
+check('a file cache holding nothing is 0%, not missing', () => {
+  // Zero used against a real capacity is a fact worth showing: this edge keeps
+  // everything in RAM.
+  const file = cacheStores(findCacheFields(RU2)).find(x => x.store === 'file');
+  assert.equal(file.used, 0);
+  assert.equal(file.fullPct, 0);
+});
+
+check('occupancy without a capacity yields no percentage', () => {
+  // A server reporting only what it holds, with no maximum, cannot say how
+  // full it is — and a percentage invented from one number would be the same
+  // fault as the "0.0 MB" line, one step further along.
+  const only = cacheStores(findCacheFields({ RamCacheSize: 2735 }));
+  assert.equal(only[0].used, 2735);
+  assert.equal(only[0].capacity, undefined);
+  assert.equal(only[0].fullPct, null);
+});
+
+check('this Nimble reports no hit or miss counters, and the panel says so', () => {
+  // The answer to a question open since the CDN discussion: hit ratio is not
+  // measurable from server_status, by any amount of further looking. Better
+  // said once than left as a percentage field that never fills in.
+  const r = cacheReport({ status: RU2, streams: [] });
+  assert.equal(r.ratioAvailable, false);
+  assert.equal(r.hitRatio, null);
+  assert.equal(r.hasAnyCacheData, true, 'there is cache data, just not that kind');
+});
+
+console.log('\nAN IDLE EDGE HAS NO BITRATE TO COMPUTE FROM:');
+
+check('zero-bitrate streams yield no expected size, not a size of zero', () => {
+  // A re-streaming route pulls nothing until a viewer asks, so an idle edge
+  // reports its streams at zero — and the page said "the cache should hold
+  // about 0.0 MB", which is the absence of an input dressed as an answer.
+  const e = expectedCacheBytes([{ bandwidth: 0 }, { bandwidth: 0 }]);
+  assert.equal(e.bytes, null);
+  assert.equal(e.knownBitrates, 0);
+  assert.equal(e.streams, 2, 'the streams are still counted');
+});
+
+check('one live stream among idle ones is not extrapolated to all', () => {
+  // Averaging the unknown ones would turn one measured stream into a confident
+  // total for seven.
+  const e = expectedCacheBytes([{ bandwidth: 5_000_000 }, { bandwidth: 0 }, { bandwidth: 0 }]);
+  assert.equal(e.knownBitrates, 1);
+  assert.equal(e.streams, 3);
+  assert.ok(e.bytes > 40e6 && e.bytes < 50e6, `${e.bytes}`);
 });
 
 console.log(failures ? `\n${failures} cache check(s) failed` : '\nall cache checks passed');

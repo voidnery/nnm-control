@@ -121,9 +121,18 @@ deliveryRoutesRouter.post('/networks/:id/cache', requirePerm('cdn.view'), async 
       ]);
       const streams = [];
       for (const entries of (live ? indexStreams(live) : new Map()).values()) streams.push(...entries);
+      // Viewers are what makes amplification mean anything: the ratio is
+      // compared against the audience, and with none there is nothing to
+      // compare. Read separately because server_status does not carry it.
+      let viewers = 0;
+      try {
+        const s = await nimble.sessions(srv);
+        viewers = Array.isArray(s?.sessions) ? s.sessions.length : Number(s?.count) || 0;
+      } catch { viewers = 0; }
+      const role = (g.network.nodes || []).find(n => String(n.server) === String(srv._id))?.role || 'edge';
       return {
-        server: srv.name, ok: true, transport: meta.transport || 'direct',
-        ...cacheReport({ status, streams, chunkSeconds }),
+        server: srv.name, ok: true, transport: meta.transport || 'direct', viewers,
+        ...cacheReport({ status, streams, chunkSeconds, node: { role }, viewers }),
       };
     } catch (e) {
       // Named, not silently absent: an edge the panel could not ask is a gap

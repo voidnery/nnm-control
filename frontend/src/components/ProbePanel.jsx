@@ -97,19 +97,68 @@ export default function ProbePanel({ network }) {
                 {/* The honest case, and the likely one: the server answered and
                     said nothing about its cache. Saying so beats a zero. */}
                 {r.ok && !r.hasAnyCacheData && <span className="badge">{t('cache.nothingReported')}</span>}
+                {/* Said once, as a fact about Nimble rather than a gap in the
+                    panel: this version reports sizes and no counters, so a hit
+                    ratio is not obtainable here however long one waits. */}
+                {r.ok && r.hasAnyCacheData && !r.ratioAvailable && (
+                  <span className="hint">{t('cache.noCounters')}</span>
+                )}
               </div>
+              {/* Occupancy against capacity, which is what this Nimble
+                  actually reports. The raw fields stay below it, named as the
+                  server named them, so a number can be traced. */}
+              {r.ok && r.stores?.map(st => (
+                <div key={st.store} className="row" style={{ gap: 8, alignItems: 'baseline' }}>
+                  <span className="hint">{t('cache.store.' + st.store)}</span>
+                  <b>{st.used} / {st.capacity} {st.unit}</b>
+                  {st.fullPct != null && (
+                    <span className={'badge ' + (st.fullPct > 90 ? 'warn' : '')}>
+                      {t('cache.full', { pct: st.fullPct })}
+                    </span>
+                  )}
+                </div>
+              ))}
+              {/* Hit ratio's question, in the form the data can answer. Shown
+                  with its preconditions rather than as a bare number: a ratio
+                  computed outside them is confidently wrong, which is worse
+                  than the missing metric it replaced. */}
+              {r.ok && r.amplification?.ok && r.amplification.ratio != null && (
+                <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <span className="hint">{t('cache.amp')}</span>
+                  <b>×{r.amplification.ratio}</b>
+                  <span className={'badge ' + (r.amplification.code === 'cache-absorbing' ? 'live'
+                                             : r.amplification.code === 'cache-not-absorbing' ? 'err' : 'warn')}>
+                    {t('cache.' + r.amplification.code)}
+                  </span>
+                  <span className="hint">{t('cache.ampOf', { n: r.viewers })}</span>
+                </div>
+              )}
+              {r.ok && r.amplification?.ok && r.amplification.ratio == null && (
+                <div className="hint">{t('cache.' + r.amplification.code)}</div>
+              )}
+              {r.ok && r.amplification && !r.amplification.ok && (
+                <div className="hint">
+                  {t('cache.ampBlocked')} {r.amplification.blocking.map(b => t('cache.block.' + b)).join('; ')}
+                </div>
+              )}
               {r.ok && r.reported?.length > 0 && (
                 <div className="hint mono">
                   {r.reported.map(f => `${f.path}=${f.value}`).join(' · ')}
                 </div>
               )}
-              {r.ok && r.expected && (
+              {/* Only when there is a bitrate to compute from. An idle edge
+                  reports zero, and "should hold about 0.0 MB" is the absence of
+                  an input dressed as an answer. */}
+              {r.ok && r.expected?.bytes != null && (
                 <div className="hint">
                   {t('cache.expected', {
                     mb: (r.expected.bytes / 1e6).toFixed(1),
-                    n: r.expected.streams, chunks: r.expected.chunksPerStream,
+                    n: r.expected.knownBitrates, chunks: r.expected.chunksPerStream,
                   })}
                 </div>
+              )}
+              {r.ok && r.expected && r.expected.bytes == null && r.expected.streams > 0 && (
+                <div className="hint">{t('cache.expectedUnknown', { n: r.expected.streams })}</div>
               )}
             </div>
           ))}

@@ -1,5 +1,68 @@
 # Changelog
 
+### v0.81.0 — hit ratio's question, asked so the data can answer it
+Confirmed from both directions now: Nimble reports cache **sizes** and no hit
+or miss counters, in the native API and in WMSPanel alike. Hit ratio is not
+obtainable, and no amount of further looking changes that.
+
+The question behind it survives. What an operator wants to know is whether the
+cache is absorbing load — do a thousand viewers cause one fetch upstream, or a
+thousand? That is a comparison of two figures the server does report:
+
+    amplification = bytes served to viewers ÷ bytes pulled from the origin
+
+Near one means every viewer's request went upstream and the cache is doing
+nothing — which is what HTTP Origin mode looks like from outside. Near the
+audience size means it is doing everything. It is not hit ratio and is not
+called hit ratio.
+
+**The preconditions are the feature.** A ratio computed outside them is a
+confidently wrong number, which is worse than the missing metric it replaces,
+so each is checked and refused with its reason:
+
+- **Not an origin.** An origin ingests SRT into the same "in" figure, and a
+  working cache would read as broken. On this fleet that is the selectel box.
+- **Somebody must be watching.** With no viewers both figures approach zero and
+  the ratio is noise — and an idle edge is the *normal* state of a pull-based
+  network, so this is the common case, not the exception.
+- **The same kind of number.** An instantaneous rate against a lifetime counter
+  is not a ratio of anything.
+- **Serving with nothing incoming** is said in words — a window served entirely
+  from cache — rather than as a division by zero.
+
+Field names are matched by whole words within the name, not by substring:
+`in` is a substring of half the language and `Interfaces` is a field on this
+very endpoint. A substring match would have divided by the interface count.
+That contradiction did not bite on the first attempt — there was no test for it
+— which is the sixth time this month a rule existed only in a comment.
+
+### v0.80.1 — the fleet answered, and one question is now closed
+Three edges replied:
+
+    RamCacheSize=2735  FileCacheSize=0  MaxRamCacheSize=5096  MaxFileCacheSize=5096
+    RamCacheSize=2440  FileCacheSize=0  MaxRamCacheSize=4096  MaxFileCacheSize=4096
+    RamCacheSize=1430  FileCacheSize=0  MaxRamCacheSize=8096  MaxFileCacheSize=8096
+
+**There are no hit or miss counters.** Not under another name, not nested
+somewhere else — this Nimble reports cache *sizes* and nothing more. Cache hit
+ratio is therefore not obtainable from `/manage/server_status` by any amount of
+further looking, and the panel now says that once, as a fact about Nimble
+rather than as a gap in itself. A question open since the CDN discussion,
+closed with an answer nobody wanted.
+
+What the fleet does give is occupancy against capacity, in the megabytes
+`nimble.conf` uses — RU-2 at 2735 of 5096, RU-3 at 2440 of 4096, FIN-1 at 1430
+of 8096 — shown as a pair with a percentage, with the raw fields kept beneath
+so a number can be traced to the name Nimble gave it.
+
+**And a bug the real data exposed immediately.** Every row read "the cache
+should hold about 0.0 MB". A re-streaming route pulls nothing until a viewer
+asks, so an idle edge reports its streams at zero bitrate, and the sum came to
+zero — the absence of an input dressed as an answer, which is exactly what this
+project keeps trying not to do. There is now no figure at all until at least
+one stream has a bitrate, the count of streams that contributed is stated, and
+the rest are not extrapolated from an average.
+
 ### v0.80.0 — the cache, read from where it actually lives
 Cache hit ratio is the number that says whether a delivery network is a
 delivery network or three parallel proxies, and WMSPanel does not report it.
