@@ -206,6 +206,26 @@ export const wmspanel = {
   routeCreate: (cfg, body) => call(cfg, `/routes/`, { method: 'POST', body }),
   routeUpdate: (cfg, id, patch) => call(cfg, `/routes/${id}`, { method: 'PUT', body: patch }),
   routeDelete: (cfg, id) => call(cfg, `/routes/${id}`, { method: 'DELETE' }),
+  // WMSAuth: groups carry servers, rules live inside a group.
+  //
+  // Paths from the reference; the account has none of these objects, so every
+  // shape below is documented rather than observed — the same position we were
+  // in with routes, where `to` turned out not to be a URL. The apply path
+  // reads back after writing for exactly that reason.
+  authGroupList:   (cfg) => call(cfg, `/wmsauth/groups`),
+  authGroupCreate: (cfg, body) => call(cfg, `/wmsauth/groups`, { method: 'POST', body }),
+  authGroupUpdate: (cfg, id, patch) => call(cfg, `/wmsauth/groups/${id}`, { method: 'PUT', body: patch }),
+  authGroupDelete: (cfg, id) => call(cfg, `/wmsauth/groups/${id}`, { method: 'DELETE' }),
+  authRuleList:    (cfg, gid) => call(cfg, `/wmsauth/groups/${gid}/rules`),
+  authRuleCreate:  (cfg, gid, body) => call(cfg, `/wmsauth/groups/${gid}/rules`, { method: 'POST', body }),
+  authRuleUpdate:  (cfg, gid, id, patch) => call(cfg, `/wmsauth/groups/${gid}/rules/${id}`, { method: 'PUT', body: patch }),
+  authRuleDelete:  (cfg, gid, id) => call(cfg, `/wmsauth/groups/${gid}/rules/${id}`, { method: 'DELETE' }),
+  // Hotlink, geo and network restrictions — separate families, same shape.
+  refererGroupList:   (cfg) => call(cfg, `/referer_groups`),
+  refererGroupCreate: (cfg, body) => call(cfg, `/referer_groups`, { method: 'POST', body }),
+  refererGroupUpdate: (cfg, id, patch) => call(cfg, `/referer_groups/${id}`, { method: 'PUT', body: patch }),
+  ipRangeList:   (cfg) => call(cfg, `/ip_ranges`),
+  ipRangeCreate: (cfg, body) => call(cfg, `/ip_ranges`, { method: 'POST', body }),
   // RTMP interfaces (view)
   rtmpInterfaceList: (cfg, sid) => call(cfg, `/server/${sid}/rtmp/interface`),
   rtmpInterfaceCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/rtmp/interface`, { method: 'POST', body }),

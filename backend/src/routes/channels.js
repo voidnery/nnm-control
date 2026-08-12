@@ -9,6 +9,8 @@ import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { indexStreams } from '../services/networkState.js';
 import { channelLinks } from '../services/channelLinks.js';
 import { derivePlan, channelReadiness } from '../services/derivePlan.js';
+import { deriveProtection, newTokenKey } from '../services/deriveProtection.js';
+import { signUrl } from '../services/wmsAuth.js';
 import { networkSteps } from '../services/networkSteps.js';
 import { logEvent } from '../services/audit.js';
 
@@ -19,6 +21,20 @@ const pub = (c) => ({
   id: c.id, application: c.application, stream: c.stream,
   label: c.label, notes: c.notes, kind: c.kind, enabled: c.enabled,
   protocol: c.protocol || 'hls',
+  // The signing key is the whole secret: whoever holds it can mint links for
+  // this channel. It is never returned — only whether one exists — so it
+  // cannot leak through a response somebody is looking at over a shoulder.
+  protection: {
+    mode: c.protection?.mode || 'open',
+    hasKey: Boolean(c.protection?.tokenKey),
+    validMinutes: c.protection?.validMinutes ?? 20,
+    bindToIp: Boolean(c.protection?.bindToIp),
+    allowedDomains: c.protection?.allowedDomains || [],
+    countries: c.protection?.countries || [],
+    countriesAllow: c.protection?.countriesAllow !== false,
+    ranges: c.protection?.ranges || [],
+    rangesAllow: c.protection?.rangesAllow !== false,
+  },
   network: c.network ? String(c.network) : null,
   name: channelName(c), updatedAt: c.updatedAt,
 });
@@ -32,6 +48,133 @@ const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
 // wrong. This offers them — across every network, since a stream is worth
 // delivering regardless of which network the operator happens to be looking
 // at, and the network is chosen when the channel is created.
+// Write the protection a network's channels imply.
+//
+// Same shape as applying routes, and for the same reasons: the plan is
+// recomputed here rather than trusted from the client, blocking findings
+// refuse rather than warn, and everything written is read back — because this
+// account has no WMSAuth objects at all, so every request body below is
+// documented rather than observed, and the first write is the first real test
+// of its shape.
+channelRouter.post('/networks/:id/protection/apply', requirePerm('cdn.manage'), async (req, res) => {
+  const [network, servers, channels] = await Promise.all([
+    DeliveryNetwork.findById(req.params.id),
+    NimbleServer.find(),
+    Channel.find({ network: req.params.id, enabled: true }),
+  ]);
+  if (!network) return res.status(404).json({ error: 'network-not-found', code: 'network-not-found' });
+
+  const cfg = (await Settings.load()).wmspanel;
+  const originApps = await wmspanel.originAppList(cfg).then(r => r.settings || []).catch(() => []);
+  const groups = await wmspanel.authGroupList(cfg).then(r => r.groups || []).catch(() => []);
+  const plan = deriveProtection({ network, servers, channels, originApps, existing: { groups } });
+
+  if (plan.blocking?.length) {
+    // Recomputed here, not taken from whatever the page was showing: the
+    // account can change between a preview and a press, and the change that
+    // matters most — an application put into HTTP Origin mode — is invisible
+    // from this page entirely.
+    return res.status(422).json({ error: 'protection-blocked', code: 'protection-blocked', ...plan });
+  }
+
+  const steps = [];
+  const created = { groups: [], rules: [] };
+  let ok = true;
+
+  try {
+    let groupId = plan.items.find(i => i.kind === 'wmsauth-group')?.detail?.groupId || null;
+    const wantServers = plan.items.find(i => i.kind === 'wmsauth-group')?.detail?.servers || [];
+
+    if (!groupId) {
+      const r = await wmspanel.authGroupCreate(cfg, { name: plan.groupName, server_ids: wantServers });
+      groupId = r?.group?.id || r?.id || null;
+      if (!groupId) {
+        // A response without an id is not proof that nothing was written, and
+        // deleting on that assumption would remove a group that exists.
+        const back = await wmspanel.authGroupList(cfg).catch(() => ({ groups: [] }));
+        groupId = (back.groups || []).find(g => g.name === plan.groupName)?.id || null;
+        if (!groupId) throw new Error('WMSPanel returned no group id and the group is not in the list afterwards');
+      }
+      created.groups.push(groupId);
+      steps.push({ step: `create group ${plan.groupName}`, ok: true, groupId });
+    }
+
+    const existingRules = await wmspanel.authRuleList(cfg, groupId).then(r => r.rules || []).catch(() => []);
+    for (const item of plan.items.filter(i => i.kind === 'wmsauth-rule' && i.action !== 'keep')) {
+      const channel = channels.find(c => `nnm:${c.application}/${c.stream}` === item.subject);
+      if (!channel) continue;
+      if (existingRules.some(r => r.name === item.subject)) {
+        steps.push({ step: `rule ${item.subject}`, ok: true, verified: 'already present' });
+        continue;
+      }
+      const body = {
+        name: item.subject,
+        // The application and stream this rule covers. Sent as plain names
+        // rather than a pattern: a regular expression that matches more than
+        // intended protects more than intended, which sounds harmless and is
+        // how an unrelated stream stops playing.
+        application: channel.application,
+        stream: channel.stream,
+        password: channel.protection.tokenKey,
+        time_tolerance: 300,
+      };
+      const r = await wmspanel.authRuleCreate(cfg, groupId, body);
+      const id = r?.rule?.id || r?.id || '';
+      created.rules.push({ groupId, id });
+      steps.push({ step: `create rule ${item.subject}`, ok: true, ruleId: id || null,
+                   verified: id ? 'created' : 'created, no id returned' });
+    }
+  } catch (e) {
+    ok = false;
+    // Undo only what this run made. A group that existed before is left alone:
+    // it may carry rules for channels this run knows nothing about.
+    const undone = [];
+    for (const r of created.rules.reverse()) {
+      try { await wmspanel.authRuleDelete(cfg, r.groupId, r.id); undone.push(r.id); } catch { /* reported below */ }
+    }
+    for (const g of created.groups.reverse()) {
+      try { await wmspanel.authGroupDelete(cfg, g); undone.push(g); } catch { /* reported below */ }
+    }
+    steps.push({ step: 'apply', ok: false, error: String(e?.message || e).slice(0, 300),
+                 upstreamError: e?.data ?? undefined,
+                 rolledBack: undone.length ? `${undone.length} object(s) removed` : 'nothing to roll back' });
+  }
+
+  await logEvent(req, 'cdn.protection.apply', { network: network.name, ok, steps: steps.length });
+  res.status(ok ? 200 : 502).json({ ok, steps, plan });
+});
+
+// A link that satisfies this channel's protection, signed here because the
+// key never leaves the server.
+//
+// The address matters: Nimble hashes the viewer's IP, so a link is bound to
+// whoever it was issued for. The panel asks who it is for rather than issuing
+// one that works only for the person who pressed the button.
+channelRouter.post('/channels/:id/sign', requirePerm('cdn.view'), async (req, res) => {
+  const c = await Channel.findById(req.params.id);
+  if (!c) return res.status(404).json({ error: 'channel-not-found', code: 'channel-not-found' });
+  if (c.protection?.mode !== 'token') {
+    return res.status(422).json({ error: 'channel-not-token-protected', code: 'channel-not-token-protected' });
+  }
+  if (!c.protection.tokenKey) {
+    return res.status(422).json({ error: 'no-token-key', code: 'no-token-key' });
+  }
+  const url = String(req.body?.url || '').trim();
+  if (!/^https?:\/\//.test(url)) {
+    return res.status(400).json({ error: 'url-required', code: 'url-required' });
+  }
+  const signed = signUrl(url, {
+    key: c.protection.tokenKey,
+    ip: String(req.body?.ip || '').trim(),
+    validMinutes: c.protection.validMinutes,
+    checkIp: Boolean(c.protection.bindToIp),
+  });
+  await logEvent(req, 'cdn.channel.sign', {
+    channel: `${c.application}/${c.stream}`, boundToIp: signed.boundToIp, validMinutes: signed.validMinutes,
+  });
+  res.json(signed);
+});
+
 channelRouter.get('/channels/discovered', requirePerm('cdn.view'), async (_req, res) => {
   const [networks, servers, existing] = await Promise.all([
     DeliveryNetwork.find(), NimbleServer.find(), Channel.find(),
@@ -110,6 +253,21 @@ channelRouter.put('/channels/:id', requirePerm('cdn.manage'), async (req, res) =
   if (b.notes !== undefined) c.notes = String(b.notes);
   if (b.kind !== undefined) c.kind = b.kind === 'test' ? 'test' : 'production';
   if (b.protocol !== undefined && ['hls', 'llhls', 'dash'].includes(b.protocol)) c.protocol = b.protocol;
+  if (b.protection !== undefined) {
+    const p = b.protection || {};
+    if (['open', 'token', 'referer', 'ip', 'geo'].includes(p.mode)) c.protection.mode = p.mode;
+    if (p.validMinutes !== undefined) c.protection.validMinutes = Math.max(1, Number(p.validMinutes) || 20);
+    if (p.bindToIp !== undefined) c.protection.bindToIp = Boolean(p.bindToIp);
+    if (Array.isArray(p.allowedDomains)) c.protection.allowedDomains = p.allowedDomains.map(x => String(x).trim()).filter(Boolean);
+    if (Array.isArray(p.countries)) c.protection.countries = p.countries.map(x => String(x).trim().toUpperCase()).filter(Boolean);
+    if (p.countriesAllow !== undefined) c.protection.countriesAllow = Boolean(p.countriesAllow);
+    if (Array.isArray(p.ranges)) c.protection.ranges = p.ranges.map(x => String(x).trim()).filter(Boolean);
+    if (p.rangesAllow !== undefined) c.protection.rangesAllow = Boolean(p.rangesAllow);
+    // Generated here, never accepted from the client: a key that arrived over
+    // the wire has been somewhere, and the operator has no way to know where.
+    if (p.regenerateKey) c.protection.tokenKey = newTokenKey();
+    if (c.protection.mode === 'token' && !c.protection.tokenKey) c.protection.tokenKey = newTokenKey();
+  }
   if (b.enabled !== undefined) c.enabled = b.enabled !== false;
   if (b.network !== undefined) c.network = b.network || null;
   try { await c.save(); }
@@ -182,6 +340,9 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
     // derivable from configuration — it takes a probe — so the step is empty
     // until the operator runs one, and the page passes the result back in.
     steps: networkSteps({ network, servers, channels, derived: plan }),
+    // Who may watch, derived alongside what carries it. Same computation for
+    // preview and apply, for the same reason as the routes.
+    protection: deriveProtection({ network, servers, channels, originApps }),
   });
 });
 

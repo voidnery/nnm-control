@@ -51,6 +51,43 @@ const channelSchema = new mongoose.Schema({
   // panel refuses to offer it on a server without TLS.
   protocol: { type: String, enum: ['hls', 'llhls', 'dash'], default: 'hls' },
 
+  // Who may watch, said as intent rather than as WMSPanel objects.
+  //
+  // The operator says "only from our sites", "only from Russia", "only with a
+  // link that expires"; the panel works out the groups and rules that means.
+  // None of these exist on the account today — every stream on the fleet is
+  // open, which is a decision nobody made.
+  //
+  // `open` is a real answer and the default. Most streams are meant to be
+  // watchable, and a panel that treats "unprotected" as an oversight nags
+  // about the normal case.
+  protection: {
+    mode: { type: String, enum: ['open', 'token', 'referer', 'ip', 'geo'], default: 'open' },
+
+    // Token: the signing key, and how long a link stays good. The key is the
+    // whole secret — anyone holding it can mint links — so it is generated
+    // rather than typed, and never returned once set.
+    tokenKey: { type: String, default: '' },
+    validMinutes: { type: Number, default: 20 },
+    // Whether a link is tied to the viewer who was issued it. Nimble hashes
+    // the address either way; this is whether it also *checks* it.
+    bindToIp: { type: Boolean, default: false },
+
+    // Referer: the sites allowed to embed the player. Bare domains, because
+    // that is what a person knows — the panel builds whatever pattern the API
+    // wants.
+    allowedDomains: { type: [String], default: [] },
+
+    // Geo: ISO alpha-2, and whether the list permits or forbids. A list with
+    // no direction is ambiguous in the dangerous direction.
+    countries: { type: [String], default: [] },
+    countriesAllow: { type: Boolean, default: true },
+
+    // IP: CIDR ranges, same question of direction.
+    ranges: { type: [String], default: [] },
+    rangesAllow: { type: Boolean, default: true },
+  },
+
   // Production channels are what viewers get. Test channels exist so an
   // operator can rehearse the whole path without the rehearsal being
   // indistinguishable from the broadcast on every screen that lists channels.

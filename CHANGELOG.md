@@ -1,5 +1,123 @@
 # Changelog
 
+### v0.84.0 — iter22 m3: protection you can actually switch on
+The model and the signer existed; nothing could reach them. Now the channel
+dialog asks who may watch, and the panel writes the WMSAuth groups and rules
+that means.
+
+**Each mode says what it costs, where the choice is made.** Referer stops
+embedding on someone else's site and not somebody opening the link directly.
+Tying a link to an IP breaks it for a viewer who changed network — Nimble puts
+the address in the signature either way, this only turns on checking it.
+Replacing a key kills every link already issued, and the dialog says so before
+the save rather than after the phone rings.
+
+**The key is never rendered.** The dialog reports that one exists; the value
+lives on the server and signing happens there. A response is read over
+shoulders and pasted into chats, and whoever holds that string can mint links.
+
+**Applying is as careful as the routes were**, and for the same reasons —
+because the account has no WMSAuth objects at all, so every request body is
+documented rather than observed, and the `to` field of a route is what that
+position cost last time:
+
+- the plan is recomputed on apply, never trusted from the page: the account
+  changes between a preview and a press, and the change that matters most — an
+  application put into HTTP Origin mode — is invisible from that page;
+- a create that returns no id looks for the object before undoing anything,
+  because a missing id is not proof that nothing was written;
+- rollback removes only what this run created. A group that existed before may
+  carry rules for channels this run knows nothing about, and undoing it would
+  be an outage rather than a rollback;
+- a rule names one application and one stream. A pattern that matches more than
+  intended protects more than intended, which sounds harmless until an
+  unrelated stream stops playing.
+
+Seven new checks on the apply path and the dialog, four proven by
+contradiction.
+
+### v0.83.0 — iter22 m2: who may watch, said as intent
+A channel now carries protection: open, token, referer, geo or IP range. The
+operator says "only from our sites" or "only with a link that expires"; the
+panel works out the WMSAuth groups and rules that means.
+
+**Open is a real answer and the default.** Most streams are meant to be
+watchable, and a panel that treats "unprotected" as an oversight nags about the
+normal case until nobody reads it. What it does do is make the current state
+visible: today every stream on the fleet is open, which is a decision nobody
+made.
+
+**One group per network, one rule per channel.** A WMSAuth group carries
+servers and rules, and a group per channel would leave an account full of
+near-duplicates nobody can tell apart — and somebody will look, because this
+panel does not yet do everything. A network already owns a set of servers,
+which is exactly what a group needs.
+
+**The signing key never leaves the server.** It is generated, never accepted
+from a client — a key that arrived over the wire has been somewhere and the
+operator cannot know where — and the API returns only whether one exists.
+Signing happens server-side, and the audit records what a link was bound to
+rather than what signed it. Four checks hold that shut.
+
+The findings separate what defeats protection from what merely weakens it:
+
+- **HTTP Origin mode defeats it entirely** and blocks. The operator sees a
+  rule, sees a signed link, and the stream is open.
+- **An empty allow-list locks out everyone including the operator**, and it is
+  one empty array away at all times.
+- **Referer is advisory** — a header the client sends and may decline to send.
+  Said where the choice is made, rather than after somebody watches with curl.
+- **A validity window long enough to be shared is a warning, not a refusal.**
+  The operator may have a reason; refusing would be the panel deciding.
+- A country that is not a country and a range that is not a range are refused
+  outright.
+
+Blocked is not in sync: a plan with everything written and a blocking finding
+reports out of sync, because everything being written and the protection not
+working is precisely the state worth flagging.
+
+### v0.82.0 — iter22 m1: signing a link Nimble will actually serve
+Every protection family in the account is empty — no WMSAuth groups, no referer
+groups, no IP ranges, no user-agent groups. Every stream on the fleet is open:
+anyone with a URL can watch it, and anyone can embed it on their own site.
+
+Creating a WMSAuth rule is the easy half. The half that matters is producing a
+link that satisfies it, and a link signed slightly wrong does not fail loudly —
+the server refuses and the operator concludes the stream is broken. So this
+milestone starts with the signer.
+
+    str2hash  = ip + id + key + server_time + validminutes
+    hash      = base64( md5(str2hash, raw bytes) )
+    signature = base64( "server_time=…&hash_value=…&validminutes=…" )
+    url       = <playback url> + "?wmsAuthSign=" + signature
+
+Three details silently change the hash, and each is now proven by
+contradiction:
+
+- **`server_time` is PHP's `n/j/Y g:i:s A`, in UTC.** No leading zeros, a
+  12-hour clock, uppercase AM/PM. `05/04/2012 08:33:05 AM` hashes differently
+  from `5/4/2012 8:33:05 AM` and the only symptom is a 403.
+- **The MD5 is base64 of the raw digest, not of the hex digest.** Both are
+  strings of plausible length; one of them works.
+- **The pay-per-view id sits between the ip and the key.** Order is not
+  guessable from the field names.
+
+**A signed link is bound to a viewer's IP**, because the address is in the
+hash. The panel cannot hand out a universal signed link and says so, rather
+than issuing one that works only for whoever generated it. Expiry and the
+bound address come back with the URL.
+
+**And HTTP Origin mode defeats a signature entirely** — Softvelum's own paywall
+FAQ says an application listed under HTTP origin applications is not protected
+by WMSAuth. That is the same shape as the cache interaction: a mode set
+somewhere else quietly disabling something the operator believes is on. It
+blocks, like the cache one does.
+
+The UTC contradiction did not bite at first: this suite runs in UTC, so local
+and UTC agree, and an implementation using `getMonth()` passed. The assertion
+now forces `TZ=Asia/Tokyo`, where the date itself rolls over. Seventh time this
+month that running the contradiction found what the assertion had missed.
+
 ### v0.81.0 — hit ratio's question, asked so the data can answer it
 Confirmed from both directions now: Nimble reports cache **sizes** and no hit
 or miss counters, in the native API and in WMSPanel alike. Hit ratio is not

@@ -186,7 +186,7 @@ export default function ChannelsPanel() {
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h2 style={{ margin: 0 }}>{t('ch.title')}</h2>
         {canManage && (
-          <button onClick={() => setEdit({ application: '', stream: '', label: '', kind: 'production', protocol: 'hls', network: '' })}>
+          <button onClick={() => setEdit({ application: '', stream: '', label: '', kind: 'production', protocol: 'hls', protection: { mode: 'open' }, network: '' })}>
             {t('ch.add')}
           </button>
         )}
@@ -226,7 +226,7 @@ export default function ChannelsPanel() {
             <Row key={r.channel.id} row={r} canManage={canManage}
                  expanded={open === r.channel.id}
                  onToggle={() => setOpen(o => (o === r.channel.id ? '' : r.channel.id))}
-                 onEdit={(c) => setEdit({ ...c, network: c.network || '' })} />
+                 onEdit={(c) => setEdit({ ...c, network: c.network || '', protection: c.protection || { mode: 'open' } })} />
           ))}
           {!data.rows.length && <tr><td colSpan={6} className="hint">{t('ch.empty')}</td></tr>}
         </tbody>
@@ -270,6 +270,92 @@ export default function ChannelsPanel() {
             ))}
           </div>
           <div className="hint">{t('ch.proto.' + (edit.protocol || 'hls') + '.note')}</div>
+
+          {/* Who may watch. Stated as intent — the panel works out the WMSAuth
+              groups and rules — and "open" is a real answer, not an oversight
+              to be nagged about. */}
+          <label>{t('ch.protectionLabel')}</label>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {['open', 'token', 'referer', 'geo', 'ip'].map(m => (
+              <button key={m} className={'tagchip' + ((edit.protection?.mode || 'open') === m ? ' on' : '')}
+                      onClick={() => setEdit({ ...edit, protection: { ...(edit.protection || {}), mode: m } })}>
+                {t('ch.prot.' + m)}
+              </button>
+            ))}
+          </div>
+          <div className="hint">{t('ch.prot.' + (edit.protection?.mode || 'open') + '.note')}</div>
+
+          {edit.protection?.mode === 'token' && (
+            <>
+              <label>{t('ch.validMinutes')}</label>
+              <input type="number" style={{ maxWidth: 120 }} value={edit.protection.validMinutes ?? 20}
+                     onChange={e => setEdit({ ...edit, protection: { ...edit.protection, validMinutes: e.target.value } })} />
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="checkbox" checked={Boolean(edit.protection.bindToIp)}
+                       onChange={e => setEdit({ ...edit, protection: { ...edit.protection, bindToIp: e.target.checked } })} />
+                {t('ch.bindToIp')}
+              </label>
+              <div className="hint">{t('ch.bindToIpNote')}</div>
+              <div className="row" style={{ gap: 8, alignItems: 'center', marginTop: 8 }}>
+                {/* The key is never shown, only whether one exists: a response
+                    is read over shoulders and pasted into chats, and whoever
+                    holds this string can mint links. */}
+                <span className="hint">{t(edit.protection.hasKey ? 'ch.keySet' : 'ch.keyWillBeMade')}</span>
+                {edit.protection.hasKey && (
+                  <button onClick={() => setEdit({ ...edit, protection: { ...edit.protection, regenerateKey: true } })}>
+                    {t('ch.regenKey')}
+                  </button>
+                )}
+                {edit.protection.regenerateKey && <span className="badge warn">{t('ch.keyWillChange')}</span>}
+              </div>
+            </>
+          )}
+
+          {edit.protection?.mode === 'referer' && (
+            <>
+              <label>{t('ch.domains')}</label>
+              <input className="mono" placeholder="bbesport.com, example.tv"
+                     value={(edit.protection.allowedDomains || []).join(', ')}
+                     onChange={e => setEdit({ ...edit, protection: { ...edit.protection,
+                       allowedDomains: e.target.value.split(',').map(x => x.trim()).filter(Boolean) } })} />
+            </>
+          )}
+
+          {edit.protection?.mode === 'geo' && (
+            <>
+              <label>{t('ch.countries')}</label>
+              <input className="mono" placeholder="RU, BY, KZ"
+                     value={(edit.protection.countries || []).join(', ')}
+                     onChange={e => setEdit({ ...edit, protection: { ...edit.protection,
+                       countries: e.target.value.split(',').map(x => x.trim().toUpperCase()).filter(Boolean) } })} />
+              <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                {[true, false].map(v => (
+                  <button key={String(v)} className={'tagchip' + ((edit.protection.countriesAllow !== false) === v ? ' on' : '')}
+                          onClick={() => setEdit({ ...edit, protection: { ...edit.protection, countriesAllow: v } })}>
+                    {t(v ? 'ch.allowOnly' : 'ch.denyThese')}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {edit.protection?.mode === 'ip' && (
+            <>
+              <label>{t('ch.ranges')}</label>
+              <input className="mono" placeholder="10.0.0.0/8, 203.0.113.0/24"
+                     value={(edit.protection.ranges || []).join(', ')}
+                     onChange={e => setEdit({ ...edit, protection: { ...edit.protection,
+                       ranges: e.target.value.split(',').map(x => x.trim()).filter(Boolean) } })} />
+              <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                {[true, false].map(v => (
+                  <button key={String(v)} className={'tagchip' + ((edit.protection.rangesAllow !== false) === v ? ' on' : '')}
+                          onClick={() => setEdit({ ...edit, protection: { ...edit.protection, rangesAllow: v } })}>
+                    {t(v ? 'ch.allowOnly' : 'ch.denyThese')}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <label>{t('ch.kindLabel')}</label>
           <div className="row" style={{ gap: 6 }}>
