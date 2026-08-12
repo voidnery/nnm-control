@@ -59,7 +59,11 @@ function protectionStatus(channel, { authRules, authGroups, originApps }) {
     return { mode, chosen: mode, applied: null, effective: null, code: 'unknown' };
   }
   const rule = authRules.get(name) || null;
-  const defeated = originApps.some(oa => trim(oa.application) === app);
+  // Defensive on purpose. The caller should pass this; when it did not, the
+  // page returned 500 and the operator saw "Internal server error" with no
+  // way to tell which of a dozen calls had failed. A missing list is now the
+  // same as an empty one, and the status still says what it knows.
+  const defeated = (originApps || []).some(oa => trim(oa.application) === app);
   return {
     mode, chosen: mode,
     applied: Boolean(rule),
@@ -390,6 +394,11 @@ channelRouter.get('/channels/overview', requirePerm('cdn.view'), async (_req, re
   // What protection actually exists on the account, as opposed to what the
   // channels ask for. Two different questions, and the operator asked both:
   // which mode is chosen, and which is in force.
+  // Needed to tell "protected" from "protected and defeated": an application
+  // in HTTP Origin mode is not covered by a signature. This was read in the
+  // other handlers and used here without being fetched, which took the whole
+  // page down with a bare 500.
+  const originApps = await wmspanel.originAppList(cfg).then(r => r.settings || []).catch(() => []);
   const authGroups = await wmspanel.authGroupList(cfg).then(r => r.groups || []).catch(() => null);
   const authRules = new Map();
   if (authGroups) {

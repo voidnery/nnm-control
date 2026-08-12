@@ -1,5 +1,34 @@
 # Changelog
 
+### v0.85.1 — Internal server error on the channels page
+v0.85.0 took the page down. The protection status needs to know which
+applications are in HTTP Origin mode, and the handler used `originApps` without
+fetching it — the name came from a different handler in the same file, where it
+is fetched. A `ReferenceError`, a bare 500, and an operator looking at
+"Internal server error" with no way to tell which of a dozen calls had failed.
+
+One line to fix. The status function also treats a missing list as an empty one
+now, so the same omission degrades to a less precise answer instead of a dead
+page.
+
+**The gate that exists for this defect class did not catch it.** `audit:undef`
+collects declarations file-wide and asks whether a name exists *anywhere* in
+the module. `originApps` did exist — in the handler above. That is the wrong
+question, and it is the second time this shape has shipped.
+
+A scoped version was written and is not shipped. It does catch this — it names
+`originApps` the moment the fetch is removed — but it also reports twenty-six
+names that are perfectly in scope, because a handler is full of callbacks whose
+parameters a regular expression struggles to collect. A gate that fails every
+build gets switched off, and then so is everything else it was checking.
+
+The attempt is recorded in the audit file rather than deleted, including the
+part worth remembering: the first version of its handler-matching pattern found
+**zero** handlers in a file full of them and reported success. A gate that
+matches nothing is indistinguishable from a gate that passes. The honest fix is
+a parser over these files instead of patterns, which is a piece of work rather
+than a patch.
+
 ### v0.85.0 — which mode is on, and which one is actually working
 Protection could be switched on and nothing showed it. The question — "what is
 enabled, what is active" — is two questions, and the row answered neither.

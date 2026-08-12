@@ -65,6 +65,71 @@ function strip(src) {
     .replace(/"(?:\\.|[^"\\\n])*"/g, '""');
 }
 
+// Names visible at module level: declared at column zero, or imported.
+// Everything else belongs to some function and is not visible from another.
+const RESERVED = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'typeof', 'new',
+  'await', 'delete', 'void', 'do', 'else', 'try', 'throw', 'yield', 'function', 'super', 'this',
+  'instanceof', 'in', 'of', 'case', 'const', 'let', 'var', 'class', 'import', 'export', 'default']);
+
+function moduleLevelNames(src) {
+  const names = new Set();
+  for (const m of src.matchAll(/^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+  for (const m of src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+  for (const m of src.matchAll(/^(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+  for (const m of src.matchAll(/^import\s+([^;]*?)\s+from\b/gm)) {
+    for (const part of m[1].split(/[{},]/)) {
+      const bits = part.trim().split(/\s+as\s+|\s+/).filter(Boolean);
+      if (bits.length) names.add(bits[bits.length - 1]);
+    }
+  }
+  // Destructured module-level constants: `const { a, b } = …` at column zero.
+  for (const m of src.matchAll(/^(?:export\s+)?(?:const|let|var)\s*\{([^}]*)\}/gm)) {
+    for (const part of m[1].split(',')) {
+      const bits = part.split(':').map(x => x.trim());
+      const last = (bits[bits.length - 1] || '').split('=')[0].trim();
+      if (/^[A-Za-z_$][\w$]*$/.test(last)) names.add(last);
+    }
+  }
+  return names;
+}
+
+// Each route handler, as its own scope.
+//
+// The gate collected declarations file-wide, which is why it passed on a
+// handler using `originApps` that a *different* handler in the same file had
+// fetched: the name existed somewhere, so it counted as declared. The page
+// returned 500 and the operator saw "Internal server error".
+//
+// A name used inside a handler must be declared inside it, or at module level.
+// Anything else belongs to some other function and is not visible from here.
+function routeHandlers(src) {
+  const out = [];
+  // Anchored on the route line, then the first `async (…) => {` after it.
+  //
+  // The first attempt matched from the route method to the arrow with
+  // `[^)]*?`, which cannot cross `requirePerm('cdn.view')` — so it found zero
+  // handlers in a file full of them and reported success. A gate that matches
+  // nothing is indistinguishable from a gate that passes.
+  const line = /^\s*\w+\.(?:get|post|put|patch|delete|use)\(/gm;
+  let m;
+  while ((m = line.exec(src))) {
+    const arrow = /async\s*\(([^)]*)\)\s*=>\s*\{/g;
+    arrow.lastIndex = m.index;
+    const a = arrow.exec(src);
+    if (!a || a.index > m.index + 400) continue;
+    let depth = 1;
+    let i = arrow.lastIndex;
+    while (i < src.length && depth > 0) {
+      const ch = src[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      i++;
+    }
+    out.push({ params: a[1], body: src.slice(arrow.lastIndex, i - 1) });
+  }
+  return out;
+}
+
 function declaredNames(src) {
   const names = new Set();
   const add = (n) => { if (n) names.add(n); };
@@ -163,6 +228,24 @@ for (const file of files) {
     bad++;
   }
 }
+
+// A second, scoped pass belongs here and is not finished.
+//
+// The file-wide pass below asks whether a name exists anywhere in the module.
+// That is the wrong question, and it cost v0.85.0: a handler used `originApps`
+// that a *different* handler in the same file had fetched, the name existed,
+// this gate passed, and the page answered 500.
+//
+// A prototype of the scoped version does catch exactly that — it names
+// `originApps` the moment the fetch is removed — but it also reports
+// twenty-six names that are perfectly in scope, because a handler is full of
+// callbacks whose parameters a regular expression struggles to collect. A gate
+// that fails every build is worse than the hole it covers: it gets switched
+// off, and then so is everything else it was checking.
+//
+// Left out rather than shipped half-working, and written down rather than
+// forgotten. The honest fix is a real parser over these files instead of
+// patterns, which is a piece of work rather than a patch.
 
 console.log(bad
   ? `\n${bad} undefined reference(s) — this is the defect class that returns 502 and restarts the panel`
