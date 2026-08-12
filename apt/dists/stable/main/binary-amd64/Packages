@@ -520,3 +520,21 @@ Description: NNM Control (network-nimble-media-control) — web panel for Nimble
  native management API. Runs as a Docker Compose stack (MongoDB + Node.js
  API + React UI behind nginx) managed by a systemd unit.
 
+Package: nnm-control
+Version: 1:0.85.1
+Architecture: all
+Maintainer: voidnery <opensource@voidnery.pro>
+Depends: debconf, docker.io | docker-ce, docker-compose-v2 | docker-compose-plugin
+Filename: pool/main/nnm-control_0.85.1_all.deb
+Size: 11596
+MD5sum: afb29d2050b49689f95ab28c3a860d13
+SHA1: 49b08bf9a5b30b02fb02d5cceb6bffd7a96a50dc
+SHA256: 9a84852e34094e7e31ae992f2ce7b2922081925bce48fd84cc08e669473281d9
+Section: net
+Priority: optional
+Homepage: https://github.com/voidnery/nnm-control
+Description: NNM Control (network-nimble-media-control) — web panel for Nimble Streamer
+ Self-hosted management panel for Nimble Streamer instances using their
+ native management API. Runs as a Docker Compose stack (MongoDB + Node.js
+ API + React UI behind nginx) managed by a systemd unit.
+
