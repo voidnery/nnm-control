@@ -1,5 +1,35 @@
 # Changelog
 
+### v0.77.1 — the chain, and screens you can read
+The steps worked and looked unfinished, which was fair: a vertical stack of six
+accordions says "here are six settings", not "this is one path and here is
+where you are on it".
+
+- **Six cards, arrows between them, and the panel grows out of the card you
+  clicked.** It scales from the top edge on purpose — from the centre it reads
+  as "the page got longer" rather than "that card opened", which is the whole
+  job of the animation. Off entirely under `prefers-reduced-motion`: an
+  animation is a way of saying where something came from, and somebody who has
+  asked for less of it has already been told.
+- **Both dense screens were the same complaint**: everything at one weight, one
+  colour, one distance apart, so the eye had nothing to grip and a wall of text
+  happened to contain the answer. Headings take the accent colour rather than
+  only more weight — bold alone in a dark theme reads as slightly-more-text.
+  The facts on "At a glance" are ruled cells instead of a field of numbers, and
+  the flow boards on "Is it arriving" have room around them instead of touching.
+
+**A tab was labelled `cdn.tab.setup` in production for a release.** The key was
+built as `t('cdn.tab.' + v)` and the i18n gate skips dynamically-built keys —
+reasonably, since most cannot be checked. But this one is built from a literal
+list in the same file, which is as checkable as a static key. The gate now
+expands those lists, and would have caught it.
+
+Two of my own contradictions failed before they bit. The reduced-motion check
+searched the whole stylesheet and was satisfied by an unrelated rule elsewhere
+— passing on evidence about something else. Its replacement then required a
+newline before the closing brace and missed the one-liner it was looking at:
+a check reporting a fault it had failed to look for. Both fixed, both re-proven.
+
 ### v0.77.0 — iter21 m4: one window, six steps
 Everything needed to build a delivery network was there and spread across six
 equal tabs. That arrangement answers "where is that setting" and never "what do

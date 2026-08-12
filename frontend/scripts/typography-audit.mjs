@@ -156,5 +156,78 @@ for (const f of files) {
 }
 if (!nested) ok('no delivery component nests one card in another');
 
+console.log('\nDENSE SCREENS ARE SEPARATED, NOT JUST SPACED:');
+
+// The complaint this answers: everything at the same weight, the same colour
+// and the same distance apart, so the eye has nothing to grip and a wall of
+// text happens to contain the answer. Weight alone does not do it — a bold
+// heading in a dark theme reads as slightly-more-text — so a heading has to
+// differ in colour, and blocks have to be divided by a rule rather than by
+// hoping the reader notices four pixels of margin.
+const rule = (sel) => {
+  const i = css.indexOf(sel + ' {');
+  return i === -1 ? '' : css.slice(i, css.indexOf('}', i));
+};
+const allRules = (sel) => {
+  const out = [];
+  let i = -1;
+  while ((i = css.indexOf(sel, i + 1)) !== -1) {
+    const brace = css.indexOf('{', i);
+    if (brace === -1) break;
+    // Only when the selector ends here, so `.gsection` does not match
+    // `.gsection-thing`.
+    if (/^[\s{,:]/.test(css.slice(i + sel.length, i + sel.length + 1) || ' ')) {
+      out.push(css.slice(brace, css.indexOf('}', brace)));
+    }
+  }
+  return out.join(' ');
+};
+
+for (const [sel, what] of [['.gsection', 'section headings'], ['.gcol-h', 'column headings']]) {
+  if (!/color:\s*var\(--accent/.test(allRules(sel))) {
+    fail(`${what} (${sel}) are not set apart by colour, only by weight`);
+  } else {
+    ok(`${what} carry the accent colour`);
+  }
+}
+
+if (!/border-top:\s*1px solid var\(--line/.test(allRules('.cfg-grid > div'))) {
+  fail('the facts on "At a glance" have no rule between them');
+} else {
+  ok('the facts are ruled, not merely spaced');
+}
+
+if (!/margin-bottom:\s*var\(--sp-[45]\)/.test(allRules('.gpipe-card'))) {
+  fail('the flow boards touch each other; they need room, not just a border');
+} else {
+  ok('the flow boards have room around them');
+}
+
+console.log('\nTHE SETUP CHAIN:');
+
+if (!/animation:\s*steppop-in/.test(rule('.steppop'))) {
+  fail('the step panel does not grow from its card');
+// Scoped to a reduced-motion block that actually turns *this* animation off.
+// The first version searched the whole stylesheet, and an unrelated
+// reduced-motion rule elsewhere satisfied it — a check passing on evidence
+// about something else.
+// Both writings: a block spanning lines and one written on a single line.
+// The first attempt required a newline before the closing brace and missed the
+// one-liner that was right there — a check reporting a fault it had itself
+// failed to look for.
+} else if (!/@media[^{]*prefers-reduced-motion[\s\S]{0,400}?\.steppop[^}]*animation:\s*none/.test(css)) {
+  fail('the animation has no reduced-motion escape; an animation is a way of '
+     + 'saying where something came from, and somebody who asked for less of it '
+     + 'has already been told');
+} else {
+  ok('the panel grows from its card, and stops for reduced motion');
+}
+if (!/transform-origin:\s*top/.test(rule('.steppop'))) {
+  fail('the panel scales from its centre, which reads as "the page got longer" '
+     + 'rather than "that card opened"');
+} else {
+  ok('it scales from the top edge');
+}
+
 console.log(bad ? `\n${bad} typography problem(s)` : '\ntypography audit: OK');
 process.exit(bad ? 1 : 0);

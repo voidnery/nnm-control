@@ -729,3 +729,87 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 /* The panels moved inside a step keep their own spacing but lose their card:
    a card inside a step inside a card is three containers deep. */
 .step-body > .panel { border: none; background: none; padding: 0; margin: 0; }
+
+/* ---------------------------------------------------------------- setup chain
+   Six cards with arrows between them. A vertical list of accordions said
+   "these are six settings"; a chain says "this is one path and here is where
+   you are on it", which is what the list could not say. */
+.stepchain { display: flex; flex-wrap: wrap; align-items: stretch; gap: var(--sp-2); margin-top: var(--sp-3); }
+.stepchain-cell { display: flex; align-items: center; gap: var(--sp-2); }
+.stepchain-arrow { color: var(--text-dim); font-size: var(--fs-lead); user-select: none; }
+
+.stepcard { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+  gap: 2px var(--sp-2); align-items: center; text-align: left;
+  min-width: 180px; max-width: 230px; padding: var(--sp-3) var(--sp-3);
+  background: var(--bg-panel); border: 1px solid var(--line); border-radius: 12px;
+  font-size: var(--fs-body); cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.stepcard:hover { background: var(--bg-raise); transform: translateY(-1px); }
+.stepcard .step-mark { grid-row: 1 / span 2; }
+.stepcard-title { font-weight: 550; }
+.stepcard-line { grid-column: 2; color: var(--text-dim); font-size: var(--fs-meta);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The open card is the one the panel below belongs to, so it is marked and its
+   bottom corners join the panel rather than closing it off. */
+.stepcard.open { border-color: var(--accent); background: var(--bg-raise);
+  border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
+.stepcard.action { border-left: 3px solid var(--warn, #a97b28); }
+
+.step-mark { display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%; font-size: var(--fs-meta);
+  background: var(--bg); border: 1px solid var(--line); color: var(--text-dim); }
+.step-mark.live { background: var(--ok, #2f7d54); border-color: transparent; color: #fff; }
+.step-mark.warn { background: var(--warn, #a97b28); border-color: transparent; color: #fff; }
+
+/* Grows out of the card. Scaling from the top edge is what makes it read as
+   "that card opened" rather than "the page got longer". */
+.steppop { margin-top: var(--sp-2); border: 1px solid var(--accent); border-radius: 12px;
+  background: var(--bg-panel); overflow: hidden; transform-origin: top center;
+  animation: steppop-in .18s cubic-bezier(.2, .8, .3, 1); }
+@keyframes steppop-in {
+  from { opacity: 0; transform: scaleY(.92) translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+/* An animation says where a thing came from. Somebody who asked for less of it
+   has already been told, so they get the position without the movement. */
+@media (prefers-reduced-motion: reduce) { .steppop { animation: none; } .stepcard:hover { transform: none; } }
+
+.steppop-head { display: flex; justify-content: space-between; align-items: center;
+  padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); background: var(--bg-raise);
+  font-size: var(--fs-lead); }
+.steppop-close { background: none; border: none; color: var(--text-dim); font-size: var(--fs-lead); padding: 0 4px; }
+.steppop-close:hover { color: var(--text); background: none; }
+.steppop-body { padding: var(--sp-4); }
+.steppop-body > .panel { border: none; background: none; padding: 0; margin: 0; }
+
+/* --------------------------------------------------- reading dense screens
+   Both "At a glance" and "Is it arriving" put everything at the same weight,
+   the same colour and the same distance apart, so the eye had nothing to grip:
+   a wall of text that happens to contain the answer. Three things fix it —
+   a rule between blocks, air around them, and a heading that is a different
+   colour from the body rather than merely bolder. */
+
+/* Section headings get the accent, not just weight. Bold-only headings in a
+   dark theme read as slightly-more-text. */
+.gsection { color: var(--accent); }
+.eyebrow { color: var(--accent); opacity: .85; }
+
+/* The facts on "At a glance": ruled cells rather than a field of numbers. */
+.cfg-grid { gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cfg-grid > div { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line); }
+/* The first row and first column have no neighbour above or to the left, so
+   their borders would be the card's own. Handled by nth-child rather than by a
+   wrapper: the grid reflows and a wrapper would not know where the rows land. */
+.cfg-grid > div:first-child { border-left: none; }
+.cfg-value { color: var(--text); }
+.cfg-finding { padding: var(--sp-3) 0; }
+.cfg-what { font-weight: 550; }
+
+/* Each channel's flow board on "Is it arriving": a card with room around it,
+   not three stacked rectangles touching. */
+.gpipe-card { margin-bottom: var(--sp-4); }
+.gpipe-h { background: var(--bg-raise); font-size: var(--fs-body); }
+.gpipe-h .mono { color: var(--accent); font-weight: 550; }
+.gcol-h { color: var(--accent); }
+.step-body .gsection, .steppop-body .gsection { margin-top: var(--sp-4); }

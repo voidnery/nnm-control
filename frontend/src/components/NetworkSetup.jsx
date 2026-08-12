@@ -19,25 +19,33 @@ import { useI18n } from '../i18n.jsx';
 
 const TONE = { done: 'live', action: 'warn', empty: '', unknown: 'warn' };
 
-function Step({ id, n, state, summary, code, open, onOpen, children }) {
+// The steps as a row of cards with arrows between them, and the one you open
+// growing out of the card you clicked.
+//
+// A vertical list of six accordions said "these are six settings". A chain
+// says "this is one path, and here is where you are on it" — which is the
+// thing the list could not say and the reason an operator who had used it for
+// a week still asked what order to work in.
+//
+// The panel scales out of its own card so the connection between the two is
+// visible rather than implied by proximity. `prefers-reduced-motion` turns the
+// growth off: an animation is a way of saying where something came from, and
+// somebody who has asked for less of it has already been told.
+
+function StepCard({ id, n, state, summary, code, open, onOpen }) {
   const { t } = useI18n();
-  // The one-line answer, built from the step's own numbers, so a collapsed
-  // step still says something rather than only its name.
   const line = code
     ? t('step.' + id + '.' + code)
     : t('step.' + id + '.' + state, summary || {});
   return (
-    <div className={'step' + (open ? ' open' : '')}>
-      <button className="step-head" onClick={onOpen}>
-        <span className={'step-mark ' + (TONE[state] || '')}>
-          {state === 'done' ? '✓' : state === 'action' ? '!' : n}
-        </span>
-        <span className="step-title">{t('step.' + id)}</span>
-        <span className="step-line hint">{line}</span>
-        <span className="step-chev">{open ? '▾' : '▸'}</span>
-      </button>
-      {open && <div className="step-body">{children}</div>}
-    </div>
+    <button className={'stepcard' + (open ? ' open' : '') + ' ' + state}
+            onClick={onOpen} aria-expanded={open}>
+      <span className={'step-mark ' + (TONE[state] || '')}>
+        {state === 'done' ? '✓' : state === 'action' ? '!' : n}
+      </span>
+      <span className="stepcard-title">{t('step.' + id)}</span>
+      <span className="stepcard-line">{line}</span>
+    </button>
   );
 }
 
@@ -71,14 +79,28 @@ export default function NetworkSetup({ network, servers, derived, onReload, chil
       </div>
       <div className="hint">{t('step.intro')}</div>
 
-      <div className="steps" style={{ marginTop: 14 }}>
+      <div className="stepchain">
         {['members', 'upstreams', 'channels', 'nimble', 'links', 'verify'].map((id, i) => (
-          <Step key={id} id={id} n={i + 1} {...st(id)}
-                open={open === id} onOpen={() => setOpen(o => (o === id ? '' : id))}>
-            {slot(id)}
-          </Step>
+          <div className="stepchain-cell" key={id}>
+            {i > 0 && <span className="stepchain-arrow" aria-hidden="true">→</span>}
+            <StepCard id={id} n={i + 1} {...st(id)}
+                      open={open === id} onOpen={() => setOpen(o => (o === id ? '' : id))} />
+          </div>
         ))}
       </div>
+
+      {/* The panel, growing out of the card. Keyed on the open step so React
+          replaces it rather than reusing it, which is what makes the animation
+          read as "this one opened" instead of "the contents changed". */}
+      {open && (
+        <div className="steppop" key={open}>
+          <div className="steppop-head">
+            <b>{t('step.' + open)}</b>
+            <button className="steppop-close" onClick={() => setOpen('')} aria-label={t('action.close')}>✕</button>
+          </div>
+          <div className="steppop-body">{slot(open)}</div>
+        </div>
+      )}
     </div>
   );
 }

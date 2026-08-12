@@ -64,6 +64,20 @@ for f in glob.glob('src/**/*.jsx', recursive=True):
     for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.]+)'\s*\+", open(f).read()):
         used.discard(m.group(1))  # dynamic key building, can't check statically
 
+# Dynamic keys built from a literal list in the same file. `t('cdn.tab.' + v)`
+# over `['setup', 'overview', 'probes', 'globe']` is as checkable as a static
+# key, and skipping it is how `cdn.tab.setup` reached a screenshot as its own
+# name: the tab bar rendered "cdn.tab.setup" to an operator for a whole release.
+for f in glob.glob('src/**/*.jsx', recursive=True):
+    src = open(f).read()
+    for m in re.finditer(r"\{\s*\[((?:\s*'[a-zA-Z0-9_-]+'\s*,?)+)\]\s*\.map\(\s*(\w+)\s*=>", src):
+        items = re.findall(r"'([a-zA-Z0-9_-]+)'", m.group(1))
+        var = m.group(2)
+        # The prefixes this list is concatenated with, anywhere after it.
+        for pm in re.finditer(r"t\(\s*'([a-zA-Z0-9_.]+\.)'\s*\+\s*" + re.escape(var) + r"\s*\)", src[m.end():]):
+            for it in items:
+                used.add(pm.group(1) + it)
+
 missing_en = sorted(k for k in used if k not in en)
 missing_ru = sorted(k for k in used if k not in ru)
 only_en = sorted(k for k in (en - ru) if k in used)
