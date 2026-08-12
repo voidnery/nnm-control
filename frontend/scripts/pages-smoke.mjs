@@ -164,6 +164,7 @@ window.fetch = (u) => {
     rows:[{ channel:{ id:'C1', application:'test2', stream:'test_stream', label:'', kind:'production', network:'N1', name:'test2/test_stream' },
             network:{ id:'N1', name:'Prod', audience:'internal' },
             edges:[{ name:'RU-2', healthy:true, routed:true, serving:false }],
+            protection:{ mode:'token', chosen:'token', applied:false, effective:false, code:'not-applied' },
             links:{ path:'/test2/test_stream',
                     production:{ url:'http://10.0.0.2:8081/test2/test_stream/playlist.m3u8', exposes:'edge-address',
                                  resolvedTo:'RU-2', reason:'only-candidate', stable:true, mode:'direct', policy:'nearest' },

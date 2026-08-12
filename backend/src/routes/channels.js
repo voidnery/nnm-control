@@ -41,6 +41,34 @@ const pub = (c) => ({
 
 const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
 
+// Chosen, applied, and actually in force — three states an operator conflates
+// until one of them bites.
+//
+// `chosen` is what the panel holds. `applied` is whether the WMSAuth rule
+// exists on the account, which is what Nimble reads. `effective` is whether it
+// does anything: an application in HTTP Origin mode is not protected by a
+// signature however many rules point at it, which is the case where every
+// screen looks correct and the stream is open.
+function protectionStatus(channel, { authRules, authGroups, originApps }) {
+  const mode = channel.protection?.mode || 'open';
+  const app = trim(channel.application);
+  const name = `nnm:${app}/${trim(channel.stream)}`;
+
+  if (mode === 'open') return { mode, chosen: 'open', applied: null, effective: true, code: 'open' };
+  if (authGroups === null) {
+    return { mode, chosen: mode, applied: null, effective: null, code: 'unknown' };
+  }
+  const rule = authRules.get(name) || null;
+  const defeated = originApps.some(oa => trim(oa.application) === app);
+  return {
+    mode, chosen: mode,
+    applied: Boolean(rule),
+    rule: rule ? { id: rule.id, group: rule.groupName } : null,
+    effective: Boolean(rule) && !defeated,
+    code: !rule ? 'not-applied' : defeated ? 'defeated-by-http-origin' : 'in-force',
+  };
+}
+
 // What the origins are publishing that is not a channel yet.
 //
 // Adding a channel used to mean typing an application and a stream that the
@@ -359,6 +387,17 @@ channelRouter.get('/channels/overview', requirePerm('cdn.view'), async (_req, re
   // Null rather than [] when the list could not be read: "we did not ask" and
   // "there are none" lead to different rows.
   const routes = await wmspanel.routeList(cfg).then(r => r.routes || []).catch(() => null);
+  // What protection actually exists on the account, as opposed to what the
+  // channels ask for. Two different questions, and the operator asked both:
+  // which mode is chosen, and which is in force.
+  const authGroups = await wmspanel.authGroupList(cfg).then(r => r.groups || []).catch(() => null);
+  const authRules = new Map();
+  if (authGroups) {
+    for (const g of authGroups) {
+      const rules = await wmspanel.authRuleList(cfg, g.id).then(r => r.rules || []).catch(() => []);
+      for (const r of rules) authRules.set(r.name, { ...r, groupId: g.id, groupName: g.name });
+    }
+  }
 
   const byNetwork = new Map();
   for (const n of networks) byNetwork.set(String(n._id), n);
@@ -385,6 +424,10 @@ channelRouter.get('/channels/overview', requirePerm('cdn.view'), async (_req, re
         serving: e.channels ? e.channels.includes(c.application) : null,
       })),
       links: channelLinks({ channel: c, network: net, edges, node: gwNode }),
+      // Chosen versus in force. `unknown` when the account could not be read:
+      // saying "not applied" about protection we simply did not look up would
+      // be the worst of the three answers.
+      protection: protectionStatus(c, { authRules, authGroups, originApps }),
     });
   }
   res.json({ rows, routesRead: routes !== null });

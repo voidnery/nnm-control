@@ -55,10 +55,11 @@ function Copyable({ url, label, note, tone = '' }) {
   );
 }
 
-function Row({ row, expanded, onToggle, onEdit, canManage }) {
+function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signing, signIp, setSignIp }) {
   const { t } = useI18n();
   const c = row.channel;
   const l = row.links;
+  const p2 = row.protection || { mode: c.protection?.mode || 'open', code: 'unknown' };
 
   // One word for the row, chosen for what it makes the operator do.
   const state = !row.network ? 'not-delivered'
@@ -86,11 +87,25 @@ function Row({ row, expanded, onToggle, onEdit, canManage }) {
         <td><span className={'badge ' + (state === 'serving' ? 'live' : state === 'idle' ? '' : 'warn')}>
           {t('ch.state.' + state)}
         </span></td>
-        <td>{c.kind === 'test' ? <span className="badge">{t('ch.kind.test')}</span> : null}</td>
+        {/* Chosen, and whether it is in force. The operator asked which mode is
+            on and which is active — two questions, and until now the row
+            answered neither. */}
+        <td>
+          {p2.mode === 'open'
+            ? <span className="hint">{t('ch.prot.open')}</span>
+            : <>
+                <span className={'badge ' + (p2.code === 'in-force' ? 'live'
+                                           : p2.code === 'unknown' ? '' : 'err')}>
+                  {t('ch.prot.' + p2.mode)}
+                </span>
+                <div className="hint">{t('ch.protState.' + p2.code)}</div>
+              </>}
+          {c.kind === 'test' && <div><span className="badge">{t('ch.kind.test')}</span></div>}
+        </td>
         <td>{canManage && <IconButton action="edit" onClick={(e) => { e.stopPropagation(); onEdit(c); }} />}</td>
       </tr>
       {expanded && (
-        <tr><td colSpan={6} className="ch-detail">
+        <tr><td colSpan={7} className="ch-detail">
           {l?.production
             ? <Copyable url={l.production.url} label={t('ch.production')}
                         tone={l.production.exposes === 'nothing' ? 'live' : 'warn'}
@@ -113,6 +128,35 @@ function Row({ row, expanded, onToggle, onEdit, canManage }) {
               {!l.production.stable && <> · <b>{t('ch.canMove')}</b></>}
             </div>
           )}
+          {/* A signed link, because with token protection the plain one no
+              longer works and there was nowhere to get the working one. Bound
+              to an address: Nimble hashes the viewer's IP, so the panel asks
+              who it is for rather than issuing one that works only here. */}
+          {p2.mode === 'token' && l?.production && (
+            <div className="inset">
+              <div className="eyebrow">{t('ch.signed')}</div>
+              <div className="hint">{t('ch.signedHint')}</div>
+              <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input className="mono" style={{ maxWidth: 200 }} placeholder={t('ch.viewerIp')}
+                       value={signIp} onChange={e => setSignIp(e.target.value)} />
+                <button disabled={signing} onClick={() => onSign(c, l.production.url, signIp)}>
+                  {signing ? '…' : t('ch.signIt')}
+                </button>
+              </div>
+              {signed && (
+                <>
+                  <Copyable url={signed.url} label={t('ch.signed')} />
+                  <div className="hint">
+                    {t('ch.signedUntil', { at: new Date(signed.expiresAt).toLocaleString() })}
+                    {signed.boundToIp
+                      ? ` · ${t('ch.signedBound', { ip: signed.boundToIp })}`
+                      : ` · ${t('ch.signedUnbound')}`}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {l?.tests?.length > 0 && (
             <div className="inset">
               <div className="eyebrow">{t('ch.tests')}</div>
@@ -147,6 +191,17 @@ export default function ChannelsPanel() {
   // rather than typed: the origin already knows these names, and a name typed
   // twice is a name eventually typed wrong.
   const [found, setFound] = useState(null);
+  const [signed, setSigned] = useState({});
+  const [signIp, setSignIp] = useState('');
+
+  const sign = async (channel, url, ip) => {
+    setBusy(true);
+    try {
+      const r = await api(`/cdn/channels/${channel.id}/sign`, { method: 'POST', body: { url, ip } });
+      setSigned(s2 => ({ ...s2, [channel.id]: r }));
+    } catch (e) { push({ type: 'warn', message: e.data?.code ? t('err.' + e.data.code) : e.message }); }
+    finally { setBusy(false); }
+  };
 
   const load = async () => {
     try {
@@ -219,16 +274,18 @@ export default function ChannelsPanel() {
       <table style={{ marginTop: 12 }}>
         <thead><tr>
           <th>{t('ch.channel')}</th><th>{t('ch.network')}</th><th>{t('ch.edges')}</th>
-          <th>{t('ch.stateCol')}</th><th /><th />
+          <th>{t('ch.stateCol')}</th><th>{t('ch.protCol')}</th><th /><th />
         </tr></thead>
         <tbody>
           {data.rows.map(r => (
             <Row key={r.channel.id} row={r} canManage={canManage}
+                 onSign={sign} signed={signed[r.channel.id] || null} signing={busy}
+                 signIp={signIp} setSignIp={setSignIp}
                  expanded={open === r.channel.id}
                  onToggle={() => setOpen(o => (o === r.channel.id ? '' : r.channel.id))}
                  onEdit={(c) => setEdit({ ...c, network: c.network || '', protection: c.protection || { mode: 'open' } })} />
           ))}
-          {!data.rows.length && <tr><td colSpan={6} className="hint">{t('ch.empty')}</td></tr>}
+          {!data.rows.length && <tr><td colSpan={7} className="hint">{t('ch.empty')}</td></tr>}
         </tbody>
       </table>
 

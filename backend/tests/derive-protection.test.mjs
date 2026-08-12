@@ -261,5 +261,58 @@ check('replacing a key warns that issued links die', () => {
   assert.ok(/ch\.keyWillChange/.test(front));
 });
 
+console.log('\nCHOSEN, APPLIED, IN FORCE — THREE DIFFERENT THINGS:');
+
+check('the row reports all three, not just the mode', () => {
+  // The operator asked which mode is on and which is active, and until now the
+  // row answered neither. They are separate questions: the panel holds the
+  // choice, the account holds the rule, and HTTP Origin decides whether the
+  // rule does anything.
+  assert.ok(/function protectionStatus/.test(code), 'nothing computes protection status');
+  for (const k of ['chosen', 'applied', 'effective']) {
+    assert.ok(new RegExp(`${k}:`).test(code), `the status has no ${k}`);
+  }
+});
+
+check('an unreadable account is unknown, not "not applied"', () => {
+  // The worst of the three answers: telling somebody their protection is off
+  // because WMSPanel did not reply.
+  assert.ok(/authGroups === null/.test(code), 'a failed read is treated as an empty account');
+  assert.ok(/'unknown'/.test(code));
+});
+
+check('a rule defeated by HTTP Origin is applied and not effective', () => {
+  // Every screen looks correct and the stream is open. The distinction only
+  // exists if the two are separate fields.
+  assert.ok(/defeated-by-http-origin/.test(code));
+  assert.ok(/effective: Boolean\(rule\) && !defeated/.test(code));
+});
+
+check('every status code has a sentence, in both languages', () => {
+  // From the function body rather than from a `code:` prefix: three of the
+  // five sit inside a ternary, so matching the prefix found two and the check
+  // passed on a third of the truth — which is how a status reaches an operator
+  // as a raw kebab-case string.
+  // Bounded by the function's own closing brace rather than by the next
+  // comment, which drifted and swallowed a neighbouring route. Only strings in
+  // a `code:` position count, ternary branches included.
+  const start = code.indexOf('function protectionStatus');
+  const body = code.slice(start, code.indexOf('\n}', start));
+  const codes = [...new Set([...body.matchAll(/(?:code:|\?|:)\s*'([a-z][a-z-]{2,})'/g)].map(m => m[1]))];
+  assert.ok(codes.length >= 5, `only ${codes.length} statuses found: ${codes.join(', ')}`);
+  for (const c of codes) {
+    assert.equal((dict.match(new RegExp(`'ch\\.protState\\.${c}':`, 'g')) || []).length, 2, c);
+  }
+});
+
+check('a token channel offers the link that actually works', () => {
+  // With protection on, the plain link stops working and there was nowhere to
+  // get the working one — which would have read as "the panel broke my
+  // stream".
+  assert.ok(/channels\/\$\{channel\.id\}\/sign/.test(front), 'nothing signs a link');
+  assert.ok(/ch\.viewerIp/.test(front), 'the signer does not ask who the link is for');
+  assert.ok(/signedUntil/.test(front), 'the expiry is not shown');
+});
+
 console.log(failures ? `\n${failures} protection check(s) failed` : '\nall protection checks passed');
 process.exit(failures ? 1 : 0);

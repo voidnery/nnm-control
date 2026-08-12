@@ -1,5 +1,38 @@
 # Changelog
 
+### v0.85.0 — which mode is on, and which one is actually working
+Protection could be switched on and nothing showed it. The question — "what is
+enabled, what is active" — is two questions, and the row answered neither.
+
+They come apart in a way that matters:
+
+- **chosen** is what the panel holds;
+- **applied** is whether the WMSAuth rule exists on the account, which is what
+  Nimble reads;
+- **in force** is whether it does anything — an application in HTTP Origin mode
+  is not protected by a signature however many rules point at it, and that is
+  the case where every screen looks correct and the stream is open.
+
+The channels table now carries a Protection column saying all three: *in
+force*, *chosen but not written to the servers*, or *written but not in force
+because the application is in HTTP Origin mode*. An account that could not be
+read is **unknown**, never "not applied" — telling somebody their protection is
+off because WMSPanel did not reply is the worst of the three answers.
+
+**And the link that actually works is now obtainable.** Switching on token
+protection stops the plain link from working, and there was nowhere to get the
+signed one, which would have read as the panel breaking the stream. The row
+signs on demand, asks who the link is for — Nimble hashes the viewer's address,
+so a link is bound to somebody — and reports when it expires and to which
+address.
+
+The check that every status has a sentence found two of five: three sit inside
+a ternary and the pattern matched only a `code:` prefix, so it passed on a
+third of the truth. Its replacement then swallowed a neighbouring route by
+bounding on a comment that had drifted. Bounded on the function's own brace
+now — the eighth time this month a gate needed the contradiction run against it
+before it meant anything.
+
 ### v0.84.1 — a refusal that was not a rate limit
 The v0.84.0 release failed on the frontend image:
 
