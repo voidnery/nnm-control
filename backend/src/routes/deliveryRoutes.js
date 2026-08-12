@@ -6,7 +6,8 @@ import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { planRoutes } from '../services/deliveryPlan.js';
 import { networkState, indexStreams, probeReason } from '../services/networkState.js';
-import { playlistPath, parsePlaylist, movedOn, classifyProbe } from '../services/playlistProbe.js';
+import { parsePlaylist, movedOn, classifyProbe } from '../services/playlistProbe.js';
+import { playbackPath } from '../services/protocols.js';
 import { configOverview } from '../services/configOverview.js';
 import { status as geoStatus } from '../services/geoip.js';
 import { nimble, agentIsLive } from '../services/nimbleClient.js';
@@ -111,7 +112,14 @@ deliveryRoutesRouter.post('/networks/:id/watch', requirePerm('cdn.view'), async 
   }
 
   const byId = new Map(g.servers.map(x => [String(x._id), x]));
-  const path = playlistPath(application, stream);
+  // The path the viewer would fetch for this channel's packaging. Probing the
+  // HLS playlist for a DASH channel would answer about a URL nobody is given.
+  // One helper for every packaging, including HLS. Branching so that HLS kept
+  // its old builder left two places constructing the same path, which is how
+  // the probe and the link drift apart — and the gate that caught it exists
+  // because they already did once.
+  const protocol = String(req.body?.protocol || 'hls');
+  const path = playbackPath(protocol, application, stream);
   const targets = [];
   for (const n of g.network.nodes || []) {
     if (!['origin', 'edge', 'mid'].includes(n.role) || n.enabled === false) continue;

@@ -5,6 +5,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { status as geoStatus, lookup, ATTRIBUTION, EDITIONS } from '../services/geoip.js';
 import { downloadEdition } from '../services/geoipUpdate.js';
+import { probeTls, tlsSummary, DEFAULT_HTTPS_PORT } from '../services/tlsProbe.js';
 import { logEvent } from '../services/audit.js';
 
 export const geoipRouter = Router();
@@ -120,4 +121,28 @@ geoipRouter.put('/servers/:id/geo', requirePerm('cdn.manage'), async (req, res) 
   await server.save();
   await logEvent(req, 'server.geo.edit', { serverId: String(server._id), geo: server.geo });
   res.json({ ok: true, geo: server.geo });
+});
+
+// Ask a server what it can actually carry.
+//
+// LL-HLS needs HTTP/2 over TLS, and a player without them falls back to
+// ordinary HLS without saying anything — video plays, latency does not change,
+// and every screen looks correct. So this is a handshake, and what comes back
+// is the server's own answer rather than anybody's claim.
+geoipRouter.post('/servers/:id/tls/check', requirePerm('cdn.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+
+  const port = Number(req.body?.port) > 0 ? Number(req.body.port)
+             : (server.httpsPort > 0 ? server.httpsPort : DEFAULT_HTTPS_PORT);
+  const host = server.playbackEndpoints?.[0]?.host || server.wmspanelDomains?.[0] || server.host;
+
+  const result = await probeTls(host, port);
+  // The port that was actually asked is remembered, so a successful check does
+  // not have to be repeated by hand next time.
+  if (result.tls && !(server.httpsPort > 0)) server.httpsPort = port;
+  server.tls = tlsSummary(result);
+  await server.save();
+  await logEvent(req, 'server.tls.check', { server: server.name, host, port, tls: result.tls, http2: result.http2 });
+  res.json({ ...result, host, port, tls: server.tls });
 });

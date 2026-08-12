@@ -116,6 +116,41 @@ check('the test links survive when the production link cannot be made', () => {
   assert.equal(l.tests[0].healthy, false);
 });
 
+console.log('\nTHE CHANNEL DECIDES THE URL:');
+
+check('a DASH channel gets a manifest, not a playlist', () => {
+  const l = channelLinks({ channel: { ...CH, protocol: 'dash' }, network: net(), edges: [RU2] });
+  assert.match(l.production.url, /\/manifest\.mpd$/);
+  assert.equal(l.production.protocol, 'dash');
+});
+
+check('an LL-HLS channel is addressed over TLS, on the TLS port', () => {
+  // An http URL for LL-HLS is the silent-fallback trap; an https URL against
+  // the plain port is a link that cannot connect at all.
+  const tls = { ...RU2, httpsPort: 443,
+                tls: { checkedAt: new Date(), tls: true, http2: true, certTrusted: true } };
+  const l = channelLinks({ channel: { ...CH, protocol: 'llhls' }, network: net(), edges: [tls] });
+  assert.match(l.production.url, /^https:\/\/[^:]+:443\//);
+  assert.equal(l.production.protocolReady, true);
+});
+
+check('an edge that cannot carry the packaging says so on its own link', () => {
+  // Rather than handing out a link that plays ordinary HLS while the operator
+  // believes it is low latency.
+  const l = channelLinks({ channel: { ...CH, protocol: 'llhls' }, network: net(), edges: [RU2] });
+  // An edge nobody has probed: the panel says it has not asked, rather than
+  // claiming the edge cannot do it.
+  assert.equal(l.tests[0].protocolReady, false);
+  assert.deepEqual(l.tests[0].protocolMissing, ['not-checked']);
+});
+
+check('an unverified path is flagged on the production link', () => {
+  const l = channelLinks({ channel: { ...CH, protocol: 'dash' }, network: net(), edges: [RU2] });
+  assert.equal(l.production.pathUnverified, true);
+  const h = channelLinks({ channel: CH, network: net(), edges: [RU2] });
+  assert.equal(h.production.pathUnverified, false);
+});
+
 console.log('\nNOTHING HERE TOUCHES A SERVER:');
 
 check('links are computed from what was passed in', () => {

@@ -1,4 +1,5 @@
 import { distanceKm } from './referencePoints.js';
+import { PROTOCOLS, playbackPath } from './protocols.js';
 
 // Which edge a viewer gets, and what URL they are handed.
 //
@@ -116,16 +117,21 @@ const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
 // out from the string: a redirect gateway without DNS names on the edges hides
 // nothing at all, and that is exactly the configuration someone would set up
 // believing it does.
-export function viewerUrl({ mode, domain, node, edge, channel, stream }) {
-  const path = `/${trim(channel)}/${trim(stream)}/playlist.m3u8`;
+export function viewerUrl({ mode, domain, node, edge, channel, stream, protocol = 'hls' }) {
+  const proto = PROTOCOLS[protocol] || PROTOCOLS.hls;
+  const path = playbackPath(protocol, channel, stream);
   const edgeHost = edge?.publicHost || edge?.host || '';
-  const edgePort = edge?.httpPort || 8081;
-  const edgeUrl = `http://${edgeHost}:${edgePort}${path}`;
+  // A protocol that requires TLS is addressed over TLS. Building an https URL
+  // against the plain port would produce a link that cannot connect, and an
+  // http one for LL-HLS produces the silent fallback instead.
+  const secure = proto.scheme === 'https';
+  const edgePort = secure ? (edge?.httpsPort || 443) : (edge?.httpPort || 8081);
+  const edgeUrl = `${proto.scheme}://${edgeHost}:${edgePort}${path}`;
 
   if (mode === 'direct') {
     return { url: edgeUrl, exposes: edge?.publicHost ? 'edge-name' : 'edge-address', via: 'edge' };
   }
-  const front = domain ? `https://${domain}` : (node?.host ? `http://${node.host}` : '');
+  const front = domain ? `https://${domain}` : (node?.host ? `${proto.scheme}://${node.host}` : '');
   if (!front) return { url: edgeUrl, exposes: 'edge-address', via: 'edge', degraded: 'gateway-has-no-address' };
 
   if (mode === 'redirect') {

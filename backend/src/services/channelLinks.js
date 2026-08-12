@@ -1,5 +1,6 @@
 import { chooseEdge, viewerUrl } from './arbiter.js';
 import { channelPath } from '../models/Channel.js';
+import { PROTOCOLS, playbackPath, protocolReadiness } from './protocols.js';
 
 // The links an operator actually needs to hold.
 //
@@ -19,7 +20,11 @@ import { channelPath } from '../models/Channel.js';
 
 export function channelLinks({ channel, network, edges, node = null }) {
   const gw = network?.gateway || {};
-  const path = channelPath(channel);
+  const proto = PROTOCOLS[channel.protocol] || PROTOCOLS.hls;
+  // The path the viewer fetches, which depends on the packaging: an .mpd for
+  // DASH, a .m3u8 for both flavours of HLS. This was hard-coded to the HLS
+  // playlist everywhere, which is why the choice could not be offered.
+  const path = playbackPath(channel.protocol, channel.application, channel.stream);
 
   // Straight at each edge, in the order the operator arranged them. These do
   // not depend on the policy and must not: their whole purpose is to answer a
@@ -27,9 +32,16 @@ export function channelLinks({ channel, network, edges, node = null }) {
   const tests = edges.map((e) => {
     const link = viewerUrl({
       mode: 'direct', edge: e, channel: channel.application, stream: channel.stream,
+      protocol: channel.protocol,
     });
+    const ready = protocolReadiness(channel.protocol, e);
     return {
       edge: e.name, url: link.url, exposes: link.exposes,
+      // An edge that cannot carry this packaging is named here rather than
+      // handing out a link that plays the wrong thing. For LL-HLS the failure
+      // is a silent fallback to ordinary HLS, which is worse than an error
+      // because it looks like success.
+      protocolReady: ready.ok, protocolMissing: ready.missing,
       // A test link to an edge that has no route for this channel resolves and
       // 404s. Saying so beats letting the operator conclude the edge is broken.
       routed: e.routes ? e.routes.includes(String(channel.application).replace(/^\/+|\/+$/g, '')) : null,
@@ -57,7 +69,9 @@ export function channelLinks({ channel, network, edges, node = null }) {
   const link = viewerUrl({
     mode: gw.mode || 'direct', domain: gw.domain || '', node,
     edge: decision.edge, channel: channel.application, stream: channel.stream,
+    protocol: channel.protocol,
   });
+  const ready = protocolReadiness(channel.protocol, decision.edge);
 
   return {
     path,
@@ -70,6 +84,10 @@ export function channelLinks({ channel, network, edges, node = null }) {
       // Which edge this resolved to *now*. A production link under a policy is
       // not a fixed address, and printing it as though it were is how an
       // operator ends up debugging the wrong machine.
+      protocol: proto.id,
+      protocolReady: ready.ok,
+      protocolMissing: ready.missing,
+      pathUnverified: Boolean(proto.pathUnverified),
       resolvedTo: decision.edge.name,
       reason: decision.reason,
       mode: gw.mode || 'direct',

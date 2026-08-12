@@ -1,5 +1,76 @@
 # Changelog
 
+### v0.79.0 — the LL-HLS gate was reading fields that did not exist
+v0.78.0 shipped a check that refused LL-HLS unless `edge.httpsPort` and
+`edge.http2Confirmed` were set. Neither field existed — not in the model, not
+in the API, not in the database. Every LL-HLS channel was therefore permanently
+"not ready", and the option was dead code wearing a working feature's clothes.
+
+It is the same shape as the geo bug in v0.64.1 and the `e.body`/`e.data`
+mismatch in v0.62.2: something written on one side of a boundary and absent on
+the other, with neither side looking wrong.
+
+**A checkbox would not have fixed it.** "This server has HTTP/2", ticked by a
+person, is a claim — and the failure it guards against is a player silently
+falling back to ordinary HLS, which is invisible *because* everything looks
+configured. Video plays, latency does not change, every screen is green.
+
+So the panel asks the server. TLS negotiates the application protocol during
+the handshake, so offering `h2` and `http/1.1` gets the server's own answer
+before a byte of HTTP is sent.
+
+- **`Check TLS` on each server**, storing what came back with a timestamp: a
+  fact about TLS from three months ago is not a fact about TLS.
+- **"Not checked" is its own answer**, distinct from "cannot". One is fixed by
+  pressing a button, the other by configuring a server, and reporting the first
+  as the second sends the operator to the wrong place.
+- **A certificate problem is not an absence of TLS.** The probe passes
+  `rejectUnauthorized: false` so a self-signed certificate still yields the
+  ALPN answer — and then reports the certificate separately, because a browser
+  will refuse what our probe accepted, and that is a delivery failure with its
+  own fix.
+- **Each failure has its own word**: nothing listening, no such host, a port
+  that accepts and never speaks TLS, a failed handshake.
+
+Tested against real TLS servers started in-process — an HTTP/2 one, an
+HTTP/1.1-only one, and a socket that accepts and says nothing — so the code
+path is the same one a live edge takes, with no fleet and no network. 9 new
+checks, 4 more proven by contradiction.
+
+### v0.78.0 — the operator chooses what the viewer gets
+Three facts from the fleet's own `nimble.log`, none of which were guessable:
+
+    add_dash_segment key='/cyber_cct/srt_feed_3/v_....m4s' duration=6,0
+    add HLS chunk app='cyber_cct' stream='srt_feed_3' duration=6.0
+    add_chunk key='/cyber_cct/srt_feed_3/l_....ts'
+
+**Nimble already emits HLS and DASH from one input, in the same second, with
+neither configured anywhere in `nimble.conf`.** Offering both is therefore not
+a conversion feature — it is choosing which URL to hand out, and it costs
+nothing on the server. The panel had HLS hard-coded in the route path, the link
+and the probe, so the choice existed all along and was simply never offered.
+
+- **A channel carries its packaging**: HLS, LL-HLS or DASH. The link, the
+  gateway URL and the viewer probe all follow it — one helper builds the path
+  for all three, because two builders is how a probe and a link drift apart.
+- **The DASH path is flagged as unconfirmed.** It comes from Softvelum's
+  documentation and no response has been seen for it. The `to` field of a route
+  taught what documentation-only shapes cost; the first watch probe confirms
+  it, and until then the panel says so.
+- **LL-HLS is refused, not warned about.** Softvelum are explicit that it needs
+  HTTP/2 over TLS and that a client without them *silently falls back to
+  ordinary HLS*. That failure mode plays: the operator sees video, calls it low
+  latency, and is watching 6-second segments. So the panel checks TLS on the
+  edge and reports HTTP/2 as unverifiable rather than assuming it — treating
+  "did not look" as "present" is precisely how the fallback goes unnoticed.
+
+**Also found in the log, and worth acting on outside the panel:** every line is
+at debug level (`D:`) on a production origin, which is a lot of disk and I/O
+for a machine that is also packaging video; segments are 6 seconds, which by
+the mantra means roughly 18–20 seconds of latency — for live sport that is the
+"spoiled by the neighbour's TV" case; and there is no access log at all, only
+`nimble.log`, which is why cache hit ratio cannot be measured the obvious way.
+
 ### v0.77.1 — the chain, and screens you can read
 The steps worked and looked unfinished, which was fair: a vertical stack of six
 accordions says "here are six settings", not "this is one path and here is

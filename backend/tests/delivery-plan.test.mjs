@@ -345,8 +345,12 @@ check('management reads go through the agent-preferring client', () => {
   // "playlistPath appears in the file" while quietly dropping the one place
   // the path is defined, so the probe and the plan could drift apart.
   if (bare.length) {
-    assert.ok(/const path = playlistPath\(/.test(routes),
-      'the probed path is built by hand instead of by the shared helper');
+    // Either helper: playlistPath was the HLS-only one, playbackPath covers
+    // every packaging and produces the identical path for HLS. What matters is
+    // that the probe and the link are built by the same code, not which of the
+    // two it is.
+    assert.ok(/const path = (playlistPath|playbackPath)\(/.test(routes),
+      'the probed path is built by hand instead of by a shared helper');
     assert.ok(/httpPort \|\| 8081/.test(routes), 'the probe does not aim at the playback port');
   }
 });

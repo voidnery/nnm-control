@@ -27,6 +27,12 @@ const pub = (s) => ({
   tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '',
   order: s.order ?? 0, httpPort: s.httpPort || 0,
   wmspanelDomains: Array.isArray(s.wmspanelDomains) ? s.wmspanelDomains : [],
+  httpsPort: s.httpsPort || 0,
+  tls: {
+    checkedAt: s.tls?.checkedAt || null, tls: Boolean(s.tls?.tls), http2: Boolean(s.tls?.http2),
+    alpn: s.tls?.alpn || '', certTrusted: Boolean(s.tls?.certTrusted),
+    certExpiresAt: s.tls?.certExpiresAt || null, reason: s.tls?.reason || '',
+  },
   playbackEndpoints: (s.playbackEndpoints || []).map(e => ({ label: e.label || '', host: e.host, hlsPort: e.hlsPort, rtmpPort: e.rtmpPort, ssl: Boolean(e.ssl) })),
   syncedFromWmspanel: Boolean(s.syncedFromWmspanel), wmspanelStatus: s.wmspanelStatus || '', lastSyncAt: s.lastSyncAt, createdAt: s.createdAt,
   // iter20 m1 stored a resolved location and nothing ever sent it back. The

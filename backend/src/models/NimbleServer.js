@@ -69,6 +69,23 @@ const serverSchema = new mongoose.Schema({
   // Their absence is why the panel used to ask for a playback endpoint before
   // it would admit an edge had a name.
   wmspanelDomains: { type: [String], default: [] },
+  // The TLS port this box answers playback on, and what was found there.
+  //
+  // `httpsPort` is the operator's answer to "where"; `tls` is the panel's
+  // answer to "and what is actually there", filled by a handshake rather than
+  // by a checkbox. LL-HLS needs HTTP/2 over TLS and falls back silently
+  // without it, so a claim would be worse than nothing: everything would look
+  // configured and the latency would not change.
+  httpsPort: { type: Number, default: 0 },
+  tls: {
+    checkedAt: { type: Date, default: null },
+    tls: { type: Boolean, default: false },
+    http2: { type: Boolean, default: false },
+    alpn: { type: String, default: '' },
+    certTrusted: { type: Boolean, default: false },
+    certExpiresAt: { type: Date, default: null },
+    reason: { type: String, default: '' },
+  },
   // iter20 m1 — where this box physically is, for delivery-network planning.
   //
   // Two provenances kept apart on purpose. `source` says whether the country

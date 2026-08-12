@@ -97,6 +97,12 @@ function Row({ row, expanded, onToggle, onEdit, canManage }) {
                         note={t('gw.exposes.' + l.production.exposes)} />
             : <div className="hint">{t('ch.noProduction')}{l?.productionReason
                 ? ` · ${t('gw.why.' + l.productionReason)}` : ''}</div>}
+          {l?.production && !l.production.protocolReady && (
+            <div className="error-box">
+              {t('ch.protoNotReady', { missing: (l.production.protocolMissing || []).join(', ') })}
+            </div>
+          )}
+          {l?.production?.pathUnverified && <div className="hint">{t('ch.pathUnverified')}</div>}
           {l?.production && (
             <div className="hint">
               {t('ch.resolvedTo', { edge: l.production.resolvedTo })}
@@ -180,7 +186,7 @@ export default function ChannelsPanel() {
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h2 style={{ margin: 0 }}>{t('ch.title')}</h2>
         {canManage && (
-          <button onClick={() => setEdit({ application: '', stream: '', label: '', kind: 'production', network: '' })}>
+          <button onClick={() => setEdit({ application: '', stream: '', label: '', kind: 'production', protocol: 'hls', network: '' })}>
             {t('ch.add')}
           </button>
         )}
@@ -196,7 +202,7 @@ export default function ChannelsPanel() {
             {found.found.map(f => (
               <button key={f.key} disabled={busy}
                       onClick={() => setEdit({ application: f.application, stream: f.stream,
-                                               label: '', kind: 'production', network: networks[0]?.id || '' })}>
+                                               label: '', kind: 'production', protocol: 'hls', network: networks[0]?.id || '' })}>
                 + {f.application}/{f.stream}
                 <span className="hint"> · {f.origin}</span>
               </button>
@@ -252,6 +258,19 @@ export default function ChannelsPanel() {
             <option value="">{t('ch.none')}</option>
             {networks.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
           </select>
+          {/* What the viewer is handed a link to. Nimble already emits HLS and
+              DASH from one input — the fleet log shows both in the same second
+              — so this costs nothing on the server; it is which URL to give
+              out. LL-HLS is different and says so. */}
+          <label>{t('ch.protocol')}</label>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {['hls', 'llhls', 'dash'].map(pr => (
+              <button key={pr} className={'tagchip' + (edit.protocol === pr ? ' on' : '')}
+                      onClick={() => setEdit({ ...edit, protocol: pr })}>{t('ch.proto.' + pr)}</button>
+            ))}
+          </div>
+          <div className="hint">{t('ch.proto.' + (edit.protocol || 'hls') + '.note')}</div>
+
           <label>{t('ch.kindLabel')}</label>
           <div className="row" style={{ gap: 6 }}>
             {['production', 'test'].map(k => (

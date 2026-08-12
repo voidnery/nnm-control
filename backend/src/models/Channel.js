@@ -31,6 +31,26 @@ const channelSchema = new mongoose.Schema({
   // is exactly the thing worth seeing before an event rather than during one.
   network: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryNetwork', default: null },
 
+  // Which packaging a viewer is handed a link to.
+  //
+  // Not a conversion setting: the fleet's own log shows Nimble already emits
+  // both containers for one incoming stream —
+  //
+  //   add_dash_segment key='/cyber_cct/srt_feed_3/v_...m4s' duration=6,0
+  //   add HLS chunk app='cyber_cct' stream='srt_feed_3' duration=6.0
+  //   add_chunk key='/cyber_cct/srt_feed_3/l_...ts'
+  //
+  // — so choosing between HLS and DASH is choosing which URL to give out, and
+  // costs nothing on the server. That is why they are on the channel rather
+  // than being a network-wide decision.
+  //
+  // `llhls` is different in kind and is not selectable until the server can
+  // carry it: Softvelum are explicit that LL-HLS uses HTTP/2 over SSL, and a
+  // client reaching it over HTTP/1.1 silently falls back to ordinary HLS. An
+  // option that quietly does nothing is worse than one that is absent, so the
+  // panel refuses to offer it on a server without TLS.
+  protocol: { type: String, enum: ['hls', 'llhls', 'dash'], default: 'hls' },
+
   // Production channels are what viewers get. Test channels exist so an
   // operator can rehearse the whole path without the rehearsal being
   // indistinguishable from the broadcast on every screen that lists channels.

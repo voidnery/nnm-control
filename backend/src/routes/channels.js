@@ -18,6 +18,7 @@ channelRouter.use(requireAuth);
 const pub = (c) => ({
   id: c.id, application: c.application, stream: c.stream,
   label: c.label, notes: c.notes, kind: c.kind, enabled: c.enabled,
+  protocol: c.protocol || 'hls',
   network: c.network ? String(c.network) : null,
   name: channelName(c), updatedAt: c.updatedAt,
 });
@@ -93,6 +94,7 @@ channelRouter.post('/channels', requirePerm('cdn.manage'), async (req, res) => {
     application, stream,
     label: String(req.body?.label || ''), notes: String(req.body?.notes || ''),
     kind: req.body?.kind === 'test' ? 'test' : 'production',
+    protocol: ['hls', 'llhls', 'dash'].includes(req.body?.protocol) ? req.body.protocol : 'hls',
     network: req.body?.network || null,
     createdBy: req.user?.username || '',
   });
@@ -107,6 +109,7 @@ channelRouter.put('/channels/:id', requirePerm('cdn.manage'), async (req, res) =
   if (b.label !== undefined) c.label = String(b.label);
   if (b.notes !== undefined) c.notes = String(b.notes);
   if (b.kind !== undefined) c.kind = b.kind === 'test' ? 'test' : 'production';
+  if (b.protocol !== undefined && ['hls', 'llhls', 'dash'].includes(b.protocol)) c.protocol = b.protocol;
   if (b.enabled !== undefined) c.enabled = b.enabled !== false;
   if (b.network !== undefined) c.network = b.network || null;
   try { await c.save(); }
