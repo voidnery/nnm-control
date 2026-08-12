@@ -137,11 +137,19 @@ export default function ChannelsPanel() {
   const [open, setOpen] = useState('');
   const [edit, setEdit] = useState(null);
   const [busy, setBusy] = useState(false);
+  // What the origins are publishing and nobody has made a channel of. Offered
+  // rather than typed: the origin already knows these names, and a name typed
+  // twice is a name eventually typed wrong.
+  const [found, setFound] = useState(null);
 
   const load = async () => {
     try {
-      const [o, n] = await Promise.all([api('/cdn/channels/overview'), api('/cdn/networks')]);
-      setData(o); setNetworks(n.networks || []); setError('');
+      const [o, n, d] = await Promise.all([
+        api('/cdn/channels/overview'),
+        api('/cdn/networks'),
+        api('/cdn/channels/discovered').catch(() => ({ found: [], unreachable: [] })),
+      ]);
+      setData(o); setNetworks(n.networks || []); setFound(d); setError('');
     } catch (e) { setError(e.data?.error || e.message); }
   };
   useEffect(() => { load(); }, []);
@@ -179,6 +187,28 @@ export default function ChannelsPanel() {
       </div>
       <div className="hint">{t('ch.intro')}</div>
       {!data.routesRead && <div className="hint">{t('ch.routesUnread')}</div>}
+
+      {canManage && found?.found?.length > 0 && (
+        <div className="inset">
+          <div className="eyebrow">{t('ch.discovered')}</div>
+          <div className="hint">{t('ch.discoveredHint')}</div>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {found.found.map(f => (
+              <button key={f.key} disabled={busy}
+                      onClick={() => setEdit({ application: f.application, stream: f.stream,
+                                               label: '', kind: 'production', network: networks[0]?.id || '' })}>
+                + {f.application}/{f.stream}
+                <span className="hint"> · {f.origin}</span>
+              </button>
+            ))}
+          </div>
+          {found.unreachable?.length > 0 && (
+            <div className="hint" style={{ marginTop: 6 }}>
+              {t('ch.discoveryGaps')} {found.unreachable.join(', ')}
+            </div>
+          )}
+        </div>
+      )}
 
       <table style={{ marginTop: 12 }}>
         <thead><tr>

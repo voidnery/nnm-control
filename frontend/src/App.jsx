@@ -30,6 +30,11 @@ const NAV_GROUPS = [
     { to: '/logs/dashboards', key: 'nav.logDashboards', show: ({ can }) => can('streams.view') },
   ] },
   { key: 'infra', items: [
+    // The WMSPanel account objects. Infrastructure rather than broadcast: they
+    // are account-wide settings edited by someone who already knows what an ABR
+    // ladder is, and an operator building a delivery network has no reason to
+    // walk past them.
+    { to: '/account-objects', key: 'nav.objects', show: ({ can, sys }) => can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' },
     { to: '/agents', key: 'nav.agents', show: ({ can }) => can('servers.manage') },
     { to: '/categories', key: 'nav.categories', show: ({ can }) => can('category.view') },
     { to: '/zabbix', key: 'nav.zabbix', show: ({ can }) => can('zabbix.view') },
@@ -68,6 +73,7 @@ import SharedLogsPage from './pages/SharedLogsPage.jsx';
 import CategoriesPage from './pages/CategoriesPage.jsx';
 import TranscodersPage from './pages/TranscodersPage.jsx';
 import DistributionPage from './pages/DistributionPage.jsx';
+import AccountObjectsPage from './pages/AccountObjectsPage.jsx';
 import { NoticeTray } from './notices.jsx';
 
 function Layout({ children }) {
@@ -161,6 +167,7 @@ export default function App() {
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/transcoders" element={<TranscodersPage />} />
         <Route path="/distribution" element={<DistributionPage />} />
+        <Route path="/account-objects" element={<AccountObjectsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

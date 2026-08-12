@@ -378,18 +378,35 @@ check('delivery is drawn as a flow, not tabulated', () => {
 // out of the service, which cannot go stale in the same way.
 
 check('the applications are offered, not demanded', () => {
-  // The page opened with an empty field and disabled buttons, expecting the
-  // operator to know names that live on the origin.
+  // The rule: an operator never types a name the origin already knows.
   //
-  // The mechanism changed in iter21 m2 and the rule did not: what the origin
-  // publishes is still read and still one click away, but the click now makes
-  // a channel rather than appending text to a box that forgot it. The old
-  // assertion named `toggleApp`, which is the implementation, so it went red
-  // about a page that had got better.
-  assert.ok(/networks\/\$\{network\.id\}\/applications/.test(panelCode),
-    'nothing reads which applications exist upstream');
-  assert.ok(/addChannel\(a\.application/.test(panelCode),
-    'a discovered application cannot be turned into a channel in one click');
+  // It has now moved twice — from a text box, to chips on the delivery tab, to
+  // the channels tab where channels are created — and this assertion has gone
+  // red on both moves while the rule held throughout. Bound to the outcome
+  // this time: something reads what the origins publish, and one click turns
+  // one of those into a channel. Which file does it is not the rule.
+  const front = ['components/DeliveryRoutesPanel.jsx', 'components/ChannelsPanel.jsx']
+    .map(f => stripComments(readFile(new URL(f, FRONT), 'utf8')));
+  assert.ok(front.some(src => /\/channels\/discovered|\/applications/.test(src)),
+    'nothing reads what the origins are publishing');
+  assert.ok(front.some(src => /setEdit\(\{ application: f\.application/.test(src)),
+    'a discovered stream cannot be turned into a channel in one click');
+});
+
+check('a channel has exactly one place it is created', () => {
+  // It had two — the delivery tab and the channels tab — so an application had
+  // two homes and the operator had to know which one counted. That is the
+  // duplication this milestone exists to remove.
+  // Matched on the endpoint, not on the body. The first version matched
+  // `body: { application` and hit the viewer probe, which posts an application
+  // and a stream to /watch and creates nothing — a rule firing on unrelated
+  // code, which is the same fault as a rule firing on nothing.
+  const deliv = stripComments(readFile(new URL('components/DeliveryRoutesPanel.jsx', FRONT), 'utf8'));
+  assert.ok(!/api\('\/cdn\/channels',\s*\{\s*method: 'POST'/.test(deliv),
+    'the delivery tab creates channels as well as the channels tab');
+  const chans = stripComments(readFile(new URL('components/ChannelsPanel.jsx', FRONT), 'utf8'));
+  assert.ok(/api\('\/cdn\/channels',\s*\{\s*method: 'POST'/.test(chans),
+    'nowhere creates channels at all');
 });
 
 check('a box with no reading still explains itself on the board', () => {
@@ -436,9 +453,13 @@ check('the delivery steps are ordered, not three equal buttons', () => {
   for (const k of ['cdn.step1', 'cdn.step2', 'cdn.step3']) {
     assert.ok(new RegExp(`t\\('${k}'\\)`).test(panelCode), `${k} is not rendered as a step heading`);
   }
-  // Plan before apply: the apply button is disabled until a plan exists, and
-  // says why rather than sitting greyed out for no stated reason.
-  assert.ok(/cdn\.planFirst/.test(panelCode), 'nothing explains why apply is disabled');
+  // There is no "plan first" any more: iter21 m3 derives what Nimble needs
+  // from the network's channels, so step 2 is the panel reporting what it will
+  // do rather than the operator asking it to work it out. The rule that
+  // survived is that the state of step 2 is legible — set up, or how much is
+  // left — and that the two are told apart.
+  assert.ok(/cdn\.inSync/.test(panelCode) && /cdn\.pendingN/.test(panelCode),
+    'step 2 cannot say whether the servers are set up');
 });
 
 check('the written routes are reference, not part of the flow', () => {

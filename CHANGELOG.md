@@ -1,5 +1,103 @@
 # Changelog
 
+### v0.76.0 — iter21 m3 finished: one home per thing
+Channels could be created in two places — the Channels tab and the Delivery
+tab — so an application had two homes and the operator had to know which one
+counted. That was the duplication this milestone set out to remove and the
+last piece of it.
+
+- **Channels are created in one place.** The Delivery tab shows what the
+  network carries and says where to change it. It no longer creates anything.
+- **Discovery moved with the creating.** The panel reads what the origins are
+  publishing and offers each stream that is not a channel yet, with its origin
+  named, one click to make it one. Scoped to origins and ingests deliberately:
+  an edge is publishing what it pulled, so offering its streams would suggest
+  creating a channel for something that is already a copy of one.
+- **Origins that could not be read are named**, rather than their streams
+  quietly not appearing.
+
+**The gate for "the operator never types a name the origin already knows" has
+now gone red on both moves of that feature** — first when chips replaced a text
+box, then when they moved to the Channels tab — while the rule held throughout.
+Rebound to the outcome: something reads what the origins publish, and one click
+turns one into a channel. Which file does it is not the rule.
+
+Its replacement then fired on the viewer probe, which posts an application and
+a stream to `/watch` and creates nothing. Matched on the endpoint instead. A
+rule that fires on unrelated code is the same fault as one that fires on
+nothing — it just takes longer to notice.
+
+And `audit:tabs`, added two versions ago after the black screen, caught a
+function my own edit had deleted along with the block above it. That is the
+regression it was written for, found in seconds instead of by an operator.
+
+### v0.75.0 — iter21 m3: the panel does the Nimble part
+The panel had grown one screen per Nimble primitive — a tab for routes, a tab
+for origin applications, a field for a port — and the operator was the
+integration between them. That is backwards. Somebody building a delivery
+network is saying "carry this channel here"; everything Nimble needs to do it
+follows, and the panel is the thing that knows how.
+
+- **Intent in, primitives out.** `derivePlan` turns a network's channels into
+  the complete set of objects Nimble requires, and every one of them carries
+  *why* it exists — "so this edge can serve that application" — plus where its
+  address and port came from. The reasoning matters more than the objects: a
+  panel that writes into an account without asking each time is only acceptable
+  while it can show its working at any moment, so the working is one fold away
+  on the page.
+- **Three ways of having nothing to do, told apart.** Already set up, blocked,
+  and a channel the network cannot carry at all produce zero items each and
+  mean entirely different things. The worst of them was reporting a *blocked*
+  channel as "nothing planned", which reads as "you have not set this up" and
+  sends the operator to add something instead of reading the reason.
+- **Routes are still planned by the existing planner.** Two answers to "which
+  routes does this imply" would drift, and the drift would stay invisible until
+  an apply did something the preview had not shown. Gated.
+- **The WMSPanel account objects moved to their own page** under
+  Infrastructure. Building a network is "which servers, which channels, what
+  link"; ABR ladders and origin applications are account-wide settings edited
+  by someone who already knows what an ABR ladder is. They are still read —
+  the "this edge will not cache" finding comes from exactly that data — but
+  nobody walks past them to build a network any more.
+
+**A gate caught me deleting a feature.** Replacing the manual plan step took
+the apply report with it, and with the report the only place WMSPanel's own
+words about a refusal were shown — the difference between "it failed" and
+knowing why. The check that noticed had been written three versions earlier
+for that exact sentence.
+
+**And one of my own contradictions failed to bite**: the reasoning fold was
+asserted by the name `showWhy`, which `const showWhy = false` satisfies while
+making the reasoning unreachable. Bound to state that starts closed and can be
+toggled. That is the fifth gate this month whose first version tested a name.
+
+### v0.74.1 — a black screen behind 213 green checks
+The Delivery tab rendered nothing. A `useEffect` dependency still named
+`channels` — state that m2 had replaced — so the panel threw on mount and React
+unmounted the tree.
+
+One line to fix. The interesting part is why nothing caught it.
+
+**`pages-smoke` opens each page on whichever tab it defaults to.** Distribution
+now defaults to Channels, so the Delivery panel was never mounted by anything,
+and neither were the five other panels behind tabs. A panel two clicks in could
+crash for weeks with every check green — and did.
+
+- **`audit:tabs` mounts every panel behind a tab**, with an error boundary, and
+  fails on a crash or an empty render.
+- **It checks its own coverage.** Any `<SomethingPanel>` referenced by the page
+  or by the network panel must appear in its list — which immediately found an
+  eighth panel I had not included while writing it. A fixture list that falls
+  behind the page is the gap reopening in slow motion.
+- The globe is included deliberately: jsdom has no WebGL, so it takes its
+  no-WebGL path, and this asserts it degrades to a message rather than to a
+  blank rectangle. That is a real browser state, not only a test artefact.
+
+Proven three ways: the dangling dependency, a panel missing from the list, and
+a crash introduced in an unrelated panel.
+
+All eight render. The blank screen was in Delivery only.
+
 ### v0.74.0 — iter21 m2: a list instead of a question
 Channels existed as a model; nothing showed them. Delivery still opened with an
 empty text box, and the answer to "what is being delivered and where" was

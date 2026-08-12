@@ -704,3 +704,6 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .ch-url { word-break: break-all; }
 
 .ch-picker { display: flex; gap: var(--sp-1); flex-wrap: wrap; margin-top: var(--sp-2); }
+
+.why-item { padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
+.why-item:first-of-type { border-top: none; }

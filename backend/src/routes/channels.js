@@ -8,6 +8,7 @@ import { wmspanel } from '../services/wmspanelClient.js';
 import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { indexStreams } from '../services/networkState.js';
 import { channelLinks } from '../services/channelLinks.js';
+import { derivePlan, channelReadiness } from '../services/derivePlan.js';
 import { logEvent } from '../services/audit.js';
 
 export const channelRouter = Router();
@@ -21,6 +22,54 @@ const pub = (c) => ({
 });
 
 const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
+
+// What the origins are publishing that is not a channel yet.
+//
+// Adding a channel used to mean typing an application and a stream that the
+// origin already knows, and a name typed twice is a name eventually typed
+// wrong. This offers them — across every network, since a stream is worth
+// delivering regardless of which network the operator happens to be looking
+// at, and the network is chosen when the channel is created.
+channelRouter.get('/channels/discovered', requirePerm('cdn.view'), async (_req, res) => {
+  const [networks, servers, existing] = await Promise.all([
+    DeliveryNetwork.find(), NimbleServer.find(), Channel.find(),
+  ]);
+  const byId = new Map(servers.map(s => [String(s._id), s]));
+  const have = new Set(existing.map(c => `${trim(c.application)}/${trim(c.stream)}`));
+
+  // Origins and ingests only. An edge is publishing what it pulled, so
+  // offering its streams would suggest creating a channel for something that
+  // is already a copy of one.
+  const sources = new Map();
+  for (const n of networks) {
+    for (const node of n.nodes || []) {
+      if (!['origin', 'ingest'].includes(node.role) || node.enabled === false) continue;
+      const s = byId.get(String(node.server));
+      if (s) sources.set(String(s._id), s);
+    }
+  }
+
+  const found = [];
+  const unreachable = [];
+  await Promise.all([...sources.values()].map(async (s) => {
+    let idx;
+    try { idx = indexStreams(await nimble.liveStreams(s)); }
+    catch { unreachable.push(s.name); return; }
+    for (const [application, entries] of idx) {
+      for (const e of entries) {
+        const stream = trim(e.stream);
+        if (!stream) continue;
+        const key = `${application}/${stream}`;
+        if (have.has(key)) continue;
+        if (!found.some(f => f.key === key)) {
+          found.push({ key, application, stream, origin: s.name, bandwidth: e.bandwidth || 0 });
+        }
+      }
+    }
+  }));
+  found.sort((a, b) => a.key.localeCompare(b.key));
+  res.json({ found, unreachable });
+});
 
 channelRouter.get('/channels', requirePerm('cdn.view'), async (_req, res) => {
   const items = await Channel.find().sort({ application: 1, stream: 1 });
@@ -98,6 +147,31 @@ async function edgesOf(network, servers, routes) {
   }
   return out;
 }
+
+// What a network needs written so its channels are delivered, and why.
+//
+// The operator adds channels; this works out the rest. Same computation drives
+// the preview and the apply, so the two cannot disagree — which is the only
+// thing that makes it acceptable for the panel to write into the account
+// without asking each time.
+channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, res) => {
+  const [network, servers, channels] = await Promise.all([
+    DeliveryNetwork.findById(req.params.id),
+    NimbleServer.find(),
+    Channel.find({ network: req.params.id, enabled: true }),
+  ]);
+  if (!network) return res.status(404).json({ error: 'network-not-found', code: 'network-not-found' });
+  const cfg = (await Settings.load()).wmspanel;
+  const [originApps, routes] = await Promise.all([
+    wmspanel.originAppList(cfg).then(r => r.settings || []).catch(() => []),
+    wmspanel.routeList(cfg).then(r => r.routes || []).catch(() => []),
+  ]);
+  const plan = derivePlan({ network, servers, channels, originApps, existingRoutes: routes });
+  res.json({
+    ...plan,
+    channels: channels.map(c => ({ ...pub(c), readiness: channelReadiness({ channel: c, plan }) })),
+  });
+});
 
 // One row per channel: where it is delivered, whether anything is arriving,
 // and the links to hand out. The question the panel could not answer about its

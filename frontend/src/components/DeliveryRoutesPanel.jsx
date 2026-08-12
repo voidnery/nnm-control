@@ -42,20 +42,21 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   // often as the operator wants to look.
   const [state, setState] = useState(null);
   const [showLive, setShowLive] = useState(false);
+  // What the network needs written, worked out from its channels rather than
+  // asked for. The operator's input is "deliver this channel here"; everything
+  // Nimble requires follows, and this is where it is shown before it is done.
+  const [derived, setDerived] = useState(null);
+  const [showWhy, setShowWhy] = useState(false);
   const [watch, setWatch] = useState({});        // "edge|app" -> probe result
 
   // Live mode, the same shape the transcoder graph uses: an operator during a
   // broadcast wants the tab open and answering, not a button to keep pressing.
   const [autoRefresh, setAutoRefresh] = useState(false);
-  // Offered rather than demanded. The page used to open with an empty field
-  // and three disabled buttons, expecting the operator to know the names —
-  // which live on the origin, so the panel goes and reads them.
-  const [found, setFound] = useState(null);
-
-  const loadApps = async () => {
-    try { setFound(await api(`/cdn/networks/${network.id}/applications`)); }
-    catch { setFound({ applications: [], asked: [] }); }
+  const loadDerived = async () => {
+    try { setDerived(await api(`/cdn/networks/${network.id}/derived`)); }
+    catch (e) { setError(e.data?.error || e.message); }
   };
+
   const loadChannels = async () => {
     try {
       const r = await api('/cdn/channels');
@@ -64,18 +65,7 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       setSel(cur => (mine.some(c => c.id === cur) ? cur : (mine[0]?.id || '')));
     } catch { setChans([]); }
   };
-  useEffect(() => { loadApps(); loadChannels(); }, [network.id]);
-
-  // Adding a channel from what the origin is actually publishing: the stream
-  // name is right there, and typing it again is how it gets typed wrong.
-  const addChannel = async (application, stream) => {
-    setBusy(true); setError('');
-    try {
-      await api('/cdn/channels', { method: 'POST', body: { application, stream, network: network.id } });
-      await loadChannels();
-    } catch (e) { setError(e.data?.code === 'channel-exists' ? t('ch.exists') : e.message); }
-    finally { setBusy(false); }
-  };
+  useEffect(() => { loadChannels(); loadDerived(); }, [network.id]);
 
 
 
@@ -134,14 +124,14 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
     if (!autoRefresh || !list.length) return;
     const id = setInterval(() => { loadState(); }, 10_000);
     return () => clearInterval(id);
-  }, [autoRefresh, channels]);
+  }, [autoRefresh, chans, sel]);
 
   const run = async (what) => {
     setBusy(true); setError(''); if (what === 'plan') setReport(null);
     try {
       const r = await api(`/cdn/networks/${network.id}/${what}`, { method: 'POST', body: { channels: list } });
       if (what === 'plan') setPlan(r);
-      else { setReport(r); setPlan(r.plan || plan); await loadLive(); await loadState(); push({ type: r.ok ? 'ok' : 'warn', message: t('cdn.applied', { n: r.applied }) }); }
+      else { setReport(r); setPlan(r.plan || plan); await loadLive(); await loadDerived(); await loadState(); push({ type: r.ok ? 'ok' : 'warn', message: t('cdn.applied', { n: r.applied }) }); }
     } catch (e) {
       // The response body is on `e.data` — reading `e.body` meant every
       // failure arrived as a bare status line while the thing worth reading,
@@ -177,8 +167,10 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
           already know. Each step's result appears under that step, not at the
           bottom of the page. */}
       <div className="gsection">{t('cdn.step1')}</div>
-      {/* A list, not a text box. What is delivered here is a property of the
-          network now, so the page can show it instead of asking. */}
+      {/* Shown, not edited. Channels were being created here *and* on the
+          Channels tab, so an application had two homes and the operator had to
+          know which one counted. One place to add them, one place to see what
+          this network carries — this is the second. */}
       <div className="ch-picker">
         {(chans || []).map(c => (
           <button key={c.id} className={'tagchip' + (sel === c.id ? ' on' : '')} onClick={() => setSel(c.id)}>
@@ -187,85 +179,83 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
         ))}
         {chans && !chans.length && <span className="hint">{t('cdn.noChannels')}</span>}
       </div>
-      {found?.applications?.length > 0 && can('cdn.manage') && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-          <span className="hint">{t('cdn.addFromOrigin')}</span>
-          {found.applications
-            .filter(a => !(chans || []).some(c => c.application === a.application))
-            .map(a => (
-              <button key={a.application} disabled={busy}
-                      onClick={() => addChannel(a.application, a.streams?.[0]?.stream || a.application)}>
-                + {a.application}
-              </button>
-            ))}
-        </div>
-      )}
-
+      <div className="hint">{t('cdn.channelsLiveOn')}</div>
       <div className="gsection">{t('cdn.step2')}</div>
-      <div className="row" style={{ gap: 8 }}>
-        <button onClick={() => run('plan')} disabled={busy || !list.length || dirty}>{t('cdn.showPlan')}</button>
-        {can('cdn.manage') && (
-          <button className="primary" onClick={apply} disabled={busy || !plan || blocked || !work.length || dirty}>
-            {busy ? '…' : t('cdn.apply', { n: work.length })}
-          </button>
-        )}
-        {!plan && <span className="hint">{t('cdn.planFirst')}</span>}
-      </div>
+      {/* The operator is not asked to plan anything. The panel derives what
+          Nimble needs and says so; the reasoning is one click away, because a
+          panel that writes into an account silently is only acceptable while
+          it can show its working at any moment. */}
+      {derived?.summary && (
+        <>
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {derived.inSync
+              ? <span className="badge live">{t('cdn.inSync')}</span>
+              : <span className="badge warn">{t('cdn.pendingN', { n: derived.summary.create + derived.summary.update })}</span>}
+            {can('cdn.manage') && !derived.inSync && !derived.blocking.length && (
+              <button className="primary" disabled={busy || dirty} onClick={apply}>
+                {busy ? '…' : t('cdn.setUp')}
+              </button>
+            )}
+            <button onClick={() => setShowWhy(v => !v)}>
+              {showWhy ? '▾' : '▸'} {t('cdn.why')}
+            </button>
+          </div>
 
-      {plan?.problems?.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          {plan.problems.map((p, i) => (
-            <div key={i} className={p.severity === 'block' ? 'error-box' : 'hint'} style={{ marginBottom: 4 }}>
-              <span className={'badge ' + (SEV[p.severity] || '')}>{t('cdn.sev.' + p.severity)}</span>{' '}
-              {t('cdn.problem.' + p.code) !== 'cdn.problem.' + p.code ? t('cdn.problem.' + p.code) : p.code}
-              {p.server && <> · <b>{p.server}</b></>}
-              {p.application && <> · <span className="mono">{p.application}</span></>}
-              {p.detail && <div style={{ marginTop: 2 }}>{p.detail}</div>}
+          {derived.blocking.length > 0 && derived.blocking.map((b, i) => (
+            <div key={i} className="error-box">
+              {t('cdn.problem.' + b.code) !== 'cdn.problem.' + b.code ? t('cdn.problem.' + b.code) : b.code}
+              {b.server && <> · <b>{b.server}</b></>}
+              {b.application && <> · <span className="mono">{b.application}</span></>}
             </div>
           ))}
-        </div>
-      )}
+          {derived.unservable.map((u, i) => (
+            <div key={i} className="hint">{t('cdn.unservable', { channel: u.channel })}</div>
+          ))}
 
-      {plan && (
-        <table style={{ marginTop: 10 }}>
-          <thead>
-            <tr><th>{t('cdn.action')}</th><th>{t('cdn.server')}</th><th>{t('cdn.from')}</th><th>{t('cdn.to')}</th></tr>
-          </thead>
-          <tbody>
-            {plan.planned.map((p, i) => (
-              <tr key={i} style={{ opacity: p.action === 'keep' ? 0.55 : 1 }}>
-                <td><span className={'badge' + (p.action === 'create' ? ' live' : '')}>{t('cdn.act.' + p.action)}</span></td>
-                <td>{p.server}</td>
-                <td className="mono" style={{ fontSize: 12 }}>{p.from}</td>
-                <td className="mono" style={{ fontSize: 12 }}>
-                  {p.to}
-                  {p.was && <div className="hint" >{t('cdn.was')} {p.was}</div>}
-                  {/* Where the two guessable parts came from, next to the value
-                      they produced — the port especially, since an assumed one
-                      produces a route that resolves and never serves. */}
-                  {p.portSource === 'nimble-default' && (
-                    <div className="hint" >{t('cdn.portAssumed')}</div>
+          {showWhy && (
+            <div className="inset">
+              <div className="hint">{t('cdn.whyHint')}</div>
+              {derived.items.map((it, i) => (
+                <div key={i} className="why-item">
+                  <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <span className={'badge ' + (it.action === 'keep' ? '' : 'live')}>{t('cdn.act.' + it.action)}</span>
+                    <span>{t('cdn.why.' + it.why)}</span>
+                    <b>{it.subject}</b>
+                    <span className="mono">{it.application}</span>
+                  </div>
+                  <div className="mono hint">{it.detail.from} → {it.detail.to}</div>
+                  {it.provenance && (
+                    <div className="hint">
+                      {t('cdn.fromOrigin', { origin: it.provenance.origin, host: it.provenance.host })}
+                      {' · '}
+                      {t(it.provenance.portSource === 'configured' ? 'cdn.portSet' : 'cdn.portGuessed',
+                         { port: it.provenance.port })}
+                    </div>
                   )}
-                </td>
-              </tr>
-            ))}
-            {!plan.planned.length && <tr><td colSpan={4} className="hint">{t('cdn.nothingToDo')}</td></tr>}
-          </tbody>
-        </table>
+                </div>
+              ))}
+              {!derived.items.length && <div className="hint">{t('cdn.nothingDerived')}</div>}
+            </div>
+          )}
+        </>
       )}
 
+      {/* What the last apply did. Cut by accident when step 2 became a derived
+          summary — and with it the only place WMSPanel's own words about a
+          refusal were shown, which is the difference between "it failed" and
+          knowing why. */}
       {report && (
         <div className="inset">
           <b>{report.ok ? t('cdn.applyDone', { n: report.applied }) : t('cdn.applyStopped', { n: report.applied })}</b>
-          {report.steps?.map((s, i) => (
-            <div key={i} className="hint" style={{ fontSize: 12 }}>
-              {s.ok ? '✓' : '✗'} {s.step}
-              {s.verified ? ` — ${s.verified}` : ''}
-              {s.error ? ` — ${s.error}` : ''}
-              {s.rolledBack ? ` · ${s.rolledBack}` : ''}
-              {s.upstreamError && (
-                <div className="mono" style={{ marginLeft: 14, wordBreak: 'break-all' }}>
-                  {t('cdn.upstreamSaid')} {typeof s.upstreamError === 'string' ? s.upstreamError : JSON.stringify(s.upstreamError)}
+          {report.steps?.map((s2, i) => (
+            <div key={i} className="hint">
+              {s2.ok ? '✓' : '✗'} {s2.step}
+              {s2.verified ? ` — ${s2.verified}` : ''}
+              {s2.error ? ` — ${s2.error}` : ''}
+              {s2.rolledBack ? ` · ${s2.rolledBack}` : ''}
+              {s2.upstreamError && (
+                <div className="mono" style={{ wordBreak: 'break-all' }}>
+                  {t('cdn.upstreamSaid')} {typeof s2.upstreamError === 'string' ? s2.upstreamError : JSON.stringify(s2.upstreamError)}
                 </div>
               )}
             </div>

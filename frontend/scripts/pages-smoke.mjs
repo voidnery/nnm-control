@@ -12,7 +12,7 @@ const PAGES = [
   ['DashboardPage','/'], ['ServersPage','/servers'], ['ServerDetailPage','/servers/S1'],
   ['UsersPage','/users'], ['RolesPage','/roles'], ['AuditPage','/audit'],
   ['SettingsPage','/settings'], ['FunctionsPage','/functions'], ['TranscodersPage','/transcoders'],
-  ['DistributionPage','/distribution'], ['PlaylistsPage','/playlists'], ['ZabbixPage','/zabbix'], ['CategoriesPage','/categories'],
+  ['DistributionPage','/distribution'], ['AccountObjectsPage','/account-objects'], ['PlaylistsPage','/playlists'], ['ZabbixPage','/zabbix'], ['CategoriesPage','/categories'],
   ['ProfilePage','/profile'], ['ServerAgentsPage','/agents'], ['LogsPage','/logs'], ['LogCategoriesPage','/logs/categories'], ['LogDashboardsPage','/logs/dashboards'],
 ];
 
@@ -156,6 +156,9 @@ window.fetch = (u) => {
   if (/\/cdn\/routes$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     status:'Ok', routes:[{ id:'r1', from:'/test2/', to:'79.98.187.66:8081/test2/',
                            servers:['6a18e008dc73c6feb3a4f1e9'] }] }), text:()=>Promise.resolve('{}') });
+  if (/\/channels\/discovered$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    found:[{ key:'ewc_chess/main', application:'ewc_chess', stream:'main', origin:'selectel(24/7)', bandwidth:3200000 }],
+    unreachable:[] }), text:()=>Promise.resolve('{}') });
   if (/\/channels\/overview$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     routesRead:true,
     rows:[{ channel:{ id:'C1', application:'test2', stream:'test_stream', label:'', kind:'production', network:'N1', name:'test2/test_stream' },
@@ -168,6 +171,12 @@ window.fetch = (u) => {
                     tests:[{ edge:'RU-2', url:'http://10.0.0.2:8081/test2/test_stream/playlist.m3u8', exposes:'edge-address', routed:true, healthy:true }] } },
           { channel:{ id:'C2', application:'povtor_tennis', stream:'main', label:'', kind:'production', network:null, name:'povtor_tennis/main' },
             network:null, edges:[], links:null, code:'not-delivered' }] }), text:()=>Promise.resolve('{}') });
+  if (/\/networks\/[^/]+\/derived$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    items:[{ kind:'route', action:'create', why:'edge-needs-route', subject:'RU-2', application:'test2',
+             detail:{ from:'/test2/', to:'79.98.187.66:8081/test2/' },
+             provenance:{ origin:'selectel(24/7)', host:'79.98.187.66', hostSource:'management-host', port:8081, portSource:'configured' } }],
+    problems:[], blocking:[], unservable:[], summary:{ create:1, update:0, keep:0 }, inSync:false,
+    channels:[{ id:'C1', application:'test2', stream:'test_stream', readiness:{ code:'pending', ready:false, pending:1 } }] }), text:()=>Promise.resolve('{}') });
   if (/\/cdn\/channels$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({ channels:[] }), text:()=>Promise.resolve('{}') });
   if (/\/cdn\/networks$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     networks:[{ id:'N1', name:'Prod', description:'', audience:'public', nodes:[
