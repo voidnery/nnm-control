@@ -40,8 +40,19 @@ function Cell({ c, t }) {
 export default function ProbePanel({ network }) {
   const { t } = useI18n();
   const [matrix, setMatrix] = useState(null);
+  // The cache, which is the number that says whether this is a delivery
+  // network or three parallel proxies. It lives beside the path measurements
+  // because both answer "is the plumbing doing its job".
+  const [cache, setCache] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const readCache = async () => {
+    setBusy(true); setError('');
+    try { setCache(await api(`/cdn/networks/${network.id}/cache`, { method: 'POST', body: {} })); }
+    catch (e) { setError(e.data?.error || e.message); }
+    finally { setBusy(false); }
+  };
 
   const run = async () => {
     setBusy(true); setError('');
@@ -66,7 +77,44 @@ export default function ProbePanel({ network }) {
       <div className="row" style={{ gap: 8, marginTop: 8 }}>
         <button className="primary" onClick={run} disabled={busy}>{busy ? '…' : t('pr.run')}</button>
         {matrix?.at && <span className="hint">{t('pr.measuredAt', { at: new Date(matrix.at).toLocaleTimeString() })}</span>}
+        <button onClick={readCache} disabled={busy}>{t('cache.read')}</button>
       </div>
+
+      {cache && (
+        <div className="inset">
+          <div className="gsection">{t('cache.title')}</div>
+          <div className="hint">{t('cache.intro')}</div>
+          {cache.rows.map((r, i) => (
+            <div key={i} className="cfg-finding">
+              <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <b>{r.server}</b>
+                {!r.ok && <span className="badge err">{t('cdn.reason.' + r.reason)}</span>}
+                {r.ok && r.hitRatio?.ratio != null && (
+                  <span className={'badge ' + (r.hitRatio.ratio >= 95 ? 'live' : 'warn')}>
+                    {t('cache.ratio', { pct: r.hitRatio.ratio })}
+                  </span>
+                )}
+                {/* The honest case, and the likely one: the server answered and
+                    said nothing about its cache. Saying so beats a zero. */}
+                {r.ok && !r.hasAnyCacheData && <span className="badge">{t('cache.nothingReported')}</span>}
+              </div>
+              {r.ok && r.reported?.length > 0 && (
+                <div className="hint mono">
+                  {r.reported.map(f => `${f.path}=${f.value}`).join(' · ')}
+                </div>
+              )}
+              {r.ok && r.expected && (
+                <div className="hint">
+                  {t('cache.expected', {
+                    mb: (r.expected.bytes / 1e6).toFixed(1),
+                    n: r.expected.streams, chunks: r.expected.chunksPerStream,
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {matrix && froms.length > 0 && (
         <table style={{ marginTop: 10 }}>

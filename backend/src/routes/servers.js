@@ -58,9 +58,9 @@ serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
 });
 
 serversRouter.post('/', requirePerm('servers.manage'), async (req, res) => {
-  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [], httpPort = 0 } = req.body || {};
+  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [], httpPort = 0, httpsPort = 0 } = req.body || {};
   if (!name || !host) return res.status(400).json({ error: 'name and host required' });
-  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, httpPort: Number(httpPort) > 0 ? Number(httpPort) : 0, playbackEndpoints: cleanEndpoints(playbackEndpoints) });
+  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, httpPort: Number(httpPort) > 0 ? Number(httpPort) : 0, httpsPort: Number(httpsPort) > 0 ? Number(httpsPort) : 0, playbackEndpoints: cleanEndpoints(playbackEndpoints) });
   res.status(201).json(pub(server));
 });
 
@@ -79,7 +79,7 @@ serversRouter.put('/order', requirePerm('servers.manage'), async (req, res) => {
 serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Not found' });
-  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints, httpPort } = req.body || {};
+  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints, httpPort, httpsPort } = req.body || {};
   if (name !== undefined) server.name = name;
   if (host !== undefined) server.host = host;
   if (port !== undefined) server.port = port;
@@ -91,6 +91,10 @@ serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   if (wmspanelServerId !== undefined) server.wmspanelServerId = String(wmspanelServerId).trim();
   if (playbackEndpoints !== undefined) server.playbackEndpoints = cleanEndpoints(playbackEndpoints);
   if (httpPort !== undefined) server.httpPort = Number(httpPort) > 0 ? Number(httpPort) : 0;
+  // The TLS port the operator tells us about. Written here as well as by the
+  // check, which remembers a port that answered — a field the panel writes and
+  // does not accept back is the fault this whole feature was born from.
+  if (httpsPort !== undefined) server.httpsPort = Number(httpsPort) > 0 ? Number(httpsPort) : 0;
   await server.save();
   // Any of host / mapping / ports invalidates a resolved playback answer.
   invalidatePlaybackCache(server.id);

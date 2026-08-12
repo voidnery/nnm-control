@@ -1,5 +1,64 @@
 # Changelog
 
+### v0.80.0 — the cache, read from where it actually lives
+Cache hit ratio is the number that says whether a delivery network is a
+delivery network or three parallel proxies, and WMSPanel does not report it.
+It turns out Nimble does — Softvelum's own Zabbix templates read RAM cache
+status from `/manage/server_status`, which is the endpoint this panel has been
+polling for metrics since iter7. The metric was one call away the whole time.
+
+**What this does not do is guess the field names.** Every shape taken from
+documentation rather than from a response has been wrong in this project: the
+`to` of a route, the DASH manifest path, and two TLS fields that existed
+nowhere at all. So the report reads whatever cache-shaped keys are actually
+present, names them as Nimble named them, keeps the path so a number can be
+traced to its field, and says plainly when it found nothing.
+
+- **A ratio only when the two numbers for one exist.** No counters means no
+  ratio — not zero. A confident 0% about a cache that may be working perfectly
+  is worse than admitting the server did not say.
+- **A fresh cache is not a broken one.** Zero hits and zero misses reports both
+  counters and no percentage.
+- **What the cache *should* need is computed separately** and labelled as
+  computed: Softvelum document four chunks resident plus a 45-second timeout,
+  so six-second chunks hold twelve, and the RAM follows from the bitrate. It
+  answers the question an operator has before an event — will it hold — which
+  no counter can answer until it is too late. And it does not grow with the
+  audience, which is the counter-intuitive part worth stating.
+- Measured and computed never share a row.
+
+11 new checks, four proven by contradiction — including the two that matter
+most: reporting zero when nothing was measured, and letting unrelated numbers
+into the report, which is how a page full of everything becomes a page nobody
+reads.
+
+### v0.79.1 — the TLS check moved to where the port is
+It was on the Geography tab because that is where a row of per-server actions
+already existed, not because it belonged there. Geography is about where a box
+stands; TLS is about what it can carry. It now sits in the server dialog, one
+line under the HTTP port, because the port is the number it asks about.
+
+- **A TLS port field beside the HTTP one.** Both are the same kind of fact —
+  something Nimble knows and no WMSPanel endpoint reports — and both have to be
+  told to the panel.
+- **The check remembers a port that answered**, so nobody has to find it twice.
+- **On a new server the button says to save first**, rather than being enabled
+  and failing on a server that has no id yet.
+- The result still shows on the Geography tab, where it is useful next to an
+  address; only the button moved.
+
+**A gate for the fault that produced this feature.** The LL-HLS check was
+written against `httpsPort` and `http2Confirmed`, neither of which existed
+anywhere — so it could never pass. `audit:dialog` now requires that every TLS
+field is stored, returned by `GET /servers`, accepted on write and editable in
+the form, and that every `tls.*` the protocol gate reads is one the API
+actually returns. Proven three ways.
+
+That is the third time this shape has cost a release: geolocation written and
+never returned (v0.64.1), a response body on `e.data` read as `e.body`
+(v0.62.2), and now two fields invented outright. The check is cheap; noticing
+was not.
+
 ### v0.79.0 — the LL-HLS gate was reading fields that did not exist
 v0.78.0 shipped a check that refused LL-HLS unless `edge.httpsPort` and
 `edge.http2Confirmed` were set. Neither field existed — not in the model, not

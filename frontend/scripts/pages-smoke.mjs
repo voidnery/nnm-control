@@ -200,6 +200,10 @@ window.fetch = (u) => {
   if (/resolve-preview$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     decision:{ edge:{ name:'Nimble RU-2' }, reason:'nearest', distanceKm:420, runnersUp:[{ edge:'RU-3', distanceKm:900 }] },
     viewerFrom:'geoip', mode:'direct', url:'http://79.98.187.66:8081/test2/s/playlist.m3u8', exposes:'edge-address', via:'edge' }), text:()=>Promise.resolve('{}') });
+  if (/\/networks\/[^/]+\/cache$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    rows:[{ server:'Nimble RU-2', ok:true, transport:'direct', reported:[{ path:'RamCacheSize', value:4096, counter:false }],
+            hitRatio:null, hasAnyCacheData:true, expected:{ bytes:9000000, streams:1, chunksPerStream:12, chunkSeconds:6, independentOfViewers:true } }],
+    chunkSeconds:6, at:new Date().toISOString() }), text:()=>Promise.resolve('{}') });
   if (/\/probe\/matrix$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     cells:[{ from:'selectel(24/7)', to:'Nimble RU-3', ok:true, minMs:12.4, avgMs:13, maxMs:14, jitterMs:1.6, lossPct:0 },
            { from:'Nimble RU-3', to:'selectel(24/7)', ok:false, error:'ETIMEDOUT', minMs:null, lossPct:null }],

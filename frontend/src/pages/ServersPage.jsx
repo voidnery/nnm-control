@@ -8,7 +8,7 @@ import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from '../components/IconButton.jsx';
 
-const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [], httpPort: 0 };
+const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [], httpPort: 0, httpsPort: 0 };
 
 function ServerModal({ initial, onClose, onSaved, wms }) {
   const { t } = useI18n();
@@ -21,7 +21,29 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
   });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // What the TLS handshake found, if it has been run in this dialog. The saved
+  // answer arrives on `initial.tls`; this holds a fresher one.
+  const [tls, setTls] = useState(initial.tls || null);
+  const [tlsBusy, setTlsBusy] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Asked of the server rather than declared by the operator. LL-HLS needs
+  // HTTP/2 over TLS and a player without it falls back to ordinary HLS in
+  // silence — video plays, latency is unchanged, nothing on any screen says
+  // so. The only honest answer comes from the handshake.
+  const checkTls = async () => {
+    setTlsBusy(true); setError('');
+    try {
+      const r = await api(`/servers/${initial.id}/tls/check`, {
+        method: 'POST', body: { port: Number(form.httpsPort) || undefined },
+      });
+      setTls(r.tls);
+      // A port that answered is worth remembering, so the next person does not
+      // have to find it again.
+      if (r.tls?.tls && !(Number(form.httpsPort) > 0)) set('httpsPort', r.port);
+    } catch (e) { setError(e.data?.error || e.message); }
+    finally { setTlsBusy(false); }
+  };
 
   useEffect(() => {
     // WMSPanel mapping helper; silently unavailable until API creds are set.
@@ -37,6 +59,7 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         wmspanelServerId: form.wmspanelServerId || '',
         httpPort: Number(form.httpPort) > 0 ? Number(form.httpPort) : 0,
+        httpsPort: Number(form.httpsPort) > 0 ? Number(form.httpsPort) : 0,
         playbackEndpoints: (form.playbackEndpoints || []).filter(e => String(e.host || '').trim()),
       };
       // On edit an empty token field means "do not change".
@@ -91,6 +114,32 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
           <span className="hint" style={{ flex: 1 }}>{t('sp.httpPortHint')}</span>
           <input type="number" style={{ flex: '0 0 110px' }} placeholder="8081"
                  value={form.httpPort || ''} onChange={e => set('httpPort', e.target.value)} />
+        </div>
+
+        {/* The TLS port sits next to the HTTP one because they are the same
+            kind of fact, and the check sits next to the port because that is
+            the number it asks about. */}
+        <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 4 }}>
+          <span className="hint" style={{ flex: 1 }}>{t('sp.httpsPortHint')}</span>
+          <input type="number" style={{ flex: '0 0 110px' }} placeholder="443"
+                 value={form.httpsPort || ''} onChange={e => set('httpsPort', e.target.value)} />
+        </div>
+        <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 10 }}>
+          {/* Only on edit: an unsaved server has no id to ask about. */}
+          <button disabled={!isEdit || tlsBusy} onClick={checkTls}>
+            {tlsBusy ? '…' : t('tls.check')}
+          </button>
+          {!isEdit && <span className="hint">{t('sp.tlsAfterSave')}</span>}
+          {isEdit && !tls?.checkedAt && <span className="hint">{t('sp.tlsNotChecked')}</span>}
+          {tls?.checkedAt && (
+            <span className="hint">
+              {tls.tls
+                ? <>{t('tls.yes', { alpn: tls.alpn || '?' })}
+                    {' · '}{t(tls.http2 ? 'tls.h2' : 'tls.noH2')}
+                    {!tls.certTrusted && <> · {t('tls.certBad')}</>}</>
+                : t('tls.reason.' + (tls.reason || 'handshake-failed'))}
+            </span>
+          )}
         </div>
         {(form.playbackEndpoints || []).map((e, i) => {
           const upd = (patch) => set('playbackEndpoints', form.playbackEndpoints.map((x, j) => j === i ? { ...x, ...patch } : x));

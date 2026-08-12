@@ -9,6 +9,7 @@ import { networkState, indexStreams, probeReason } from '../services/networkStat
 import { parsePlaylist, movedOn, classifyProbe } from '../services/playlistProbe.js';
 import { playbackPath } from '../services/protocols.js';
 import { configOverview } from '../services/configOverview.js';
+import { cacheReport } from '../services/cacheReport.js';
 import { status as geoStatus } from '../services/geoip.js';
 import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { logEvent } from '../services/audit.js';
@@ -90,6 +91,49 @@ deliveryRoutesRouter.get('/networks/:id/overview', requirePerm('cdn.view'), asyn
     network: g.network, servers: g.servers,
     originApps: g.originApps, routes: g.existingRoutes, geo, channels,
   }));
+});
+
+// What the cache is doing, per edge.
+//
+// The one number that says whether this is a delivery network or three
+// parallel proxies. WMSPanel does not have it; `/manage/server_status` does,
+// which is the endpoint the panel already polls for metrics — Softvelum's own
+// Zabbix templates read RAM cache status from exactly there.
+//
+// Read through the shared native client, so it prefers the agent like every
+// other management call.
+deliveryRoutesRouter.post('/networks/:id/cache', requirePerm('cdn.view'), async (req, res) => {
+  const g = await gather(req.params.id);
+  if (g.error) return res.status(404).json({ error: g.error });
+  const chunkSeconds = Number(req.body?.chunkSeconds) > 0 ? Number(req.body.chunkSeconds) : 6;
+
+  const byId = new Map(g.servers.map(x => [String(x._id), x]));
+  const edges = (g.network.nodes || [])
+    .filter(n => n.role === 'edge' && n.enabled !== false)
+    .map(n => byId.get(String(n.server))).filter(Boolean);
+
+  const rows = await Promise.all(edges.map(async (srv) => {
+    const meta = {};
+    try {
+      const [status, live] = await Promise.all([
+        nimble.serverStatus(srv, meta),
+        nimble.liveStreams(srv).catch(() => null),
+      ]);
+      const streams = [];
+      for (const entries of (live ? indexStreams(live) : new Map()).values()) streams.push(...entries);
+      return {
+        server: srv.name, ok: true, transport: meta.transport || 'direct',
+        ...cacheReport({ status, streams, chunkSeconds }),
+      };
+    } catch (e) {
+      // Named, not silently absent: an edge the panel could not ask is a gap
+      // in the picture, and pretending it has no cache would be a claim.
+      return { server: srv.name, ok: false, reason: probeReason(e, agentIsLive(srv)),
+               error: String(e?.message || e).slice(0, 200) };
+    }
+  }));
+
+  res.json({ rows, chunkSeconds, at: new Date().toISOString() });
 });
 
 // Be the viewer.

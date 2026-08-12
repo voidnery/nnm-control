@@ -81,7 +81,7 @@ function GeoDbPanel({ status, onUpdate, busy, canManage }) {
 // country, `coordsSource` the coordinates, separately — they do not arrive
 // together, and a marker whose origin nobody can account for is worse than no
 // marker.
-function GeoCell({ server, onEdit, onResolve, onTls, canManage, busy }) {
+function GeoCell({ server, onEdit, onResolve, canManage, busy }) {
   const { t } = useI18n();
   const g = server.geo || {};
   const has = Boolean(g.countryCode);
@@ -116,10 +116,6 @@ function GeoCell({ server, onEdit, onResolve, onTls, canManage, busy }) {
       {canManage && (
         <div className="row" style={{ gap: 6, marginTop: 4 }}>
           <button disabled={busy} onClick={() => onResolve(server)}>{t('cdn.resolve')}</button>
-          {/* What this box can carry, found by handshake. LL-HLS falls back to
-              ordinary HLS without HTTP/2 and says nothing, so this is the only
-              honest way to know. */}
-          <button disabled={busy} onClick={() => onTls(server)}>{t('tls.check')}</button>
           <IconButton action="edit" disabled={busy} onClick={() => onEdit(server)} />
         </div>
       )}
@@ -159,11 +155,6 @@ export default function DeliveryGeoPanel({ servers, onServersChanged }) {
     const r = await api('/geoip/update', { method: 'POST', body: { edition: wanted } });
     if (!r.ok) throw new Error(r.error || 'update failed');
   }, t('cdn.geoDbUpdated'));
-
-  const checkTls = (server) => act(async () => {
-    await api(`/servers/${server.id}/tls/check`, { method: 'POST', body: {} });
-    onServersChanged?.();
-  });
 
   const resolveOne = (server) => act(async () => {
     const r = await api(`/servers/${server.id}/geo/resolve`, { method: 'POST' });
@@ -225,7 +216,7 @@ export default function DeliveryGeoPanel({ servers, onServersChanged }) {
                 <td>{s.name}</td>
                 <td className="mono" style={{ fontSize: 12 }}>{s.host}</td>
                 <td><GeoCell server={s} canManage={canManage} busy={busy}
-                             onResolve={resolveOne} onTls={checkTls}
+                             onResolve={resolveOne}
                              onEdit={sv => setGeoEdit({
                                id: sv.id, name: sv.name,
                                countryCode: sv.geo?.countryCode || '', countryName: sv.geo?.countryName || '',

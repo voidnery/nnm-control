@@ -121,7 +121,7 @@ async function call(server, path, { method = 'GET', body, extraQuery, meta } = {
 }
 
 export const nimble = {
-  serverStatus:     (s) => call(s, '/manage/server_status'),
+  serverStatus:     (s, meta) => call(s, '/manage/server_status', { meta }),
   liveStreams:      (s, meta) => call(s, '/manage/live_streams_status', { meta }),
   sessions:         (s) => call(s, '/manage/sessions'),
   deleteSessions:   (s, ids) => call(s, '/manage/sessions/delete', { method: 'POST', body: ids }),

@@ -93,6 +93,36 @@ if (geoFields.length < 5) {
   }
 }
 
+// The same contract for the TLS fields, and for the same reason: the LL-HLS
+// gate was written against `httpsPort` and `http2Confirmed`, neither of which
+// existed anywhere, so the option was permanently unavailable and looked like
+// a feature. A field the panel reads must be one the panel returns, and a
+// field a form writes must be one the API accepts.
+const routes2 = readFileSync(path.join(BACKEND, 'routes/servers.js'), 'utf8');
+const form = readFileSync(path.join(SRC, 'pages/ServersPage.jsx'), 'utf8');
+
+if (!/httpsPort:\s*\{\s*type: Number/.test(model)) {
+  fail('the model has no httpsPort, but the protocol gate reads one');
+} else if (!/httpsPort: s\.httpsPort/.test(routes2)) {
+  fail('httpsPort is stored and never returned — the form could not show it back');
+} else if (!/server\.httpsPort = Number\(httpsPort\)/.test(routes2)) {
+  fail('the form can send httpsPort and the API drops it');
+} else if (!/set\('httpsPort'/.test(form)) {
+  fail('nothing in the server dialog can set the TLS port');
+} else {
+  ok('httpsPort is stored, returned, accepted and editable');
+}
+
+// The probe result likewise: read by the readiness check, so it has to reach
+// the client.
+const protocols = readFileSync(path.join(BACKEND, 'services/protocols.js'), 'utf8');
+for (const f of [...new Set([...protocols.matchAll(/edge\.tls\.(\w+)/g)].map(m => m[1]))]) {
+  if (!new RegExp(`${f}: `).test(routes2)) {
+    fail(`the protocol gate reads tls.${f} and GET /servers does not return it`);
+  }
+}
+ok('every tls field the protocol gate reads is returned by the API');
+
 // And the control that writes them must have somewhere to write to.
 if (!/geo\/resolve/.test(readFileSync(path.join(BACKEND, 'routes/geoip.js'), 'utf8'))) {
   fail('the resolve endpoint is gone');
