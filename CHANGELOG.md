@@ -1,5 +1,32 @@
 # Changelog
 
+### v0.84.1 — a refusal that was not a rate limit
+The v0.84.0 release failed on the frontend image:
+
+    failed to fetch oauth token: denied: denied
+
+Not the secondary rate limit from v0.62.5, though it wore the same shape. The
+tell is on the same screen: `images (api)` pushed and `images (web)` did not.
+Same workflow, same login, same `GITHUB_TOKEN` — so the credentials are fine
+and the *package* is not. In GHCR each package carries its own Actions access
+alongside the repository's, and one created before this workflow existed, or
+linked elsewhere, refuses a push from here.
+
+The retry made it worse rather than better: two minutes of waiting, then an
+identical failure, and a summary line reading "GitHub asks for a few minutes
+before retrying" about a problem that no amount of waiting fixes.
+
+So the message now names both causes, says which evidence tells them apart —
+whether the other image in the same run pushed — and where the fix is
+(Package settings → Manage Actions access → give this repository Write). The
+retry stays, because the other cause is real and it does clear it.
+
+`audit:release` grows a rule for it. A message that describes one of two causes
+sends the operator to wait out something that is not a wait.
+
+**Nothing in the panel changed.** The code of v0.84.0 is intact; it simply
+never reached the registry.
+
 ### v0.84.0 — iter22 m3: protection you can actually switch on
 The model and the signer existed; nothing could reach them. Now the channel
 dialog asks who may watch, and the panel writes the WMSAuth groups and rules

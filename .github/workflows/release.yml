@@ -30,6 +30,13 @@
 #   - Secret APT_GPG_PASSPHRASE (optional): only if the key is passphrase-protected.
 #   - After first release: make both ghcr packages public
 #       (Packages -> nnm-control-api / -web -> Package settings -> Change visibility).
+#
+#       Each package also carries its own Actions access, separately from the
+#       repository's. A package created before this workflow existed, or linked
+#       to a different repository, refuses a push from here with
+#       "failed to fetch oauth token: denied" while the other image in the same
+#       matrix pushes fine — same token, same login. The fix is in
+#       Package settings -> Manage Actions access, not in this file.
 name: release
 
 on:
@@ -194,9 +201,32 @@ jobs:
           cache-from: type=gha,scope=nc-${{ matrix.name }}
           cache-to: type=gha,scope=nc-${{ matrix.name }},mode=max
       - if: steps.push.outcome == 'failure'
-        name: Wait out the rate limit
+        name: Explain the refusal, then wait
         run: |
-          echo "push refused; GitHub asks for a few minutes before retrying" >> "$GITHUB_STEP_SUMMARY"
+          # Two very different failures wear the same word, and the retry only
+          # helps one of them.
+          #
+          #   "exceeded a secondary rate limit"  -> transient, waiting fixes it
+          #   "failed to fetch oauth token: denied: denied"  -> permissions on
+          #       that one package; waiting changes nothing and the retry burns
+          #       two minutes before failing identically
+          #
+          # The tell is whether the *other* image in this matrix pushed. Same
+          # token, same login, same workflow: if one succeeded and one did not,
+          # the credentials are fine and the package is not.
+          {
+            echo "### Push refused for nnm-control-${{ matrix.name }}"
+            echo
+            echo "If the log says **exceeded a secondary rate limit**, this is temporary —"
+            echo "the retry below usually clears it."
+            echo
+            echo "If it says **failed to fetch oauth token: denied**, the credentials are"
+            echo "fine and this package's permissions are not. Check that the other image"
+            echo "in this run pushed: same token, same login. Then go to"
+            echo "Packages → nnm-control-${{ matrix.name }} → Package settings →"
+            echo "Manage Actions access, and give this repository the Write role."
+            echo "Waiting will not help and the retry below will fail the same way."
+          } >> "$GITHUB_STEP_SUMMARY"
           sleep 120
       - if: steps.push.outcome == 'failure'
         uses: docker/build-push-action@v6

@@ -108,6 +108,19 @@ if (pushes < 2) {
 } else {
   notes.push('the image push retries once after a rate limit');
 }
+// A refusal from ghcr wears one word for two causes: a secondary rate limit,
+// which the retry clears, and a permission denial on one package, which it
+// cannot. The retry costs two minutes either way, so the message beside it has
+// to name both — otherwise the operator waits out a wait that will not help.
+if (!/oauth token: denied/.test(wf)) {
+  fail('the push-failure message does not mention the permission denial, so a '
+     + 'denied package reads as a rate limit and the operator waits for nothing');
+} else if (!/Manage Actions access/.test(wf)) {
+  fail('the message names the failure and not where to fix it');
+} else {
+  notes.push('a refused push explains both of its causes');
+}
+
 if (!/max-parallel:\s*1/.test(wf)) {
   fail('the image matrix runs in parallel; two jobs pushing to ghcr at once is '
      + 'half of what earns the rate limit in the first place');
