@@ -56,6 +56,23 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   // Live mode, the same shape the transcoder graph uses: an operator during a
   // broadcast wants the tab open and answering, not a button to keep pressing.
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const applyProtection = async () => {
+    setBusy(true); setError('');
+    try {
+      const r = await api(`/cdn/networks/${network.id}/protection/apply`, { method: 'POST', body: {} });
+      setReport(r);
+      await loadDerived();
+      push({ type: r.ok ? 'ok' : 'warn', message: t(r.ok ? 'cdn.protApplied' : 'cdn.protFailed') });
+    } catch (e) {
+      // The steps carry WMSPanel's own words about a refusal, and this is the
+      // first write of these objects on this account — so they are the only
+      // thing that will say what the shape should have been.
+      const d = e.data || {};
+      if (d.steps) setReport(d);
+      setError(d.steps ? '' : (d.error || e.message));
+    } finally { setBusy(false); }
+  };
+
   const loadDerived = async () => {
     try { setDerived(await api(`/cdn/networks/${network.id}/derived`)); }
     catch (e) { setError(e.data?.error || e.message); }
@@ -194,6 +211,38 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
           it can show its working at any moment. */}
       {derived?.summary && (
         <>
+          {/* Protection is written by the same button and was not shown by it.
+              A channel switched to token protection sat unapplied while this
+              step said "all set up" — everything visible was green and the
+              stream was open to anybody. */}
+          {derived.protection && (derived.protection.summary.create > 0
+            || derived.protection.blocking?.length > 0) && (
+            <div className="inset">
+              <div className="eyebrow">{t('cdn.protPlan')}</div>
+              {derived.protection.blocking?.length > 0
+                ? derived.protection.blocking.map((b, i) => (
+                    <div key={i} className="error-box">
+                      {t('cfg.' + b.code) !== 'cfg.' + b.code ? t('cfg.' + b.code) : b.code}
+                      {b.channel && <> · <span className="mono">{b.channel}</span></>}
+                    </div>
+                  ))
+                : (
+                  <>
+                    <div className="hint">{t('cdn.protPlanHint', { n: derived.protection.summary.create })}</div>
+                    {derived.protection.items.filter(i => i.action !== 'keep').map((it, i) => (
+                      <div key={i} className="hint">
+                        <span className="badge live">{t('cdn.act.' + it.action)}</span>{' '}
+                        {t('cdn.protWhy.' + it.why)} · <b>{it.subject}</b>
+                      </div>
+                    ))}
+                    {can('cdn.manage') && (
+                      <button className="primary" style={{ marginTop: 8 }} disabled={busy}
+                              onClick={applyProtection}>{t('cdn.applyProt')}</button>
+                    )}
+                  </>
+                )}
+            </div>
+          )}
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             {derived.inSync
               ? <span className="badge live">{t('cdn.inSync')}</span>

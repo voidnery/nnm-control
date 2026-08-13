@@ -39,11 +39,13 @@ check('there are six, and they are the six', () => {
 });
 
 check('a fully set-up network reads as done', () => {
+  // Five steps now, not six: the roles and the upstreams are one table and
+  // were two cards showing it twice.
   const r = networkSteps({
     network: NET(), servers: SERVERS, channels: CH, derived: SYNCED,
     watched: { total: 1, ok: 1, failing: 0 },
   });
-  assert.equal(r.done, 6, JSON.stringify(r.steps.map(s => [s.id, s.state])));
+  assert.equal(r.done, 5, JSON.stringify(r.steps.map(s => [s.id, s.state])));
   assert.equal(r.next, null);
 });
 
@@ -53,15 +55,15 @@ check('an empty network is empty, not broken', () => {
   // Nothing has been done yet. Painting that as a fault greets a new operator
   // with a page of problems they created by opening it.
   const r = networkSteps({ network: { nodes: [], gateway: {} }, servers: SERVERS });
-  assert.equal(step(r, 'members').state, 'empty');
+  assert.equal(step(r, 'topology').state, 'empty');
   assert.equal(step(r, 'channels').state, 'empty');
 });
 
 check('a network missing an origin needs a decision, not a nudge', () => {
   const noOrigin = NET({ nodes: [{ id: 'n-2', role: 'edge', server: 'e2', upstream: [], enabled: true }] });
   const r = networkSteps({ network: noOrigin, servers: SERVERS });
-  assert.equal(step(r, 'members').state, 'action');
-  assert.equal(step(r, 'members').code, 'no-origin');
+  assert.equal(step(r, 'topology').state, 'action');
+  assert.equal(step(r, 'topology').code, 'no-origin');
 });
 
 check('a derived plan the panel could not read is unknown, not empty', () => {
@@ -104,8 +106,8 @@ check('an origin is not asked what it takes content from', () => {
   // — none of which the panel models. Asking would demand an action that does
   // not exist, which it did on the overview page until v0.70.1.
   const r = networkSteps({ network: NET(), servers: SERVERS, channels: CH, derived: SYNCED });
-  assert.equal(step(r, 'upstreams').state, 'done');
-  assert.equal(step(r, 'upstreams').summary.total, 1, 'the origin was counted as needing an upstream');
+  assert.equal(step(r, 'topology').state, 'done');
+  assert.equal(step(r, 'topology').summary.total, 1, 'the origin was counted as needing an upstream');
 });
 
 check('an unwired edge is named as such', () => {
@@ -114,8 +116,8 @@ check('an unwired edge is named as such', () => {
     { id: 'n-2', role: 'edge', server: 'e2', upstream: [], enabled: true },
   ] });
   const r = networkSteps({ network: loose, servers: SERVERS });
-  assert.equal(step(r, 'upstreams').state, 'action');
-  assert.equal(step(r, 'upstreams').code, 'unwired');
+  assert.equal(step(r, 'topology').state, 'action');
+  assert.equal(step(r, 'topology').code, 'unwired');
 });
 
 check('"straight to the edge" is an answer, not an absence', () => {
@@ -128,6 +130,30 @@ check('"straight to the edge" is an answer, not an absence', () => {
   assert.equal(step(r2, 'links').state, 'action');
 });
 
+check('protection waiting to be written keeps the Nimble step unfinished', () => {
+  // The step said "all set up" while a channel's token protection sat
+  // unwritten: everything visible was green and the stream was open to
+  // anybody. Both halves count, and the row says which is which.
+  const r = networkSteps({
+    network: NET(), servers: SERVERS, channels: CH, derived: SYNCED,
+    protection: { inSync: false, blocking: [], summary: { create: 2, update: 0, keep: 0 } },
+  });
+  const n = step(r, 'nimble');
+  assert.equal(n.state, 'action');
+  assert.equal(n.summary.protection, 2);
+  assert.equal(n.summary.routes, 0, 'the routes are in sync and should not be counted as pending');
+});
+
+check('protection blocked is its own code, not "pending"', () => {
+  // A different fault from routes blocked, and the more dangerous one: the
+  // routes work, the stream is delivered, and it is delivered to anybody.
+  const r = networkSteps({
+    network: NET(), servers: SERVERS, channels: CH, derived: SYNCED,
+    protection: { inSync: false, blocking: [{ code: 'http-origin-defeats-protection' }], summary: {} },
+  });
+  assert.equal(step(r, 'nimble').code, 'protection-blocked');
+});
+
 console.log('\nWHERE TO GO NEXT:');
 
 check('the first step wanting attention is offered', () => {
@@ -136,7 +162,7 @@ check('the first step wanting attention is offered', () => {
     { id: 'n-2', role: 'edge', server: 'e2', upstream: [], enabled: true },
   ] });
   const r = networkSteps({ network: loose, servers: SERVERS, channels: [], derived: SYNCED });
-  assert.equal(r.next, 'upstreams', 'an action outranks an empty step');
+  assert.equal(r.next, 'topology', 'an action outranks an empty step');
 });
 
 check('with nothing wrong, the first unstarted step is offered', () => {
@@ -152,9 +178,14 @@ const setup = strip(readFileSync(new URL('components/NetworkSetup.jsx', FRONT), 
 const net = strip(readFileSync(new URL('components/DeliveryNetworkPanel.jsx', FRONT), 'utf8'));
 const dict = readFileSync(new URL('i18n.jsx', FRONT), 'utf8');
 
-check('all six steps are rendered, in order', () => {
-  const listed = setup.match(/\['members', 'upstreams', 'channels', 'nimble', 'links', 'verify'\]/);
-  assert.ok(listed, 'the steps are not rendered as one ordered list');
+check('every step is rendered, in the order the service defines', () => {
+  // Bound to STEP_IDS rather than to a literal list. The page and the service
+  // disagreeing about which steps exist is how a card opens onto nothing, and
+  // a hard-coded list in the assertion just moves the disagreement here.
+  const m = setup.match(/\{\[((?:\s*'[a-z]+',?)+)\]\.map\(\(id, i\)/);
+  assert.ok(m, 'the steps are not rendered as one ordered list');
+  const rendered = [...m[1].matchAll(/'([a-z]+)'/g)].map(x => x[1]);
+  assert.deepEqual(rendered, STEP_IDS, 'the page renders a different set of steps than the service computes');
 });
 
 check('every step has something inside it', () => {

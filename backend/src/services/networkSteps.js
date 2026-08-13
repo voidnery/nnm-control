@@ -14,14 +14,18 @@
 // wizard that leads by the hand is intolerable the second time, and a delivery
 // network is configured once and then lived with for months.
 
-export const STEP_IDS = ['members', 'upstreams', 'channels', 'nimble', 'links', 'verify'];
+// Five, not six. "What it is made of" and "who takes content from whom" opened
+// the same table twice — the roles and the upstreams are edited in one place,
+// so splitting them made a step that could not be completed on its own and a
+// second card that repeated the first.
+export const STEP_IDS = ['topology', 'channels', 'nimble', 'links', 'verify'];
 
 // `state` is one of:
 //   done    — the thing this step describes is true
 //   action  — something is wrong or missing and the operator must decide
 //   empty   — nothing has been done here yet, which is not a fault
 //   unknown — the panel could not find out, which is not the same as empty
-export function networkSteps({ network, servers, channels = [], derived = null, watched = null }) {
+export function networkSteps({ network, servers, channels = [], derived = null, protection = null, watched = null }) {
   const byId = new Map(servers.map(s => [String(s._id ?? s.id), s]));
   const nodes = (network?.nodes || []).filter(n => n.enabled !== false);
   const origins = nodes.filter(n => n.role === 'origin');
@@ -31,24 +35,22 @@ export function networkSteps({ network, servers, channels = [], derived = null, 
   const steps = [];
   const add = (id, state, summary, extra = {}) => steps.push({ id, state, summary, ...extra });
 
-  // 1 — which machines are in it at all.
-  if (!nodes.length) add('members', 'empty', { count: 0 });
-  else if (!origins.length) add('members', 'action', { count: nodes.length }, { code: 'no-origin' });
-  else if (!edges.length) add('members', 'action', { count: nodes.length }, { code: 'no-edges' });
-  else add('members', 'done', {
-    count: nodes.length,
-    names: nodes.map(n => byId.get(String(n.server))?.name).filter(Boolean),
-  });
-
-  // 2 — and what each of them takes content from. Only mids and edges are fed
-  // from inside the network; an origin is fed by whatever publishes into it,
-  // which the panel does not model and must not ask about.
+  // 1 — the shape of the network: which machines, in which role, taking
+  // content from which. One step because it is one table.
   const needUpstream = nodes.filter(n => ['mid', 'edge'].includes(n.role));
   const wired = needUpstream.filter(n => (n.upstream || []).length);
-  if (!needUpstream.length) add('upstreams', 'empty', { wired: 0, total: 0 });
-  else if (wired.length < needUpstream.length) {
-    add('upstreams', 'action', { wired: wired.length, total: needUpstream.length }, { code: 'unwired' });
-  } else add('upstreams', 'done', { wired: wired.length, total: needUpstream.length });
+  if (!nodes.length) add('topology', 'empty', { count: 0 });
+  else if (!origins.length) add('topology', 'action', { count: nodes.length }, { code: 'no-origin' });
+  else if (!edges.length) add('topology', 'action', { count: nodes.length }, { code: 'no-edges' });
+  else if (needUpstream.length && wired.length < needUpstream.length) {
+    add('topology', 'action', { count: nodes.length, wired: wired.length, total: needUpstream.length },
+        { code: 'unwired' });
+  } else {
+    add('topology', 'done', {
+      count: nodes.length, wired: wired.length, total: needUpstream.length,
+      names: nodes.map(n => byId.get(String(n.server))?.name).filter(Boolean),
+    });
+  }
 
   // 3 — what it is supposed to carry.
   if (!channels.length) add('channels', 'empty', { count: 0 });
@@ -65,9 +67,19 @@ export function networkSteps({ network, servers, channels = [], derived = null, 
     // Nothing to derive is not "set up". Saying done here would put a tick on
     // a network that delivers nothing.
     add('nimble', 'empty', { pending: 0 });
-  } else if (!derived.inSync) {
-    add('nimble', 'action', { pending: (derived.summary?.create || 0) + (derived.summary?.update || 0) });
-  } else add('nimble', 'done', { written: derived.summary?.keep || 0 });
+  } else if (protection?.blocking?.length) {
+    // Protection blocked is a different fault from routes blocked, and it is
+    // the more dangerous one: the routes work, the stream is delivered, and it
+    // is delivered to anybody.
+    add('nimble', 'action', { blocking: protection.blocking.length }, { code: 'protection-blocked' });
+  } else if (!derived.inSync || (protection && !protection.inSync)) {
+    // Both halves count. The step said "all set up" while a channel's token
+    // protection sat unwritten — everything the operator could see was green
+    // and the stream was open.
+    const routePending = (derived.summary?.create || 0) + (derived.summary?.update || 0);
+    const protPending = (protection?.summary?.create || 0) + (protection?.summary?.update || 0);
+    add('nimble', 'action', { pending: routePending + protPending, routes: routePending, protection: protPending });
+  } else add('nimble', 'done', { written: (derived.summary?.keep || 0) + (protection?.summary?.keep || 0) });
 
   // 5 — how a viewer is handed a link. `direct` is a real answer, not an
   // absence: it is the default and it works. Only a gateway mode with no

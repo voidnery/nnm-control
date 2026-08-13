@@ -361,6 +361,8 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
     wmspanel.routeList(cfg).then(r => r.routes || []).catch(() => []),
   ]);
   const plan = derivePlan({ network, servers, channels, originApps, existingRoutes: routes });
+  const authGroups = await wmspanel.authGroupList(cfg).then(r => r.groups || []).catch(() => []);
+  const protPlan = deriveProtection({ network, servers, channels, originApps, existing: { groups: authGroups } });
   res.json({
     ...plan,
     channels: channels.map(c => ({ ...pub(c), readiness: channelReadiness({ channel: c, plan }) })),
@@ -371,10 +373,10 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
     // `watched` is not included. Whether content actually arrives is not
     // derivable from configuration — it takes a probe — so the step is empty
     // until the operator runs one, and the page passes the result back in.
-    steps: networkSteps({ network, servers, channels, derived: plan }),
+    steps: networkSteps({ network, servers, channels, derived: plan, protection: protPlan }),
     // Who may watch, derived alongside what carries it. Same computation for
     // preview and apply, for the same reason as the routes.
-    protection: deriveProtection({ network, servers, channels, originApps }),
+    protection: protPlan,
   });
 });
 

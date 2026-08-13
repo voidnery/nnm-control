@@ -40,9 +40,10 @@ function StepCard({ id, n, state, summary, code, open, onOpen }) {
   return (
     <button className={'stepcard' + (open ? ' open' : '') + ' ' + state}
             onClick={onOpen} aria-expanded={open}>
-      <span className={'step-mark ' + (TONE[state] || '')}>
-        {state === 'done' ? '✓' : state === 'action' ? '!' : n}
-      </span>
+      {/* The number, always. A tick tells you a step is finished and loses
+          where it sits in the order — which is the one thing the chain exists
+          to show. Colour carries the state instead. */}
+      <span className={'step-mark ' + (TONE[state] || '')}>{n}</span>
       <span className="stepcard-title">{t('step.' + id)}</span>
       <span className="stepcard-line">{line}</span>
     </button>
@@ -80,7 +81,7 @@ export default function NetworkSetup({ network, servers, derived, onReload, chil
       <div className="hint">{t('step.intro')}</div>
 
       <div className="stepchain">
-        {['members', 'upstreams', 'channels', 'nimble', 'links', 'verify'].map((id, i) => (
+        {['topology', 'channels', 'nimble', 'links', 'verify'].map((id, i) => (
           <div className="stepchain-cell" key={id}>
             {i > 0 && <span className="stepchain-arrow" aria-hidden="true">→</span>}
             <StepCard id={id} n={i + 1} {...st(id)}

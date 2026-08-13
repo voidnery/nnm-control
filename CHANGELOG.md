@@ -1,5 +1,36 @@
 # Changelog
 
+### v0.86.0 — the step said everything was set up, and the stream was open
+A channel switched to token protection sat unwritten while the Nimble step read
+**all set up**. The step counted routes and not protection, so every card on
+the page was green and anybody with the URL could watch. That is the worst
+shape a status can take: not wrong about a detail, but confidently right about
+the wrong half.
+
+- **The Nimble step counts both halves** and says which is which — so many
+  routes pending, so many protection objects.
+- **Protection blocked is its own state**, separate from routes blocked, and it
+  is the more dangerous one: the routes work, the stream is delivered, and it
+  is delivered to everybody.
+- **The protection plan is shown where it is written**, inside that step, with
+  what each object is for and a button to write it. It was derived and returned
+  by the API since v0.83.0 and rendered nowhere, which is why nothing appeared
+  after switching a channel to a token.
+
+**Six steps became five.** "What it is made of" and "who takes content from
+whom" opened the same table twice — roles and upstreams are edited in one
+place, so the first step could not be completed on its own and the second card
+repeated the first. One step, called Topology.
+
+**The ticks are numbers again.** A tick says a step is finished and loses where
+it sits in the order, which is the one thing a chain exists to show. Colour
+carries the state instead.
+
+The check that the page renders every step was bound to a literal list and went
+red on the merge. Bound to `STEP_IDS` now: the page and the service disagreeing
+about which steps exist is how a card opens onto nothing, and a hard-coded list
+in the assertion only moves that disagreement into the test.
+
 ### v0.85.1 — Internal server error on the channels page
 v0.85.0 took the page down. The protection status needs to know which
 applications are in HTTP Origin mode, and the handler used `originApps` without

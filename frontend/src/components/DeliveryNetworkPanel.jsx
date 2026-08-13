@@ -261,8 +261,7 @@ export default function DeliveryNetworkPanel({ servers, onServersChanged }) {
           {tab === 'setup' && (
             <NetworkSetup network={net} servers={servers} derived={derived} onReload={loadDerived}
                           children={{
-                            members: topologyUI,
-                            upstreams: topologyUI,
+                            topology: topologyUI,
                             channels: <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} only="channels" />,
                             nimble: <DeliveryRoutesPanel network={net} servers={servers} dirty={dirty} only="nimble" />,
                             links: <GatewayPanel network={net} servers={servers} />,
