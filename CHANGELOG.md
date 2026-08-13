@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.97.3 — the helper was looking in the wrong place
+Second rebuild, same result: purpose set to gateway, install ran, no helper.
+v0.97.2 fixed a real fault — the literal `$AGENT_TOKEN` reaching the helper's
+env file — but it was not the one stopping it.
+
+**The helper looked for the agent at `/usr/local/lib/nnm-agent.mjs`. The
+installer writes `/var/lib/nnm-agent/nnm-agent.mjs`.** It did not find it,
+exited 1 before doing anything, and the `|| echo` around it turned a hard stop
+into one line a hundred lines above a summary reading "done". A default that is
+wrong is worse than none: it looks like a decision somebody made.
+
+It now tries the installer's path, then the older one, then whatever the
+running unit is executing — the one place that cannot be out of date — and says
+which it took. A check binds the two files together by reading `STATE_DIR` out
+of the installer, so they cannot drift apart again silently.
+
+**And a failed helper now reaches the last line**, because the last line is
+what gets read. On a gateway the summary is either *"the agent and the
+privileged helper are installed"* or *"done, WITH ONE FAILURE"* — never the
+same sentence for both, which is what let this pass twice.
+
+One more thing this exposed: backticks inside a template literal comment
+terminated the string, so a paragraph of shell became JavaScript. `audit:undef`
+caught it as an undefined `echo` — the parser-based rewrite from v0.89.0
+earning its keep on a fault nobody was looking for.
+
 ### v0.97.2 — the helper was installed with the word for the token
 The purpose was set to gateway, the install ran, and no helper appeared. The
 install reported done, because from its point of view it was.

@@ -58,7 +58,13 @@ export const PRIVILEGED_PORT = 8091;
 // for the same reason: it is read by the operator before it is run, and a
 // script somebody can read is a script somebody can refuse.
 export function privilegedInstaller({
-  panelUrl, token, port = PRIVILEGED_PORT, bind = '127.0.0.1', agentBin = '/usr/local/lib/nnm-agent.mjs',
+  // Where the agent installer actually puts the binary. It was
+  // `/usr/local/lib/nnm-agent.mjs` here and `/var/lib/nnm-agent/nnm-agent.mjs`
+  // there — so the helper looked, did not find it, exited 1, and the `|| echo`
+  // around it turned a hard stop into a line nobody was watching for. A
+  // default that is wrong is worse than no default: it looks like a decision.
+  panelUrl, token, port = PRIVILEGED_PORT, bind = '127.0.0.1',
+  agentBin = '/var/lib/nnm-agent/nnm-agent.mjs',
 }) {
   const sh = (v) => String(v).replace(/'/g, `'\\''`);
   const rw = ALLOWED_PATHS.join(' ');
@@ -93,7 +99,20 @@ UNIT=/etc/systemd/system/nnm-agent-privileged.service
 ENV_FILE=/etc/nnm-agent-privileged.env
 BIN='${sh(agentBin)}'
 
-[ -f "$BIN" ] || { echo "the agent is not installed at $BIN — install it first"; exit 1; }
+# Where the installer puts it, then the older location, then whatever the
+# running unit is executing — because the one place that cannot be out of date
+# is the unit that is running. This looked in one hard-coded path before, did
+# not find the agent, and exited: a default that is wrong is worse than none,
+# because it looks like a decision somebody made.
+for candidate in "$BIN" /usr/local/lib/nnm-agent.mjs; do
+  if [ -f "$candidate" ]; then BIN="$candidate"; break; fi
+done
+if [ ! -f "$BIN" ]; then
+  FROM_UNIT=$(systemctl show -p ExecStart --value nnm-agent 2>/dev/null | tr ' ' '\n' | grep -m1 'nnm-agent\.mjs' || true)
+  [ -n "$FROM_UNIT" ] && [ -f "$FROM_UNIT" ] && BIN="$FROM_UNIT"
+fi
+[ -f "$BIN" ] || { echo "the agent binary was not found — looked in /var/lib/nnm-agent, /usr/local/lib and the running unit"; exit 1; }
+echo "==> using agent binary: $BIN"
 
 NODE_BIN=$(command -v node || true)
 [ -n "$NODE_BIN" ] || { echo "node is required and was not found"; exit 1; }

@@ -139,7 +139,7 @@ check('the script says what it is before it does it', () => {
 
 check('it refuses to run as anything but root, and without the agent', () => {
   assert.match(script, /id -u.*!= *"0"|\[ "\$\(id -u\)" = "0" \]/);
-  assert.match(script, /the agent is not installed/);
+  assert.match(script, /the agent binary was not found/);
 });
 
 console.log('\nTHE HELPER TRAVELS WITH THE INSTALL, ON GATEWAYS ONLY:');
@@ -183,8 +183,38 @@ check('the ticket carries the purpose, because the script is fetched later', () 
 check('a failing helper does not fail the agent install', () => {
   // The agent is the thing that had to work. A helper that will not install
   // leaves a machine the panel can still see and talk to, which is a much
-  // better place to debug from than a machine with nothing on it.
-  assert.ok(/the helper did not install; the agent itself is fine/.test(gwScript));
+  // better place to debug from than one with nothing on it.
+  assert.ok(/THE PRIVILEGED HELPER DID NOT INSTALL \(the agent itself is fine\)/.test(gwScript));
+});
+
+check('and the last line says so, because the last line is what gets read', () => {
+  // A one-line "or echo" put the reason a hundred lines above a summary
+  // reading "done", and the summary is what an operator reads. Twice, on two
+  // rebuilt machines.
+  assert.ok(/done, WITH ONE FAILURE/.test(gwScript));
+  assert.ok(/agent and the privileged helper are installed/.test(gwScript));
+});
+
+check('the helper looks where the agent actually is', () => {
+  // It looked in /usr/local/lib and the installer writes /var/lib/nnm-agent,
+  // so it exited before doing anything — and the failure landed in the middle
+  // of a successful-looking install. A default that is wrong is worse than
+  // none: it looks like a decision somebody made.
+  assert.match(script, /BIN='\/var\/lib\/nnm-agent\/nnm-agent\.mjs'/);
+  assert.ok(script.includes('/usr/local/lib/nnm-agent.mjs'), 'the older location is not tried');
+  assert.ok(/systemctl show -p ExecStart/.test(script), 'the running unit is not consulted');
+  assert.ok(/using agent binary/.test(script), 'it does not say which one it took');
+});
+
+check('the path it looks for matches the path the installer writes', () => {
+  // Bound to both files rather than to a literal: the two drifted apart once
+  // and nothing noticed until a machine had been rebuilt twice.
+  const inst = readFileSync(new URL('../src/services/agentInstaller.js', import.meta.url), 'utf8');
+  const stateDir = /STATE_DIR=(\S+)/.exec(inst)?.[1];
+  const binLine = /BIN=\$STATE_DIR\/(\S+)/.exec(inst)?.[1];
+  assert.ok(stateDir && binLine, 'the installer no longer says where it puts the agent');
+  assert.ok(script.includes(`${stateDir}/${binLine}`),
+    `the helper looks elsewhere than ${stateDir}/${binLine}`);
 });
 
 console.log('\nTHE ORDER OF WORK IS NOT A TRAP:');

@@ -301,8 +301,19 @@ if [ -n "$REAL_TOKEN" ]; then
   # working substitution becomes a broken one on the day somebody changes the
   # token alphabet.
   sed -i "s|__NNM_TOKEN__|$REAL_TOKEN|" /tmp/nnm-privileged.sh
-  sh /tmp/nnm-privileged.sh || echo "==> the helper did not install; the agent itself is fine"
+  # Its output is shown, and its failure is stated in words the installer's own
+  # summary repeats. A one-line "or echo" put the reason above a hundred lines
+  # of "done" and the operator read the last line, which said everything was
+  # fine — twice, on two rebuilt machines.
+  if sh /tmp/nnm-privileged.sh; then
+    HELPER_OK=1
+  else
+    HELPER_OK=0
+    echo "==> THE PRIVILEGED HELPER DID NOT INSTALL (the agent itself is fine)"
+    echo "    the reason is in the lines just above this one"
+  fi
 else
+  HELPER_OK=0
   echo "==> no agent token yet, so the helper was not installed; add it from the panel"
 fi
 rm -f /tmp/nnm-privileged.sh
@@ -313,7 +324,11 @@ rm -f /tmp/nnm-privileged.sh
 # accident.
 `}
 echo
-echo "==> done. The agent is installed, enabled and enrolled."
+${purpose === 'gateway' ? `if [ "\${HELPER_OK:-1}" = "0" ]; then
+  echo "==> done, WITH ONE FAILURE: the agent is installed and enrolled, the privileged helper is not."
+else
+  echo "==> done. The agent and the privileged helper are installed and enrolled."
+fi` : `echo "==> done. The agent is installed, enabled and enrolled."`}
 echo "    service : systemctl status nnm-agent"
 echo "    logs    : journalctl -u nnm-agent -f"
 echo "    token   : $ENV_FILE (root only, never leaves this machine except to the panel at enrollment)"
