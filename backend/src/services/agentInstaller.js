@@ -1,3 +1,5 @@
+import { privilegedInstaller, PRIVILEGED_PORT } from './privilegedHelper.js';
+
 // iter11 m1 — the script an operator runs on a Nimble box.
 //
 // Deliberately plain POSIX sh and short enough to read before running. Nothing
@@ -25,7 +27,7 @@ export function installScript(o) {
     // more, so a listening socket on the network would be attack surface with
     // no purpose. What remains is a local diagnostic surface: this installer
     // uses it to check the agent came up, and so can an operator with a shell.
-    agentPort = 8090, bind = '127.0.0.1',
+    agentPort = 8090, bind = '127.0.0.1', purpose = 'nimble', token = '',
     logDir = '/var/log/nimble',
     confDir = '/srv/nimble/conf',
     mediaDir = '/srv/nimble/media/gallery',
@@ -268,6 +270,30 @@ while [ $i -lt 20 ]; do
   i=$((i+1)); sleep 0.5
 done
 
+${purpose === 'gateway' ? `
+# ---- the privileged helper, on a gateway machine only ----------------------
+#
+# This install already runs as root over SSH, so the helper goes in with it
+# rather than being a second thing somebody has to remember on a machine whose
+# whole purpose needs it. On any other purpose this block is simply absent from
+# the script — not skipped at runtime, absent, so a media server's installer
+# has no privileged path in it to go wrong.
+#
+# What it is and what limits it is written into the unit below; the short
+# version is root scoped by ReadWritePaths to nginx, certbot and apt.
+echo
+echo "==> installing the privileged helper (this machine's purpose is a gateway)"
+cat > /tmp/nnm-privileged.sh <<'PRIVEOF'
+${privilegedInstaller({ panelUrl, token: token || '$AGENT_TOKEN', port: PRIVILEGED_PORT, bind })}
+PRIVEOF
+sh /tmp/nnm-privileged.sh || { echo "==> the helper did not install; the agent itself is fine"; }
+rm -f /tmp/nnm-privileged.sh
+` : `
+# No privileged helper: this machine's purpose is "${purpose}", and a media
+# server has no reason to be able to install packages from the panel. The block
+# is absent rather than disabled — there is nothing here to switch on by
+# accident.
+`}
 echo
 echo "==> done. The agent is installed, enabled and enrolled."
 echo "    service : systemctl status nnm-agent"

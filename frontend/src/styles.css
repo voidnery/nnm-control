@@ -838,3 +838,24 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .inst-stage.done .inst-stage-mark { background: var(--ok, #2f7d54); border-color: transparent; color: #fff; }
 .inst-stage.running .inst-stage-mark { border-color: var(--accent); color: var(--accent); }
 .inst-stage.failed .inst-stage-mark { background: var(--err, #a33); border-color: transparent; color: #fff; }
+
+/* Running, with no idea how long: apt decides. A bar that moves without
+   claiming a percentage says "working" without inventing progress it does not
+   have. */
+.progress-fill.indeterminate {
+  width: 40%;
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+@keyframes indeterminate {
+  0%   { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill.indeterminate { animation: none; width: 100%; opacity: .5; }
+}
+
+/* Whether a machine has been prepared, on the card rather than only inside the
+   dialog that did it. */
+.gw-state { font-size: var(--fs-meta); }
+.gw-state.applied { color: var(--ok, #5ad18f); }
+.gw-state.failed, .gw-state.refused-by-sandbox { color: var(--err, #c66); }

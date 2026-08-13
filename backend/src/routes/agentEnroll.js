@@ -54,10 +54,14 @@ const clientIp = (req) =>
 // of the pull path, while their three call sites stayed. The result was a
 // ReferenceError inside an async route, which Node turns into an unhandled
 // rejection and a process exit — a 502 and a restarted panel.
-function scriptFor(doc, rawTicket) {
+function scriptFor(doc, rawTicket, server = null) {
   return installScript({
     panelUrl: doc.panelUrl,
     ticket: rawTicket,
+    // The purpose decides whether the privileged helper is in this script at
+    // all. Absent rather than disabled on a media server: there is nothing
+    // there to switch on by accident.
+    purpose: server?.purpose || doc.purpose || 'nimble',
     agentPort: doc.agentPort,
     bind: doc.bind,
     logDir: doc.logDir,
@@ -90,7 +94,17 @@ agentEnrollRouter.get('/agents/install/:ticket', rateLimit, async (req, res) => 
     doc.fetchedFrom = clientIp(req);
     await doc.save();
   }
-  res.type('text/plain').send(scriptFor(doc, req.params.ticket));
+  // The machine's purpose as it is *now*, not as it was when the ticket was
+  // issued. The ticket identifies the server, so looking it up here is exactly
+  // as trustworthy as the ticket itself — and it removes a trap that would
+  // otherwise be permanent: issue a ticket, realise the machine is a gateway,
+  // change its purpose, and the script fetched afterwards would still have
+  // been the media-server one, silently, with no way to tell from the outside.
+  //
+  // The ticket's own copy stays as the fallback for a server that has since
+  // been deleted, and as the record of what was intended at issue.
+  const live = await NimbleServer.findById(doc.serverId).catch(() => null);
+  res.type('text/plain').send(scriptFor(doc, req.params.ticket, live));
 });
 
 // The agent binary itself, behind the same ticket so it is not an anonymous
@@ -179,6 +193,9 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
     logDir: String(b.logDir || '/var/log/nimble'),
     confDir: String(b.confDir || '/srv/nimble/conf'),
     mediaDir: String(b.mediaDir || '/srv/nimble/media/gallery'),
+    // Captured now, because the script is fetched later by a URL nobody
+    // authenticates and cannot look the server up then.
+    purpose: server?.purpose || 'nimble',
     expiresAt: new Date(Date.now() + TTL_MIN * 60_000),
     createdBy: req.user?.username || '',
   });
@@ -293,6 +310,9 @@ agentEnrollRouter.post('/servers/:id/agent/ssh/install', requireAuth, requirePer
     agentPort,
     bind: String(b.bind || '127.0.0.1'),
     logDir: String(b.logDir || '/var/log/nimble'),
+    // Captured now, because the script is fetched later by a URL nobody
+    // authenticates and cannot look the server up then.
+    purpose: server?.purpose || 'nimble',
     expiresAt: new Date(Date.now() + TTL_MIN * 60_000),
     createdBy: req.user?.username || '',
   });

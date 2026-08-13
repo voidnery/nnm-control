@@ -264,5 +264,67 @@ check('an agent too old is refused before anything runs', () => {
   assert.ok(/agent-too-old/.test(applyRoute));
 });
 
+console.log('\nWHAT THE AGENT IS NOT ALLOWED TO DO IS SAID, NOT SHOWN AS NOISE:');
+
+const { readFileSync: rf } = await import('node:fs');
+const agentSrc = rf(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+const ui = rf(new URL('../../frontend/src/components/GatewaySetupModal.jsx', import.meta.url), 'utf8');
+const cards = rf(new URL('../../frontend/src/pages/ServerAgentsPage.jsx', import.meta.url), 'utf8');
+const d = rf(new URL('../../frontend/src/i18n.jsx', import.meta.url), 'utf8');
+
+check('a refusal by the sandbox is recognised, not passed through as apt output', () => {
+  // The agent runs as its own user under ProtectSystem=strict — deliberately,
+  // because on fifteen media servers it needs two directories and an agent
+  // that could install packages would be root across the fleet. So a system
+  // change fails by design, as a wall of complaints about read-only
+  // filesystems, and the operator reads it as a broken machine.
+  assert.ok(/sandboxed = true|e\.sandboxed = true/.test(agentSrc), 'the agent does not recognise its own sandbox');
+  assert.ok(/read-only file system/i.test(agentSrc));
+  assert.ok(/gw\.setup\.sandboxed/.test(ui), 'the panel does not explain it');
+  assert.equal((d.match(/'gw\.setup\.sandboxedWhy':/g) || []).length, 2);
+});
+
+check('the explanation says what to do instead of only what happened', () => {
+  const ru = d.slice(d.indexOf("'gw.setup.sandboxedWhy'"), d.indexOf("'gw.setup.sandboxedWhy'") + 700);
+  assert.ok(/вручную|by hand/.test(ru), 'the operator is told the cause and left there');
+});
+
+console.log('\nA PREPARED MACHINE SAYS SO:');
+
+check('the state is recorded on failure as well as on success', () => {
+  // A failed attempt is a fact about this machine, and forgetting it is how
+  // the same wall gets walked into twice.
+  const routes2 = rf(new URL('../src/routes/servers.js', import.meta.url), 'utf8');
+  assert.ok(/state: result\?\.ok \? 'applied' : sandboxed \? 'refused-by-sandbox' : 'failed'/.test(routes2));
+  assert.ok(/\/\/ Saved either way/.test(routes2), 'the state is only saved when it worked');
+});
+
+check('the card shows it, not only the dialog that did it', () => {
+  // Otherwise a gateway that is serving and one created five minutes ago and
+  // never touched look identical in a list.
+  assert.ok(/s\.gateway\?\.state/.test(cards));
+  for (const st of ['applied', 'failed', 'refused-by-sandbox', 'none']) {
+    assert.equal((d.match(new RegExp(`'agent\\.gw\\.${st}':`, 'g')) || []).length, 2, st);
+  }
+});
+
+console.log('\nRUNNING LOOKS LIKE RUNNING:');
+
+check('there is a bar while it runs, and it claims no percentage', () => {
+  // It sat grey and silent for as long as apt took, which is
+  // indistinguishable from a hang — and the one thing anybody does with a
+  // hung screen is press the button again.
+  const css = rf(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+  assert.ok(/busy && !result/.test(ui), 'nothing is shown while it runs');
+  assert.ok(/indeterminate/.test(ui) && /@keyframes indeterminate/.test(css));
+  assert.ok(/prefers-reduced-motion[\s\S]{0,200}indeterminate/.test(css), 'the animation has no reduced-motion escape');
+});
+
+check('the plan opens in its own window', () => {
+  // Inline it pushed the buttons off the bottom of an already long dialog, so
+  // the thing to read before deciding was the thing to scroll past to decide.
+  assert.ok(/showPlan && plan/.test(ui));
+});
+
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');
 process.exit(failures ? 1 : 0);

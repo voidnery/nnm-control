@@ -24,10 +24,23 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showFile, setShowFile] = useState('');
+  const [showPlan, setShowPlan] = useState(false);
+  const [helper, setHelper] = useState(null);
+
+  const getHelper = async () => {
+    setBusy(true);
+    try { setHelper(await api(`/servers/${server.id}/privileged/script`, { method: 'POST', body: {} })); }
+    catch (e) { setError(e.data?.code ? t('err.' + e.data.code) : e.message); }
+    finally { setBusy(false); }
+  };
 
   const preview = async () => {
     setBusy(true); setError(''); setResult(null);
-    try { setPlan(await api(`/servers/${server.id}/gateway/plan`, { method: 'POST', body: { domain, mode, email } })); }
+    try {
+      const p = await api(`/servers/${server.id}/gateway/plan`, { method: 'POST', body: { domain, mode, email } });
+      setPlan(p);
+      setShowPlan(!p.blocking?.length);
+    }
     catch (e) { setError(e.data?.error || e.message); }
     finally { setBusy(false); }
   };
@@ -66,6 +79,17 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
       <div className="hint">{t('gw.setup.intro')}</div>
       {error && <div className="error-box">{error}</div>}
 
+      {/* Said before the attempt, not after it fails. An agent installed before
+          this machine's purpose was set has no helper, and every apply would
+          refuse — which reads as the panel being broken. */}
+      {server.privileged === false && (
+        <div className="error-box">
+          <b>{t('gw.helper.missing')}</b>
+          <div className="hint">{t('gw.helper.missingWhy')}</div>
+          <button style={{ marginTop: 8 }} onClick={getHelper} disabled={busy}>{t('gw.helper.get')}</button>
+        </div>
+      )}
+
       {/* Asked, never guessed: the certificate is issued for this name and an
           invented one burns a rate-limited issuance to produce something
           nobody can use. */}
@@ -90,7 +114,9 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
         <button onClick={preview} disabled={busy || !domain.trim()}>{t('gw.setup.preview')}</button>
         {plan && !plan.blocking?.length && !result && (
-          <button className="primary" onClick={apply} disabled={busy}>{t('gw.setup.apply')}</button>
+          <button className="primary" onClick={() => setShowPlan(true)} disabled={busy}>
+            {t('gw.setup.review')}
+          </button>
         )}
       </div>
 
@@ -136,9 +162,12 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
         <div key={i} className="hint">{t('gw.note.' + p2.code)}</div>
       ))}
 
-      {plan && !plan.blocking?.length && (
-        <div className="inset">
-          <div className="eyebrow">{t('gw.setup.willRun')}</div>
+      {/* Its own window. Inline, the plan pushed the buttons off the bottom of
+          a dialog that was already long, so the thing the operator is meant to
+          read to decide was the thing they had to scroll past to decide. */}
+      {showPlan && plan && !plan.blocking?.length && (
+        <Modal onClose={() => setShowPlan(false)} size="wide">
+          <h3>{t('gw.setup.willRun')}</h3>
           <div className="hint">{t('gw.setup.willRunHint', {
             p: plan.summary.packages, f: plan.summary.files, c: plan.summary.commands,
           })}</div>
@@ -171,12 +200,76 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
               </div>
             </div>
           ))}
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+            <button onClick={() => setShowPlan(false)}>{t('action.close')}</button>
+            <button className="primary" onClick={() => { setShowPlan(false); apply(); }} disabled={busy}>
+              {t('gw.setup.apply')}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Running, with a bar. It sat grey and silent for as long as apt took,
+          which is indistinguishable from a hang — and the one thing an
+          operator does when a screen looks hung is press the button again. */}
+      {busy && !result && (
+        <div className="inset">
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <b>{t('gw.setup.running')}</b>
+            <span className="hint">{t('gw.setup.runningHint')}</span>
+          </div>
+          <div className="progress"><div className="progress-fill indeterminate" /></div>
+          <div className="inst-stages">
+            {(plan?.steps || []).map((st, i) => (
+              <div key={st.id} className="inst-stage running">
+                <span className="inst-stage-mark">{i + 1}</span>
+                <span>{st.why}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {result && (
         <div className="inset">
-          <div className="eyebrow">{t(result.ok ? 'gw.setup.done' : 'gw.setup.stopped')}</div>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <b>{t(result.ok ? 'gw.setup.done' : 'gw.setup.stopped')}</b>
+            <span className="hint">
+              {t('gw.setup.stepsOf', {
+                n: (result.steps || []).filter(x => x.ok).length,
+                total: (result.steps || []).length,
+              })}
+            </span>
+          </div>
+          <div className={'progress' + (result.ok ? '' : ' failed')}>
+            <div className="progress-fill" style={{ width: `${(result.steps || []).length
+              ? Math.round(((result.steps || []).filter(x => x.ok).length / (result.steps || []).length) * 100)
+              : 0}%` }} />
+          </div>
+
+          {/* The one failure that retrying cannot fix, said in words rather
+              than as a wall of apt complaining about read-only filesystems. */}
+          {result.sandboxed && (
+            <div className="error-box">
+              <b>{t('gw.setup.sandboxed')}</b>
+              <div className="hint">{t('gw.setup.sandboxedWhy')}</div>
+              {/* The way out, offered where the wall was met. A script rather
+                  than a button: installing something that runs as root is a
+                  decision made on a machine by a person, and an operator who
+                  dislikes what it says can simply not run it. */}
+              <button style={{ marginTop: 8 }} onClick={getHelper} disabled={busy}>
+                {t('gw.helper.get')}
+              </button>
+            </div>
+          )}
+
+          {helper && (
+            <div className="inset">
+              <div className="eyebrow">{t('gw.helper.title')}</div>
+              <div className="hint">{t('gw.helper.hint')}</div>
+              <pre className="mono" style={{ fontSize: 11, maxHeight: 320, overflow: 'auto' }}>{helper.script}</pre>
+            </div>
+          )}
           {result.steps?.map((s, i) => (
             <div key={i} className="hint">
               {s.ok ? '✓' : '✗'} {s.id}

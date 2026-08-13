@@ -113,7 +113,33 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 23;
+const AGENT_VERSION = 24;
+
+// Whether this process is the privileged helper. Set by its unit's
+// environment file and by nothing else — an agent cannot promote itself.
+const PRIVILEGED = process.env.NNM_PRIVILEGED === '1';
+
+// What the helper may touch, kept here rather than only in the panel so the
+// limit survives a compromised caller. Mirrors ALLOWED_PATHS and
+// ALLOWED_BINARIES in privilegedHelper.js, and a check keeps them equal.
+const ALLOWED_PATHS = [
+  '/etc/nginx', '/etc/letsencrypt', '/var/www/html', '/var/log/letsencrypt',
+  '/var/lib/letsencrypt', '/var/cache/apt', '/var/lib/apt', '/var/lib/dpkg',
+  '/var/lib/systemd', '/etc/systemd/system',
+];
+const ALLOWED_BINARIES = ['apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm'];
+
+function allowedStep(step) {
+  if (step?.kind === 'file') {
+    const p = String(step.path || '');
+    return ALLOWED_PATHS.some(root => p === root || p.startsWith(`${root}/`));
+  }
+  if (step?.kind === 'package' || step?.kind === 'command') {
+    const bin = Array.isArray(step.command) ? String(step.command[0] || '') : '';
+    return ALLOWED_BINARIES.includes(bin.split('/').pop());
+  }
+  return false;
+}
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -385,7 +411,7 @@ const routes = {
     disk.mediaRoot = MEDIA_ROOT;
     disk.selfPath = SELF_PATH;
     disk.selfUpdate = await canSelfUpdate();
-    return { ok: true, agent: 'nnm-agent', version: AGENT_VERSION, logs: LOG_ENABLED,
+    return { ok: true, agent: 'nnm-agent', version: AGENT_VERSION, privileged: PRIVILEGED, logs: LOG_ENABLED,
              maxLogChunk: MAX_LOG_CHUNK, maxUploadBytes: MAX_UPLOAD, ...disk };
   },
 
@@ -960,6 +986,23 @@ const routes = {
     const steps = Array.isArray(body?.steps) ? body.steps : [];
     if (!steps.length) throw new Error('nothing to apply');
 
+    // The same binary runs in two units with two privilege levels. Which one
+    // this process is comes from its environment, and an ordinary agent
+    // refuses the work rather than attempting it and failing halfway through
+    // as a wall of apt complaining about read-only filesystems.
+    if (!PRIVILEGED) {
+      throw Object.assign(new Error('this agent is not the privileged helper'), { needsPrivileged: true });
+    }
+
+    // The helper's own list, checked here as well as in the panel's plan. The
+    // plan is composed by the panel, and the panel is the thing that might be
+    // compromised: a lock that depends on its caller being honest is not one.
+    for (const step of steps) {
+      if (!allowedStep(step)) {
+        throw new Error(`refused: ${step.kind} ${step.path || (step.command || [])[0] || ''} is outside what this helper may touch`);
+      }
+    }
+
     const done = [];
     let halted = null;
 
@@ -974,7 +1017,22 @@ const routes = {
           const env = step.kind === 'package'
             ? { ...process.env, DEBIAN_FRONTEND: 'noninteractive' } : process.env;
           const out = await runFull(cmd[0], cmd.slice(1), { env, timeout: step.timeoutMs || 180000 });
-          if (out.code !== 0) throw new Error(out.stderr.trim() || `exit ${out.code}`);
+          if (out.code !== 0) {
+            // This agent runs under ProtectSystem=strict, as a non-root user,
+            // with ReadWritePaths limited to Nimble's own directories. That is
+            // deliberate: on fifteen media servers it needs two directories
+            // and nothing else, and an agent that could install packages there
+            // would be root on the whole fleet.
+            //
+            // So a system change fails here by design, and it fails as a wall
+            // of apt noise about read-only filesystems. Named, so the panel
+            // can say what is actually wrong rather than showing the noise.
+            const denied = /read-only file system|permission denied|are you root|not using locking/i
+              .test(`${out.stderr}\n${out.stdout}`);
+            const e = new Error(out.stderr.trim() || `exit ${out.code}`);
+            if (denied) e.sandboxed = true;
+            throw e;
+          }
           done.push({ id: step.id, ok: true, at, output: tail(out.stdout) });
         } else if (step.kind === 'file') {
           if (!step.path || typeof step.content !== 'string') throw new Error('a file step with no path or content');
@@ -996,7 +1054,12 @@ const routes = {
           throw new Error(`unknown step kind: ${String(step.kind)}`);
         }
       } catch (e) {
-        const failure = { id: step.id, ok: false, at, error: String(e?.message || e).slice(0, 400) };
+        const failure = {
+          id: step.id, ok: false, at,
+          error: String(e?.message || e).slice(0, 400),
+          // The one failure the operator cannot fix by retrying.
+          sandboxed: Boolean(e?.sandboxed),
+        };
         done.push(failure);
         // Halting steps exist because some failures make everything after them
         // dangerous rather than merely pointless.
@@ -1011,6 +1074,9 @@ const routes = {
   // than an automatic consequence — an apply that half-worked is sometimes
   // better left in place until somebody has looked at it.
   async 'POST /host/rollback'(_req, _url, body) {
+    if (!PRIVILEGED) {
+      throw Object.assign(new Error('this agent is not the privileged helper'), { needsPrivileged: true });
+    }
     const steps = Array.isArray(body?.steps) ? body.steps : [];
     const done = [];
     // Reverse order: the last thing done is the first thing undone, or the

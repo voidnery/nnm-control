@@ -153,7 +153,30 @@ export default function ServerAgentsPage() {
                     media server would install nginx onto a box already serving
                     on the ports it wants. */}
                 {(s.purpose || 'nimble') === 'gateway' && (
-                  <button onClick={() => setGwSetup(s)}>{t('agent.prepareGateway')}</button>
+                  <>
+                    {/* On the card, not only inside the dialog that did it:
+                        otherwise a gateway that is serving and one created five
+                        minutes ago and never touched look identical. */}
+                    {s.gateway?.state && (
+                      <span className={'gw-state ' + s.gateway.state}>
+                        {t('agent.gw.' + s.gateway.state)}
+                        {s.gateway.domain && <> · <span className="mono">{s.gateway.domain}</span></>}
+                        {s.gateway.mode && <> · {t('gw.mode.' + s.gateway.mode)}</>}
+                      </span>
+                    )}
+                    {!s.gateway?.state && <span className="hint">{t('agent.gw.none')}</span>}
+                    {/* Whether the machine can be changed at all. A gateway
+                        whose agent was installed before its purpose was set has
+                        no helper, and every attempt would refuse — which reads
+                        as a broken panel until somebody says otherwise.
+                        `null` is its own answer: nobody has asked yet. */}
+                    {s.privileged === false && (
+                      <span className="gw-state failed">{t('agent.gw.noHelper')}</span>
+                    )}
+                    <button onClick={() => setGwSetup(s)}>
+                      {t(s.gateway?.state === 'applied' ? 'agent.gw.redo' : 'agent.prepareGateway')}
+                    </button>
+                  </>
                 )}
                 <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
                   <input type="checkbox" checked={Boolean(r.enabled)} onChange={e => set(s.id, { enabled: e.target.checked })} />

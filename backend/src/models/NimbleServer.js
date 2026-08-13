@@ -89,6 +89,20 @@ const serverSchema = new mongoose.Schema({
   // starts conservative.
   purpose: { type: String, enum: ['nimble', 'nimble-cdn', 'gateway'], default: 'nimble' },
 
+  // Whether this machine has been prepared as a gateway, and how it went.
+  //
+  // Stamped, like everything else read from a machine: a preparation from last
+  // month says nothing about a certificate that expires in ninety days. And
+  // recorded on failure too — a failed attempt is a fact about this machine,
+  // and forgetting it is how the same wall gets walked into twice.
+  gateway: {
+    domain: { type: String, default: '' },
+    mode: { type: String, default: '' },
+    state: { type: String, default: '' },   // applied | failed | refused-by-sandbox
+    haltedAt: { type: String, default: null },
+    at: { type: Date, default: null },
+  },
+
   // The machine's own last report about what it has. Kept so a fleet can be
   // shown at a glance without asking every box on every render — and stamped,
   // because a reading from last week is not a statement about now.

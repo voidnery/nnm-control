@@ -1,5 +1,127 @@
 # Changelog
 
+### v0.97.1 — the order of work is no longer a trap
+v0.97.0 left one: install the agent, then set the machine's purpose to gateway,
+and the script had already been built without the helper. The suggested fix was
+a warning. A warning about a trap is still a trap with a sign on it.
+
+**The script now uses the purpose as it is when fetched.** The ticket
+identifies the server, so looking it up at that moment is exactly as
+trustworthy as the ticket itself — my earlier note claiming otherwise was
+simply wrong. The ticket keeps its own copy as the fallback for a server since
+deleted, and as the record of what was intended.
+
+That leaves one real case: a machine whose agent was installed before any of
+this existed. So the panel says whether the helper is there — **from the
+agent's own health**, not from anything the panel remembers, because the helper
+can be removed with one `systemctl` command and a panel reporting it from its
+records would keep claiming it for as long as nobody looked.
+
+**Never asked is not absent.** A machine no agent has reported from is `null`,
+and the UI complains only about `false`. Otherwise every server the panel has
+not heard from yet would be accused of missing something.
+
+And the warning appears **before** the buttons that would fail rather than
+after the refusal, because an apply that refuses on every attempt reads as a
+broken panel until somebody says otherwise.
+
+### v0.97.0 — the helper goes in with the install
+The SSH install already runs as root, so on a gateway the privileged helper
+travels with the agent instead of being a second thing somebody has to remember
+on the one machine whose purpose needs it.
+
+**On every other purpose the block is absent from the script**, not skipped at
+runtime. A block that exists and is disabled is one that can be enabled by
+accident; one that was never rendered cannot. The media-server script says why
+it is absent rather than silently differing — a script that quietly varies
+between machines is one nobody can compare.
+
+**The purpose is captured on the enrolment ticket.** The install URL is
+unauthenticated by design, which is what a single-use ticket is for, so at
+fetch time there is no server to look up — and deciding a privilege level from
+whatever the fetcher claims is not a decision at all.
+
+**A helper that will not install does not fail the agent install.** The agent
+is the thing that had to work: a machine the panel can see and talk to is a
+much better place to debug from than a machine with nothing on it.
+
+Five checks, three proven by contradiction — including the helper reaching a
+media server's script, which is the one that would matter.
+
+### v0.96.0 — iter23 m4: root, scoped to the job
+The agent cannot install packages, and that stays. On fifteen media servers it
+needs two directories, and one that could install packages would be root across
+the fleet the moment the panel is compromised — over plain HTTP, with agent
+tokens in a database.
+
+So the privilege is a second unit, `nnm-agent-privileged`, and the shape is the
+feature:
+
+- **Its own service**, not a flag on the existing one. Removing it is one
+  command and leaves an ordinary machine behind; the two units share no
+  lifetime.
+- **Installed explicitly, per machine**, by a person running a script they can
+  read first — because installing something that runs as root is a decision
+  made on a machine, not a consequence of pressing a button in a browser. An
+  operator who dislikes what the script says can simply not run it.
+- **Only where it is needed.** A media server is refused it outright; its whole
+  justification is that a gateway needs system changes and a media server does
+  not, and an installer offered everywhere ends up everywhere.
+- **Root, scoped.** `ReadWritePaths` lists ten directories — nginx, certbot,
+  apt's state. Full control of the panel then buys nginx and certbot, not
+  `/etc/passwd`, not `/root/.ssh`, not a Nimble configuration on a box that
+  runs both. It binds loopback only.
+- **The limits exist twice**, in the panel's plan and in the helper itself,
+  because the plan is composed by the panel and the panel is the thing that
+  might be compromised. A lock that depends on its caller being honest is not
+  one, and a check keeps the two lists equal.
+
+**An ordinary agent now refuses the work** rather than attempting it and
+failing halfway as a wall of apt complaining about read-only filesystems —
+which read as a broken machine and was not.
+
+Fifteen checks, six proven by contradiction: `/root` added to the allow-list, a
+prefix match without its separator (`/etc/nginx-evil` passing as `/etc/nginx`),
+the helper offered on a media server, the two lists diverging, loopback
+widened, and the apply guard removed. That last contradiction did not bite at
+first — the check matched the whole file and was satisfied by the rollback
+handler's identical guard, which is a check about one thing passing on evidence
+about another.
+
+### v0.95.0 — the agent is not allowed to do this, and that is correct
+The apply failed on a real VM with a wall of apt complaining about read-only
+filesystems and dpkg locks. Not a bug in apt, and not a broken machine: the
+agent runs as its own user under `ProtectSystem=strict`, `NoNewPrivileges=yes`,
+with `ReadWritePaths` limited to Nimble's own directories.
+
+That is right. On fifteen media servers the agent needs two directories and
+nothing else, and one that could install packages would be root across the
+fleet. **The gateway apply was designed against a capability the agent
+deliberately does not have**, and loosening the unit to fix it would trade the
+whole fleet's isolation for one machine's convenience.
+
+So the panel now recognises the refusal and says it: what the sandbox is, why
+it exists, and that the commands shown can be run on the machine by hand
+meanwhile. The proper answer is a separate privileged helper, installed only on
+gateway-purpose machines, which is the next milestone rather than a patch to
+this one.
+
+Three things the screen was missing:
+
+- **The plan opens in its own window.** Inline it pushed the buttons off the
+  bottom of an already long dialog, so the thing to read before deciding was
+  the thing to scroll past to decide.
+- **Running looks like running.** The button sat grey and silent for as long as
+  apt took, which is indistinguishable from a hang — and the one thing anybody
+  does with a hung screen is press the button again. There is a moving bar that
+  claims no percentage, because apt decides how long it takes and inventing
+  progress would be a lie in a bar.
+- **A machine says whether it has been prepared**, on the card and not only
+  inside the dialog that did it: *gateway configured · cdn-test-1.bbesport.com
+  · proxy*, or *the agent may not change the system*. Recorded on failure too —
+  a failed attempt is a fact about the machine, and forgetting it is how the
+  same wall gets walked into twice.
+
 ### v0.94.2 — the agent was answering; the panel was asking wrong
 Two faults on one screen, both mine.
 

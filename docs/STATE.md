@@ -73,9 +73,33 @@ per network (off by default). History gives availability over a window, with
 partial and total failures counted apart.
 
 **Agents.** Ticket-based install with a progress bar and named stages, agent
-v22, a readiness report per machine, and a report of which processes hold ports
+v24, a readiness report per machine, and a report of which processes hold ports
 80 and 443 — with the systemd unit where there is one, because a unit is
 stopped by name and a bare process is not. All of it reads; none of it writes.
+
+**A privileged helper, and the reason it is separate.** The agent proper runs
+as its own user under `ProtectSystem=strict` and cannot install packages or
+write `/etc`. That is deliberate and stays: on fifteen media servers it needs
+two directories, and an agent that could install packages would be root across
+the fleet the moment the panel is compromised — and the panel is reachable over
+plain HTTP.
+
+So system changes live in a second unit, `nnm-agent-privileged`, installed
+only on machines whose purpose is `gateway`. The SSH install already runs as
+root, so on those machines it goes in with the agent rather than being a second
+thing to remember; on every other purpose the block is **absent from the
+script** rather than skipped at runtime — a block that exists and is disabled is
+one somebody can enable by accident. The purpose is captured on the enrolment
+ticket, because the install URL is unauthenticated by design and there is no
+server to look up at fetch time. It runs as root and
+is scoped by `ReadWritePaths` to ten directories: nginx, certbot and apt's
+state. Full control of the panel then buys nginx and certbot — not
+`/etc/passwd`, not `/root/.ssh`, not a Nimble configuration. It binds loopback,
+it is its own unit with its own lifetime, and removing it is one command.
+
+The allow-lists exist twice on purpose — in the panel's plan and in the helper
+itself — because the plan is composed by the panel and the panel is the thing
+that might be compromised. A check keeps the two equal.
 
 **Gateway preparation, end to end.** Given a domain and a mode, exactly what
 would be run and written — the argv and the file bytes, not a description —

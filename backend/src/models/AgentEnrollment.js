@@ -34,6 +34,13 @@ const enrollmentSchema = new mongoose.Schema({
   bind: { type: String, default: '0.0.0.0' },
 
   expiresAt: { type: Date, required: true },
+  // What the machine is for, captured when the ticket is issued.
+  //
+  // The script is fetched later by a URL nobody authenticates — that is the
+  // point of a single-use ticket — so it cannot look the server up then. And
+  // it decides whether the privileged helper is in the script at all, which is
+  // not a decision to leave to whoever fetches it.
+  purpose: { type: String, default: 'nimble' },
   createdBy: { type: String, default: '' },
   // Lifecycle, kept explicit so the UI can say which stage a stalled install
   // reached rather than just "nothing happened".

@@ -7,6 +7,7 @@ import { purposeChangeWarnings, readiness, PREPARE_MIN_AGENT } from '../services
 import { runTask } from '../services/agentBus.js';
 import { gatewayPlan, replacePlan } from '../services/gatewayPlan.js';
 import { probeTls, tlsSummary } from '../services/tlsProbe.js';
+import { privilegedInstaller, privilegedEligibility } from '../services/privilegedHelper.js';
 import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { logEvent } from '../services/audit.js';
 import { resolvePlaybackEndpoints, invalidatePlaybackCache } from '../services/playbackEndpoints.js';
@@ -33,6 +34,20 @@ const pub = (s) => ({
   order: s.order ?? 0, httpPort: s.httpPort || 0,
   wmspanelDomains: Array.isArray(s.wmspanelDomains) ? s.wmspanelDomains : [],
   purpose: s.purpose || 'nimble',
+  // Whether the privileged helper is on this machine, from the agent's own
+  // health rather than from anything the panel remembers: the helper can be
+  // removed with one systemctl command, and a panel that reports it from its
+  // own records would keep claiming it for as long as nobody looked.
+  //
+  // `null` when no agent has reported yet — an unanswered question, not a
+  // missing helper.
+  privileged: s.agent?.lastHealth
+    ? Boolean(s.agent.lastHealth.privileged)
+    : null,
+  gateway: s.gateway?.state ? {
+    domain: s.gateway.domain, mode: s.gateway.mode,
+    state: s.gateway.state, at: s.gateway.at, haltedAt: s.gateway.haltedAt,
+  } : null,
   httpsPort: s.httpsPort || 0,
   tls: {
     checkedAt: s.tls?.checkedAt || null, tls: Boolean(s.tls?.tls), http2: Boolean(s.tls?.http2),
@@ -312,6 +327,19 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
   // and the machine still not serve — the same rule as delivery, and the
   // reason the panel checks playlists rather than configurations.
   let verify = null;
+  // Whether this machine has been prepared, and as what. Without it an
+  // operator looking at a list of servers cannot tell a gateway that is
+  // serving from one that was created five minutes ago and never touched —
+  // which is the state the panel leaves them in for as long as it stays
+  // silent.
+  const sandboxed = (result?.steps || []).some(x => x.sandboxed);
+  server.gateway = {
+    domain, mode,
+    at: new Date(),
+    state: result?.ok ? 'applied' : sandboxed ? 'refused-by-sandbox' : 'failed',
+    haltedAt: result?.halted || null,
+  };
+
   if (result?.ok) {
     verify = await probeTls(domain, 443).catch(() => null);
     if (verify) {
@@ -319,14 +347,16 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
       server.httpsPort = 443;
     }
     server.purpose = 'gateway';
-    await server.save();
   }
+  // Saved either way: a failed attempt is a fact about this machine too, and
+  // forgetting it is how the same wall is walked into twice.
+  await server.save();
 
   await logEvent(req, 'server.gateway.apply', {
     server: server.name, domain, mode, ok: Boolean(result?.ok), halted: result?.halted || null,
     tls: Boolean(verify?.tls), http2: Boolean(verify?.http2),
   });
-  res.json({ ...result, verify, plan });
+  res.json({ ...result, verify, plan, gateway: server.gateway, sandboxed });
 });
 
 // Put it back.
@@ -353,4 +383,30 @@ serversRouter.post('/:id/gateway/rollback', requirePerm('servers.manage'), async
     .catch(e => ({ steps: [], error: String(e?.message || e) }));
   await logEvent(req, 'server.gateway.rollback', { server: server.name, steps: undo.length });
   res.json(result);
+});
+
+
+// The installer for the privileged helper, as a script to read and run.
+//
+// Handed over rather than executed: installing something that runs as root is
+// a decision made by a person on a machine, not a consequence of pressing a
+// button in a browser. The panel composes it, shows it, and stays out of the
+// way — which also means an operator who does not like what it says can
+// simply not run it.
+serversRouter.post('/:id/privileged/script', requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+
+  const eligible = privilegedEligibility(server);
+  if (!eligible.ok) {
+    return res.status(422).json({ error: eligible.code, code: eligible.code, purpose: eligible.purpose });
+  }
+
+  const panelUrl = String(req.body?.panelUrl || '').trim() || `${req.protocol}://${req.get('host')}`;
+  const script = privilegedInstaller({ panelUrl, token: server.agent?.token || '' });
+
+  // Recorded because it is the moment a machine gained the ability to be
+  // changed remotely, and that is worth being able to find later.
+  await logEvent(req, 'server.privileged.script', { server: server.name, purpose: server.purpose });
+  res.json({ script, port: 8091 });
 });
