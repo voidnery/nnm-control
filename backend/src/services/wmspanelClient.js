@@ -222,10 +222,33 @@ export const wmspanel = {
   authRuleDelete:  (cfg, gid, id) => call(cfg, `/wmsauth/groups/${gid}/rules/${id}`, { method: 'DELETE' }),
   // Hotlink, geo and network restrictions — separate families, same shape.
   refererGroupList:   (cfg) => call(cfg, `/referer_groups`),
+  refererGroupGet:    (cfg, id) => call(cfg, `/referer_groups/${id}`),
   refererGroupCreate: (cfg, body) => call(cfg, `/referer_groups`, { method: 'POST', body }),
   refererGroupUpdate: (cfg, id, patch) => call(cfg, `/referer_groups/${id}`, { method: 'PUT', body: patch }),
+  refererGroupDelete: (cfg, id) => call(cfg, `/referer_groups/${id}`, { method: 'DELETE' }),
+
+  // IP ranges are two objects, not one: a group, and the CIDRs assigned to it.
+  // Creating the group leaves it empty and permitting nothing, so the assign
+  // call is not an optional second step — it is half of creating the thing.
   ipRangeList:   (cfg) => call(cfg, `/ip_ranges`),
   ipRangeCreate: (cfg, body) => call(cfg, `/ip_ranges`, { method: 'POST', body }),
+  ipRangeUpdate: (cfg, id, patch) => call(cfg, `/ip_ranges/${id}`, { method: 'PUT', body: patch }),
+  ipRangeDelete: (cfg, id) => call(cfg, `/ip_ranges/${id}`, { method: 'DELETE' }),
+  ipRangeCidrs:  (cfg, id) => call(cfg, `/ip_ranges/${id}/cidrs`),
+  ipRangeAssign: (cfg, id, body) => call(cfg, `/ip_ranges/${id}/cidrs/assign`, { method: 'PUT', body }),
+  ipRangeRevoke: (cfg, id, body) => call(cfg, `/ip_ranges/${id}/cidrs/revoke`, { method: 'PUT', body }),
+
+  // Reference data, and read-only: the account's countries and networks as
+  // WMSPanel knows them. There is no POST for either — which is why a country
+  // restriction cannot be written as an object of its own.
+  // DVR: what is recorded, and removing a recording. There is no POST — the
+  // recording itself is set up on WMSPanel's own DVR settings page, so the
+  // panel reads and offers playback rather than pretending it can configure.
+  dvrStreamList:   (cfg) => call(cfg, `/dvr_streams/`),
+  dvrStreamDelete: (cfg, id) => call(cfg, `/dvr_streams/${id}`, { method: 'DELETE' }),
+
+  geoList: (cfg) => call(cfg, `/geo`),
+  asnList: (cfg) => call(cfg, `/asn`),
   // RTMP interfaces (view)
   rtmpInterfaceList: (cfg, sid) => call(cfg, `/server/${sid}/rtmp/interface`),
   rtmpInterfaceCreate: (cfg, sid, body) => call(cfg, `/server/${sid}/rtmp/interface`, { method: 'POST', body }),

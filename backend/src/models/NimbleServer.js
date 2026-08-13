@@ -69,6 +69,32 @@ const serverSchema = new mongoose.Schema({
   // Their absence is why the panel used to ask for a playback endpoint before
   // it would admit an edge had a name.
   wmspanelDomains: { type: [String], default: [] },
+  // What this machine is for.
+  //
+  // Until now every server was assumed to run Nimble, because every server
+  // did. A CDN gateway does not: it terminates TLS, resolves a viewer to an
+  // edge and forwards — there is no media server on it at all, and half of
+  // what the panel checks about a server is meaningless there.
+  //
+  // Naming it means the panel can stop reporting a gateway as a broken Nimble
+  // host, and can offer the right work on the right machine instead of the
+  // union of everything.
+  //
+  //   nimble     — a media server, and nothing to do with a delivery network
+  //   nimble-cdn — a media server that is also a node in a network
+  //   gateway    — a machine for the network only: no Nimble on it
+  //
+  // Defaulting to `nimble` because that is what every existing server is, and
+  // a migration that silently reclassifies a fleet is worse than a field that
+  // starts conservative.
+  purpose: { type: String, enum: ['nimble', 'nimble-cdn', 'gateway'], default: 'nimble' },
+
+  // The machine's own last report about what it has. Kept so a fleet can be
+  // shown at a glance without asking every box on every render — and stamped,
+  // because a reading from last week is not a statement about now.
+  lastReadiness: { type: Object, default: null },
+  lastReadinessAt: { type: Date, default: null },
+
   // The TLS port this box answers playback on, and what was found there.
   //
   // `httpsPort` is the operator's answer to "where"; `tls` is the panel's

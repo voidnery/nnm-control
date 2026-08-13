@@ -55,7 +55,8 @@ function Copyable({ url, label, note, tone = '' }) {
   );
 }
 
-function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signing, signIp, setSignIp }) {
+function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signing, signIp, setSignIp,
+               onReplay, replay, replayAt, setReplayAt, replayPad, setReplayPad, busy }) {
   const { t } = useI18n();
   const c = row.channel;
   const l = row.links;
@@ -168,6 +169,44 @@ function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signi
             </div>
           )}
 
+          {/* A replay, because "the goal at 19:42" is the request that arrives
+              during a broadcast. Recording itself is set up in WMSPanel — there
+              is no API to switch it on — so this is playback only, and it says
+              so rather than looking like a recording switch. */}
+          <div className="inset">
+            <div className="eyebrow">{t('ch.replay')}</div>
+            <div className="hint">{t('ch.replayHint')}</div>
+            <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input type="datetime-local" value={replayAt} onChange={e => setReplayAt(e.target.value)} />
+              <span className="hint">±</span>
+              <input type="number" style={{ maxWidth: 80 }} value={replayPad}
+                     onChange={e => setReplayPad(e.target.value)} />
+              <span className="hint">{t('ch.seconds')}</span>
+              <button disabled={busy || !replayAt} onClick={() => onReplay(c, { at: replayAt, pad: replayPad })}>
+                {t('ch.replayMoment')}
+              </button>
+              <button disabled={busy} onClick={() => onReplay(c, {})}>{t('ch.replayAll')}</button>
+            </div>
+            {replay && (
+              <>
+                <Copyable url={replay.url} label={t('ch.replay')} />
+                <div className="hint">
+                  {replay.describes?.everything
+                    ? t('ch.replayEverything')
+                    : t('ch.replayRange', {
+                        at: new Date(replay.describes.fromUtc).toLocaleString(),
+                        n: replay.describes.seconds,
+                      })}
+                  {' · '}{replay.server}
+                  {/* Absent and broken look identical from a player, so the
+                      panel says which it is. */}
+                  {replay.recordingKnown && !replay.recording && <> · <b>{t('ch.noRecording')}</b></>}
+                  {!replay.recordingKnown && <> · {t('ch.recordingUnknown')}</>}
+                </div>
+              </>
+            )}
+          </div>
+
           {l?.tests?.length > 0 && (
             <div className="inset">
               <div className="eyebrow">{t('ch.tests')}</div>
@@ -204,6 +243,24 @@ export default function ChannelsPanel() {
   const [found, setFound] = useState(null);
   const [signed, setSigned] = useState({});
   const [signIp, setSignIp] = useState('');
+  const [replays, setReplays] = useState({});
+  const [replayAt, setReplayAt] = useState('');
+  const [replayPad, setReplayPad] = useState(15);
+
+  const replayFor = async (channel, { at, pad }) => {
+    setBusy(true);
+    try {
+      const body = at
+        // The picker gives local time; the URL needs UTC seconds. Converted
+        // here rather than by the operator, because doing it by hand at speed
+        // is how footage of the wrong minute gets sent out.
+        ? { at: new Date(at).toISOString(), before: Number(pad) || 15, after: Number(pad) || 15 }
+        : {};
+      const r = await api(`/cdn/channels/${channel.id}/replay`, { method: 'POST', body });
+      setReplays(s2 => ({ ...s2, [channel.id]: r }));
+    } catch (e) { push({ type: 'warn', message: e.data?.code ? t('err.' + e.data.code) : e.message }); }
+    finally { setBusy(false); }
+  };
 
   const sign = async (channel, url, ip) => {
     setBusy(true);
@@ -291,7 +348,10 @@ export default function ChannelsPanel() {
           {data.rows.map(r => (
             <Row key={r.channel.id} row={r} canManage={canManage}
                  onSign={sign} signed={signed[r.channel.id] || null} signing={busy}
-                 signIp={signIp} setSignIp={setSignIp}
+                 signIp={signIp} setSignIp={setSignIp} busy={busy}
+                 onReplay={replayFor} replay={replays[r.channel.id] || null}
+                 replayAt={replayAt} setReplayAt={setReplayAt}
+                 replayPad={replayPad} setReplayPad={setReplayPad}
                  expanded={open === r.channel.id}
                  onToggle={() => setOpen(o => (o === r.channel.id ? '' : r.channel.id))}
                  onEdit={(c) => setEdit({ ...c, network: c.network || '', protection: c.protection || { mode: 'open' } })} />
@@ -344,10 +404,14 @@ export default function ChannelsPanel() {
               to be nagged about. */}
           <label>{t('ch.protectionLabel')}</label>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {['open', 'token', 'referer', 'geo', 'ip'].map(m => (
+            {['open', 'token', 'referer', 'ip', 'geo'].map(m => (
               <button key={m} className={'tagchip' + ((edit.protection?.mode || 'open') === m ? ' on' : '')}
                       onClick={() => setEdit({ ...edit, protection: { ...(edit.protection || {}), mode: m } })}>
                 {t('ch.prot.' + m)}
+                {/* Marked where it is chosen, not after saving: WMSPanel has no
+                    API to create a geo object, so picking this and seeing no
+                    complaint would mean believing the channel was restricted. */}
+                {m === 'geo' && ' ⚠'}
               </button>
             ))}
           </div>

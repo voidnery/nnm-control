@@ -1,5 +1,155 @@
 # Changelog
 
+### v0.91.0 — iter23 m1: what a machine is for, and what it has
+The two remaining pieces — TLS on the edges, and a gateway VM — turn out to be
+one technical problem: the agent has to work on machines that are not media
+servers. That needs saying first, because the panel has assumed otherwise
+everywhere.
+
+**A server now has a purpose:** `nimble`, `nimble-cdn`, or `gateway`. A gateway
+has no media server on it at all — it terminates TLS, resolves a viewer to an
+edge and forwards — and half of what the panel checks about a server is
+meaningless there. Naming it lets the panel stop reporting a correct gateway as
+a broken Nimble host. The agents page groups and filters by it.
+
+**Changing the purpose of a machine running Nimble is blocked**, not warned
+about: something is serving video on it, and that is not a field edit.
+
+**Agent v21 reports what a machine has, and changes nothing.** This is the
+first step of a class of action the panel has never taken — everything written
+so far went into somebody else's API, where a wrong call is refused. A wrong
+`apt-get` is not refused; it happens. So finding out is separated from doing,
+and the readiness endpoint runs no package manager, writes no file, and
+restarts nothing. The cost of being wrong here is a wrong answer.
+
+Each requirement carries what it is for, because a checklist without reasons is
+one somebody overrides. For a gateway, ports being free is checked **first**:
+installing nginx where something already holds 80 produces a broken service
+rather than an error, and finding that out afterwards means having broken
+somebody else's machine.
+
+**"Could not find out" is never "missing".** `ss` not installed must not read
+as "the port is free", and an agent too old to be asked must not read as a
+machine that lacks things — that is the difference between proposing an install
+and breaking a service.
+
+**Two gates caught me.** The first version of the agent's helpers used `sh -c`,
+against the oldest rule in that file, with unit names and paths arriving from
+the panel over the network — the gate written for ffprobe caught it, and the
+helpers are `execFile` and file reads now. And `audit:i18n` could not see
+hyphens in key *declarations* while seeing them in uses, so keys present in
+both dictionaries reported as missing from both; it surfaced only now because
+dynamic keys from a literal list became statically visible.
+
+Installing an agent from the panel, and preparing a VM, are the next
+milestones. This one is deliberately the half that cannot break anything.
+
+### v0.90.0 — iter22 m5: the goal at 19:42
+DVR turned out to be two different questions with two different answers.
+
+**Recording cannot be set up from here.** WMSPanel exposes `/v1/dvr_streams`
+as GET and DELETE only — no POST, the same shape as geo. It is configured on
+WMSPanel's own DVR settings page, and the panel says so rather than growing a
+switch that does nothing.
+
+**Playback needs no object at all.** A DVR link is the live URL with a
+different filename, documented consistently across four of Softvelum's own
+articles: `playlist_dvr.m3u8` for the archive,
+`playlist_dvr_range-<utc>-<seconds>.m3u8` for a fragment,
+`playlist_dvr_timeshift-<shift>-<depth>.m3u8` for a rewind, each with an fMP4
+variant. Which makes it arithmetic, and arithmetic can be got right without a
+fleet.
+
+So the panel builds the link, and builds it the way the request actually
+arrives during a broadcast: **a moment and some padding**, not a start and an
+end. Nobody watching a match remembers a start and an end.
+
+The parts that are easy to get wrong, each proven by contradiction:
+
+- **Seconds, not milliseconds.** Milliseconds put the request 46 years out and
+  the server answers with an empty playlist rather than an error — the kind of
+  wrong nobody debugs quickly.
+- **UTC, not the operator's clock.** The picker gives local time and the
+  conversion happens in one place, because doing it by hand at speed is how
+  footage of the wrong minute goes out.
+- **An incomplete range is refused, not completed.** Defaulting a missing
+  duration turns it into some other range and produces the wrong minute with
+  nothing having looked broken.
+- **A stream nobody is recording is named as such.** A replay link for it plays
+  nothing, and absent and broken are identical from a player.
+
+### v0.89.0 — the gate that failed three times now parses
+`audit:undef` exists to catch an identifier used where nothing declares it.
+That defect has taken the panel down three times, and the gate caught none of
+them:
+
+- `move`, deleted from ServersPage while its call sites stayed;
+- `scriptFor` and `sha256`, the same in agentEnroll;
+- `originApps` in v0.85.0 — read by one route handler, fetched by a *different*
+  handler in the same file. The gate asked whether the name existed anywhere in
+  the module. It did. The channels page answered 500.
+
+Regular expressions cannot answer this. Scope is a tree. The scoped version
+attempted last week reported **twenty-six** names that were perfectly in scope —
+parameters of callbacks it could not see — and a gate that fails every build
+gets switched off, taking everything else it was checking with it.
+
+So it parses now, with `acorn`: every function pushes a frame, declarations
+land in the frame that owns them, and each identifier read is checked against
+the chain. **Zero false positives across 108 modules**, and all three
+historical failures are caught with a file and a line — verified by
+reintroducing two of them into the live source.
+
+The distinctions a matcher could not make, each now a check: an object key is
+not a read but a shorthand value is (which is the exact shape `originApps`
+shipped in); `o.b` does not reference `b` but `o[b]` does; catch bindings,
+nested destructuring with defaults and rest, class fields and labels are all
+declarations. A name declared later in the same scope is deliberately not
+reported — this looks for names that exist nowhere, not for names used early.
+
+An unparseable file is reported rather than skipped, because a gate that
+silently passes a file it could not read is reporting success about code it
+never looked at.
+
+Two checks guarding the old tokeniser were removed, not rewritten: they
+protected a comment-stripping regex that no longer exists. What replaced them
+is the rule that survived — this audit reads code as code.
+
+### v0.88.0 — the protection modes that could be chosen and not written
+Three of the five modes were selectable in the dialog and only one reached the
+account. An operator could pick "our sites only", save, apply, see no
+complaint, and have a channel exactly as open as before.
+
+- **Referer protection writes a referer group**, one per network holding every
+  allowed domain — same reasoning as the auth group, since a group per channel
+  fills the account with near-duplicates. The same domains in a different order
+  count as unchanged.
+- **IP protection writes two objects**, because it is two: a range group, and
+  the CIDRs assigned to it. A group with no CIDRs permits nothing and looks
+  identical to one with the right ones, so a plan stopping at the group would
+  report success over a restriction that lets nobody in — including the
+  operator.
+- **A WMSAuth rule is only derived for channels that use signed links.** A rule
+  for a referer-protected channel is an object with no effect that a later
+  reader has to work out the purpose of.
+
+**Country restriction is refused, and says why.** WMSPanel has `GET /v1/geo`
+and no POST: the country list is reference data it holds, not an object a
+caller creates. The mode stays in the dialog — marked, with the reason, where
+it is chosen — because "set it up by hand in WMSPanel" is a real answer and
+hiding the option would only move the surprise. What it does not do is accept
+the choice silently, which would leave somebody believing a channel was
+restricted.
+
+Existing objects are read once, for all three families, and the same reading
+drives the preview and the apply: a plan computed against a partial view
+proposes objects that already exist, and the apply then duplicates them or
+fails on the duplicate.
+
+Nine new checks, four proven by contradiction — including the two that would
+have shipped quietly: assigning no CIDRs, and treating a reordered domain list
+as a change.
+
 ### v0.87.0 — iter22 m4: how it has held up, not whether it works right now
 Step five asked a question and threw the answer away. The probe ran, the page
 showed it, the next request forgot it — so the step could never turn green, and

@@ -11,6 +11,7 @@ import { channelLinks } from '../services/channelLinks.js';
 import { derivePlan, channelReadiness } from '../services/derivePlan.js';
 import { deriveProtection, newTokenKey } from '../services/deriveProtection.js';
 import { signUrl } from '../services/wmsAuth.js';
+import { dvrUrl, momentUrl, recordingFor } from '../services/dvrLinks.js';
 import { networkSteps } from '../services/networkSteps.js';
 import { logEvent } from '../services/audit.js';
 
@@ -40,6 +41,24 @@ const pub = (c) => ({
 });
 
 const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
+
+// Everything the account already holds, across all three families.
+//
+// Read in one place so the preview and the apply see the same thing: a plan
+// computed against a partial reading proposes objects that exist, and the
+// apply then either duplicates them or fails on the duplicate.
+async function readProtectionObjects(cfg, groups, rules) {
+  const refererGroups = await wmspanel.refererGroupList(cfg).then(r => r.referer_groups || []).catch(() => []);
+  const ipRanges = await wmspanel.ipRangeList(cfg).then(r => r.ip_ranges || []).catch(() => []);
+  // The CIDRs of each range group, because a group with none permits nothing
+  // and looks identical to a group with the right ones.
+  const cidrsByGroup = {};
+  for (const g of ipRanges) {
+    const list = await wmspanel.ipRangeCidrs(cfg, g.id).then(r => r.cidrs || []).catch(() => []);
+    cidrsByGroup[String(g.id)] = list.map(c => (typeof c === 'string' ? c : c.cidr || c.range)).filter(Boolean);
+  }
+  return { groups, rules, refererGroups, ipRanges, cidrsByGroup };
+}
 
 // Chosen, applied, and actually in force — three states an operator conflates
 // until one of them bites.
@@ -99,7 +118,13 @@ channelRouter.post('/networks/:id/protection/apply', requirePerm('cdn.manage'), 
   const cfg = (await Settings.load()).wmspanel;
   const originApps = await wmspanel.originAppList(cfg).then(r => r.settings || []).catch(() => []);
   const groups = await wmspanel.authGroupList(cfg).then(r => r.groups || []).catch(() => []);
-  const plan = deriveProtection({ network, servers, channels, originApps, existing: { groups } });
+  const rulesFlat = [];
+  for (const g of groups) {
+    const rr = await wmspanel.authRuleList(cfg, g.id).then(r => r.rules || []).catch(() => []);
+    for (const r of rr) rulesFlat.push({ ...r, groupId: g.id });
+  }
+  const existing = await readProtectionObjects(cfg, groups, rulesFlat);
+  const plan = deriveProtection({ network, servers, channels, originApps, existing });
 
   if (plan.blocking?.length) {
     // Recomputed here, not taken from whatever the page was showing: the
@@ -110,14 +135,17 @@ channelRouter.post('/networks/:id/protection/apply', requirePerm('cdn.manage'), 
   }
 
   const steps = [];
-  const created = { groups: [], rules: [] };
+  const created = { groups: [], rules: [], referers: [], ranges: [] };
   let ok = true;
 
   try {
-    let groupId = plan.items.find(i => i.kind === 'wmsauth-group')?.detail?.groupId || null;
-    const wantServers = plan.items.find(i => i.kind === 'wmsauth-group')?.detail?.servers || [];
+    const groupItem = plan.items.find(i => i.kind === 'wmsauth-group');
+    let groupId = groupItem?.detail?.groupId || null;
+    const wantServers = groupItem?.detail?.servers || [];
 
-    if (!groupId) {
+    // Only when something needs signing. A network protected purely by referer
+    // would otherwise get an empty WMSAuth group that does nothing.
+    if (groupItem && !groupId) {
       const r = await wmspanel.authGroupCreate(cfg, { name: plan.groupName, server_ids: wantServers });
       groupId = r?.group?.id || r?.id || null;
       if (!groupId) {
@@ -131,7 +159,44 @@ channelRouter.post('/networks/:id/protection/apply', requirePerm('cdn.manage'), 
       steps.push({ step: `create group ${plan.groupName}`, ok: true, groupId });
     }
 
-    const existingRules = await wmspanel.authRuleList(cfg, groupId).then(r => r.rules || []).catch(() => []);
+    // Hotlink protection.
+    for (const item of plan.items.filter(i => i.kind === 'referer-group' && i.action !== 'keep')) {
+      const body = { name: item.subject, referers: item.detail.domains, server_ids: item.detail.servers };
+      if (item.action === 'create') {
+        const r = await wmspanel.refererGroupCreate(cfg, body);
+        const id = r?.referer_group?.id || r?.id || null;
+        if (id) created.referers.push(id);
+        steps.push({ step: `create referer group ${item.subject}`, ok: true, id: id || null });
+      } else {
+        await wmspanel.refererGroupUpdate(cfg, item.detail.id, body);
+        steps.push({ step: `update referer group ${item.subject}`, ok: true, verified: 'domains rewritten' });
+      }
+    }
+
+    // IP ranges: the group, then the CIDRs. Both, because the group alone
+    // permits nothing and a half-applied restriction locks everybody out.
+    let rangeGroupId = plan.items.find(i => i.kind === 'ip-range-group')?.detail?.id || null;
+    for (const item of plan.items.filter(i => i.kind === 'ip-range-group' && i.action === 'create')) {
+      const r = await wmspanel.ipRangeCreate(cfg, { name: item.subject, server_ids: item.detail.servers });
+      rangeGroupId = r?.ip_range?.id || r?.id || null;
+      if (!rangeGroupId) {
+        const back = await wmspanel.ipRangeList(cfg).catch(() => ({ ip_ranges: [] }));
+        rangeGroupId = (back.ip_ranges || []).find(g => g.name === item.subject)?.id || null;
+        if (!rangeGroupId) throw new Error('WMSPanel returned no ip range id and the group is not in the list afterwards');
+      }
+      created.ranges.push(rangeGroupId);
+      steps.push({ step: `create ip range group ${item.subject}`, ok: true, id: rangeGroupId });
+    }
+    for (const item of plan.items.filter(i => i.kind === 'ip-range-cidrs')) {
+      const id = item.detail.id || rangeGroupId;
+      if (!id) throw new Error('no ip range group to assign CIDRs to');
+      await wmspanel.ipRangeAssign(cfg, id, { cidrs: item.detail.assign });
+      steps.push({ step: `assign ${item.detail.assign.length} range(s)`, ok: true, verified: item.detail.assign.join(', ') });
+    }
+
+    const existingRules = groupId
+      ? await wmspanel.authRuleList(cfg, groupId).then(r => r.rules || []).catch(() => [])
+      : [];
     for (const item of plan.items.filter(i => i.kind === 'wmsauth-rule' && i.action !== 'keep')) {
       const channel = channels.find(c => `nnm:${c.application}/${c.stream}` === item.subject);
       if (!channel) continue;
@@ -167,6 +232,12 @@ channelRouter.post('/networks/:id/protection/apply', requirePerm('cdn.manage'), 
     for (const g of created.groups.reverse()) {
       try { await wmspanel.authGroupDelete(cfg, g); undone.push(g); } catch { /* reported below */ }
     }
+    for (const g of created.referers.reverse()) {
+      try { await wmspanel.refererGroupDelete(cfg, g); undone.push(g); } catch { /* reported below */ }
+    }
+    for (const g of created.ranges.reverse()) {
+      try { await wmspanel.ipRangeDelete(cfg, g); undone.push(g); } catch { /* reported below */ }
+    }
     steps.push({ step: 'apply', ok: false, error: String(e?.message || e).slice(0, 300),
                  upstreamError: e?.data ?? undefined,
                  rolledBack: undone.length ? `${undone.length} object(s) removed` : 'nothing to roll back' });
@@ -178,6 +249,68 @@ channelRouter.post('/networks/:id/protection/apply', requirePerm('cdn.manage'), 
   // response — without it the operator was told "written: undefined", which is
   // the panel admitting it does not know what it just did.
   res.status(ok ? 200 : 502).json({ ok, applied, steps, plan });
+});
+
+// A link to what was recorded.
+//
+// The panel cannot switch recording on — WMSPanel has no POST for it — so this
+// is playback only: the archive, a fragment around a moment, or a rewind. The
+// moment form exists because that is how somebody watching a match asks, and
+// turning "19:42" into an epoch range by hand at speed is how the wrong minute
+// gets sent out.
+channelRouter.post('/channels/:id/replay', requirePerm('cdn.view'), async (req, res) => {
+  const c = await Channel.findById(req.params.id);
+  if (!c) return res.status(404).json({ error: 'channel-not-found', code: 'channel-not-found' });
+
+  const servers = await NimbleServer.find();
+  const net = c.network ? await DeliveryNetwork.findById(c.network) : null;
+  // From an edge, like any other viewer link. The archive lives where the
+  // recording was made, so an edge that only re-streams has nothing — but that
+  // is a fact about the fleet, and the probe below reports it rather than this
+  // guessing.
+  const byId = new Map(servers.map(s => [String(s._id), s]));
+  const edge = (net?.nodes || [])
+    .filter(n => n.role === 'edge' && n.enabled !== false)
+    .map(n => byId.get(String(n.server))).filter(Boolean)[0]
+    || servers.find(s => String(s._id) === String((net?.nodes || []).find(n => n.role === 'origin')?.server));
+  if (!edge) return res.status(422).json({ error: 'no-server-for-replay', code: 'no-server-for-replay' });
+
+  const common = {
+    host: edge.playbackEndpoints?.[0]?.host || edge.wmspanelDomains?.[0] || edge.host,
+    port: edge.httpPort || 8081,
+    application: c.application, stream: c.stream,
+    container: req.body?.container === 'fmp4' ? 'fmp4' : 'ts',
+  };
+
+  let link;
+  try {
+    if (req.body?.at) {
+      link = momentUrl({
+        ...common, at: req.body.at,
+        beforeSeconds: Math.max(0, Number(req.body.before) || 15),
+        afterSeconds: Math.max(1, Number(req.body.after) || 15),
+      });
+    } else if (req.body?.shiftSeconds) {
+      link = dvrUrl({ ...common, mode: 'timeshift', shiftSeconds: Number(req.body.shiftSeconds),
+                      depthSeconds: Number(req.body.depthSeconds) || null });
+    } else {
+      link = dvrUrl({ ...common, mode: 'full' });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'bad-replay-request', code: 'bad-replay-request', detail: String(e.message) });
+  }
+
+  const cfg = (await Settings.load()).wmspanel;
+  // Whether anything is recorded at all. A replay link for a stream nobody
+  // recorded plays nothing, and the operator concludes the archive is broken
+  // rather than absent.
+  const dvrStreams = await wmspanel.dvrStreamList(cfg).then(r => r.dvr_streams || []).catch(() => null);
+  res.json({
+    ...link,
+    server: edge.name,
+    recording: dvrStreams === null ? null : recordingFor(c, dvrStreams),
+    recordingKnown: dvrStreams !== null,
+  });
 });
 
 // A link that satisfies this channel's protection, signed here because the
@@ -375,10 +508,8 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
     const rules = await wmspanel.authRuleList(cfg, g.id).then(r => r.rules || []).catch(() => []);
     for (const r of rules) authRulesFlat.push({ ...r, groupId: g.id });
   }
-  const protPlan = deriveProtection({
-    network, servers, channels, originApps,
-    existing: { groups: authGroups, rules: authRulesFlat },
-  });
+  const existing = await readProtectionObjects(cfg, authGroups, authRulesFlat);
+  const protPlan = deriveProtection({ network, servers, channels, originApps, existing });
   res.json({
     ...plan,
     channels: channels.map(c => ({ ...pub(c), readiness: channelReadiness({ channel: c, plan }) })),

@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 20;
+const AGENT_VERSION = 21;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -219,6 +219,98 @@ async function writeAtomic(full, data) {
   await fs.writeFile(tmp, data);
   await fs.rename(tmp, full);
 }
+
+
+// ---- iter23 m1: reading the machine, without changing it -------------------
+//
+// Every helper here is a read. None runs a package manager, writes a file or
+// restarts anything: the agent's new job is to answer questions, and doing is
+// a separate decision with a separate envelope.
+//
+// Each returns null rather than false when it could not find out. "ss is not
+// installed" must not read as "the port is free" — that is the difference
+// between proposing an install and breaking a service.
+
+// No shell, ever. This agent has one rule about running things and it is the
+// oldest one here: `execFile`, so an argument containing a semicolon is an
+// argument rather than an instruction. A `sh -c` helper written for these
+// checks was caught by the gate that enforces it — correctly, because the
+// paths and unit names below arrive from a panel over the network.
+async function run(file, args = []) {
+  try {
+    const { promisify } = await import('node:util');
+    const { execFile } = await import('node:child_process');
+    const { stdout } = await promisify(execFile)(file, args, { timeout: 5000 });
+    return String(stdout || '');
+  } catch (e) { return String(e?.stdout || ''); }
+}
+
+async function hasBinary(name) {
+  // `command -v` needs a shell, so: look for the file. A fixed list of the
+  // places a system binary lives, which is not elegant and does not hand a
+  // name to an interpreter.
+  for (const dir of ['/usr/sbin', '/usr/bin', '/sbin', '/bin', '/usr/local/sbin', '/usr/local/bin']) {
+    try { await fs.access(`${dir}/${name}`); return true; } catch { /* next */ }
+  }
+  return false;
+}
+
+async function firstLine(file, args) { return (await run(file, args)).split('\n')[0].trim() || null; }
+
+async function unitActive(unit) {
+  return (await run('systemctl', ['is-active', unit])).trim() === 'active';
+}
+
+async function portListening(port) {
+  // ss, then netstat, because a minimal image has one or the other — and
+  // "neither is installed" must not read as "the port is free", which is the
+  // difference between proposing an install and breaking a service.
+  if (await hasBinary('ss')) return (await run('ss', ['-ltn'])).includes(`:${port} `);
+  if (await hasBinary('netstat')) return (await run('netstat', ['-ltn'])).includes(`:${port} `);
+  return null;
+}
+
+async function certState() {
+  let names = [];
+  try { names = (await fs.readdir('/etc/letsencrypt/live')).filter(n => n !== 'README'); }
+  catch { return { present: null, expired: null, detail: 'could not read /etc/letsencrypt/live' }; }
+  if (!names.length) return { present: false, expired: null, detail: 'no certificate found' };
+
+  const out = await run('openssl', ['x509', '-enddate', '-noout', '-in',
+                                    `/etc/letsencrypt/live/${names[0]}/fullchain.pem`]);
+  const m = /notAfter=(.+)/.exec(out);
+  if (!m) return { present: true, expired: null, detail: `certificate for ${names[0]}, expiry unreadable` };
+  const until = new Date(m[1]);
+  return {
+    present: true,
+    expired: until.getTime() < Date.now(),
+    detail: `${names[0]}, until ${until.toISOString().slice(0, 10)}`,
+  };
+}
+
+// Reading the files rather than shelling out to grep, for the same reason.
+// Reading the files rather than shelling out to grep, for the same reason.
+async function grepConf(dir, needle) {
+  try {
+    for (const f of await collectFiles(dir, 3)) {
+      try { if ((await fs.readFile(f, 'utf8')).includes(needle)) return true; } catch { /* next file */ }
+    }
+    return false;
+  } catch { return null; }
+}
+
+async function collectFiles(dir, depth, out = []) {
+  if (depth < 0 || out.length > 300) return out;
+  let entries = [];
+  try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    const full = `${dir}/${e.name}`;
+    if (e.isDirectory()) await collectFiles(full, depth - 1, out);
+    else out.push(full);
+  }
+  return out;
+}
+
 
 const routes = {
   async 'GET /health'() {
@@ -786,6 +878,57 @@ const routes = {
     await fs.rm(full, { force: false });
     return { ok: true, name: path.basename(full) };
   },
+
+  // ---- iter23 m1: what this machine has, for the job it has been given ------
+  //
+  // Reporting only. The panel is about to start installing software and
+  // opening public ports, which is a class of action it has never taken:
+  // everything written so far went into somebody else's API, where a wrong
+  // call is refused. A wrong apt-get is not refused; it happens.
+  //
+  // So this endpoint finds out and changes nothing. It runs no package
+  // manager, writes no file, touches no service. The cost of being wrong here
+  // is a wrong answer, not a broken machine.
+  async 'GET /host/readiness'() {
+    const out = { agent: AGENT_VERSION };
+
+    // `systemctl is-active` rather than a port check: something answering on
+    // 8081 says something is there, not that it is Nimble, and a gateway
+    // answering on that port would read as a media server.
+    out['nimble-running'] = await unitActive('nimble');
+
+    out['playback-port-open'] = await portListening(8081);
+    out['playback-port-open:detail'] = 'listening locally; a firewall in front is not visible from here';
+
+    out['nginx-installed'] = await hasBinary('nginx');
+    if (out['nginx-installed']) out['nginx-installed:detail'] = await firstLine('nginx', ['-v']);
+
+    // Installing nginx onto a machine where something already holds 80
+    // produces a broken service rather than an error, so this is asked before
+    // anything is proposed.
+    const p80 = await portListening(80);
+    const p443 = await portListening(443);
+    out['ports-free'] = (p80 === null || p443 === null) ? null : (!p80 && !p443);
+    if (p80 || p443) {
+      out['ports-free:detail'] = [p80 ? '80 is taken' : null, p443 ? '443 is taken' : null]
+        .filter(Boolean).join(', ');
+    }
+
+    // Presence is not the question: an expired certificate is a page of
+    // browser warnings, which is worse than none because it looks like an
+    // attack rather than an omission.
+    const cert = await certState();
+    out['tls-cert'] = cert.present === null ? null : (cert.present && !cert.expired);
+    out['tls-cert:detail'] = cert.detail;
+
+    // Without a resolver line nginx looks names up once at start-up and keeps
+    // a dead address until somebody restarts it — the failure that makes a
+    // balancer worse than no balancer.
+    out.resolver = await grepConf('/etc/nginx', 'resolver ');
+
+    return out;
+  },
+
 };
 
 const server = http.createServer(async (req, res) => {

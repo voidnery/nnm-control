@@ -3,6 +3,8 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
+import { purposeChangeWarnings, readiness, PREPARE_MIN_AGENT } from '../services/hostReadiness.js';
+import { runTask } from '../services/agentBus.js';
 import { logEvent } from '../services/audit.js';
 import { resolvePlaybackEndpoints, invalidatePlaybackCache } from '../services/playbackEndpoints.js';
 
@@ -27,6 +29,7 @@ const pub = (s) => ({
   tags: s.tags, notes: s.notes, hasToken: Boolean(s.token), wmspanelServerId: s.wmspanelServerId || '',
   order: s.order ?? 0, httpPort: s.httpPort || 0,
   wmspanelDomains: Array.isArray(s.wmspanelDomains) ? s.wmspanelDomains : [],
+  purpose: s.purpose || 'nimble',
   httpsPort: s.httpsPort || 0,
   tls: {
     checkedAt: s.tls?.checkedAt || null, tls: Boolean(s.tls?.tls), http2: Boolean(s.tls?.http2),
@@ -58,9 +61,11 @@ serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
 });
 
 serversRouter.post('/', requirePerm('servers.manage'), async (req, res) => {
-  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [], httpPort = 0, httpsPort = 0 } = req.body || {};
+  const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [], httpPort = 0, httpsPort = 0, purpose = 'nimble' } = req.body || {};
   if (!name || !host) return res.status(400).json({ error: 'name and host required' });
-  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, httpPort: Number(httpPort) > 0 ? Number(httpPort) : 0, httpsPort: Number(httpsPort) > 0 ? Number(httpsPort) : 0, playbackEndpoints: cleanEndpoints(playbackEndpoints) });
+  const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, httpPort: Number(httpPort) > 0 ? Number(httpPort) : 0, httpsPort: Number(httpsPort) > 0 ? Number(httpsPort) : 0,
+    purpose: ['nimble', 'nimble-cdn', 'gateway'].includes(purpose) ? purpose : 'nimble',
+    playbackEndpoints: cleanEndpoints(playbackEndpoints) });
   res.status(201).json(pub(server));
 });
 
@@ -79,7 +84,7 @@ serversRouter.put('/order', requirePerm('servers.manage'), async (req, res) => {
 serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'Not found' });
-  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints, httpPort, httpsPort } = req.body || {};
+  const { name, host, port, token, useSsl, tags, notes, wmspanelServerId, playbackEndpoints, httpPort, httpsPort, purpose } = req.body || {};
   if (name !== undefined) server.name = name;
   if (host !== undefined) server.host = host;
   if (port !== undefined) server.port = port;
@@ -95,6 +100,17 @@ serversRouter.put('/:id', requirePerm('servers.manage'), async (req, res) => {
   // check, which remembers a port that answered — a field the panel writes and
   // does not accept back is the fault this whole feature was born from.
   if (httpsPort !== undefined) server.httpsPort = Number(httpsPort) > 0 ? Number(httpsPort) : 0;
+  // Changing what a machine is for. Blocked while a media server is running on
+  // it: something is serving video, and that is not a field edit.
+  if (purpose !== undefined && purpose !== server.purpose) {
+    const warnings = purposeChangeWarnings(server.purpose, purpose, {
+      nimbleRunning: server.lastReadiness?.['nimble-running'] ?? null,
+    });
+    if (warnings.some(w => w.severity === 'block')) {
+      return res.status(422).json({ error: 'purpose-change-blocked', code: 'purpose-change-blocked', warnings });
+    }
+    server.purpose = purpose;
+  }
   await server.save();
   // Any of host / mapping / ports invalidates a resolved playback answer.
   invalidatePlaybackCache(server.id);
@@ -137,4 +153,39 @@ serversRouter.post('/:id/test', requirePerm('servers.view'), async (req, res) =>
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
+});
+
+
+// What this machine has, for the job it has been given.
+//
+// A read, and only a read: the agent's endpoint installs nothing. Stored so
+// the agents page can show a fleet at a glance without asking every machine
+// on every render.
+serversRouter.post('/servers/:id/readiness', requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+
+  let report = null;
+  try {
+    // Through the agent bus like every other agent call: the panel does not
+    // dial a box that has an agent, and a second way of reaching one would be
+    // a second set of rules about when it is allowed to.
+    report = await runTask(server, '/host/readiness', { createdBy: req.user?.username || '' });
+  } catch {
+    // An agent that cannot be asked is not a machine that lacks things. The
+    // readiness function is given no report and says which of the two it is.
+    report = null;
+  }
+  const r = readiness({
+    purpose: server.purpose || 'nimble',
+    report,
+    agentVersion: report?.agent ?? server.agent?.version ?? 0,
+  });
+  if (report) {
+    server.lastReadiness = report;
+    server.lastReadinessAt = new Date();
+    await server.save();
+  }
+  await logEvent(req, 'server.readiness', { server: server.name, purpose: server.purpose, code: r.code });
+  res.json({ ...r, at: server.lastReadinessAt, minAgent: PREPARE_MIN_AGENT });
 });

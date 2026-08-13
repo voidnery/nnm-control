@@ -8,7 +8,7 @@ import { useI18n } from '../i18n.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from '../components/IconButton.jsx';
 
-const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [], httpPort: 0, httpsPort: 0 };
+const EMPTY = { name: '', host: '', port: 8082, token: '', useSsl: false, tags: '', notes: '', wmspanelServerId: '', playbackEndpoints: [], httpPort: 0, httpsPort: 0, purpose: 'nimble' };
 
 function ServerModal({ initial, onClose, onSaved, wms }) {
   const { t } = useI18n();
@@ -60,6 +60,7 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
         wmspanelServerId: form.wmspanelServerId || '',
         httpPort: Number(form.httpPort) > 0 ? Number(form.httpPort) : 0,
         httpsPort: Number(form.httpsPort) > 0 ? Number(form.httpsPort) : 0,
+        purpose: form.purpose || 'nimble',
         playbackEndpoints: (form.playbackEndpoints || []).filter(e => String(e.host || '').trim()),
       };
       // On edit an empty token field means "do not change".
@@ -110,6 +111,17 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
             but the HTTP port lives in nimble.conf and no API reports it, so it
             is the one number that has to be told to the panel. Blank means
             "use Nimble's default", and the playback dialog says when it did. */}
+        {/* What this machine is for. It decides which checks apply — a gateway
+            judged as a media server reads as broken while being correct. */}
+        <label>{t('sp.purposeLabel')}</label>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {['nimble', 'nimble-cdn', 'gateway'].map(v => (
+            <button key={v} className={'tagchip' + ((form.purpose || 'nimble') === v ? ' on' : '')}
+                    onClick={() => set('purpose', v)}>{t('sp.purpose.' + v)}</button>
+          ))}
+        </div>
+        <div className="hint">{t('sp.purpose.' + (form.purpose || 'nimble') + '.note')}</div>
+
         <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 8 }}>
           <span className="hint" style={{ flex: 1 }}>{t('sp.httpPortHint')}</span>
           <input type="number" style={{ flex: '0 0 110px' }} placeholder="8081"

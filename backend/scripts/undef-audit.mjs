@@ -1,253 +1,187 @@
-// The panel has been taken down twice by the same defect: an identifier that
-// is called but was never declared. On the frontend it was `move` in
-// ServersPage; on the backend it was `scriptFor` and `sha256` in agentEnroll,
-// deleted during a cleanup while their call sites stayed.
-//
-// `node --check` cannot see it, because the syntax is perfectly valid. Nothing
-// notices until the line runs — and on the backend that means a ReferenceError
-// inside an async route, an unhandled rejection, and a process exit: HTTP 502
-// and a restarted panel, rather than one failed request.
-//
-// The frontend gained a gate for this (audit:pages clicks every button). This
-// is the backend's.
-//
-// Deliberately conservative: it flags only names that appear in call position
-// and are declared NOWHERE in the file — not out of scope, not shadowed,
-// nowhere. That misses some real bugs and reports almost no false ones, which
-// is the right trade for something that must never cry wolf.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from 'acorn';
+import * as walk from 'acorn-walk';
 
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
+// An identifier used where nothing declares it.
+//
+// This defect class has taken the panel down three times. Twice a name was
+// deleted in a cleanup while its call sites stayed — `move` in ServersPage,
+// `scriptFor` in agentEnroll. The third time is why this file was rewritten: a
+// route handler read `originApps`, a *different* handler in the same file
+// fetched it, and the previous version asked only whether the name existed
+// somewhere in the module. It did. The gate passed and the channels page
+// answered 500.
+//
+// Regular expressions cannot answer this. Scope is a tree, and the first
+// attempt at a scoped version reported twenty-six names that were perfectly in
+// scope — parameters of callbacks it could not see. A gate that fails every
+// build gets switched off, and then so is everything else it was checking.
+//
+// So: a parser. Every function pushes a frame, declarations land in the frame
+// that owns them, and each identifier read is checked against the chain.
+// `node --check` sees none of this because the syntax is valid; nothing
+// notices until the line runs, and on the backend that means a ReferenceError
+// inside an async route and a 500.
 
-// Keywords that can appear immediately before a parenthesis and are not calls.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const SRC = path.resolve(HERE, '../src');
+
 const GLOBALS = new Set([
-  'require', 'import', 'super', 'this', 'typeof', 'void', 'delete', 'new', 'return', 'yield', 'await',
-  'if', 'for', 'while', 'switch', 'catch', 'function', 'class', 'do', 'else', 'try', 'finally', 'case',
-  'async', 'of', 'in', 'instanceof', 'throw', 'export', 'default', 'from', 'as', 'let', 'const', 'var',
-  'console', 'process', 'Buffer', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder',
-  'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'setImmediate', 'queueMicrotask',
-  'fetch', 'Promise', 'Object', 'Array', 'String', 'Number', 'Boolean', 'Date', 'Math', 'JSON',
-  'Map', 'Set', 'WeakMap', 'WeakSet', 'Symbol', 'RegExp', 'Error', 'TypeError', 'RangeError',
-  'AbortController', 'AbortSignal', 'Intl', 'BigInt', 'isNaN', 'parseInt', 'parseFloat', 'structuredClone',
-  'encodeURIComponent', 'decodeURIComponent', 'encodeURI', 'decodeURI', 'globalThis',
+  'globalThis', 'console', 'process', 'Buffer', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder',
+  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'queueMicrotask',
+  'fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob', 'AbortController', 'AbortSignal',
+  'Object', 'Array', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt', 'Math', 'JSON', 'Date',
+  'RegExp', 'Error', 'TypeError', 'RangeError', 'SyntaxError', 'EvalError', 'ReferenceError',
+  'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise', 'Proxy', 'Reflect', 'Intl',
+  'ArrayBuffer', 'DataView', 'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array',
+  'Uint32Array', 'Int32Array', 'Float32Array', 'Float64Array', 'BigInt64Array', 'BigUint64Array',
+  'isNaN', 'isFinite', 'parseInt', 'parseFloat', 'encodeURIComponent', 'decodeURIComponent',
+  'encodeURI', 'decodeURI', 'structuredClone', 'crypto', 'performance', 'require',
+  '__dirname', '__filename', 'undefined', 'NaN', 'Infinity', 'arguments', 'module', 'exports',
 ]);
 
-// Strip comments, regex literals, template literals and strings so their
-// contents cannot look like code.
-//
-// Regex literals go BEFORE strings, and that ordering is load-bearing: this
-// codebase contains patterns like /([?&](?:key|token)=)[^\s&"']+/gi, and an
-// apostrophe inside one desynchronises a naive string stripper, which then
-// swallows the rest of the file and makes everything after it look undeclared.
-// The first run of this audit did exactly that.
-function strip(src) {
-  let out = src
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    // A `//` comment, with URLs protected by hiding their separator first
-    // rather than by refusing to strip a comment that happens to follow a
-    // colon. The old guard was `[^:]`, which meant a line such as
-    // `const clk = 100;  // USER_HZ; the kernel's own unit` stripped fine but
-    // anything reaching `//` just after a colon did not — and the leftover
-    // comment text then swallowed the rest of the file at the next apostrophe,
-    // reporting four real functions as undefined.
-    .replace(/:\/\//g, ':\u0000\u0000')
-    .replace(/\/\/[^\n]*/g, ' ')
-    .replace(/:\u0000\u0000/g, '://');
-  // A slash starts a regex only where a value may begin — after an operator,
-  // a comma, a bracket or the start of a statement.
-  out = out.replace(/([=(,:;[!&|?{}+\-*%^~<>]|^|\breturn\b|\btypeof\b)(\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[gimsuyd]*/g,
-    (_m, pre, ws) => `${pre}${ws}/RE/`);
-  return out
-    .replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``')
-    .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
-    .replace(/"(?:\\.|[^"\\\n])*"/g, '""');
-}
-
-// Names visible at module level: declared at column zero, or imported.
-// Everything else belongs to some function and is not visible from another.
-const RESERVED = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'typeof', 'new',
-  'await', 'delete', 'void', 'do', 'else', 'try', 'throw', 'yield', 'function', 'super', 'this',
-  'instanceof', 'in', 'of', 'case', 'const', 'let', 'var', 'class', 'import', 'export', 'default']);
-
-function moduleLevelNames(src) {
-  const names = new Set();
-  for (const m of src.matchAll(/^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
-  for (const m of src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
-  for (const m of src.matchAll(/^(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
-  for (const m of src.matchAll(/^import\s+([^;]*?)\s+from\b/gm)) {
-    for (const part of m[1].split(/[{},]/)) {
-      const bits = part.trim().split(/\s+as\s+|\s+/).filter(Boolean);
-      if (bits.length) names.add(bits[bits.length - 1]);
-    }
-  }
-  // Destructured module-level constants: `const { a, b } = …` at column zero.
-  for (const m of src.matchAll(/^(?:export\s+)?(?:const|let|var)\s*\{([^}]*)\}/gm)) {
-    for (const part of m[1].split(',')) {
-      const bits = part.split(':').map(x => x.trim());
-      const last = (bits[bits.length - 1] || '').split('=')[0].trim();
-      if (/^[A-Za-z_$][\w$]*$/.test(last)) names.add(last);
-    }
-  }
-  return names;
-}
-
-// Each route handler, as its own scope.
-//
-// The gate collected declarations file-wide, which is why it passed on a
-// handler using `originApps` that a *different* handler in the same file had
-// fetched: the name existed somewhere, so it counted as declared. The page
-// returned 500 and the operator saw "Internal server error".
-//
-// A name used inside a handler must be declared inside it, or at module level.
-// Anything else belongs to some other function and is not visible from here.
-function routeHandlers(src) {
-  const out = [];
-  // Anchored on the route line, then the first `async (…) => {` after it.
-  //
-  // The first attempt matched from the route method to the arrow with
-  // `[^)]*?`, which cannot cross `requirePerm('cdn.view')` — so it found zero
-  // handlers in a file full of them and reported success. A gate that matches
-  // nothing is indistinguishable from a gate that passes.
-  const line = /^\s*\w+\.(?:get|post|put|patch|delete|use)\(/gm;
-  let m;
-  while ((m = line.exec(src))) {
-    const arrow = /async\s*\(([^)]*)\)\s*=>\s*\{/g;
-    arrow.lastIndex = m.index;
-    const a = arrow.exec(src);
-    if (!a || a.index > m.index + 400) continue;
-    let depth = 1;
-    let i = arrow.lastIndex;
-    while (i < src.length && depth > 0) {
-      const ch = src[i];
-      if (ch === '{') depth++;
-      else if (ch === '}') depth--;
-      i++;
-    }
-    out.push({ params: a[1], body: src.slice(arrow.lastIndex, i - 1) });
+// Every name a binding pattern introduces: plain, destructured, defaulted,
+// rested, nested. Written out because each shape a regex missed became a false
+// positive, and false positives are what discredited the previous attempt.
+export function bound(node, out = []) {
+  if (!node) return out;
+  switch (node.type) {
+    case 'Identifier': out.push(node.name); break;
+    case 'ObjectPattern':
+      for (const p of node.properties) {
+        if (p.type === 'RestElement') bound(p.argument, out);
+        else bound(p.value, out);
+      }
+      break;
+    case 'ArrayPattern': for (const e of node.elements) bound(e, out); break;
+    case 'AssignmentPattern': bound(node.left, out); break;
+    case 'RestElement': bound(node.argument, out); break;
+    case 'Property': bound(node.value, out); break;
+    default: break;
   }
   return out;
 }
 
-function declaredNames(src) {
-  const names = new Set();
-  const add = (n) => { if (n) names.add(n); };
-
-  for (const m of src.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) add(m[1]);
-  for (const m of src.matchAll(/\bfunction\s*\*?\s*([A-Za-z_$][\w$]*)/g)) add(m[1]);
-  for (const m of src.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)/g)) add(m[1]);
-  // import x, { a as b, c } from '…'  /  import * as ns from '…'
-  for (const m of src.matchAll(/\bimport\s+([^;]*?)\s+from\b/g)) {
-    for (const part of m[1].split(/[{},]/)) {
-      const bits = part.trim().split(/\s+as\s+|\s+/).filter(Boolean);
-      const last = bits[bits.length - 1];
-      if (last && /^[A-Za-z_$][\w$]*$/.test(last)) add(last);
-    }
-  }
-  // Destructuring, including from await/require, and catch bindings.
-  for (const m of src.matchAll(/(?:const|let|var)\s*\{([^}]*)\}/g)) {
-    for (const part of m[1].split(',')) {
-      const bits = part.split(':').map(x => x.trim());
-      const name = (bits[1] || bits[0] || '').replace(/=.*$/, '').trim();
-      if (/^[A-Za-z_$][\w$]*$/.test(name)) add(name);
-    }
-  }
-  for (const m of src.matchAll(/(?:const|let|var)\s*\[([^\]]*)\]/g)) {
-    for (const part of m[1].split(',')) {
-      const name = part.replace(/=.*$/, '').trim();
-      if (/^[A-Za-z_$][\w$]*$/.test(name)) add(name);
-    }
-  }
-  for (const m of src.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) add(m[1]);
-  // Function parameters of every shape, plus arrow parameters.
-  for (const m of src.matchAll(/\(([^()]*)\)\s*(?:=>|\{)/g)) {
-    for (const part of m[1].split(',')) {
-      const name = part.replace(/[{}[\]]/g, ' ').split(/[:=]/)[0].replace(/\.\.\./, '').trim();
-      if (/^[A-Za-z_$][\w$]*$/.test(name)) add(name);
-    }
-  }
-  for (const m of src.matchAll(/([A-Za-z_$][\w$]*)\s*=>/g)) add(m[1]);
-  // Destructured parameters, including ones with defaults spread over several
-  // lines and defaults that are themselves functions —
-  // `function f({ onOutput = () => {}, timeoutMs = 1000 })`. One level of
-  // nesting is allowed, which is what an arrow-function default needs.
-  for (const m of src.matchAll(/\{((?:[^{}]|\{[^{}]*\})*)\}/g)) {
-    for (const part of m[1].replace(/\{[^{}]*\}/g, '').split(',')) {
-      const bits = part.split(':').map(x => x.trim());
-      const name = (bits[1] || bits[0] || '').replace(/=.*$/, '').replace(/\.\.\./, '').trim();
-      if (/^[A-Za-z_$][\w$]*$/.test(name)) add(name);
-    }
-  }
-  // Object shorthand methods: `async foo(a, b) {`
-  for (const m of src.matchAll(/(?:^|[,{]\s*)(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(/gm)) add(m[1]);
-  return names;
-}
-
-function usedAsCalls(src) {
-  const out = new Map();
-  const lines = src.split('\n');
-  lines.forEach((line, i) => {
-    // Direct calls: foo(...)
-    for (const m of line.matchAll(/(^|[^.\w$'"`])([A-Za-z_$][\w$]*)\s*\(/g)) {
-      const name = m[2];
-      if (!out.has(name)) out.set(name, i + 1);
-    }
-    // Member calls on a capitalised receiver: NimbleServer.find(...).
-    //
-    // This shape is the most common one in the codebase — every model is used
-    // this way — and the first version of this audit missed it entirely,
-    // letting a missing `import { NimbleServer }` through into a route. Only
-    // capitalised receivers, because a lowercase one is nearly always a local
-    // object rather than an import.
-    for (const m of line.matchAll(/(^|[^.\w$'"`])([A-Z][\w$]*)\s*\.\s*[\w$]+\s*\(/g)) {
-      const name = m[2];
-      if (!out.has(name)) out.set(name, i + 1);
-    }
+// Declarations belonging to this scope rather than to a nested one.
+//
+// One frame per function, not per block: that over-approximates in the
+// operator's favour, treating a name declared later in the same scope as
+// visible. This looks for names that exist nowhere, not for names used early —
+// reporting a temporal dead zone would be a different check with a different
+// false-positive rate.
+function collect(node, add) {
+  walk.recursive(node, null, {
+    VariableDeclaration(n, st, c) {
+      for (const d of n.declarations) {
+        for (const name of bound(d.id)) add(name);
+        if (d.init) c(d.init, st);
+      }
+    },
+    FunctionDeclaration(n) { if (n.id) add(n.id.name); },
+    ClassDeclaration(n) { if (n.id) add(n.id.name); },
+    ImportDeclaration(n) { for (const sp of n.specifiers) add(sp.local.name); },
+    FunctionExpression() {},
+    ArrowFunctionExpression() {},
   });
-  return out;
 }
 
-const files = [];
-(function walk(dir) {
-  for (const e of readdirSync(dir)) {
-    const p = path.join(dir, e);
-    if (statSync(p).isDirectory()) walk(p);
-    else if (p.endsWith('.js') || p.endsWith('.mjs')) files.push(p);
-  }
-})(SRC);
-
-let bad = 0;
-for (const file of files) {
-  const raw = readFileSync(file, 'utf8');
-  const src = strip(raw);
-  const declared = declaredNames(src);
-  for (const [name, line] of usedAsCalls(src)) {
-    if (GLOBALS.has(name) || declared.has(name)) continue;
-    console.log(`  ✗ ${path.relative(SRC, file)}:${line} — ${name}() is called but declared nowhere in this file`);
-    bad++;
-  }
+function scopeOf(fnNode) {
+  const names = new Set();
+  for (const p of fnNode.params || []) for (const n of bound(p)) names.add(n);
+  if (fnNode.id) names.add(fnNode.id.name);
+  if (fnNode.body) collect(fnNode.body, (n) => names.add(n));
+  return names;
 }
 
-// A second, scoped pass belongs here and is not finished.
-//
-// The file-wide pass below asks whether a name exists anywhere in the module.
-// That is the wrong question, and it cost v0.85.0: a handler used `originApps`
-// that a *different* handler in the same file had fetched, the name existed,
-// this gate passed, and the page answered 500.
-//
-// A prototype of the scoped version does catch exactly that — it names
-// `originApps` the moment the fetch is removed — but it also reports
-// twenty-six names that are perfectly in scope, because a handler is full of
-// callbacks whose parameters a regular expression struggles to collect. A gate
-// that fails every build is worse than the hole it covers: it gets switched
-// off, and then so is everything else it was checking.
-//
-// Left out rather than shipped half-working, and written down rather than
-// forgotten. The honest fix is a real parser over these files instead of
-// patterns, which is a piece of work rather than a patch.
+export function undefinedIdentifiers(source, filename = '<anonymous>') {
+  let ast;
+  try {
+    ast = parse(source, { ecmaVersion: 'latest', sourceType: 'module', locations: true });
+  } catch (e) {
+    return [{ name: '(parse error)', line: e.loc?.line || 0, file: filename, message: e.message }];
+  }
 
-console.log(bad
-  ? `\n${bad} undefined reference(s) — this is the defect class that returns 502 and restarts the panel`
-  : `undefined-reference audit: OK (${files.length} backend modules)`);
-process.exit(bad ? 1 : 0);
+  const moduleScope = new Set();
+  collect(ast, (n) => moduleScope.add(n));
+
+  const found = [];
+  const seen = new Set();
+
+  walk.recursive(ast, [], {
+    FunctionDeclaration(n, st, c) { c(n.body, [...st, scopeOf(n)]); },
+    FunctionExpression(n, st, c) { c(n.body, [...st, scopeOf(n)]); },
+    ArrowFunctionExpression(n, st, c) { c(n.body, [...st, scopeOf(n)]); },
+    ClassDeclaration(n, st, c) { c(n.body, st); },
+    TryStatement(n, st, c) {
+      c(n.block, st);
+      if (n.handler) c(n.handler.body, [...st, new Set(bound(n.handler.param || null))]);
+      if (n.finalizer) c(n.finalizer, st);
+    },
+    // The property in `a.b` is not a reference to something called `b`.
+    MemberExpression(n, st, c) {
+      c(n.object, st);
+      if (n.computed) c(n.property, st);
+    },
+    // `{ a: 1 }` — the key is not a read. `{ a }` is, and acorn gives the same
+    // node type for both. This is exactly the shape `originApps` shipped in.
+    Property(n, st, c) {
+      if (n.computed) c(n.key, st);
+      c(n.value, st);
+    },
+    MethodDefinition(n, st, c) {
+      if (n.computed) c(n.key, st);
+      c(n.value, st);
+    },
+    PropertyDefinition(n, st, c) {
+      if (n.computed) c(n.key, st);
+      if (n.value) c(n.value, st);
+    },
+    // A label is not a variable.
+    LabeledStatement(n, st, c) { c(n.body, st); },
+    BreakStatement() {},
+    ContinueStatement() {},
+    ExportSpecifier() {},
+    ImportSpecifier() {},
+    ImportDefaultSpecifier() {},
+    ImportNamespaceSpecifier() {},
+    Identifier(n, st) {
+      const name = n.name;
+      if (GLOBALS.has(name) || moduleScope.has(name)) return;
+      if (st.some(s => s.has(name))) return;
+      const key = `${name}:${n.loc.start.line}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      found.push({ name, line: n.loc.start.line, file: filename });
+    },
+  });
+
+  return found;
+}
+
+// ---------------------------------------------------------------- the gate
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const files = [];
+  (function walkDir(dir) {
+    for (const e of readdirSync(dir)) {
+      const p = path.join(dir, e);
+      if (statSync(p).isDirectory()) { if (e !== 'node_modules') walkDir(p); }
+      else if (e.endsWith('.js') || e.endsWith('.mjs')) files.push(p);
+    }
+  })(SRC);
+
+  let bad = 0;
+  for (const file of files) {
+    for (const hit of undefinedIdentifiers(readFileSync(file, 'utf8'), path.relative(SRC, file))) {
+      console.log(`  ✗ ${hit.file}:${hit.line} — "${hit.name}" is used and declared in no scope that reaches it`);
+      bad++;
+    }
+  }
+
+  console.log(bad
+    ? `\n${bad} undefined reference(s) — this is the defect class that returns 500 and restarts the panel`
+    : `undefined-reference audit: OK (${files.length} backend modules, parsed)`);
+  process.exit(bad ? 1 : 0);
+}

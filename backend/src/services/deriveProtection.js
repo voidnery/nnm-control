@@ -27,6 +27,8 @@ const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
 export const newTokenKey = () => crypto.randomBytes(24).toString('base64url');
 
 export const groupNameFor = (network) => `nnm:${network?.name || 'network'}`;
+export const refererNameFor = (network) => `nnm:${network?.name || 'network'}:referers`;
+export const rangeNameFor = (network) => `nnm:${network?.name || 'network'}:ranges`;
 export const ruleNameFor = (channel) => `nnm:${trim(channel.application)}/${trim(channel.stream)}`;
 
 // What each protection mode needs in order to work at all. Returned as
@@ -64,6 +66,14 @@ export function protectionProblems({ channel, originApps = [] }) {
   }
 
   if (p.mode === 'geo') {
+    // WMSPanel has GET /v1/geo and no POST: the country list is reference data
+    // it holds, not an object an API caller creates. So a country restriction
+    // cannot be written the way a referer group can, and offering it as though
+    // it could would be the panel promising something it has no way to do.
+    //
+    // Blocking rather than silently ignoring: an operator who picked "by
+    // country" and saw no complaint would believe the channel was restricted.
+    add('geo-not-writable', 'block');
     if (!(p.countries || []).length) add('no-countries');
     const bad = (p.countries || []).filter(c => !/^[A-Z]{2}$/.test(String(c).toUpperCase()));
     if (bad.length) add('bad-country-code', 'block', { codes: bad });
@@ -107,10 +117,14 @@ export function deriveProtection({ network, servers, channels, originApps = [], 
     return { items, problems, groupName: null, summary: { create: 0, update: 0, keep: 0 }, inSync: true };
   }
 
+  const tokenChannels = protectedChannels.filter(c => c.protection.mode === 'token');
   const groupName = groupNameFor(network);
   const group = (existing.groups || []).find(g => g.name === groupName);
 
-  items.push({
+  // Only when something actually needs signing. A network protected purely by
+  // referer would otherwise get an empty WMSAuth group that does nothing and
+  // that somebody later has to work out the purpose of.
+  if (tokenChannels.length) items.push({
     kind: 'wmsauth-group',
     action: !group ? 'create' : (sameServers(group, wmsIds) ? 'keep' : 'update'),
     why: 'network-needs-a-group',
@@ -118,7 +132,58 @@ export function deriveProtection({ network, servers, channels, originApps = [], 
     detail: { servers: wmsIds, groupId: group?.id || null },
   });
 
-  for (const c of protectedChannels) {
+  // Hotlink protection: one group per network holding every allowed domain,
+  // for the same reason the auth group is per network — a group per channel
+  // fills the account with near-duplicates nobody can later tell apart.
+  const refererDomains = [...new Set(protectedChannels
+    .filter(c => c.protection.mode === 'referer')
+    .flatMap(c => c.protection.allowedDomains || []))];
+  if (refererDomains.length) {
+    const name = refererNameFor(network);
+    const found = (existing.refererGroups || []).find(g => g.name === name);
+    const same = found && sameList(found.referers || found.domains, refererDomains);
+    items.push({
+      kind: 'referer-group',
+      action: !found ? 'create' : (same ? 'keep' : 'update'),
+      why: 'domains-may-embed',
+      subject: name,
+      detail: { id: found?.id || null, domains: refererDomains, servers: wmsIds },
+    });
+  }
+
+  // IP ranges: a group *and* the CIDRs assigned to it. The group alone permits
+  // nothing, so both halves are planned — a plan that stops at the group would
+  // report success over a restriction that lets nobody in.
+  const ranges = [...new Set(protectedChannels
+    .filter(c => c.protection.mode === 'ip')
+    .flatMap(c => c.protection.ranges || []))];
+  if (ranges.length) {
+    const name = rangeNameFor(network);
+    const found = (existing.ipRanges || []).find(g => g.name === name);
+    items.push({
+      kind: 'ip-range-group',
+      action: !found ? 'create' : 'keep',
+      why: 'networks-may-watch',
+      subject: name,
+      detail: { id: found?.id || null, servers: wmsIds },
+    });
+    const have = found ? (existing.cidrsByGroup?.[String(found.id)] || []) : [];
+    const missing = ranges.filter(r => !have.includes(r));
+    if (missing.length) {
+      items.push({
+        kind: 'ip-range-cidrs',
+        action: 'update',
+        why: 'ranges-must-be-assigned',
+        subject: name,
+        detail: { id: found?.id || null, assign: missing },
+      });
+    }
+  }
+
+  // Rules sign links, so only the channels that use signed links get one. A
+  // rule for a referer-protected channel would be an object with no effect
+  // that a later reader has to work out the purpose of.
+  for (const c of tokenChannels) {
     const name = ruleNameFor(c);
     const rule = (existing.rules || []).find(r => r.name === name);
     items.push({
@@ -148,6 +213,16 @@ export function deriveProtection({ network, servers, channels, originApps = [], 
     },
     inSync: items.every(i => i.action === 'keep') && blocking.length === 0,
   };
+}
+
+// Order-insensitive on purpose: WMSPanel returns a list in whatever order it
+// stores it, and comparing positionally would rewrite the group on every plan
+// — an update that changes nothing, forever, on an account somebody else also
+// edits.
+function sameList(have, want) {
+  const a = new Set((have || []).map(String));
+  const b = new Set((want || []).map(String));
+  return a.size === b.size && [...a].every(v => b.has(v));
 }
 
 function sameServers(group, wanted) {

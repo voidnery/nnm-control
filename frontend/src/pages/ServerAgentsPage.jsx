@@ -23,6 +23,7 @@ export default function ServerAgentsPage() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
+  const [purposeFilter, setPurposeFilter] = useState('all');
   const [install, setInstall] = useState(null);
   const [centre, setCentre] = useState(false);
   const [fleet, setFleet] = useState(null);
@@ -82,7 +83,13 @@ export default function ServerAgentsPage() {
   if (!servers) return <div className="hint">{t('sd.loading')}</div>;
 
   const q = filter.trim().toLowerCase();
-  const shown = servers.filter(s => !q || `${s.name} ${s.host || ''}`.toLowerCase().includes(q));
+  const shown = servers.filter(s => !q || `${s.name} ${s.host || ''}`.toLowerCase().includes(q))
+    .filter(s => purposeFilter === 'all' || (s.purpose || 'nimble') === purposeFilter);
+  // Grouped by what each machine is for, because the same agent does different
+  // jobs on different boxes: a gateway has no media server on it, and half of
+  // what this page reports about a Nimble host is meaningless there.
+  const byPurpose = { nimble: [], 'nimble-cdn': [], gateway: [] };
+  for (const s2 of shown) (byPurpose[s2.purpose || 'nimble'] ||= []).push(s2);
   const configured = servers.filter(s => rows[s.id]?.enabled).length;
 
   return (
@@ -96,6 +103,16 @@ export default function ServerAgentsPage() {
       <div className="row" style={{ marginBottom: 12, alignItems: 'center', justifyContent: 'space-between' }}>
         <div className="row" style={{ gap: 10 }}>
           <SearchInput style={{ maxWidth: 260 }} value={filter} onChange={setFilter} placeholder={t('agent.filter')} />
+          {/* What each machine is for. Not a cosmetic grouping: it decides
+              which checks apply, and a gateway judged as a media server reads
+              as broken while being perfectly correct. */}
+          {['all', 'nimble', 'nimble-cdn', 'gateway'].map(v => (
+            <button key={v} className={'tagchip' + (purposeFilter === v ? ' on' : '')}
+                    onClick={() => setPurposeFilter(v)}>
+              {t('agent.purpose.' + v)}
+              {v !== 'all' && <span className="hint"> {(byPurpose[v] || []).length}</span>}
+            </button>
+          ))}
           <button onClick={load}>{t('action.refresh')}</button>
           <span className="hint">{t('agent.countConfigured', { n: configured, total: servers.length })}</span>
         </div>

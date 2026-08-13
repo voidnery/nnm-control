@@ -1610,29 +1610,30 @@ check('forwarding edits are gated behind an explicit opt-in', () => {
   assert.ok(ed2.includes('se.undocAck'), 'the opt-in is a deliberate checkbox');
 });
 
-console.log('\nTHE AUDIT TOKENISER (v0.58.0):');
+console.log('\nTHE UNDEFINED-REFERENCE AUDIT:');
 
 const aud = readFileSync(new URL('../scripts/undef-audit.mjs', import.meta.url), 'utf8');
 
-check('a comment after a colon is stripped', () => {
-  // The guard was `[^:]`, there to protect `://` in a URL. It also refused to
-  // strip any comment reaching `//` just after a colon — and the leftover text
-  // then ran to the next apostrophe and swallowed whatever lay between,
-  // reporting real functions as undefined. URLs are protected directly now.
-  assert.ok(aud.includes("replace(/:\\/\\//g"));
-  assert.ok(!aud.includes("(^|[^:])"));
+check('it parses rather than matching text', () => {
+  // Two checks here used to guard a tokeniser: a comment-stripping regex whose
+  // guard against `://` in a URL also refused to strip comments after a colon,
+  // leaving text that ran to the next apostrophe and reported real functions
+  // as undefined.
+  //
+  // The tokeniser is gone. It could not answer the question at all — scope is
+  // a tree, and a name in the wrong scope is invisible to any amount of
+  // matching, which is what took the channels page down in v0.85.0. What
+  // survives is the rule it was there for: this audit reads code as code.
+  assert.ok(/from 'acorn'/.test(aud), 'the audit is back to matching text');
+  assert.ok(!/replace\(\/\\\/\\\//.test(aud), 'a comment stripper survived the rewrite');
 });
 
-check('a URL still survives comment stripping', () => {
-  // The point of the old guard, kept.
-  const strip = (src) => src
-    .replace(/:\/\//g, ':\u0000\u0000')
-    .replace(/\/\/[^\n]*/g, ' ')
-    .replace(/:\u0000\u0000/g, '://');
-  assert.equal(strip("const u = 'https://example.com/x';"), "const u = 'https://example.com/x';");
-  assert.equal(strip('const a = 1; // note').trim(), 'const a = 1;');
-  assert.equal(strip("const b = 2; // it's fine").trim(), 'const b = 2;');
+check('an unparseable file is reported, not skipped', () => {
+  // Silently passing a file it could not read is a gate reporting success
+  // about code it never looked at.
+  assert.ok(/parse error/.test(aud));
 });
+
 
 console.log('\nTWO DEFECTS IN RECENT WORK (v0.58.1):');
 

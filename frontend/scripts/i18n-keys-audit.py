@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 """Every t('key') used in the UI must exist in BOTH dictionaries, otherwise the
+
+Keys contain hyphens — `cfg.http-origin-on-edge`, `agent.purpose.nimble-cdn`,
+`step.verify.not-arriving` — and the character class here did not. Declarations
+with a hyphen were therefore invisible to this audit while uses of them were
+not, so a key present in both dictionaries was reported as missing from both.
+It only surfaced once dynamic keys built from a literal list were expanded,
+which is the moment such a key first became statically visible as a use.
 fallback renders the raw key (e.g. "wo.port") to the user. Also reports keys
 present in EN but missing in RU and vice versa."""
 import re, sys, glob
@@ -11,7 +18,7 @@ src_i18n = open('src/i18n.jsx').read()
 def block(lang, nxt):
     a = src_i18n.index(f'\n  {lang}: {{')
     b = src_i18n.index(f'\n  {nxt}: {{') if nxt else src_i18n.index('\nconst I18nCtx')
-    return set(re.findall(r"'([a-zA-Z0-9_.]+)'\s*:", src_i18n[a:b]))
+    return set(re.findall(r"'([a-zA-Z0-9_.-]+)'\s*:", src_i18n[a:b]))
 
 en = block('en', 'ru')
 ru = block('ru', None)
@@ -25,7 +32,7 @@ def dup_keys(lang, nxt):
     a = src_i18n.index(f'\n  {lang}: {{')
     b = src_i18n.index(f'\n  {nxt}: {{') if nxt else src_i18n.index('\nconst I18nCtx')
     seen, dups = set(), []
-    for m in re.finditer(r"'([a-zA-Z0-9_.]+)'\s*:", src_i18n[a:b]):
+    for m in re.finditer(r"'([a-zA-Z0-9_.-]+)'\s*:", src_i18n[a:b]):
         k = m.group(1)
         if k in seen: dups.append(k)
         seen.add(k)
@@ -47,7 +54,7 @@ if dup_problems:
 def values(lang, nxt):
     a = src_i18n.index(f'\n  {lang}: {{')
     b = src_i18n.index(f'\n  {nxt}: {{') if nxt else src_i18n.index('\nconst I18nCtx')
-    return dict(re.findall(r"'([a-zA-Z0-9_.]+)'\s*:\s*'([^']*)'", src_i18n[a:b]))
+    return dict(re.findall(r"'([a-zA-Z0-9_.-]+)'\s*:\s*'([^']*)'", src_i18n[a:b]))
 
 env, ruv = values('en','ru'), values('ru',None)
 same = [k for k in env if k in ruv and env[k] == ruv[k]
@@ -59,7 +66,7 @@ if same:
 
 used = set()
 for f in glob.glob('src/**/*.jsx', recursive=True):
-    for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.]+)'", open(f).read()):
+    for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.-]+)'", open(f).read()):
         used.add(m.group(1))
     for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.]+)'\s*\+", open(f).read()):
         used.discard(m.group(1))  # dynamic key building, can't check statically

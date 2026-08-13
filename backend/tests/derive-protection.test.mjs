@@ -10,7 +10,7 @@
 // group per channel would fill the account with near-duplicates nobody can
 // later tell apart. One group per network, one rule per protected channel.
 import assert from 'node:assert/strict';
-import { deriveProtection, protectionProblems, newTokenKey, groupNameFor, ruleNameFor }
+import { deriveProtection, protectionProblems, newTokenKey, groupNameFor, ruleNameFor, refererNameFor, rangeNameFor }
   from '../src/services/deriveProtection.js';
 
 let failures = 0;
@@ -80,6 +80,96 @@ check('a group whose servers have changed is updated', () => {
     existing: { groups: [{ id: 'g1', name: groupNameFor(NET), server_ids: ['W-O'] }] },
   });
   assert.equal(d.items[0].action, 'update');
+});
+
+console.log('\nEACH MODE DERIVES ITS OWN FAMILY:');
+
+const only = (prot) => deriveProtection({
+  network: NET, servers: SERVERS,
+  channels: [CH({ protection: prot })],
+}).items.map(i => i.kind);
+
+check('referer protection derives a referer group and nothing else', () => {
+  // A WMSAuth rule for a referer-protected channel would be an object with no
+  // effect that a later reader has to work out the purpose of.
+  assert.deepEqual(only({ mode: 'referer', allowedDomains: ['bbesport.com'] }), ['referer-group']);
+});
+
+check('a signed link derives the auth group and rule, and no referer group', () => {
+  assert.deepEqual(only({ mode: 'token', tokenKey: 'k', validMinutes: 20 }),
+                   ['wmsauth-group', 'wmsauth-rule']);
+});
+
+check('IP protection derives the group and the CIDRs, as two steps', () => {
+  // The group alone permits nothing. A plan stopping at it would report
+  // success over a restriction that lets nobody in — including the operator.
+  assert.deepEqual(only({ mode: 'ip', ranges: ['10.0.0.0/8'] }),
+                   ['ip-range-group', 'ip-range-cidrs']);
+});
+
+check('CIDRs already assigned are not assigned again', () => {
+  const d = deriveProtection({
+    network: NET, servers: SERVERS,
+    channels: [CH({ protection: { mode: 'ip', ranges: ['10.0.0.0/8'] } })],
+    existing: { ipRanges: [{ id: 'g9', name: rangeNameFor(NET) }], cidrsByGroup: { g9: ['10.0.0.0/8'] } },
+  });
+  assert.deepEqual(d.items.map(i => i.kind), ['ip-range-group']);
+  assert.equal(d.items[0].action, 'keep');
+});
+
+check('a domain list that changed is an update, not a second group', () => {
+  const d = deriveProtection({
+    network: NET, servers: SERVERS,
+    channels: [CH({ protection: { mode: 'referer', allowedDomains: ['a.com', 'b.com'] } })],
+    existing: { refererGroups: [{ id: 'r1', name: refererNameFor(NET), referers: ['a.com'] }] },
+  });
+  assert.equal(d.items[0].action, 'update');
+});
+
+check('an unchanged domain list is kept', () => {
+  const d = deriveProtection({
+    network: NET, servers: SERVERS,
+    channels: [CH({ protection: { mode: 'referer', allowedDomains: ['b.com', 'a.com'] } })],
+    existing: { refererGroups: [{ id: 'r1', name: refererNameFor(NET), referers: ['a.com', 'b.com'] }] },
+  });
+  assert.equal(d.items[0].action, 'keep', 'the same domains in another order counted as a change');
+  // Also with duplicates on either side: WMSPanel returns what it stores, and
+  // a positional comparison would rewrite the group on every plan forever.
+  const dup = deriveProtection({
+    network: NET, servers: SERVERS,
+    channels: [CH({ protection: { mode: 'referer', allowedDomains: ['a.com', 'a.com', 'b.com'] } })],
+    existing: { refererGroups: [{ id: 'r1', name: refererNameFor(NET), referers: ['b.com', 'a.com'] }] },
+  });
+  assert.equal(dup.items[0].action, 'keep');
+});
+
+check('two channels naming the same domain share one entry', () => {
+  const d = deriveProtection({
+    network: NET, servers: SERVERS,
+    channels: [
+      CH({ protection: { mode: 'referer', allowedDomains: ['x.com'] } }),
+      CH({ stream: 'two', protection: { mode: 'referer', allowedDomains: ['x.com', 'y.com'] } }),
+    ],
+  });
+  assert.deepEqual(d.items[0].detail.domains.sort(), ['x.com', 'y.com']);
+});
+
+console.log('\nWHAT WMSPANEL HAS NO WAY TO WRITE:');
+
+check('country restriction is refused, because the API cannot create one', () => {
+  // WMSPanel has GET /v1/geo and no POST: the country list is reference data
+  // it holds, not an object a caller creates. An operator who picked "by
+  // country" and saw no complaint would believe the channel was restricted.
+  const p = protectionProblems({ channel: CH({ protection: { mode: 'geo', countries: ['RU'] } }) });
+  assert.equal(p.find(x => x.code === 'geo-not-writable')?.severity, 'block');
+});
+
+check('a blocked mode keeps the whole plan out of sync', () => {
+  const d = deriveProtection({
+    network: NET, servers: SERVERS,
+    channels: [CH({ protection: { mode: 'geo', countries: ['RU'] } })],
+  });
+  assert.equal(d.inSync, false);
 });
 
 console.log('\nTHE KEY IS NEVER IN A PLAN:');
