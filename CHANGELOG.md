@@ -1,5 +1,66 @@
 # Changelog
 
+### v0.87.0 — iter22 m4: how it has held up, not whether it works right now
+Step five asked a question and threw the answer away. The probe ran, the page
+showed it, the next request forgot it — so the step could never turn green, and
+"did this channel hold through the match" was unanswerable.
+
+- **Checks are kept**, one row per channel per check, for thirty days. Manual
+  checks land in the same history as scheduled ones: separating them would put
+  holes in the record exactly where somebody was paying attention.
+- **Availability is three numbers, not one percentage.** Every edge serving,
+  some serving, none. Averaging them hides which happened, and they call for
+  different work — one is a machine, the other is the channel.
+- **Never checked is not healthy.** An untested channel reports as untested;
+  100% of nothing is the most flattering number available and the panel does
+  not print it.
+- **The reasons survive.** A 404 all evening is a missing route; a timeout all
+  evening is a network. "It was down" is not a report.
+- **The slowest answer survives the averaging**, because a channel that serves
+  everywhere in four seconds is technically fine and practically broken.
+
+**Checking on a schedule, off by default and per network.** A panel that starts
+making requests to production because somebody installed it is a panel nobody
+installs twice — being the viewer means fetching a playlist from every edge,
+twice, and that is real traffic to real servers. The interval floors at five
+minutes, a pass will not start on top of itself, and a channel checked a minute
+ago is left alone: without that a slow pass overlaps the next and the fleet gets
+asked twice as often as configured.
+
+**A check that could not run is recorded as not run**, never as a channel that
+was down — otherwise the history reports an outage every time the panel
+restarts.
+
+The probe itself moved out of the route so the schedule and the button run the
+same code. Two implementations of "is it arriving" would drift, and the drift
+would show as a history disagreeing with the page in front of the operator,
+which is worse than having no history.
+
+### v0.86.1 — it wrote the protection and kept asking for it
+Three faults, all visible the moment the button was pressed.
+
+**The plan read the groups and not the rules.** Every rule therefore looked
+absent and the step said *create* forever: the operator pressed write, the
+object was made, and the page went on asking — which reads as the panel not
+having done the thing it had just done. It reads both now.
+
+**"Written: undefined."** The protection apply returned no count and the page
+printed the field it expected. A panel saying it does not know what it just did
+is worse than one saying nothing.
+
+**Step five could never turn green**, because nothing remembered the probe: it
+ran, the page showed the answer, and the next request forgot it. The result now
+lives on the network — and carries its age, because a confirmation from three
+days ago is a statement about then, not about now. Older than a day and the
+step goes back to wanting attention with the age said out loud. A green step
+that stopped being true is worse than an empty one.
+
+**Signing a link stopped looking compulsory.** There is a button for a link to
+hand out and a separate one for a link locked to a named viewer; the IP field
+made the rarer case look required. The panel also says plainly how the thing is
+used, because "there is a token somewhere" is not a workflow: press sign, hand
+out the URL, it expires — the key never leaves the server, and the panel signs.
+
 ### v0.86.0 — the step said everything was set up, and the stream was open
 A channel switched to token protection sat unwritten while the Nimble step read
 **all set up**. The step counted routes and not protection, so every card on

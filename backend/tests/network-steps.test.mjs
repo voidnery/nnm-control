@@ -99,6 +99,28 @@ check('a failing probe is an action even when everything is configured', () => {
   assert.equal(step(r, 'verify').code, 'not-arriving');
 });
 
+check('a confirmed delivery turns the step green', () => {
+  // It never could: nothing remembered the probe, so the step asked forever.
+  const r = networkSteps({
+    network: NET(), servers: SERVERS, channels: CH, derived: SYNCED,
+    watched: { total: 3, ok: 3, failing: 0, at: new Date() },
+  });
+  assert.equal(step(r, 'verify').state, 'done');
+});
+
+check('a confirmation old enough to have stopped being true is not a tick', () => {
+  // A green step that was true last Tuesday is worse than an empty one: it
+  // answers a question about now with an answer about then.
+  const old = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+  const r = networkSteps({
+    network: NET(), servers: SERVERS, channels: CH, derived: SYNCED,
+    watched: { total: 3, ok: 3, failing: 0, at: old },
+  });
+  assert.equal(step(r, 'verify').state, 'action');
+  assert.equal(step(r, 'verify').code, 'stale');
+  assert.ok(step(r, 'verify').summary.ageHours >= 70);
+});
+
 console.log('\nWHAT IS NOT ASKED:');
 
 check('an origin is not asked what it takes content from', () => {

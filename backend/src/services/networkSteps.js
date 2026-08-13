@@ -92,8 +92,20 @@ export function networkSteps({ network, servers, channels = [], derived = null, 
   // configuration alone: everything above can be right while nothing arrives,
   // which is the whole reason the watch probe exists.
   if (!watched || !watched.total) add('verify', 'empty', {});
-  else if (watched.failing) add('verify', 'action', { ok: watched.ok, total: watched.total }, { code: 'not-arriving' });
-  else add('verify', 'done', { ok: watched.ok, total: watched.total });
+  else if (watched.failing) {
+    add('verify', 'action', { ok: watched.ok, total: watched.total }, { code: 'not-arriving' });
+  } else {
+    // Confirmed, and when. A probe from three days ago is not a statement
+    // about now, so an old result is reported as stale rather than as a tick —
+    // a green step that stopped being true is worse than no step.
+    const ageMin = watched.at ? Math.round((Date.now() - new Date(watched.at).getTime()) / 60000) : null;
+    if (ageMin != null && ageMin > 24 * 60) {
+      add('verify', 'action', { ok: watched.ok, total: watched.total, ageHours: Math.round(ageMin / 60) },
+          { code: 'stale' });
+    } else {
+      add('verify', 'done', { ok: watched.ok, total: watched.total, ageMin });
+    }
+  }
 
   const done = steps.filter(s => s.state === 'done').length;
   return {

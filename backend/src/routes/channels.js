@@ -172,8 +172,12 @@ channelRouter.post('/networks/:id/protection/apply', requirePerm('cdn.manage'), 
                  rolledBack: undone.length ? `${undone.length} object(s) removed` : 'nothing to roll back' });
   }
 
-  await logEvent(req, 'cdn.protection.apply', { network: network.name, ok, steps: steps.length });
-  res.status(ok ? 200 : 502).json({ ok, steps, plan });
+  const applied = steps.filter(x => x.ok).length;
+  await logEvent(req, 'cdn.protection.apply', { network: network.name, ok, applied });
+  // `applied` because the page reports "written: N" and read it off this
+  // response — without it the operator was told "written: undefined", which is
+  // the panel admitting it does not know what it just did.
+  res.status(ok ? 200 : 502).json({ ok, applied, steps, plan });
 });
 
 // A link that satisfies this channel's protection, signed here because the
@@ -362,7 +366,19 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
   ]);
   const plan = derivePlan({ network, servers, channels, originApps, existingRoutes: routes });
   const authGroups = await wmspanel.authGroupList(cfg).then(r => r.groups || []).catch(() => []);
-  const protPlan = deriveProtection({ network, servers, channels, originApps, existing: { groups: authGroups } });
+  // The rules too, not only the groups. Without them every rule looked absent
+  // and the plan said "create" forever: the operator pressed write, the object
+  // was made, and the step went on asking for it — which reads as the panel
+  // not having done what it just did.
+  const authRulesFlat = [];
+  for (const g of authGroups) {
+    const rules = await wmspanel.authRuleList(cfg, g.id).then(r => r.rules || []).catch(() => []);
+    for (const r of rules) authRulesFlat.push({ ...r, groupId: g.id });
+  }
+  const protPlan = deriveProtection({
+    network, servers, channels, originApps,
+    existing: { groups: authGroups, rules: authRulesFlat },
+  });
   res.json({
     ...plan,
     channels: channels.map(c => ({ ...pub(c), readiness: channelReadiness({ channel: c, plan }) })),
@@ -373,7 +389,17 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
     // `watched` is not included. Whether content actually arrives is not
     // derivable from configuration — it takes a probe — so the step is empty
     // until the operator runs one, and the page passes the result back in.
-    steps: networkSteps({ network, servers, channels, derived: plan, protection: protPlan }),
+    steps: networkSteps({
+      network, servers, channels, derived: plan, protection: protPlan,
+      // The last time somebody actually asked an edge for a playlist. Step
+      // five could never turn green because nothing remembered the answer:
+      // the probe ran, the page showed it, and the next request forgot it.
+      watched: network.lastVerified?.at ? {
+        total: network.lastVerified.total, ok: network.lastVerified.ok,
+        failing: network.lastVerified.total - network.lastVerified.ok,
+        at: network.lastVerified.at,
+      } : null,
+    }),
     // Who may watch, derived alongside what carries it. Same computation for
     // preview and apply, for the same reason as the routes.
     protection: protPlan,

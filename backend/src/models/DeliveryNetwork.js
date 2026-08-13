@@ -99,6 +99,27 @@ const networkSchema = new mongoose.Schema({
   audience: { type: String, enum: ['internal', 'public'], default: 'internal' },
   nodes: { type: [nodeSchema], default: [] },
   gateway: { type: gatewaySchema, default: () => ({}) },
+  // Whether the panel asks on its own, and how often.
+  //
+  // Off by default and deliberately: a panel that starts making requests to
+  // production because somebody installed it is a panel nobody installs twice.
+  // Being the viewer means fetching a playlist from every edge, so this is
+  // real traffic to real servers and the operator decides.
+  monitor: {
+    enabled: { type: Boolean, default: false },
+    intervalMin: { type: Number, default: 5 },
+  },
+  // The last time delivery was actually verified, and what came back.
+  //
+  // Kept because "does it arrive" is not derivable from configuration and the
+  // answer has a shelf life: a probe from three days ago is not a statement
+  // about now, so the age is stored alongside the result and shown with it.
+  lastVerified: {
+    at: { type: Date, default: null },
+    total: { type: Number, default: 0 },
+    ok: { type: Number, default: 0 },
+    by: { type: String, default: '' },
+  },
   createdBy: { type: String, default: '' },
 }, { timestamps: true });
 

@@ -3,6 +3,7 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
+import { DeliveryCheck, availability } from '../models/DeliveryCheck.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { planRoutes } from '../services/deliveryPlan.js';
 import { networkState, indexStreams, probeReason } from '../services/networkState.js';
@@ -145,6 +146,50 @@ deliveryRoutesRouter.post('/networks/:id/cache', requirePerm('cdn.view'), async 
   res.json({ rows, chunkSeconds, at: new Date().toISOString() });
 });
 
+// How delivery has been holding up, from the history rather than the last
+// answer. One reading is about one moment; an operator asking whether a
+// channel held through a match is asking about a stretch of time.
+deliveryRoutesRouter.get('/networks/:id/history', requirePerm('cdn.view'), async (req, res) => {
+  const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 24 * 30);
+  const since = new Date(Date.now() - hours * 3600_000);
+  const rows = await DeliveryCheck.find({ network: req.params.id, at: { $gte: since } })
+    .sort({ at: -1 }).limit(2000);
+
+  const byChannel = new Map();
+  for (const r of rows) {
+    const key = `${r.application}/${r.stream}`;
+    if (!byChannel.has(key)) byChannel.set(key, []);
+    byChannel.get(key).push(r);
+  }
+  const net = await DeliveryNetwork.findById(req.params.id);
+  res.json({
+    hours,
+    monitor: { enabled: Boolean(net?.monitor?.enabled), intervalMin: net?.monitor?.intervalMin || 5 },
+    // Null rather than an empty array when nothing was checked: an untested
+    // channel is not a healthy one, and the page has to be able to say so.
+    channels: [...byChannel.entries()].map(([name, checks]) => ({
+      channel: name, availability: availability(checks),
+      recent: checks.slice(0, 24).map(c => ({ at: c.at, ok: c.ok, total: c.total, worstMs: c.worstMs })),
+    })),
+    overall: availability(rows),
+  });
+});
+
+deliveryRoutesRouter.put('/networks/:id/monitor', requirePerm('cdn.manage'), async (req, res) => {
+  const n = await DeliveryNetwork.findById(req.params.id);
+  if (!n) return res.status(404).json({ error: 'network-not-found', code: 'network-not-found' });
+  if (req.body?.enabled !== undefined) n.monitor.enabled = Boolean(req.body.enabled);
+  if (req.body?.intervalMin !== undefined) {
+    // Floored rather than trusted: being the viewer is real traffic to real
+    // servers, and a one-minute sweep across a fleet is the panel becoming the
+    // load it was built to measure.
+    n.monitor.intervalMin = Math.max(5, Math.min(1440, Number(req.body.intervalMin) || 5));
+  }
+  await n.save();
+  await logEvent(req, 'cdn.monitor.update', { network: n.name, ...n.monitor.toObject?.() });
+  res.json({ monitor: n.monitor });
+});
+
 // Be the viewer.
 //
 // Three milestones inferred delivery from what an edge was streaming, and an
@@ -211,7 +256,25 @@ deliveryRoutesRouter.post('/networks/:id/watch', requirePerm('cdn.view'), async 
     };
   }));
 
-  res.json({ path, application, stream, results, at: new Date().toISOString() });
+  // Remembered, so the setup step can say whether delivery was ever confirmed
+  // rather than asking forever. Stored on the network because that is what the
+  // step is about.
+  const okCount = results.filter(r => r.verdict?.ok).length;
+  // Recorded in the same history as the scheduled checks. A manual check is
+  // evidence too — and separating them would mean the graph has holes exactly
+  // where somebody was paying attention.
+  await DeliveryCheck.create({
+    network: req.params.id, application, stream, at: new Date(),
+    ok: okCount, total: results.length,
+    codes: [...new Set(results.map(r => r.verdict?.code).filter(Boolean))],
+    worstMs: results.reduce((m, r) => (r.ms != null && (m == null || r.ms > m) ? r.ms : m), null),
+    by: req.user?.username || '',
+  }).catch(() => { /* the answer is still worth returning */ });
+  await DeliveryNetwork.updateOne({ _id: req.params.id }, {
+    $set: { lastVerified: { at: new Date(), total: results.length, ok: okCount, by: req.user?.username || '' } },
+  }).catch(() => { /* the answer is still worth returning */ });
+
+  res.json({ path, application, stream, results, okCount, at: new Date().toISOString() });
 });
 
 // What the servers say, next to what the plan says. Reads live_streams_status

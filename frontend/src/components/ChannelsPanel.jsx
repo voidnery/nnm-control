@@ -136,11 +136,22 @@ function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signi
             <div className="inset">
               <div className="eyebrow">{t('ch.signed')}</div>
               <div className="hint">{t('ch.signedHint')}</div>
+              <div className="hint">{t('ch.tokenHowto')}</div>
+              {/* Two buttons, because there are two situations and the field
+                  made the rarer one look compulsory. Most of the time an
+                  operator wants a link to hand out; occasionally they want one
+                  locked to a named viewer. */}
               <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                <input className="mono" style={{ maxWidth: 200 }} placeholder={t('ch.viewerIp')}
+                <button className="primary" disabled={signing}
+                        onClick={() => onSign(c, l.production.url, '')}>
+                  {signing ? '…' : t('ch.signAnyone')}
+                </button>
+                <span className="hint">{t('ch.or')}</span>
+                <input className="mono" style={{ maxWidth: 180 }} placeholder={t('ch.viewerIp')}
                        value={signIp} onChange={e => setSignIp(e.target.value)} />
-                <button disabled={signing} onClick={() => onSign(c, l.production.url, signIp)}>
-                  {signing ? '…' : t('ch.signIt')}
+                <button disabled={signing || !signIp.trim()}
+                        onClick={() => onSign(c, l.production.url, signIp.trim())}>
+                  {t('ch.signFor')}
                 </button>
               </div>
               {signed && (

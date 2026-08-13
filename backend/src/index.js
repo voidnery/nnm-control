@@ -29,6 +29,8 @@ import { transcoderTemplateRouter } from './routes/transcoderTemplate.js';
 import { transcoderFleetRouter } from './routes/transcoderFleet.js';
 import { transcoderEditRouter } from './routes/transcoderEdit.js';
 import { startStatsCollector } from './services/statsCollector.js';
+import { startMonitor } from './services/deliveryMonitor.js';
+import { probeChannel } from './services/channelProbe.js';
 import { startSpoolSweeper } from './services/mediaSpool.js';
 import { startTaskReaper } from './services/agentBus.js';
 import { startAgentWatchdog } from './services/agentWatchdog.js';
@@ -107,6 +109,10 @@ const start = async () => {
   await connectDb();
   startPeriodicSync();
   await startStatsCollector();
+  // Delivery monitoring. Per-network and off by default, so installing the
+  // panel does not start it making requests to production; the loop runs
+  // regardless and finds nothing to do until somebody switches a network on.
+  startMonitor({ probe: probeChannel, onError: (e) => console.error('[monitor]', e?.message || e) });
   startSpoolSweeper();
   startTaskReaper();
   startAgentWatchdog();

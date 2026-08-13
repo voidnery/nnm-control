@@ -6,6 +6,7 @@ import { useToast } from '../toast.jsx';
 import { useConfirm } from '../confirm.jsx';
 import IconButton from './IconButton.jsx';
 import DeliveryFlowBoard from './DeliveryFlowBoard.jsx';
+import DeliveryHistoryPanel from './DeliveryHistoryPanel.jsx';
 
 // What the network implies, before anything is written.
 //
@@ -322,6 +323,11 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       </>}
 
       {shows('verify') && <>
+      {/* How it has been holding up, above whether it works this second. The
+          first is what somebody actually wants to know and the panel could
+          not answer it at all. */}
+      <DeliveryHistoryPanel network={network} />
+
       <div className="gsection">{t('cdn.step3')}</div>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={loadState} disabled={busy || !list.length}>{t('cdn.checkState')}</button>

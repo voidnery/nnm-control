@@ -172,6 +172,10 @@ window.fetch = (u) => {
                     tests:[{ edge:'RU-2', url:'http://10.0.0.2:8081/test2/test_stream/playlist.m3u8', exposes:'edge-address', routed:true, healthy:true }] } },
           { channel:{ id:'C2', application:'povtor_tennis', stream:'main', label:'', kind:'production', network:null, name:'povtor_tennis/main' },
             network:null, edges:[], links:null, code:'not-delivered' }] }), text:()=>Promise.resolve('{}') });
+  if (/\/history/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
+    hours:24, monitor:{ enabled:false, intervalMin:5 }, overall:null,
+    channels:[{ channel:'test2/test_stream', availability:{ checks:12, served:11, partial:1, failed:0, pct:91.7, reasons:[], worstMs:340 },
+                recent:[{ at:new Date().toISOString(), ok:3, total:3, worstMs:200 }] }] }), text:()=>Promise.resolve('{}') });
   if (/\/networks\/[^/]+\/derived$/.test(s)) return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve({
     items:[{ kind:'route', action:'create', why:'edge-needs-route', subject:'RU-2', application:'test2',
              detail:{ from:'/test2/', to:'79.98.187.66:8081/test2/' },

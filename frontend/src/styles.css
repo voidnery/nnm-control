@@ -813,3 +813,10 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .gpipe-h .mono { color: var(--accent); font-weight: 550; }
 .gcol-h { color: var(--accent); }
 .step-body .gsection, .steppop-body .gsection { margin-top: var(--sp-4); }
+
+/* One mark per check, oldest on the left, because that is how time is read. */
+.hist-bar { display: flex; gap: 2px; align-items: flex-end; }
+.hist-tick { width: 6px; height: 18px; border-radius: 2px; background: var(--line); }
+.hist-tick.ok { background: var(--ok, #2f7d54); }
+.hist-tick.part { background: var(--warn, #a97b28); }
+.hist-tick.bad { background: var(--err, #a33); }
