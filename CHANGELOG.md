@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.94.2 — the agent was answering; the panel was asking wrong
+Two faults on one screen, both mine.
+
+**The task route had no method.** The agent bus dispatches on
+`"GET /host/ports"`; five calls passed `"/host/ports"`, which matches no
+handler. The task went out, came back empty, and the panel reported *"the ports
+were not checked — the agent did not answer"* about an agent that was polling
+every second and had answered v23 a line above.
+
+The check that should have caught it matched the path alone and therefore
+passed against all five. It matches the method now, and a new one walks every
+`runTask` call in the routes: a route without a method produces a key nothing
+matches and a panel blaming the wrong component.
+
+**"Proxy mode needs an edge" was refusing the normal order of work.** A machine
+is prepared and *then* joined to a network — telling somebody preparing a fresh
+VM that it is misconfigured for not already being in a topology it cannot be in
+yet is backwards. It is a note now, and the nginx written points at
+`edge.invalid`, a reserved TLD that can never resolve: a placeholder that fails
+loudly rather than one quietly pointing somewhere real.
+
+**And "not checked" now says why.** An old agent answers promptly with "unknown
+endpoint" and a dead one answers nothing; reporting both as silence sends the
+operator to check a network that is fine. The reason is shown, and when the
+agent is simply too old the panel says which version it has and which it needs.
+
 ### v0.94.1 — HTTP 404 on the button
 Four routes shipped as `/servers/:id/gateway/plan` on a router already mounted
 at `/api/servers`, so their real path was `/api/servers/servers/…` and the

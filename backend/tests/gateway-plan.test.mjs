@@ -54,9 +54,21 @@ check('a domain that is not a domain is refused', () => {
     .some(x => x.code === 'bad-domain'));
 });
 
-check('proxy mode without an edge is refused rather than pointed at nothing', () => {
+check('proxy mode before the machine has joined a network is not a fault', () => {
+  // The normal order of work: prepare a machine, then put it in a network.
+  // Blocking here told an operator preparing a fresh VM that their brand-new
+  // machine was misconfigured for not already being in a topology it cannot
+  // be in yet.
   const p = plan({ mode: 'proxy', edges: [] });
-  assert.ok(p.blocking.some(x => x.code === 'proxy-needs-an-edge'));
+  assert.deepEqual(p.blocking, [], JSON.stringify(p.problems));
+  assert.equal(p.problems.find(x => x.code === 'proxy-has-no-edge-yet')?.severity, 'note');
+});
+
+check('a proxy with nowhere to forward points at something that cannot resolve', () => {
+  // `edge.invalid` is a reserved TLD: a placeholder that fails loudly rather
+  // than one that quietly points somewhere real.
+  const c = nginxConf({ domain: 'x.example.com', mode: 'proxy', edges: [] });
+  assert.match(c, /edge\.invalid/);
 });
 
 check('the plan counts what it will do, not describes it', () => {
@@ -219,7 +231,22 @@ check('the plan is recomputed at apply, not taken from the request', () => {
 check('ports are re-read rather than remembered', () => {
   // Something can start listening between a plan and a press, and this is the
   // check whose staleness breaks somebody else's service.
-  assert.ok(/'\/host\/ports'/.test(applyRoute));
+  // With the method, because that is what the agent bus dispatches on. This
+  // assertion matched the path alone and therefore passed against every one of
+  // the five calls that were missing their method — the task never reached a
+  // handler and the panel reported "the agent did not answer" about an agent
+  // answering perfectly well.
+  assert.ok(/'GET \/host\/ports'/.test(applyRoute), 'the ports task has no method and will never dispatch');
+});
+
+check('every agent task names a method, as the bus dispatches on one', () => {
+  // `task.route.split(' ')[0]` is the method; a route without one produces a
+  // key no handler matches, an empty result, and a panel blaming the agent.
+  // Five calls shipped this way.
+  for (const m of routes.matchAll(/runTask\([^,]+,\s*'([^']+)'/g)) {
+    assert.match(m[1], /^(GET|POST|PUT|PATCH|DELETE) \//,
+      `runTask("${m[1]}") has no method`);
+  }
 });
 
 check('only steps the plan produced are sent', () => {

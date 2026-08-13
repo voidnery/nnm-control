@@ -29,6 +29,9 @@ export function nginxConf({ domain, mode = 'redirect', resolvers = '127.0.0.53 1
     # passes through this machine — which is the cost, stated where it is paid.
     location / {
         # Resolved per request, deliberately: see the resolver note above.
+        # Filled in when this machine joins a network. The placeholder is a
+        # reserved TLD and can never resolve, so it fails loudly
+        # rather than quietly pointing somewhere real.
         set $edge "${edges[0]?.host || 'edge.invalid'}:${edges[0]?.httpPort || 8081}";
         proxy_pass http://$edge;
         proxy_set_header Host $host;
@@ -93,7 +96,15 @@ export function gatewayPlan({
   const problems = [];
   if (!isDomain(domain)) problems.push({ code: 'bad-domain', severity: 'block' });
   if (!['redirect', 'proxy'].includes(mode)) problems.push({ code: 'bad-mode', severity: 'block' });
-  if (mode === 'proxy' && !edges.length) problems.push({ code: 'proxy-needs-an-edge', severity: 'block' });
+  // Proxy mode with no edges yet is the normal order of work, not a fault: a
+  // machine is prepared and *then* joined to a network. Refusing it here told
+  // an operator preparing a fresh VM that their brand-new machine was
+  // misconfigured for not already being in a topology it cannot be in.
+  //
+  // It is still worth saying, because a proxy gateway with nowhere to forward
+  // to answers nothing — so it is a note, and the nginx it writes points at a
+  // placeholder that is obviously a placeholder rather than at a guess.
+  if (mode === 'proxy' && !edges.length) problems.push({ code: 'proxy-has-no-edge-yet', severity: 'note' });
 
   // Ports first, and blocking. Installing nginx where something already holds
   // 80 produces a broken service rather than an error, and the operator finds

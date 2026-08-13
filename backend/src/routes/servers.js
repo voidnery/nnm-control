@@ -173,7 +173,7 @@ serversRouter.post('/:id/readiness', requirePerm('servers.manage'), async (req, 
     // Through the agent bus like every other agent call: the panel does not
     // dial a box that has an agent, and a second way of reaching one would be
     // a second set of rules about when it is allowed to.
-    report = await runTask(server, '/host/readiness', { createdBy: req.user?.username || '' });
+    report = await runTask(server, 'GET /host/readiness', { createdBy: req.user?.username || '' });
   } catch {
     // An agent that cannot be asked is not a machine that lacks things. The
     // readiness function is given no report and says which of the two it is.
@@ -215,10 +215,18 @@ serversRouter.post('/:id/gateway/plan', requirePerm('servers.manage'), async (re
   // than remembered: something can start listening between a plan and an
   // apply, and this is the check whose staleness breaks a service.
   let ports = null;
+  let portsError = null;
   try {
-    const r = await runTask(server, '/host/ports', { createdBy: req.user?.username || '' });
+    const r = await runTask(server, 'GET /host/ports', { createdBy: req.user?.username || '' });
     ports = r?.ports || null;
-  } catch { ports = null; }
+    // A result with no ports is not the same as no result. An older agent
+    // answers "unknown endpoint" perfectly promptly, and reporting that as
+    // "the agent did not answer" sends the operator to check a network that
+    // is fine.
+    if (!ports) portsError = r?.error || 'the agent answered without port information';
+  } catch (e) {
+    portsError = String(e?.message || e).slice(0, 200);
+  }
 
   // The edges this gateway would send viewers to, for proxy mode.
   const nets = await DeliveryNetwork.find({ 'nodes.server': server._id });
@@ -241,6 +249,10 @@ serversRouter.post('/:id/gateway/plan', requirePerm('servers.manage'), async (re
     // service is the one destructive thing here and gets its own consent
     // rather than riding along inside a longer list.
     replace: held.length ? replacePlan(held) : [],
+    // Why the ports are unknown, when they are. "Not checked" without a
+    // reason is a dead end: the operator cannot tell an old agent from a dead
+    // one, and the two are fixed differently.
+    portsError,
     agent: { version: server.agent?.version ?? null, need: 22 },
   });
 });
@@ -266,7 +278,7 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
   // plan and a press, and this is precisely the check whose staleness breaks
   // somebody else's service.
   let ports = null;
-  try { ports = (await runTask(server, '/host/ports', { createdBy: req.user?.username || '' }))?.ports || null; }
+  try { ports = (await runTask(server, 'GET /host/ports', { createdBy: req.user?.username || '' }))?.ports || null; }
   catch { ports = null; }
 
   const nets = await DeliveryNetwork.find({ 'nodes.server': server._id });
@@ -289,7 +301,7 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
 
   let result;
   try {
-    result = await runTask(server, '/host/apply', { body: { steps }, timeoutMs: 15 * 60_000,
+    result = await runTask(server, 'POST /host/apply', { body: { steps }, timeoutMs: 15 * 60_000,
                                                     createdBy: req.user?.username || '' });
   } catch (e) {
     await logEvent(req, 'server.gateway.apply', { server: server.name, domain, ok: false });
@@ -336,7 +348,7 @@ serversRouter.post('/:id/gateway/rollback', requirePerm('servers.manage'), async
     return { id: a.id };
   });
 
-  const result = await runTask(server, '/host/rollback', { body: { steps: undo }, timeoutMs: 10 * 60_000,
+  const result = await runTask(server, 'POST /host/rollback', { body: { steps: undo }, timeoutMs: 10 * 60_000,
                                                            createdBy: req.user?.username || '' })
     .catch(e => ({ steps: [], error: String(e?.message || e) }));
   await logEvent(req, 'server.gateway.rollback', { server: server.name, steps: undo.length });

@@ -117,7 +117,23 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
       )}
 
       {plan?.blocking?.filter(b => b.code !== 'ports-held').map((b, i) => (
-        <div key={i} className="error-box">{t('gw.block.' + b.code)}</div>
+        <div key={i} className="error-box">
+          {t('gw.block.' + b.code)}
+          {/* The reason, when there is one. "Not checked" on its own is a dead
+              end: an old agent and a dead one look identical and are fixed
+              differently. */}
+          {b.code === 'ports-not-checked' && plan.portsError && (
+            <div className="mono hint">{plan.portsError}</div>
+          )}
+          {b.code === 'ports-not-checked' && plan.agent?.version < plan.agent?.need && (
+            <div className="hint">{t('gw.block.agentOld', { have: plan.agent.version ?? '—', need: plan.agent.need })}</div>
+          )}
+        </div>
+      ))}
+      {/* Notes are not failures: a machine being prepared before it joins a
+          network is the normal order of work. */}
+      {plan?.problems?.filter(p2 => p2.severity === 'note').map((p2, i) => (
+        <div key={i} className="hint">{t('gw.note.' + p2.code)}</div>
       ))}
 
       {plan && !plan.blocking?.length && (
