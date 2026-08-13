@@ -25,6 +25,10 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
   // answer arrives on `initial.tls`; this holds a fresher one.
   const [tls, setTls] = useState(initial.tls || null);
   const [tlsBusy, setTlsBusy] = useState(false);
+  // What this machine is decides what the dialog asks. A gateway has no media
+  // server on it, so a WMSPanel mapping, a Nimble HTTP port and playback
+  // endpoints are all questions about something that is not there.
+  const isNimble = (form.purpose || 'nimble') !== 'gateway';
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   // Asked of the server rather than declared by the operator. LL-HLS needs
@@ -75,7 +79,22 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
   return (
     <div className="modal-back" {...backdropClose(onClose)}>
       <div className="modal" onClick={e => e.stopPropagation()}>
-        <h3>{isEdit ? 'Edit server' : 'Add server'}</h3>
+        <h3>{isEdit ? t('sp.editTitle') : t('sp.addTitle')}</h3>
+        {/* First, because it decides what the rest of this dialog is even
+            asking. A gateway has no WMSPanel mapping, no Nimble port and no
+            playback endpoints; a media server has no use for a TLS port. The
+            dialog used to ask everything of everyone, which is how a form
+            teaches people to skip fields. */}
+        <label>{t('sp.purposeLabel')}</label>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {['nimble', 'nimble-cdn', 'gateway'].map(v => (
+            <button key={v} className={'tagchip' + ((form.purpose || 'nimble') === v ? ' on' : '')}
+                    onClick={() => set('purpose', v)}>{t('sp.purpose.' + v)}</button>
+          ))}
+        </div>
+        <div className="hint">{t('sp.purpose.' + (form.purpose || 'nimble') + '.note')}</div>
+        {!isNimble && <div className="hint">{t('sp.gatewayHint')}</div>}
+
         <label>{t('sp.name')}</label>
         <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="edge-01" />
         <div className="field-inline">
@@ -91,20 +110,26 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
           )}
         </div>
         {!wms && <>
-          <label>Management token {isEdit && <span className="hint">(empty = keep current)</span>}</label>
+          <label>{t('sp.mgmtToken')} {isEdit && <span className="hint">{t('sp.keepCurrent')}</span>}</label>
           <input type="password" value={form.token} onChange={e => set('token', e.target.value)}
                  placeholder={initial.hasToken ? '••••••• (set)' : 'empty = no auth on server'} />
         </>}
+        {/* A gateway is not in WMSPanel and never will be: no media server
+            runs on it, so there is nothing for WMSPanel to manage. */}
+        {isNimble && <>
         <label>{t('sp.wmspanelServer')}</label>
         {wpServers ? (
           <Select value={form.wmspanelServerId} onChange={v => set('wmspanelServerId', v)}
-                  options={[{ value: '', label: '— not mapped —' }, ...wpServers.map(ws => ({ value: ws.id, label: `${ws.name} (${ws.status})` }))]} />
+                  options={[{ value: '', label: t('sp.notMapped') }, ...wpServers.map(ws => ({ value: ws.id, label: `${ws.name} (${ws.status})` }))]} />
         ) : (
           <input value={form.wmspanelServerId} onChange={e => set('wmspanelServerId', e.target.value)}
                  placeholder={t('sp.wmspanelIdHint')} className="mono" />
         )}
+        </>}
+
         <label>{t('sp.tagsComma')}</label>
         <input value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="edge, moscow" />
+        {isNimble && <>
         <label>{t('sp.playback')}</label>
         <div className="hint" style={{ marginBottom: 6 }}>{t('sp.playbackHint')}</div>
         {/* iter9 m2 - the RTMP port and the hostnames are read from WMSPanel,
@@ -113,14 +138,6 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
             "use Nimble's default", and the playback dialog says when it did. */}
         {/* What this machine is for. It decides which checks apply — a gateway
             judged as a media server reads as broken while being correct. */}
-        <label>{t('sp.purposeLabel')}</label>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          {['nimble', 'nimble-cdn', 'gateway'].map(v => (
-            <button key={v} className={'tagchip' + ((form.purpose || 'nimble') === v ? ' on' : '')}
-                    onClick={() => set('purpose', v)}>{t('sp.purpose.' + v)}</button>
-          ))}
-        </div>
-        <div className="hint">{t('sp.purpose.' + (form.purpose || 'nimble') + '.note')}</div>
 
         <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 8 }}>
           <span className="hint" style={{ flex: 1 }}>{t('sp.httpPortHint')}</span>
@@ -128,9 +145,11 @@ function ServerModal({ initial, onClose, onSaved, wms }) {
                  value={form.httpPort || ''} onChange={e => set('httpPort', e.target.value)} />
         </div>
 
-        {/* The TLS port sits next to the HTTP one because they are the same
-            kind of fact, and the check sits next to the port because that is
-            the number it asks about. */}
+        </>}
+
+        {/* TLS is asked of every purpose: a gateway needs it to terminate for
+            viewers, and a media server needs it for LL-HLS. It is the one
+            question that means the same thing on both. */}
         <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 4 }}>
           <span className="hint" style={{ flex: 1 }}>{t('sp.httpsPortHint')}</span>
           <input type="number" style={{ flex: '0 0 110px' }} placeholder="443"
@@ -268,7 +287,7 @@ export default function ServersPage() {
         </div>
       )}
       {can('servers.manage') && (
-        <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>+ Add server</button>
+        <button className="primary" style={{ marginBottom: 14 }} onClick={() => setModal({})}>{t('sp.add')}</button>
       )}
       <div className="panel">
         <table>

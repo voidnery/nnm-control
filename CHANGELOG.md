@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.91.1 — the server dialog asked everything of everyone
+Adding a machine offered a WMSPanel mapping to a gateway that will never be in
+WMSPanel, playback endpoints to a box with no media server, and buried the one
+field that decides all of it — the purpose — in the middle of the form.
+
+**The purpose is asked first**, because it governs the rest. A gateway is then
+not asked for a WMSPanel mapping or playback endpoints: there is no media
+server on it, so those are questions about something that is not there. TLS is
+asked of everything, being the one question that means the same on both — a
+gateway terminates it for viewers, a media server needs it for LL-HLS.
+
+Some of the dialog was still in English inside a Russian panel: "Add server",
+"Edit server", "Management token", "— not mapped —". That is what an unfinished
+screen looks like from the outside, whatever the state of the code behind it.
+
+Five checks, two proven by contradiction. A form that asks for things a machine
+cannot have is how people learn to skip fields, and then to skip the one that
+mattered.
+
 ### v0.91.0 — iter23 m1: what a machine is for, and what it has
 The two remaining pieces — TLS on the edges, and a gateway VM — turn out to be
 one technical problem: the agent has to work on machines that are not media

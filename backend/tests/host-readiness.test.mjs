@@ -146,5 +146,49 @@ check('a missing tool yields null rather than a confident false', () => {
     'portListening reports "free" when it could not look');
 });
 
+console.log('\nTHE DIALOG ASKS WHAT THE PURPOSE NEEDS:');
+
+const dlg = readFileSync(new URL('../../frontend/src/pages/ServersPage.jsx', import.meta.url), 'utf8');
+const dict = readFileSync(new URL('../../frontend/src/i18n.jsx', import.meta.url), 'utf8');
+
+check('the purpose is asked before anything it decides', () => {
+  // It decides what the rest of the dialog is even asking. Buried in the
+  // middle, it read as one field among many and the form asked everything of
+  // everyone — which is how a form teaches people to skip fields.
+  assert.ok(dlg.indexOf("t('sp.purposeLabel')") < dlg.indexOf("t('sp.name')"),
+    'the purpose is asked after the fields it governs');
+});
+
+check('a gateway is not asked for a WMSPanel mapping', () => {
+  // It is not in WMSPanel and never will be: no media server runs on it, so
+  // there is nothing there to manage.
+  const i = dlg.indexOf("t('sp.wmspanelServer')");
+  assert.ok(/\{isNimble && <>[\s\S]{0,400}$/.test(dlg.slice(Math.max(0, i - 400), i)),
+    'the WMSPanel mapping is offered on a machine that has no Nimble');
+});
+
+check('a gateway is not asked for playback endpoints', () => {
+  const i = dlg.indexOf("t('sp.playback')");
+  assert.ok(/\{isNimble && <>[\s\S]{0,300}$/.test(dlg.slice(Math.max(0, i - 300), i)));
+});
+
+check('TLS is asked of every purpose', () => {
+  // The one question that means the same on both: a gateway terminates it for
+  // viewers, a media server needs it for LL-HLS.
+  const tls = dlg.indexOf("t('sp.httpsPortHint')");
+  const closes = dlg.lastIndexOf('</>}', tls);
+  assert.ok(closes < tls, 'the TLS port is inside a Nimble-only block');
+});
+
+check('the dialog speaks the panel\'s language', () => {
+  // "Add server" and "not mapped" sat in English inside a Russian dialog,
+  // which is what an unfinished screen looks like from the outside.
+  for (const k of ['sp.addTitle', 'sp.editTitle', 'sp.mgmtToken', 'sp.notMapped']) {
+    assert.equal((dict.match(new RegExp(`'${k.replace('.', '\\.')}':`, 'g')) || []).length, 2, k);
+    assert.ok(dlg.includes(`t('${k}')`), `${k} is declared and not used`);
+  }
+  assert.ok(!/>\+ Add server</.test(dlg), 'a hard-coded English label survived');
+});
+
 console.log(failures ? `\n${failures} readiness check(s) failed` : '\nall readiness checks passed');
 process.exit(failures ? 1 : 0);
