@@ -42,6 +42,33 @@ const GLOBALS = new Set([
   '__dirname', '__filename', 'undefined', 'NaN', 'Infinity', 'arguments', 'module', 'exports',
 ]);
 
+// acorn-walk has no base for JSX, and every walk in this file meets it once
+// the caller passes a JSX parser — including the small ones that only collect
+// declarations. Without a base they throw on the first `<div>`, which is loud
+// but stops the gate dead.
+//
+// Built once and given to every walk: children are visited so an expression
+// inside `{...}` is still checked, and the leaves are no-ops.
+const BASE = { ...walk.base };
+BASE.JSXElement = (n, st, c) => {
+  if (n.openingElement) c(n.openingElement, st);
+  for (const child of n.children || []) c(child, st);
+};
+BASE.JSXFragment = (n, st, c) => { for (const child of n.children || []) c(child, st); };
+BASE.JSXOpeningElement = (n, st, c) => { for (const a of n.attributes || []) c(a, st); };
+BASE.JSXAttribute = (n, st, c) => { if (n.value) c(n.value, st); };
+BASE.JSXSpreadAttribute = (n, st, c) => { if (n.argument) c(n.argument, st); };
+BASE.JSXSpreadChild = (n, st, c) => { if (n.expression) c(n.expression, st); };
+BASE.JSXExpressionContainer = (n, st, c) => { if (n.expression) c(n.expression, st); };
+BASE.JSXClosingElement = () => {};
+BASE.JSXOpeningFragment = () => {};
+BASE.JSXClosingFragment = () => {};
+BASE.JSXIdentifier = () => {};
+BASE.JSXMemberExpression = () => {};
+BASE.JSXNamespacedName = () => {};
+BASE.JSXText = () => {};
+BASE.JSXEmptyExpression = () => {};
+
 // Every name a binding pattern introduces: plain, destructured, defaulted,
 // rested, nested. Written out because each shape a regex missed became a false
 // positive, and false positives are what discredited the previous attempt.
@@ -84,7 +111,7 @@ function collect(node, add) {
     ImportDeclaration(n) { for (const sp of n.specifiers) add(sp.local.name); },
     FunctionExpression() {},
     ArrowFunctionExpression() {},
-  });
+  }, BASE);
 }
 
 function scopeOf(fnNode) {
@@ -95,10 +122,10 @@ function scopeOf(fnNode) {
   return names;
 }
 
-export function undefinedIdentifiers(source, filename = '<anonymous>') {
+export function undefinedIdentifiers(source, filename = '<anonymous>', { parse: parseWith = parse } = {}) {
   let ast;
   try {
-    ast = parse(source, { ecmaVersion: 'latest', sourceType: 'module', locations: true });
+    ast = parseWith(source, { ecmaVersion: 'latest', sourceType: 'module', locations: true });
   } catch (e) {
     return [{ name: '(parse error)', line: e.loc?.line || 0, file: filename, message: e.message }];
   }
@@ -146,6 +173,39 @@ export function undefinedIdentifiers(source, filename = '<anonymous>') {
     ImportSpecifier() {},
     ImportDefaultSpecifier() {},
     ImportNamespaceSpecifier() {},
+    // JSX, when a caller passes a parser that understands it. `<Foo>` is a
+    // reference to `Foo` and must be checked; `<div>` is not, and neither is
+    // an attribute name. Ignored entirely by the base walker, so without this
+    // a component used and never imported would pass.
+    JSXElement(n, st, c) {
+      const nameNode = n.openingElement?.name;
+      if (nameNode?.type === 'JSXIdentifier' && /^[A-Z]/.test(nameNode.name)) {
+        c({ type: 'Identifier', name: nameNode.name, loc: nameNode.loc }, st);
+      }
+      for (const a of n.openingElement?.attributes || []) {
+        if (a.value) c(a.value, st);
+        if (a.type === 'JSXSpreadAttribute' && a.argument) c(a.argument, st);
+      }
+      for (const child of n.children || []) c(child, st);
+    },
+    JSXFragment(n, st, c) { for (const child of n.children || []) c(child, st); },
+    JSXExpressionContainer(n, st, c) { if (n.expression) c(n.expression, st); },
+    JSXText() {},
+    JSXEmptyExpression() {},
+    // acorn-walk has no base for JSX at all, so every node type it can produce
+    // has to be named here or the walk throws. The first version listed four
+    // and the walker died on the fifth — which at least failed loudly rather
+    // than skipping the file.
+    JSXIdentifier() {},
+    JSXMemberExpression() {},
+    JSXNamespacedName() {},
+    JSXAttribute(n, st, c) { if (n.value) c(n.value, st); },
+    JSXSpreadAttribute(n, st, c) { if (n.argument) c(n.argument, st); },
+    JSXSpreadChild(n, st, c) { if (n.expression) c(n.expression, st); },
+    JSXOpeningElement() {},
+    JSXClosingElement() {},
+    JSXOpeningFragment() {},
+    JSXClosingFragment() {},
     Identifier(n, st) {
       const name = n.name;
       if (GLOBALS.has(name) || moduleScope.has(name)) return;
@@ -155,7 +215,7 @@ export function undefinedIdentifiers(source, filename = '<anonymous>') {
       seen.add(key);
       found.push({ name, line: n.loc.start.line, file: filename });
     },
-  });
+  }, BASE);
 
   return found;
 }

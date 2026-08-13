@@ -332,11 +332,16 @@ function NativeRules({ serverId }) {
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <span className={'lamp ' + (rule.paused ? 'off' : 'on')} />
                   {rule.paused ? t('rp.paused') : t('rp.running')}
-                  {can('republish.manage') && (
-                    <span style={{ marginLeft: 8 }}>
-                      <IconButton action={rule.paused ? 'start' : 'stop'} disabled={busy}
-                                  onClick={() => savePaused(rule, !rule.paused)} />
-                    </span>
+                  {/* No pause button here. `savePaused` belongs to the
+                      WMSPanel table above; this is the native one, so
+                      pressing it threw a ReferenceError — which React turns
+                      into a blank page rather than a message. And there is
+                      nothing for it to call: the native republish API
+                      creates and deletes rules and cannot modify one.
+                      Pausing is a WMSPanel operation, said rather than
+                      offered as a button that cannot work. */}
+                  {rule.paused && (
+                    <span className="hint" style={{ marginLeft: 8 }}>{t('rp.pauseViaWms')}</span>
                   )}
                 </td>
                 <td><TagChips st={tg} kind="republish" objId={rule.id} /></td>

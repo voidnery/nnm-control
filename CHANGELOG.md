@@ -1,5 +1,40 @@
 # Changelog
 
+### v0.98.0 — the button fetched a script and showed it nowhere
+"Get the helper installer" did nothing visible. It worked: the request went
+out, the script came back, and it was rendered inside the block that only
+exists after an apply has been attempted. From the outside that is a button
+that does nothing, pressed twice and reported broken.
+
+It now renders beside the button that fetches it, with a copy control — a
+script meant for a root shell that can only be selected by hand in a scrolling
+box is a script somebody will truncate.
+
+**A gateway install no longer asks where Nimble's logs are.** There is no
+Nimble on it, and a pre-filled `/var/log/nimble` reads as a fact about the
+machine. An empty directory is sent rather than a plausible one, so the agent
+does not watch a path that will never exist.
+
+**And the frontend has an undefined-reference gate now.** The backend has had
+one since v0.89.0; the frontend had none, which is how `isGateway` shipped
+today — used three times in a dialog, declared nowhere, every frontend gate
+green. A component that throws on open is worse here than on the backend: React
+takes the page with it and leaves a blank screen with no message.
+
+It found a second one immediately. `savePaused` is declared in the WMSPanel
+republish table and called from the **native** one — a pause button that threw
+a ReferenceError instead of pausing anything, and which had nothing to call
+regardless: the native republish API creates and deletes rules and cannot
+modify one. The button is gone, with a line saying where pausing happens.
+
+The gate's own first version stripped JSX with regular expressions and left 69
+of 79 files unparseable. It refused to pass rather than report OK on an eighth
+of the codebase, which was the one thing it got right; it uses a real JSX
+parser now, shares the backend's scope analysis rather than duplicating it, and
+still exits non-zero if a single file cannot be read. Build-time `define`s are
+excused by reading them out of `vite.config.js`, so removing one stops being
+excused the moment it is removed.
+
 ### v0.97.3 — the helper was looking in the wrong place
 Second rebuild, same result: purpose set to gateway, install ran, no helper.
 v0.97.2 fixed a real fault — the literal `$AGENT_TOKEN` reaching the helper's

@@ -304,5 +304,45 @@ check('it says where the real work is instead of showing nothing', () => {
   assert.equal((d2.match(/'server\.gateway\.where':/g) || []).length, 2);
 });
 
+console.log('\nTHE SCRIPT IS SHOWN WHERE IT IS ASKED FOR:');
+
+const ui2 = readFileSync(new URL('../../frontend/src/components/GatewaySetupModal.jsx', import.meta.url), 'utf8');
+
+check('the script renders outside the block that needs an apply first', () => {
+  // It sat inside `{result && …}`, which only renders after an apply has been
+  // attempted. So pressing the button fetched the script and displayed it
+  // nowhere — the same screen as a button that does nothing, and the operator
+  // pressed it twice and reported it broken.
+  const fetchAt = ui2.indexOf('gw.helper.get');
+  const showAt = ui2.indexOf('helper.script');
+  const resultAt = ui2.indexOf('{result && (');
+  assert.ok(showAt > 0, 'the script is not rendered at all');
+  assert.ok(showAt < resultAt, 'the script only renders after an apply has been attempted');
+  assert.ok(showAt > fetchAt, 'the script is rendered above the button that fetches it');
+});
+
+check('it can be copied, since it is meant to be run elsewhere', () => {
+  // A script to paste into a root shell that can only be selected by hand in a
+  // scrolling box is a script somebody will truncate.
+  assert.ok(/copyText\(helper\.script\)/.test(ui2));
+});
+
+console.log('\nA GATEWAY INSTALL DOES NOT ASK ABOUT NIMBLE:');
+
+const instUi = readFileSync(new URL('../../frontend/src/components/AgentInstallModal.jsx', import.meta.url), 'utf8');
+
+check('the Nimble log directory is not asked for on a gateway', () => {
+  // There is no Nimble on it, so there are no logs. A pre-filled path reads as
+  // a fact about the machine.
+  assert.ok(/const isGateway = \(server\?\.purpose \|\| 'nimble'\) === 'gateway'/.test(instUi));
+  assert.ok(/isGateway \?[\s\S]{0,200}inst\.noNimbleLogs/.test(instUi), 'nothing replaces the field');
+});
+
+check('and an empty directory is sent rather than a plausible one', () => {
+  // Sending /var/log/nimble would have the agent watch a directory that will
+  // never exist, and report its absence forever.
+  assert.ok(/logDir: isGateway \? '' :/.test(instUi));
+});
+
 console.log(failures ? `\n${failures} privileged-helper check(s) failed` : '\nall privileged-helper checks passed');
 process.exit(failures ? 1 : 0);

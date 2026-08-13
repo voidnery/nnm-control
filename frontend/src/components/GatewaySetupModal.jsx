@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import Modal from './Modal.jsx';
+import { copyText } from '../lib/clipboard.js';
 
 // Turning a machine into a gateway.
 //
@@ -26,6 +27,7 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
   const [showFile, setShowFile] = useState('');
   const [showPlan, setShowPlan] = useState(false);
   const [helper, setHelper] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const getHelper = async () => {
     setBusy(true);
@@ -87,6 +89,24 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
           <b>{t('gw.helper.missing')}</b>
           <div className="hint">{t('gw.helper.missingWhy')}</div>
           <button style={{ marginTop: 8 }} onClick={getHelper} disabled={busy}>{t('gw.helper.get')}</button>
+        </div>
+      )}
+
+      {/* Beside the button that fetches it. This sat inside the block that only
+          renders after an apply has been attempted, so pressing the button
+          fetched the script and displayed it nowhere — which is the same
+          screen as a button that does nothing. */}
+      {helper && (
+        <div className="inset">
+          <div className="eyebrow">{t('gw.helper.title')}</div>
+          <div className="hint">{t('gw.helper.hint')}</div>
+          <div className="row" style={{ gap: 8, marginTop: 6 }}>
+            <button onClick={async () => setCopied(await copyText(helper.script))}>
+              {copied ? t('ch.copied') : t('ch.copy')}
+            </button>
+            <span className="hint">{t('gw.helper.thenRun')}</span>
+          </div>
+          <pre className="mono" style={{ fontSize: 11, maxHeight: 320, overflow: 'auto' }}>{helper.script}</pre>
         </div>
       )}
 
@@ -263,13 +283,6 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
             </div>
           )}
 
-          {helper && (
-            <div className="inset">
-              <div className="eyebrow">{t('gw.helper.title')}</div>
-              <div className="hint">{t('gw.helper.hint')}</div>
-              <pre className="mono" style={{ fontSize: 11, maxHeight: 320, overflow: 'auto' }}>{helper.script}</pre>
-            </div>
-          )}
           {result.steps?.map((s, i) => (
             <div key={i} className="hint">
               {s.ok ? '✓' : '✗'} {s.id}

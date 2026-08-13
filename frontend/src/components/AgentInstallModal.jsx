@@ -52,6 +52,9 @@ function lastErrorLine(output = '') {
 
 export default function AgentInstallModal({ server, onClose, onEnrolled }) {
   const { t } = useI18n();
+  // What this machine is decides part of what the install needs to ask. A
+  // gateway has no Nimble, so it has no Nimble logs to point at.
+  const isGateway = (server?.purpose || 'nimble') === 'gateway';
   const { push } = useToast();
   const [form, setForm] = useState({
     agentPort: 8090,
@@ -107,7 +110,9 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
         body: {
           panelUrl: form.panelUrl.trim(),
           agentPort: Number(form.agentPort) || 8090,
-          logDir: form.logDir.trim(),
+          // Empty on a gateway: the agent takes it as "there is nothing to
+          // tail" rather than watching a directory that will never exist.
+          logDir: isGateway ? '' : form.logDir.trim(),
         },
       }));
     } catch (e) { setError(e.message); }
@@ -145,7 +150,9 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
           fingerprint: hostKey.fingerprint,
           panelUrl: form.panelUrl.trim(),
           agentPort: Number(form.agentPort) || 8090,
-          logDir: form.logDir.trim(),
+          // Empty on a gateway: the agent takes it as "there is nothing to
+          // tail" rather than watching a directory that will never exist.
+          logDir: isGateway ? '' : form.logDir.trim(),
         },
       });
       // The credential was needed for exactly one request. Dropping it here
@@ -193,8 +200,17 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
           <label>{t('inst.panelUrl')}</label>
           <input className="mono" value={form.panelUrl} onChange={e => set('panelUrl', e.target.value)} />
           <div className="hint">{t('inst.panelUrlHint')}</div>
-          <label>{t('inst.logDir')}</label>
-          <input className="mono" value={form.logDir} onChange={e => set('logDir', e.target.value)} />
+          {/* A gateway has no Nimble, so it has no Nimble logs. Asking where
+              they are on a machine that does not produce any invites an answer
+              that means nothing — and a filled-in field reads as a fact. */}
+          {isGateway ? (
+            <div className="hint">{t('inst.noNimbleLogs')}</div>
+          ) : (
+            <>
+              <label>{t('inst.logDir')}</label>
+              <input className="mono" value={form.logDir} onChange={e => set('logDir', e.target.value)} />
+            </>
+          )}
           {mode === 'ssh' && (
             <div className="panel" style={{ marginTop: 10 }}>
               <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr', gap: 8 }}>
