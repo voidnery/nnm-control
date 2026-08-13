@@ -820,3 +820,21 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .hist-tick.ok { background: var(--ok, #2f7d54); }
 .hist-tick.part { background: var(--warn, #a97b28); }
 .hist-tick.bad { background: var(--err, #a33); }
+
+/* Install progress. The bar answers "how far" and the stages answer "doing
+   what" — a wall of console output answers neither without being read. */
+.progress { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin: var(--sp-2) 0; }
+.progress-fill { height: 100%; background: var(--accent); transition: width .3s ease; }
+.progress.failed .progress-fill { background: var(--err, #a33); }
+@media (prefers-reduced-motion: reduce) { .progress-fill { transition: none; } }
+
+.inst-stages { display: flex; flex-direction: column; gap: var(--sp-1); margin-bottom: var(--sp-2); }
+.inst-stage { display: flex; gap: var(--sp-2); align-items: center; font-size: var(--fs-meta); color: var(--text-dim); }
+.inst-stage.running { color: var(--text); }
+.inst-stage.done { color: var(--text); }
+.inst-stage-mark { display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; font-size: 11px;
+  background: var(--bg); border: 1px solid var(--line); }
+.inst-stage.done .inst-stage-mark { background: var(--ok, #2f7d54); border-color: transparent; color: #fff; }
+.inst-stage.running .inst-stage-mark { border-color: var(--accent); color: var(--accent); }
+.inst-stage.failed .inst-stage-mark { background: var(--err, #a33); border-color: transparent; color: #fff; }

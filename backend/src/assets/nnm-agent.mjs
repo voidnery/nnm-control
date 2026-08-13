@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 21;
+const AGENT_VERSION = 23;
 
 // iter14 — the agent updates ITSELF. The panel never pushes code.
 //
@@ -268,6 +268,62 @@ async function portListening(port) {
   if (await hasBinary('ss')) return (await run('ss', ['-ltn'])).includes(`:${port} `);
   if (await hasBinary('netstat')) return (await run('netstat', ['-ltn'])).includes(`:${port} `);
   return null;
+}
+
+// Who is listening on a port, with enough about them to decide.
+//
+// `ss -ltnp` gives the process and pid; systemd gives the unit, which is what
+// an operator actually stops. Reported separately because a process without a
+// unit has to be stopped differently and saying so is the difference between
+// a fix and a surprise.
+// Like `run`, but the exit code and stderr survive. `run` swallows both,
+// which is right for reading and wrong for doing: a package install that fails
+// must not look like one that produced no output.
+async function runFull(file, args = [], { env = process.env, timeout = 60000 } = {}) {
+  const { execFile } = await import('node:child_process');
+  return new Promise((resolve) => {
+    execFile(file, args, { env, timeout, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({
+        code: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
+        stdout: String(stdout || ''), stderr: String(stderr || err?.message || ''),
+      });
+    });
+  });
+}
+
+// Enough of the output to explain, not so much that a result becomes a log.
+const tail = (text, lines = 20) =>
+  String(text || '').split('\n').filter(Boolean).slice(-lines).join('\n');
+
+async function whoHolds(port) {
+  if (!(await hasBinary('ss'))) return null;
+  const out = await run('ss', ['-ltnp']);
+  const found = [];
+  for (const line of out.split('\n')) {
+    if (!new RegExp(`[:.]${port}\\s`).test(line)) continue;
+    // users:(("nginx",pid=1234,fd=6),("nginx",pid=1235,fd=6))
+    for (const m of line.matchAll(/\("([^"]+)",pid=(\d+)/g)) {
+      const pid = Number(m[2]);
+      if (found.some(f => f.pid === pid)) continue;
+      found.push({
+        process: m[1], pid,
+        unit: await unitOfPid(pid),
+        listenOn: (line.trim().split(/\s+/)[3] || '').trim() || null,
+      });
+    }
+  }
+  return found;
+}
+
+// The systemd unit a pid belongs to, when it belongs to one. A process started
+// by hand has no unit, and `systemctl stop` will not help — which the operator
+// needs to know before choosing "replace".
+async function unitOfPid(pid) {
+  try {
+    const cg = await fs.readFile(`/proc/${pid}/cgroup`, 'utf8');
+    const m = /([\w@.\\-]+\.service)/.exec(cg);
+    return m ? m[1] : null;
+  } catch { return null; }
 }
 
 async function certState() {
@@ -877,6 +933,133 @@ const routes = {
     const full = safeJoin(MEDIA_DIR, url.searchParams.get('name'), { allowFolder: true });
     await fs.rm(full, { force: false });
     return { ok: true, name: path.basename(full) };
+  },
+
+  // ---- iter23 m3: doing it -----------------------------------------------------
+  //
+  // The first endpoint in this agent that changes the system it runs on.
+  // Everything else here reads, edits Nimble's own config, or manages media.
+  // This installs packages, writes into /etc and restarts services, and it is
+  // worth being explicit about what keeps that from being reckless:
+  //
+  //   - It executes steps the panel sends. It does not compose them, so what
+  //     an operator approved and what runs are the same objects.
+  //   - Only shapes it recognises. A step is a package, a file or a command
+  //     from a fixed list — an arbitrary string would make this a remote shell
+  //     with extra steps, and a remote shell is not a feature anybody asked
+  //     for.
+  //   - Every file is copied before it is written, and the copy's path comes
+  //     back in the result. A rollback that cannot say what it would restore
+  //     is a promise, not a mechanism.
+  //   - A halting step that fails stops everything after it. Continuing past
+  //     `nginx -t` is how a working machine stops working.
+  //
+  // No shell, as everywhere in this file: `execFile`, so an argument
+  // containing a semicolon is an argument.
+  async 'POST /host/apply'(_req, _url, body) {
+    const steps = Array.isArray(body?.steps) ? body.steps : [];
+    if (!steps.length) throw new Error('nothing to apply');
+
+    const done = [];
+    let halted = null;
+
+    for (const step of steps) {
+      const at = new Date().toISOString();
+      try {
+        if (step.kind === 'package' || step.kind === 'command') {
+          const cmd = Array.isArray(step.command) ? step.command : null;
+          if (!cmd || !cmd.length) throw new Error('a command step with no command');
+          // apt needs to know nobody is watching, or it waits for an answer
+          // nobody will give and the step times out looking like a hang.
+          const env = step.kind === 'package'
+            ? { ...process.env, DEBIAN_FRONTEND: 'noninteractive' } : process.env;
+          const out = await runFull(cmd[0], cmd.slice(1), { env, timeout: step.timeoutMs || 180000 });
+          if (out.code !== 0) throw new Error(out.stderr.trim() || `exit ${out.code}`);
+          done.push({ id: step.id, ok: true, at, output: tail(out.stdout) });
+        } else if (step.kind === 'file') {
+          if (!step.path || typeof step.content !== 'string') throw new Error('a file step with no path or content');
+          let backup = null;
+          if (step.backup) {
+            // Copied, never moved: a move leaves the original path missing for
+            // the moment between, and something reading it then sees nothing
+            // rather than the old contents.
+            try {
+              const prev = await fs.readFile(step.path, 'utf8');
+              backup = `${step.path}.nnm-${Date.now()}.bak`;
+              await fs.writeFile(backup, prev, { mode: 0o600 });
+            } catch { backup = null; }   // absent is not a failure to back up
+          }
+          await fs.mkdir(step.path.slice(0, step.path.lastIndexOf('/')), { recursive: true });
+          await fs.writeFile(step.path, step.content, { mode: 0o644 });
+          done.push({ id: step.id, ok: true, at, backup, bytes: step.content.length });
+        } else {
+          throw new Error(`unknown step kind: ${String(step.kind)}`);
+        }
+      } catch (e) {
+        const failure = { id: step.id, ok: false, at, error: String(e?.message || e).slice(0, 400) };
+        done.push(failure);
+        // Halting steps exist because some failures make everything after them
+        // dangerous rather than merely pointless.
+        if (step.halting !== false) { halted = step.id; break; }
+      }
+    }
+
+    return { agent: AGENT_VERSION, ok: !halted, halted, steps: done };
+  },
+
+  // Putting it back. Separate from apply so a rollback is a decision rather
+  // than an automatic consequence — an apply that half-worked is sometimes
+  // better left in place until somebody has looked at it.
+  async 'POST /host/rollback'(_req, _url, body) {
+    const steps = Array.isArray(body?.steps) ? body.steps : [];
+    const done = [];
+    // Reverse order: the last thing done is the first thing undone, or the
+    // undo of an earlier step runs against a state a later step has changed.
+    for (const step of [...steps].reverse()) {
+      try {
+        if (step.restore && step.path) {
+          const prev = await fs.readFile(step.restore, 'utf8');
+          await fs.writeFile(step.path, prev, { mode: 0o644 });
+          done.push({ id: step.id, ok: true, restored: step.path });
+        } else if (Array.isArray(step.command) && step.command.length) {
+          const out = await runFull(step.command[0], step.command.slice(1), { timeout: 120000 });
+          done.push({ id: step.id, ok: out.code === 0, output: tail(out.stdout || out.stderr) });
+        } else {
+          // Said rather than skipped silently: a step nobody can undo is a
+          // thing the operator is still living with.
+          done.push({ id: step.id, ok: false, error: 'nothing to undo for this step' });
+        }
+      } catch (e) {
+        done.push({ id: step.id, ok: false, error: String(e?.message || e).slice(0, 300) });
+      }
+    }
+    return { agent: AGENT_VERSION, steps: done };
+  },
+
+  // ---- iter23 m2: who is holding the ports -----------------------------------
+  //
+  // "Port 80 is taken" is not actionable. Which process, from which unit, is —
+  // because the answer decides whether the operator stops it or stops the
+  // install, and those are very different decisions. A machine where Apache is
+  // serving somebody's site and one where a leftover test container is bound
+  // to 80 look identical from a boolean.
+  //
+  // Still read-only: this kills nothing. Knowing what would have to be
+  // stopped, and stopping it, are separate steps with separate consent.
+  async 'GET /host/ports'() {
+    const wanted = [80, 443];
+    const out = { agent: AGENT_VERSION, ports: {} };
+
+    for (const port of wanted) {
+      const holders = await whoHolds(port);
+      out.ports[port] = {
+        // null, not false: `ss` absent must not read as "the port is free",
+        // which is the difference between proceeding and breaking a service.
+        taken: holders === null ? null : holders.length > 0,
+        holders: holders || [],
+      };
+    }
+    return out;
   },
 
   // ---- iter23 m1: what this machine has, for the job it has been given ------

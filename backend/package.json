@@ -1,13 +1,13 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.91.1",
+  "version": "0.94.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "test:functions": "node tests/function-actions.test.mjs",
     "test:stats": "node tests/stats-collector.test.mjs",
-    "test": "npm run audit:release && npm run audit:installer && npm run audit:dockerfile && npm run audit:shadow && npm run audit:routes && npm run audit:undef && npm run test:undefgate && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl && npm run test:lifecycle && npm run test:host && npm run test:join && npm run test:geo && npm run test:delivery && npm run test:netstate && npm run test:probes && npm run test:arbiter && npm run test:playlist2 && npm run test:config && npm run test:globe && npm run test:channels && npm run test:derive && npm run test:steps && npm run test:protocols && npm run test:tls && npm run test:cache && npm run test:amp && npm run test:wmsauth && npm run test:protection && npm run test:monitor && npm run test:dvr && npm run test:readiness && npm run test:playlist",
+    "test": "npm run audit:release && npm run audit:installer && npm run audit:dockerfile && npm run audit:shadow && npm run audit:routes && npm run audit:undef && npm run test:undefgate && npm run test:functions && npm run test:stats && npm run test:template && npm run test:fleet && npm run test:playback && npm run test:logs && npm run test:enroll && npm run test:transport && npm run test:media && npm run test:diagnosis && npm run test:ssh && npm run test:logquery && npm run test:dashboards && npm run test:variants && npm run test:publicurl && npm run test:lifecycle && npm run test:host && npm run test:join && npm run test:geo && npm run test:delivery && npm run test:netstate && npm run test:probes && npm run test:arbiter && npm run test:playlist2 && npm run test:config && npm run test:globe && npm run test:channels && npm run test:derive && npm run test:steps && npm run test:protocols && npm run test:tls && npm run test:cache && npm run test:amp && npm run test:wmsauth && npm run test:protection && npm run test:monitor && npm run test:dvr && npm run test:readiness && npm run test:gateway && npm run test:playlist",
     "test:template": "node tests/transcoder-template.test.mjs",
     "test:fleet": "node tests/transcoder-fleet.test.mjs",
     "test:playback": "node tests/playback-endpoints.test.mjs",
@@ -51,7 +51,8 @@
     "test:monitor": "node tests/monitor.test.mjs",
     "test:undefgate": "node tests/undef-gate.test.mjs",
     "test:dvr": "node tests/dvr.test.mjs",
-    "test:readiness": "node tests/host-readiness.test.mjs"
+    "test:readiness": "node tests/host-readiness.test.mjs",
+    "test:gateway": "node tests/gateway-plan.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

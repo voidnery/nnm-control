@@ -5,6 +5,9 @@ import { nimble } from '../services/nimbleClient.js';
 import { Settings } from '../models/Settings.js';
 import { purposeChangeWarnings, readiness, PREPARE_MIN_AGENT } from '../services/hostReadiness.js';
 import { runTask } from '../services/agentBus.js';
+import { gatewayPlan, replacePlan } from '../services/gatewayPlan.js';
+import { probeTls, tlsSummary } from '../services/tlsProbe.js';
+import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { logEvent } from '../services/audit.js';
 import { resolvePlaybackEndpoints, invalidatePlaybackCache } from '../services/playbackEndpoints.js';
 
@@ -188,4 +191,154 @@ serversRouter.post('/servers/:id/readiness', requirePerm('servers.manage'), asyn
   }
   await logEvent(req, 'server.readiness', { server: server.name, purpose: server.purpose, code: r.code });
   res.json({ ...r, at: server.lastReadinessAt, minAgent: PREPARE_MIN_AGENT });
+});
+
+
+// What would be done to turn this machine into a gateway.
+//
+// A preview and nothing else: no package manager runs, no file is written.
+// The apply path — which does not exist yet — will execute these very objects
+// rather than recomputing them, because a preview computed separately from the
+// work is a preview that drifts, and the drift is invisible until the day it
+// matters.
+serversRouter.post('/servers/:id/gateway/plan', requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+
+  // Asked, never guessed. The certificate is issued for this name and nothing
+  // else, and a name the panel invented would produce a certificate nobody can
+  // use — after burning one of a rate-limited number of issuances.
+  const domain = String(req.body?.domain || '').trim().toLowerCase();
+  const mode = req.body?.mode === 'proxy' ? 'proxy' : 'redirect';
+
+  // Who holds 80 and 443, from the machine itself. Asked every time rather
+  // than remembered: something can start listening between a plan and an
+  // apply, and this is the check whose staleness breaks a service.
+  let ports = null;
+  try {
+    const r = await runTask(server, '/host/ports', { createdBy: req.user?.username || '' });
+    ports = r?.ports || null;
+  } catch { ports = null; }
+
+  // The edges this gateway would send viewers to, for proxy mode.
+  const nets = await DeliveryNetwork.find({ 'nodes.server': server._id });
+  const all = await NimbleServer.find();
+  const byId = new Map(all.map(x => [String(x._id), x]));
+  const edges = nets.flatMap(n => (n.nodes || [])
+    .filter(x => x.role === 'edge' && x.enabled !== false)
+    .map(x => byId.get(String(x.server)))
+    .filter(Boolean)
+    .map(x => ({ host: x.playbackEndpoints?.[0]?.host || x.host, httpPort: x.httpPort || 8081 })));
+
+  const plan = gatewayPlan({ server, domain, mode, edges, ports, email: String(req.body?.email || '') });
+  const held = plan.blocking.find(b => b.code === 'ports-held')?.held || [];
+
+  await logEvent(req, 'server.gateway.plan', { server: server.name, domain, mode, blocked: plan.blocking.length });
+  res.json({
+    ...plan,
+    ports,
+    // Offered separately and only when needed: stopping somebody else's
+    // service is the one destructive thing here and gets its own consent
+    // rather than riding along inside a longer list.
+    replace: held.length ? replacePlan(held) : [],
+    agent: { version: server.agent?.version ?? null, need: 22 },
+  });
+});
+
+
+// Do it.
+//
+// The first thing the panel does that changes a machine. What makes that
+// acceptable is not care in this function — it is that the plan was computed
+// once, shown, and is now recomputed here and compared: if the machine moved
+// between the preview and the press, the operator approved something else.
+serversRouter.post('/servers/:id/gateway/apply', requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+  if ((server.agent?.version ?? 0) < 23) {
+    return res.status(422).json({ error: 'agent-too-old', code: 'agent-too-old', need: 23, have: server.agent?.version ?? null });
+  }
+
+  const domain = String(req.body?.domain || '').trim().toLowerCase();
+  const mode = req.body?.mode === 'proxy' ? 'proxy' : 'redirect';
+
+  // Ports are re-read, not remembered. Something can start listening between a
+  // plan and a press, and this is precisely the check whose staleness breaks
+  // somebody else's service.
+  let ports = null;
+  try { ports = (await runTask(server, '/host/ports', { createdBy: req.user?.username || '' }))?.ports || null; }
+  catch { ports = null; }
+
+  const nets = await DeliveryNetwork.find({ 'nodes.server': server._id });
+  const all = await NimbleServer.find();
+  const byId = new Map(all.map(x => [String(x._id), x]));
+  const edges = nets.flatMap(n => (n.nodes || [])
+    .filter(x => x.role === 'edge' && x.enabled !== false)
+    .map(x => byId.get(String(x.server))).filter(Boolean)
+    .map(x => ({ host: x.playbackEndpoints?.[0]?.host || x.host, httpPort: x.httpPort || 8081 })));
+
+  const plan = gatewayPlan({ server, domain, mode, edges, ports, email: String(req.body?.email || '') });
+  if (plan.blocking.length) {
+    return res.status(422).json({ error: 'gateway-blocked', code: 'gateway-blocked', ...plan });
+  }
+
+  // The steps the operator saw, by their ids. Sending anything the plan did
+  // not produce would make this a remote shell with extra ceremony.
+  const wanted = new Set((req.body?.stepIds || plan.steps.map(s => s.id)));
+  const steps = plan.steps.filter(s => wanted.has(s.id));
+
+  let result;
+  try {
+    result = await runTask(server, '/host/apply', { body: { steps }, timeoutMs: 15 * 60_000,
+                                                    createdBy: req.user?.username || '' });
+  } catch (e) {
+    await logEvent(req, 'server.gateway.apply', { server: server.name, domain, ok: false });
+    return res.status(502).json({ error: 'apply-failed', code: 'apply-failed', detail: String(e?.message || e) });
+  }
+
+  // Verified by being a client, not by exit codes. Every step can return zero
+  // and the machine still not serve — the same rule as delivery, and the
+  // reason the panel checks playlists rather than configurations.
+  let verify = null;
+  if (result?.ok) {
+    verify = await probeTls(domain, 443).catch(() => null);
+    if (verify) {
+      server.tls = tlsSummary(verify);
+      server.httpsPort = 443;
+    }
+    server.purpose = 'gateway';
+    await server.save();
+  }
+
+  await logEvent(req, 'server.gateway.apply', {
+    server: server.name, domain, mode, ok: Boolean(result?.ok), halted: result?.halted || null,
+    tls: Boolean(verify?.tls), http2: Boolean(verify?.http2),
+  });
+  res.json({ ...result, verify, plan });
+});
+
+// Put it back.
+serversRouter.post('/servers/:id/gateway/rollback', requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+
+  // Built from what the apply reported, not from the plan: only steps that
+  // actually ran need undoing, and only the backups it actually made can be
+  // restored.
+  const applied = Array.isArray(req.body?.steps) ? req.body.steps : [];
+  const plan = gatewayPlan({ server, domain: String(req.body?.domain || 'x.invalid'), ports: { 80: { taken: false }, 443: { taken: false } } });
+  const byId = new Map(plan.steps.map(s => [s.id, s]));
+
+  const undo = applied.filter(a => a.ok).map((a) => {
+    const step = byId.get(a.id);
+    if (a.backup && step?.undo === 'restore') return { id: a.id, path: step.path, restore: a.backup };
+    if (Array.isArray(step?.undo)) return { id: a.id, command: step.undo };
+    return { id: a.id };
+  });
+
+  const result = await runTask(server, '/host/rollback', { body: { steps: undo }, timeoutMs: 10 * 60_000,
+                                                           createdBy: req.user?.username || '' })
+    .catch(e => ({ steps: [], error: String(e?.message || e) }));
+  await logEvent(req, 'server.gateway.rollback', { server: server.name, steps: undo.length });
+  res.json(result);
 });

@@ -7,6 +7,16 @@ repository's own APT repo (GitHub Pages).
 
 License: MIT.
 
+## Before changing anything
+
+`docs/STATE.md` — what exists, what was established against live systems, and
+what is deliberately not built. It is short and it is the first thing to read:
+the alternative kept happening, which was proposing to build something the
+panel already had, or re-deriving a WMSPanel fact that had cost an afternoon
+two iterations earlier.
+
+`CHANGELOG.md` says what changed and when. `docs/STATE.md` says what *is*.
+
 ## Install (Ubuntu Server)
 
 ```bash

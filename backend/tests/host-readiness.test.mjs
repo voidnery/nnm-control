@@ -190,5 +190,64 @@ check('the dialog speaks the panel\'s language', () => {
   assert.ok(!/>\+ Add server</.test(dlg), 'a hard-coded English label survived');
 });
 
+console.log('\nAN INSTALL REPORTS ITSELF, NOT ITS CONSOLE:');
+
+const inst = readFileSync(new URL('../../frontend/src/components/AgentInstallModal.jsx', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../../frontend/src/styles.css', import.meta.url), 'utf8');
+
+check('there is a bar and named stages, not only a log', () => {
+  // A wall of console output asks the operator to be the parser: to read apt's
+  // noise and work out how far it got and whether that is normal.
+  assert.ok(/INSTALL_STAGES/.test(inst), 'the install has no named stages');
+  assert.ok(/progress-fill/.test(inst) && /\.progress-fill/.test(css), 'there is no progress bar');
+});
+
+check('the log is behind a fold, and still there', () => {
+  // Evidence rather than interface — but removing it would take away the only
+  // thing that answers "why" when a stage fails.
+  assert.ok(/showLog/.test(inst), 'the log has no fold');
+  // Inside the fold, not merely somewhere in the file: `job.output` is also
+  // read to work out the stage, so its presence proved nothing about the log
+  // still being shown. The first version of this check passed against a fold
+  // that opened onto an ellipsis.
+  const fold = inst.slice(inst.indexOf('{showLog && ('), inst.indexOf('</pre>'));
+  assert.ok(/job\.output/.test(fold), 'the fold opens onto nothing — the log was removed, not folded');
+});
+
+check('a failed install never shows a full bar', () => {
+  // A bar that fills to the end and then says it went wrong contradicts
+  // itself, and people believe the bar.
+  assert.ok(/job\.status === 'done' \? 100/.test(inst), 'the fill does not depend on success');
+  assert.ok(/progress\.failed/.test(css), 'a failed bar looks like a finished one');
+});
+
+check('the failing line is lifted out of the log', () => {
+  // Somebody whose install just failed should not have to scroll to find the
+  // one line that says why.
+  assert.ok(/lastErrorLine/.test(inst));
+});
+
+check('every stage has a sentence, in both languages', () => {
+  const ids = [...new Set([...inst.matchAll(/\{ id: '([a-z]+)'/g)].map(m => m[1]))];
+  assert.ok(ids.length >= 5, `only ${ids.length} stages`);
+  for (const id of ids) {
+    assert.equal((dict.match(new RegExp(`'inst\\.stage\\.${id}':`, 'g')) || []).length, 2, id);
+  }
+});
+
+console.log('\nTHE PROJECT SAYS WHAT IT IS:');
+
+check('there is a state document, and the readme points at it', () => {
+  // Written after proposing to build a feature the panel already had. A
+  // changelog says what changed; nothing said what exists.
+  const state = readFileSync(new URL('../../docs/STATE.md', import.meta.url), 'utf8');
+  assert.ok(state.length > 2000, 'the state document is a stub');
+  for (const heading of ['What exists', 'deliberately absent', 'waiting on something other than code']) {
+    assert.ok(state.includes(heading), `the state document has no "${heading}" section`);
+  }
+  const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+  assert.ok(readme.includes('docs/STATE.md'), 'the readme does not point at it');
+});
+
 console.log(failures ? `\n${failures} readiness check(s) failed` : '\nall readiness checks passed');
 process.exit(failures ? 1 : 0);

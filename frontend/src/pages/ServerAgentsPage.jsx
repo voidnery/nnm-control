@@ -5,6 +5,7 @@ import { useToast } from '../toast.jsx';
 import SearchInput from '../components/SearchInput.jsx';
 import AgentInstallModal from '../components/AgentInstallModal.jsx';
 import AgentCentreModal from '../components/AgentCentreModal.jsx';
+import GatewaySetupModal from '../components/GatewaySetupModal.jsx';
 
 // Server agents used to live in a modal behind a button on the Playlists page,
 // because deploying a playlist was the first thing an agent was needed for.
@@ -24,6 +25,7 @@ export default function ServerAgentsPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
   const [purposeFilter, setPurposeFilter] = useState('all');
+  const [gwSetup, setGwSetup] = useState(null);
   const [install, setInstall] = useState(null);
   const [centre, setCentre] = useState(false);
   const [fleet, setFleet] = useState(null);
@@ -97,6 +99,11 @@ export default function ServerAgentsPage() {
       <h1>{t('page.agents.title')}</h1>
       <div className="sub">{t('page.agents.sub')}</div>
       {error && <div className="error-box">{error}</div>}
+      {/* Offered on the machines it is for. A gateway is the one purpose where
+          the panel has work to do on the system itself. */}
+      {gwSetup && (
+        <GatewaySetupModal server={gwSetup} onClose={() => setGwSetup(null)} onDone={load} />
+      )}
 
       {/* One button, everything about agents behind it: what is running, what
           is behind, what has gone wrong, and how to recover it. */}
@@ -142,6 +149,12 @@ export default function ServerAgentsPage() {
                 <div className="hint mono">{s.host || '—'}</div>
               </div>
               <div className="row" style={{ gap: 12, flexShrink: 0 }}>
+                {/* Only on the machines it is for. Preparing a gateway on a
+                    media server would install nginx onto a box already serving
+                    on the ports it wants. */}
+                {(s.purpose || 'nimble') === 'gateway' && (
+                  <button onClick={() => setGwSetup(s)}>{t('agent.prepareGateway')}</button>
+                )}
                 <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
                   <input type="checkbox" checked={Boolean(r.enabled)} onChange={e => set(s.id, { enabled: e.target.checked })} />
                   {t('agent.enabled')}

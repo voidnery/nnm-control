@@ -1,5 +1,116 @@
 # Changelog
 
+### v0.94.0 — iter23 m3: the panel changes a machine
+The first thing this panel does that alters a system. Everything until now went
+into somebody else's API, where a wrong call is refused; `apt-get` is not
+refused, it happens. So the shape matters more than the feature.
+
+**The operator sees the argv and the file bytes**, not a summary of them. A
+description instead of the thing is how consent becomes a formality, and
+somebody about to let software install packages on their server is entitled to
+read what it will run.
+
+**The agent executes steps it is sent and composes none.** Package, file or
+command, from a fixed set of shapes — an agent that built its own commands from
+a domain would be a remote shell with extra ceremony. What the operator
+approved and what runs are the same objects.
+
+**The plan is recomputed at apply and the ports re-read.** If the machine moved
+between the preview and the press, the operator approved something else — and
+port occupancy is precisely the check whose staleness breaks somebody else's
+service.
+
+**Success is a handshake.** Every step can return zero and the machine still
+not serve, so the apply finishes by connecting to the domain over TLS and
+reading the ALPN. The same rule as delivery, for the same reason.
+
+**Files are copied before they are written**, never moved — a move leaves the
+path missing for the moment between, and something reading it then sees nothing
+rather than the old contents. The copy's path comes back in the result, and the
+rollback restores from it: a rollback that cannot say what it would put back is
+a promise rather than a mechanism.
+
+**A halting failure stops everything after it.** Continuing past `nginx -t` is
+how a working machine stops working.
+
+**Stopping somebody else's service is not in the flow.** When a port is held
+the install stops and names the process, the pid and the unit — a bare process
+has no unit and cannot be restarted by the panel, which is said rather than
+discovered. The panel does not offer a button for it: making that decision with
+a Next button is the wrong way round.
+
+Eleven checks on the executing half, six proven by contradiction — including an
+agent inventing its own `apt-get`, a swallowed non-zero exit, and success
+declared from an exit code.
+
+### v0.93.0 — iter23 m2: exactly what would be done to a machine
+The answer to "can the agent turn a clean VM into a gateway, or make LL-HLS
+work" was no, and that made everything after it pointless: LL-HLS could be
+chosen and refused forever, and two of the three gateway modes were settings
+that did nothing. The core has been finished since iter20 m5 and was waiting on
+about a hundred lines of execution.
+
+This milestone builds the plan. Not the applying — the plan, with one rule
+above the others: **what is shown is what will be applied.** The same objects
+this produces are what the apply path will execute, because a preview computed
+separately from the work drifts, and the drift is invisible until it matters.
+
+**Ports are answered by name, not by a boolean.** "Port 80 is taken" is not
+actionable; "apache2, pid 900, apache2.service" is, because it decides whether
+the operator stops it or stops the install. Agent v22 reports the process, the
+pid and the systemd unit where there is one — and a unit is stopped by name
+while a bare process has to be killed, which is not interchangeable: stopping a
+unit systemd will restart looks like it worked and is not. A process with no
+unit is marked as **not reversible**, because the panel cannot start it again
+and the operator is agreeing to that.
+
+**A port that could not be read blocks, and is never treated as free.** `ss`
+missing means the panel could not look, and proceeding on that is the
+assumption this project keeps refusing to make.
+
+**The domain is asked, never guessed.** A certificate is issued for one name,
+and an invented one burns a rate-limited issuance to produce something nobody
+can use.
+
+Every step says why it exists and how to undo it; the two that cannot say —
+issuing a certificate, and testing a configuration — are named as the
+exceptions rather than left silent. The order is deliberate: nothing
+irreversible happens before the things that can fail, `nginx -t` halts the plan
+before a reload, and ACME is served before the redirect or renewal breaks the
+moment TLS is on. Replacing somebody else's service is not part of the plan at
+all — it is the one destructive thing here and gets its own consent instead of
+riding along inside a longer list.
+
+Sixteen checks, five proven by contradiction.
+
+### v0.92.0 — a state document, and an install that reports itself
+
+**`docs/STATE.md`.** Written after proposing to build agent installation that
+had existed since iter11 — and after re-deriving WMSPanel facts that had cost
+afternoons two iterations earlier. A changelog says what changed; nothing said
+what *is*. This does: the facts established against live systems and their
+consequences, what exists, what is deliberately absent and why, what is waiting
+on a machine rather than on code, and the habits that earned their place. The
+readme points at it as the first thing to read, and a check keeps both honest.
+
+**The install stopped reporting itself as a console.** A wall of output asks
+the operator to be the parser — to read apt's noise and work out how far it got
+and whether that is normal. There is now a bar and six named stages, recognised
+from what the installer already prints rather than from a second progress
+channel, because a separate reporting path is a second thing that can disagree
+with the log underneath it.
+
+The log is a fold below it, not gone: it is the only thing that answers "why"
+when a stage fails. The failing line is lifted out beside the bar, so nobody
+has to scroll to find it. And a failed install never shows a full bar — a bar
+that fills to the end and then says it went wrong contradicts itself, and
+people believe the bar.
+
+One contradiction did not bite: the check for the log surviving matched
+`job.output` anywhere in the file, and that string is also read to work out the
+stage — so it passed against a fold that opened onto an ellipsis. Bound to the
+fold itself.
+
 ### v0.91.1 — the server dialog asked everything of everyone
 Adding a machine offered a WMSPanel mapping to a gateway that will never be in
 WMSPanel, playback endpoints to a box with no media server, and buried the one

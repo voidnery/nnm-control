@@ -16,6 +16,40 @@ import { copyText } from '../lib/clipboard.js';
 //     separately and reported separately.
 //   * a private address is fine on a shared network and fatal across NAT.
 //     The panel says which one it is looking at rather than guessing.
+// The stages the installer announces, in the order it announces them.
+//
+// Matched on what the script already prints rather than on a second progress
+// channel: the installer is a POSIX script run over SSH, and a separate
+// reporting path would be a second thing that can disagree with the log
+// underneath it.
+const INSTALL_STAGES = [
+  { id: 'connect', match: /connect|ssh|host key/i },
+  { id: 'checks', match: /root|curl|node|prerequisite/i },
+  { id: 'fetch', match: /download|fetch|nnm-agent\.mjs/i },
+  { id: 'install', match: /install|write|systemd|unit/i },
+  { id: 'start', match: /start|enable|active/i },
+  { id: 'enroll', match: /enroll|token|panel/i },
+];
+
+// How far the output says it got. The last stage whose marker appeared, not
+// the first — an installer mentions what it is about to do and then does it,
+// so the newest mention is the truthful one.
+function stageFrom(output = '') {
+  let idx = 0;
+  INSTALL_STAGES.forEach((st, i) => { if (st.match.test(output)) idx = i; });
+  return idx;
+}
+
+// The last line that looks like a failure, for the operator who should not
+// have to scroll a log to find out what went wrong.
+function lastErrorLine(output = '') {
+  const lines = String(output).split('\n').filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/error|failed|cannot|refused|denied|not found|no such/i.test(lines[i])) return lines[i].trim();
+  }
+  return null;
+}
+
 export default function AgentInstallModal({ server, onClose, onEnrolled }) {
   const { t } = useI18n();
   const { push } = useToast();
@@ -37,6 +71,7 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
   const [job, setJob] = useState(null);
   const [ticket, setTicket] = useState(null);
   const [status, setStatus] = useState(null);
+  const [showLog, setShowLog] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const poll = useRef(null);
@@ -134,6 +169,8 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
     : { type: 'error', message: t('copy.failed') });
 
   const state = status?.status || (ticket ? 'pending' : null);
+  const stageIndex = job ? stageFrom(job.output) : 0;
+  const lastError = job?.status === 'failed' ? lastErrorLine(job.output) : null;
 
   return (
     <Modal onClose={onClose} size="wide">
@@ -220,9 +257,65 @@ export default function AgentInstallModal({ server, onClose, onEnrolled }) {
 
       {job && (
         <>
-          <h4 style={{ margin: '0 0 6px' }}>{t(`inst.job.${job.status}`)}{job.exitCode ? ` (exit ${job.exitCode})` : ''}</h4>
+          {/* An install reported as a wall of console output asks the operator
+              to be the parser: to read apt's noise and work out how far it got
+              and whether that is normal. The installer already announces its
+              own stages, so the bar reads those and the log becomes evidence
+              rather than the interface.
+
+              The stages are recognised from the output rather than reported
+              separately, because the installer is a POSIX script run over SSH
+              and inventing a second channel for progress would be a second
+              thing that can disagree with the first. */}
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <b>{t(`inst.job.${job.status}`)}</b>
+            <span className="hint">{t('inst.stageOf', { n: stageIndex + 1, total: INSTALL_STAGES.length })}</span>
+          </div>
+
+          <div className={'progress' + (job.status === 'failed' ? ' failed' : '')}>
+            {/* Never a full bar on failure: a bar that fills to the end and
+                then says it went wrong contradicts itself, and people believe
+                the bar. */}
+            <div className="progress-fill"
+                 style={{ width: `${job.status === 'done' ? 100 : Math.round((stageIndex / INSTALL_STAGES.length) * 100)}%` }} />
+          </div>
+
+          <div className="inst-stages">
+            {INSTALL_STAGES.map((st, i) => {
+              const state = job.status === 'done' ? 'done'
+                : i < stageIndex ? 'done'
+                : i === stageIndex ? (job.status === 'failed' ? 'failed' : 'running')
+                : 'waiting';
+              return (
+                <div key={st.id} className={'inst-stage ' + state}>
+                  <span className="inst-stage-mark">
+                    {state === 'done' ? '✓' : state === 'failed' ? '!' : i + 1}
+                  </span>
+                  <span>{t('inst.stage.' + st.id)}</span>
+                  {state === 'running' && job.status !== 'failed' && <span className="hint">…</span>}
+                </div>
+              );
+            })}
+          </div>
+
           {job.error && <div className="error-box">{job.error}</div>}
-          <pre className="mono" style={{ fontSize: 11, maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{job.output || '…'}</pre>
+          {/* The failing line, lifted out. Somebody whose install just failed
+              should not have to scroll a log to find the one line that says
+              why — and the whole log is still one click away. */}
+          {job.status === 'failed' && lastError && (
+            <div className="error-box mono" style={{ fontSize: 12 }}>{lastError}</div>
+          )}
+
+          <button style={{ marginTop: 8 }} onClick={() => setShowLog(v => !v)}>
+            {showLog ? '▾' : '▸'} {t('inst.showLog')}
+            {job.exitCode ? ` · exit ${job.exitCode}` : ''}
+          </button>
+          {showLog && (
+            <pre className="mono" style={{ fontSize: 11, maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+              {job.output || '…'}
+            </pre>
+          )}
+
           <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
             <button className={job.status === 'done' ? 'primary' : ''} onClick={onClose}>{t('action.close')}</button>
           </div>
