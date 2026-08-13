@@ -1,5 +1,42 @@
 # Changelog
 
+### v0.99.0 — the helper was writing variables the agent does not read
+Third attempt at the same failure, and this time the cause is the one that
+explains all three. The helper's environment file set `NNM_TOKEN`, `PORT` and
+`BIND`. The agent reads `NNM_AGENT_TOKEN`, `NNM_AGENT_PORT`, `NNM_AGENT_BIND`.
+So the helper started, with no token, on the default port, polled the panel,
+was ignored, and never appeared. Nothing failed at any point.
+
+**It inherits the agent's environment now instead of composing one.** Which is
+not merely safer: composing could never have worked, because the agent gains
+`NNM_AGENT_SERVER_ID` only when it enrols, and without that it does not poll at
+all. Copying whatever the agent ended up with, overriding the port and the
+privilege flag, is the only version of this that can be right.
+
+The check that would have caught all three attempts is now there: **every
+variable the helper writes must be one the agent actually reads.** A name it
+never looks at is a setting that silently does nothing.
+
+**A gateway is no longer told its Nimble log directory is missing.** Pressing
+Check reported `conf: /srv/nimble/conf`, `media: …`, and `the log directory is
+absent` — about a machine that has no Nimble and never will. It says what it
+can reach instead, and whether the privileged helper is running.
+
+**And the agent can be removed from the panel**, the same two ways as
+installing: a script to run, or SSH credentials used once. What differs is that
+there is no undo — an install that goes wrong leaves a service to look at, an
+uninstall that goes wrong has already removed it. So the dialog lists what will
+go and what will not **before** the choice of how, because what an uninstall
+leaves behind is the part people are unsure about.
+
+It removes the units, the token and the binary; it does not touch Nimble's
+directories — the agent wrote into them, which does not make them its own — and
+it keeps the state directory unless asked, so a reinstall resumes instead of
+re-reading a fortnight of logs. The server stays listed in the panel, which the
+script says out loud. And the panel clears its record of the agent **only when
+the removal succeeded**: forgetting an agent that is still running would leave
+nothing able to reach it.
+
 ### v0.98.0 — the button fetched a script and showed it nowhere
 "Get the helper installer" did nothing visible. It worked: the request went
 out, the script came back, and it was rendered inside the block that only

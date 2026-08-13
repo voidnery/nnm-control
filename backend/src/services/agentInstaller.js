@@ -283,38 +283,18 @@ ${purpose === 'gateway' ? `
 # version is root scoped by ReadWritePaths to nginx, certbot and apt.
 echo
 echo "==> installing the privileged helper (this machine's purpose is a gateway)"
-# The token is read from the agent's own env file rather than baked in here.
-#
-# A quoted heredoc does not expand anything — which is right, because the
-# helper script contains $ signs of its own that must survive verbatim — but it
-# also meant a literal "$AGENT_TOKEN" reached the helper's env file. The helper
-# then polled the panel with the string "$AGENT_TOKEN" as its token, was
-# refused, and never appeared. So the substitution happens afterwards, on the
-# machine, where the real value is.
+# The helper copies the agent's environment on the machine, so nothing about
+# the token passes through this script. An earlier version substituted it here
+# and got the variable names wrong; there is now no substitution to get wrong.
 cat > /tmp/nnm-privileged.sh <<'PRIVEOF'
-${privilegedInstaller({ panelUrl, token: '__NNM_TOKEN__', port: PRIVILEGED_PORT, bind })}
+${privilegedInstaller({ panelUrl, port: PRIVILEGED_PORT, bind })}
 PRIVEOF
-REAL_TOKEN=$(sed -n "s/^NNM_AGENT_TOKEN=//p" "$ENV_FILE" | head -n 1)
-if [ -n "$REAL_TOKEN" ]; then
-  # sed with a delimiter the token cannot contain: it is base64url, so no
-  # slashes, but a delimiter that can appear in the replacement is how a
-  # working substitution becomes a broken one on the day somebody changes the
-  # token alphabet.
-  sed -i "s|__NNM_TOKEN__|$REAL_TOKEN|" /tmp/nnm-privileged.sh
-  # Its output is shown, and its failure is stated in words the installer's own
-  # summary repeats. A one-line "or echo" put the reason above a hundred lines
-  # of "done" and the operator read the last line, which said everything was
-  # fine — twice, on two rebuilt machines.
-  if sh /tmp/nnm-privileged.sh; then
-    HELPER_OK=1
-  else
-    HELPER_OK=0
-    echo "==> THE PRIVILEGED HELPER DID NOT INSTALL (the agent itself is fine)"
-    echo "    the reason is in the lines just above this one"
-  fi
+if sh /tmp/nnm-privileged.sh; then
+  HELPER_OK=1
 else
   HELPER_OK=0
-  echo "==> no agent token yet, so the helper was not installed; add it from the panel"
+  echo "==> THE PRIVILEGED HELPER DID NOT INSTALL (the agent itself is fine)"
+  echo "    the reason is in the lines just above this one"
 fi
 rm -f /tmp/nnm-privileged.sh
 ` : `

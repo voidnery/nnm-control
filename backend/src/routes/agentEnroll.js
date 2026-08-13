@@ -7,6 +7,7 @@ import { AgentEnrollment, hashTicket, newTicket } from '../models/AgentEnrollmen
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import crypto from 'node:crypto';
 import { installScript } from '../services/agentInstaller.js';
+import { uninstallScript } from '../services/agentUninstaller.js';
 import { probeHostKey, runOverSsh, createJob, appendJob, finishJob, getJob } from '../services/sshInstaller.js';
 import { publicUrl } from '../services/publicUrl.js';
 import { logEvent } from '../services/audit.js';
@@ -353,4 +354,71 @@ agentEnrollRouter.get('/servers/:id/agent/ssh/jobs/:jobId', requireAuth, require
     id: job.id, status: job.status, exitCode: job.exitCode, error: job.error,
     output: job.output, startedAt: job.startedAt, finishedAt: job.finishedAt || null,
   });
+});
+
+
+// The script that removes the agent, to read or to run.
+//
+// Handed over exactly like the installer, and by the same reasoning: taking
+// software off a machine is a decision made on that machine. Unlike the
+// installer it has no undo — an uninstall that goes wrong has already removed
+// the thing somebody would have looked at — so what it removes is fixed and
+// narrow, and it says what it left alone.
+agentEnrollRouter.post('/agents/uninstall/script', requirePerm('servers.manage'), async (req, res) => {
+  const script = uninstallScript({
+    removeHelper: req.body?.removeHelper !== false,
+    // Off by default. The state directory holds the log cursor, and a
+    // reinstall that resumes is usually wanted; re-reading a fortnight of logs
+    // is not.
+    purge: Boolean(req.body?.purge),
+  });
+  logEvent({ req, action: 'agent:uninstall-script', target: String(req.body?.server || ''), outcome: 'ok', status: 200 });
+  res.json({ script });
+});
+
+// The same thing over SSH, when the operator would rather the panel did it.
+agentEnrollRouter.post('/agents/uninstall/ssh', requirePerm('servers.manage'), async (req, res) => {
+  const b = req.body || {};
+  const server = await NimbleServer.findById(b.serverId);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+
+  const host = String(b.host || server.host || '').trim();
+  const port = Number(b.port) || 22;
+  const username = String(b.username || 'root').trim();
+  if (!host || !username) return res.status(400).json({ error: 'ssh-target-required', code: 'ssh-target-required' });
+
+  const script = uninstallScript({
+    removeHelper: b.removeHelper !== false,
+    purge: Boolean(b.purge),
+  });
+  // Piped to sh over stdin, like the install: nothing is written to the
+  // machine's disk that then has to be cleaned up by the thing doing the
+  // cleaning up.
+  const command = `sh -s <<'NNMEOF'\n${script}\nNNMEOF`;
+
+  const jobId = createJob();
+  runOverSsh({
+    host, port, username,
+    password: b.password, privateKey: b.privateKey, passphrase: b.passphrase,
+    expectedFingerprint: b.expectedFingerprint,
+    command, useSudo: Boolean(b.useSudo) && username !== 'root',
+    onOutput: (chunk) => appendJob(jobId, chunk),
+  })
+    .then(async (r) => {
+      finishJob(jobId, { status: r.exitCode === 0 ? 'done' : 'failed', exitCode: r.exitCode });
+      if (r.exitCode === 0) {
+        // The panel's own record of the agent, cleared because it is now
+        // describing something that is not there. The server itself stays —
+        // a machine whose agent is gone is still a machine.
+        server.agent.enabled = false;
+        server.agent.token = '';
+        server.agent.version = 0;
+        server.agent.lastHealth = null;
+        await server.save().catch(() => { /* the machine is done either way */ });
+      }
+    })
+    .catch(e => finishJob(jobId, { status: 'failed', error: String(e?.message || e) }));
+
+  logEvent({ req, action: 'agent:uninstall-ssh', target: server.name, outcome: 'ok', status: 202 });
+  res.status(202).json({ jobId });
 });

@@ -6,6 +6,7 @@ import SearchInput from '../components/SearchInput.jsx';
 import AgentInstallModal from '../components/AgentInstallModal.jsx';
 import AgentCentreModal from '../components/AgentCentreModal.jsx';
 import GatewaySetupModal from '../components/GatewaySetupModal.jsx';
+import AgentUninstallModal from '../components/AgentUninstallModal.jsx';
 
 // Server agents used to live in a modal behind a button on the Playlists page,
 // because deploying a playlist was the first thing an agent was needed for.
@@ -26,6 +27,7 @@ export default function ServerAgentsPage() {
   const [filter, setFilter] = useState('');
   const [purposeFilter, setPurposeFilter] = useState('all');
   const [gwSetup, setGwSetup] = useState(null);
+  const [uninstall, setUninstall] = useState(null);
   const [install, setInstall] = useState(null);
   const [centre, setCentre] = useState(false);
   const [fleet, setFleet] = useState(null);
@@ -103,6 +105,9 @@ export default function ServerAgentsPage() {
           the panel has work to do on the system itself. */}
       {gwSetup && (
         <GatewaySetupModal server={gwSetup} onClose={() => setGwSetup(null)} onDone={load} />
+      )}
+      {uninstall && (
+        <AgentUninstallModal server={uninstall} onClose={() => setUninstall(null)} onDone={load} />
       )}
 
       {/* One button, everything about agents behind it: what is running, what
@@ -182,6 +187,11 @@ export default function ServerAgentsPage() {
                   <input type="checkbox" checked={Boolean(r.enabled)} onChange={e => set(s.id, { enabled: e.target.checked })} />
                   {t('agent.enabled')}
                 </label>
+                {/* Beside reinstall, because it is the same act in reverse and
+                    somebody looking for one is looking for the other. */}
+                {r.enabled && (
+                  <button onClick={() => setUninstall(s)}>{t('agent.uninstall')}</button>
+                )}
                 {/* Installing is a different act from configuring an agent that
                     is already there, so it stays its own action. */}
                 <button onClick={() => setInstall(s)}>{r.enabled ? t('inst.reinstall') : t('inst.install')}</button>
@@ -272,17 +282,33 @@ export default function ServerAgentsPage() {
             )}
             {h && (h.ok
               ? <div className="hint" style={{ marginTop: 6 }}>
-                  ✓ {t('agent.ok', { conf: h.data.confDir, media: h.data.mediaDir })}
-                  {h.data.confExists === false && <> · {t('agent.dirWillBeCreated')}</>}
-                  {/* iter10 m1 — an agent that predates log support, or has it
-                      switched off, cannot feed the log collector. Say so here
-                      rather than leaving the Logs section mysteriously empty. */}
-                  <div style={{ marginTop: 2 }}>
-                    {h.data.logs
-                      ? <>✓ {t('agent.logsOk', { dir: h.data.logDir })}{h.data.logExists === false && <> · {t('agent.logDirMissing')}</>}</>
-                      : t('agent.logsOff')}
-                    {h.data.version < 2 && <> · {t('agent.oldVersion')}</>}
-                  </div>
+                  {/* A gateway has no Nimble, so its conf and media
+                      directories, and its log directory, are questions about
+                      something that is not there. Reporting "the log directory
+                      is missing" on a machine that will never have one reads
+                      as a fault; it is a category error, and the checkmark in
+                      front of it made it worse. */}
+                  {(s.purpose || 'nimble') === 'gateway' ? (
+                    <>
+                      ✓ {t('agent.okGateway', { port: h.data.port || 8090 })}
+                      {h.data.privileged && <> · {t('agent.helperRunning')}</>}
+                    </>
+                  ) : (
+                    <>
+                      ✓ {t('agent.ok', { conf: h.data.confDir, media: h.data.mediaDir })}
+                      {h.data.confExists === false && <> · {t('agent.dirWillBeCreated')}</>}
+                      {/* iter10 m1 — an agent that predates log support, or has
+                          it switched off, cannot feed the log collector. Say so
+                          here rather than leaving the Logs section
+                          mysteriously empty. */}
+                      <div style={{ marginTop: 2 }}>
+                        {h.data.logs
+                          ? <>✓ {t('agent.logsOk', { dir: h.data.logDir })}{h.data.logExists === false && <> · {t('agent.logDirMissing')}</>}</>
+                          : t('agent.logsOff')}
+                        {h.data.version < 2 && <> · {t('agent.oldVersion')}</>}
+                      </div>
+                    </>
+                  )}
                 </div>
               : <div className="error-box" style={{ marginTop: 6 }}>{h.error}</div>)}
           </div>

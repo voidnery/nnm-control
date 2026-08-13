@@ -119,7 +119,12 @@ check('a machine without the ordinary agent is refused', () => {
 
 check('it listens on loopback only', () => {
   // Nothing outside the machine reaches it, whatever happens to the panel.
-  assert.match(script, /BIND='127\.0\.0\.1'/);
+  // The variable is the agent's own name for it — the helper's environment is
+  // the agent's, and a name the agent does not read is a setting that does
+  // nothing.
+  assert.ok(!/NNM_AGENT_BIND=/.test(script) || /NNM_AGENT_BIND='127\.0\.0\.1'/.test(script));
+  assert.ok(/bind = '127\.0\.0\.1'/.test(
+    readFileSync(new URL('../src/services/privilegedHelper.js', import.meta.url), 'utf8')));
 });
 
 check('it is its own unit, with its own life', () => {
@@ -266,25 +271,36 @@ check('a missing helper is said before the attempt, not after it refuses', () =>
   assert.ok(before > 0 && before < attempt, 'the warning comes after the buttons that would fail');
 });
 
-check('the token reaches the helper as a value, not as the word for it', () => {
-  // A quoted heredoc expands nothing — which is right, since the helper script
-  // has $ signs of its own that must survive — but it meant the literal
-  // "$AGENT_TOKEN" reached the helper's env file. It then polled the panel
-  // with that string as its token, was refused, and never appeared. Nothing
-  // failed loudly: the install said done, and the helper was simply absent.
-  const gw2 = installScript({ panelUrl: 'http://p:8095', ticket: 'T', purpose: 'gateway' });
-  const a = gw2.indexOf('PRIVEOF');
-  const inner = gw2.slice(a + 8, gw2.indexOf('PRIVEOF', a + 8));
-  assert.ok(!/NNM_TOKEN='\$/.test(inner), 'a shell variable name is embedded as the token');
-  assert.ok(/__NNM_TOKEN__/.test(inner), 'there is no placeholder to substitute');
-  assert.ok(/sed -i .*__NNM_TOKEN__/.test(gw2), 'nothing substitutes the real token on the machine');
+check('the helper inherits the agent\'s environment rather than composing one', () => {
+  // Two attempts failed here. The first embedded the literal "$AGENT_TOKEN";
+  // the second substituted a real token into variables the agent does not read
+  // — NNM_TOKEN, PORT, BIND — so the helper started with no token on the wrong
+  // port, polled, was ignored, and never appeared. Nothing failed loudly.
+  //
+  // And composing could not work regardless: the agent gains
+  // NNM_AGENT_SERVER_ID only when it enrols, and without it there is no
+  // polling at all.
+  assert.ok(/\/etc\/nnm-agent\.env > "\$ENV_FILE"/.test(script), 'the helper composes its own environment');
+  assert.ok(/NNM_PRIVILEGED=1/.test(script));
+  assert.ok(/NNM_AGENT_PORT=/.test(script), 'the port is not overridden');
+});
+
+check('every variable it writes is one the agent reads', () => {
+  // The check that would have caught both attempts: a name the agent never
+  // looks at is a setting that silently does nothing.
+  const agentSrc = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+  const written = [...script.matchAll(/^(NNM_[A-Z_]+)=/gm)].map(m => m[1]);
+  assert.ok(written.length >= 2, `only ${written.length} variables written`);
+  for (const name of written) {
+    assert.ok(agentSrc.includes(`process.env.${name}`),
+      `the helper sets ${name} and the agent never reads it`);
+  }
 });
 
 check('no token means no helper, said rather than installed broken', () => {
-  // Installing it with an empty token produces a service that runs, polls,
-  // is refused, and looks installed — the worst of the three outcomes.
-  const gw3 = installScript({ panelUrl: 'http://p:8095', ticket: 'T', purpose: 'gateway' });
-  assert.ok(/no agent token yet/.test(gw3));
+  // Installing it against an unenrolled agent produces a service that runs,
+  // polls, is refused, and looks installed — the worst of the three outcomes.
+  assert.ok(/the agent has no token yet/.test(script));
 });
 
 console.log('\nA GATEWAY IS NOT ASKED MEDIA-SERVER QUESTIONS:');
@@ -342,6 +358,56 @@ check('and an empty directory is sent rather than a plausible one', () => {
   // Sending /var/log/nimble would have the agent watch a directory that will
   // never exist, and report its absence forever.
   assert.ok(/logDir: isGateway \? '' :/.test(instUi));
+});
+
+console.log('\nREMOVING THE AGENT IS THE INSTALL IN REVERSE:');
+
+const { uninstallScript } = await import('../src/services/agentUninstaller.js');
+const un = uninstallScript();
+
+check('it removes the agent, the helper, the units and the token', () => {
+  for (const gone of ['nnm-agent.service', 'nnm-agent-privileged.service',
+                      '/etc/nnm-agent.env', '/var/lib/nnm-agent/nnm-agent.mjs']) {
+    assert.ok(un.includes(gone), `${gone} survives an uninstall`);
+  }
+});
+
+check('it does not touch Nimble', () => {
+  // The agent wrote into those directories; that does not make them its own,
+  // and a script that took both would be doing something nobody asked for.
+  assert.ok(!/rm -rf \/srv\/nimble|rm -f \/srv\/nimble/.test(un), 'it removes media-server content');
+  assert.ok(/Nimble and its directories were not touched/.test(un), 'it does not say what it left alone');
+});
+
+check('the state directory survives unless asked for', () => {
+  // It holds the log cursor. A reinstall that resumes is usually wanted;
+  // re-reading a fortnight of logs is not.
+  assert.ok(!/rm -rf \/var\/lib\/nnm-agent\b/.test(un), 'state is removed by default');
+  assert.ok(/rm -rf \/var\/lib\/nnm-agent/.test(uninstallScript({ purge: true })));
+});
+
+check('it says the server stays in the panel', () => {
+  // The part people forget: the machine is out of the panel's reach, not out
+  // of the panel.
+  assert.ok(/still listed in the panel/.test(un));
+});
+
+check('the panel clears its record of the agent, and only that', () => {
+  // A stored token and version describing something that is no longer there
+  // is worse than no record: the panel would keep claiming an agent.
+  const enroll = readFileSync(new URL('../src/routes/agentEnroll.js', import.meta.url), 'utf8');
+  const route = enroll.slice(enroll.indexOf("'/agents/uninstall/ssh'"));
+  assert.ok(/server\.agent\.token = ''/.test(route), 'the token is kept after removal');
+  assert.ok(/server\.agent\.enabled = false/.test(route));
+  assert.ok(!/deleteOne|findByIdAndDelete/.test(route), 'the server itself is deleted');
+});
+
+check('a failed removal does not clear the record', () => {
+  // Otherwise the panel forgets an agent that is still running, and nothing
+  // can reach it to try again.
+  const enroll = readFileSync(new URL('../src/routes/agentEnroll.js', import.meta.url), 'utf8');
+  const route = enroll.slice(enroll.indexOf("'/agents/uninstall/ssh'"));
+  assert.ok(/if \(r\.exitCode === 0\) \{/.test(route), 'the record is cleared regardless of the outcome');
 });
 
 console.log(failures ? `\n${failures} privileged-helper check(s) failed` : '\nall privileged-helper checks passed');

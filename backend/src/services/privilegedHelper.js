@@ -118,14 +118,32 @@ NODE_BIN=$(command -v node || true)
 [ -n "$NODE_BIN" ] || { echo "node is required and was not found"; exit 1; }
 
 umask 077
-cat > "$ENV_FILE" <<EOF
-NNM_PANEL='${sh(panelUrl)}'
-NNM_TOKEN='${sh(token)}'
+# The helper's environment is the agent's, plus the flag that makes it the
+# helper.
+#
+# Copied rather than composed. The first version wrote NNM_TOKEN, PORT and BIND
+# — none of which the agent reads — so the helper started with no token on the
+# wrong port, polled, was ignored, and never appeared. And composing it could
+# not work anyway: the agent's own env gains NNM_AGENT_SERVER_ID only after it
+# enrols, and without that it does not poll the panel at all.
+#
+# So whatever the agent ended up with is what the helper gets, with its port
+# and its flag overridden and Nimble's paths cleared — a gateway has no Nimble,
+# and pointing at directories that will never exist means reporting their
+# absence forever.
+umask 077
+grep -v -E "^(NNM_AGENT_PORT|NNM_PRIVILEGED|NNM_AGENT_LOGS|NNM_AGENT_LOG_DIR)=" \
+  /etc/nnm-agent.env > "$ENV_FILE" 2>/dev/null || {
+    echo "the agent's environment file was not found at /etc/nnm-agent.env"; exit 1; }
+cat >> "$ENV_FILE" <<EOF
 NNM_PRIVILEGED=1
-PORT='${sh(port)}'
-BIND='${sh(bind)}'
+NNM_AGENT_PORT='${sh(port)}'
+NNM_AGENT_LOGS=0
 EOF
 chmod 600 "$ENV_FILE"
+
+grep -q '^NNM_AGENT_TOKEN=' "$ENV_FILE" || {
+  echo "the agent has no token yet — enrol it first, then install the helper"; exit 1; }
 
 cat > "$UNIT" <<EOF
 [Unit]
