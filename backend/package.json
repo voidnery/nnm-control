@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-backend",
-  "version": "0.94.0",
+  "version": "0.94.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -23,7 +23,7 @@
     "audit:undef": "node scripts/undef-audit.mjs",
     "test:publicurl": "node tests/public-url.test.mjs",
     "test:lifecycle": "node tests/agent-lifecycle.test.mjs",
-    "audit:routes": "node scripts/route-order-audit.mjs",
+    "audit:routes": "node scripts/route-audit.mjs",
     "test:host": "node tests/host-metrics.test.mjs",
     "test:join": "node tests/stream-join.test.mjs",
     "audit:shadow": "node scripts/shadow-audit.mjs",

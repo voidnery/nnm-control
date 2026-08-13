@@ -1,5 +1,36 @@
 # Changelog
 
+### v0.94.1 — HTTP 404 on the button
+Four routes shipped as `/servers/:id/gateway/plan` on a router already mounted
+at `/api/servers`, so their real path was `/api/servers/servers/…` and the
+dialog answered 404 the moment somebody pressed the button.
+
+Every test passed. The plan was right, the agent was right, the button was
+right, and the two halves had never been introduced: unit tests import the
+service and never touch the router, the render smoke test answers whatever
+fetch is asked, and `node --check` sees valid syntax. The mount prefix lives in
+one file and the path in another, and only putting them together shows it.
+
+**`audit:routes`** reads the mounts from `index.js`, the declarations from
+every router — following the `const r = wmspanelRouter` aliases these files use
+— and every `api()` call in the frontend, then joins them. It catches both
+shapes: a path nothing answers, and a route declared with the prefix its router
+already carries.
+
+Its own first two versions were the more interesting part. The first did not
+follow aliases and reported **forty working endpoints as unreachable** — a
+check that fires on correct code gets switched off, and the one real fault goes
+with it. The second, fixing that, excluded every call containing two template
+holes and reported OK — throwing away thirty real checks to silence five, which
+is the exact failure this file exists to prevent: passing by not looking. It
+now tries each path as written and only sets aside the five where a hole
+*names* the endpoint, listing them as unchecked rather than counting them as
+fine.
+
+And a check in the gateway suite was anchored on the old route string, so
+removing the duplicated prefix left it slicing an empty span — passing against
+nothing. It now refuses to run rather than pass when it cannot find its subject.
+
 ### v0.94.0 — iter23 m3: the panel changes a machine
 The first thing this panel does that alters a system. Everything until now went
 into somebody else's API, where a wrong call is refused; `apt-get` is not

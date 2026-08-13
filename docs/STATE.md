@@ -134,6 +134,11 @@ implementation; assert the rule.
 folding them together: an unread route list reading as no routes, an unasked
 agent as an absent capability, an unchecked delivery as a failed one.
 
+**A route is only real once both halves are joined.** A path declared on a
+mounted router, and a path called from the client, live in different files and
+are checked by nothing that reads only one of them —  reads the
+mounts, the declarations and the call sites together.
+
 **Verify the archive from a clean extraction.** Eight gates once passed only in
 the directory they were authored in. It also once recovered a file this work
 had truncated to zero.

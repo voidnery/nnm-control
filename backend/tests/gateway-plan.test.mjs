@@ -202,7 +202,12 @@ check('a non-zero exit is a failure, not silence', () => {
 console.log('\nAPPLYING RE-PLANS, AND VERIFIES BY BEING A CLIENT:');
 
 const routes = readFileSync(new URL('../src/routes/servers.js', import.meta.url), 'utf8');
-const applyRoute = routes.slice(routes.indexOf("'/servers/:id/gateway/apply'"), routes.indexOf("'/servers/:id/gateway/rollback'"));
+// Sliced by the route path as it is declared. It changed when the duplicated
+// mount prefix was removed, and a slice anchored on the old string silently
+// became empty — so these checks passed against nothing until the suite said
+// otherwise.
+const applyRoute = routes.slice(routes.indexOf("'/:id/gateway/apply'"), routes.indexOf("'/:id/gateway/rollback'"));
+if (!applyRoute) throw new Error('the apply route could not be located; these checks would test nothing');
 
 check('the plan is recomputed at apply, not taken from the request', () => {
   // If the machine moved between the preview and the press, the operator

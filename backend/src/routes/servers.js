@@ -164,7 +164,7 @@ serversRouter.post('/:id/test', requirePerm('servers.view'), async (req, res) =>
 // A read, and only a read: the agent's endpoint installs nothing. Stored so
 // the agents page can show a fleet at a glance without asking every machine
 // on every render.
-serversRouter.post('/servers/:id/readiness', requirePerm('servers.manage'), async (req, res) => {
+serversRouter.post('/:id/readiness', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
 
@@ -201,7 +201,7 @@ serversRouter.post('/servers/:id/readiness', requirePerm('servers.manage'), asyn
 // rather than recomputing them, because a preview computed separately from the
 // work is a preview that drifts, and the drift is invisible until the day it
 // matters.
-serversRouter.post('/servers/:id/gateway/plan', requirePerm('servers.manage'), async (req, res) => {
+serversRouter.post('/:id/gateway/plan', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
 
@@ -252,7 +252,7 @@ serversRouter.post('/servers/:id/gateway/plan', requirePerm('servers.manage'), a
 // acceptable is not care in this function — it is that the plan was computed
 // once, shown, and is now recomputed here and compared: if the machine moved
 // between the preview and the press, the operator approved something else.
-serversRouter.post('/servers/:id/gateway/apply', requirePerm('servers.manage'), async (req, res) => {
+serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
   if ((server.agent?.version ?? 0) < 23) {
@@ -318,7 +318,7 @@ serversRouter.post('/servers/:id/gateway/apply', requirePerm('servers.manage'), 
 });
 
 // Put it back.
-serversRouter.post('/servers/:id/gateway/rollback', requirePerm('servers.manage'), async (req, res) => {
+serversRouter.post('/:id/gateway/rollback', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
 
