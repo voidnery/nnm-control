@@ -283,10 +283,28 @@ ${purpose === 'gateway' ? `
 # version is root scoped by ReadWritePaths to nginx, certbot and apt.
 echo
 echo "==> installing the privileged helper (this machine's purpose is a gateway)"
+# The token is read from the agent's own env file rather than baked in here.
+#
+# A quoted heredoc does not expand anything — which is right, because the
+# helper script contains $ signs of its own that must survive verbatim — but it
+# also meant a literal "$AGENT_TOKEN" reached the helper's env file. The helper
+# then polled the panel with the string "$AGENT_TOKEN" as its token, was
+# refused, and never appeared. So the substitution happens afterwards, on the
+# machine, where the real value is.
 cat > /tmp/nnm-privileged.sh <<'PRIVEOF'
-${privilegedInstaller({ panelUrl, token: token || '$AGENT_TOKEN', port: PRIVILEGED_PORT, bind })}
+${privilegedInstaller({ panelUrl, token: '__NNM_TOKEN__', port: PRIVILEGED_PORT, bind })}
 PRIVEOF
-sh /tmp/nnm-privileged.sh || { echo "==> the helper did not install; the agent itself is fine"; }
+REAL_TOKEN=$(sed -n "s/^NNM_AGENT_TOKEN=//p" "$ENV_FILE" | head -n 1)
+if [ -n "$REAL_TOKEN" ]; then
+  # sed with a delimiter the token cannot contain: it is base64url, so no
+  # slashes, but a delimiter that can appear in the replacement is how a
+  # working substitution becomes a broken one on the day somebody changes the
+  # token alphabet.
+  sed -i "s|__NNM_TOKEN__|$REAL_TOKEN|" /tmp/nnm-privileged.sh
+  sh /tmp/nnm-privileged.sh || echo "==> the helper did not install; the agent itself is fine"
+else
+  echo "==> no agent token yet, so the helper was not installed; add it from the panel"
+fi
 rm -f /tmp/nnm-privileged.sh
 ` : `
 # No privileged helper: this machine's purpose is "${purpose}", and a media

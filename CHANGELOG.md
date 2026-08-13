@@ -1,5 +1,28 @@
 # Changelog
 
+### v0.97.2 — the helper was installed with the word for the token
+The purpose was set to gateway, the install ran, and no helper appeared. The
+install reported done, because from its point of view it was.
+
+**A quoted heredoc expands nothing.** That is right — the helper script has `$`
+signs of its own that have to survive verbatim — but it meant the literal
+string `$AGENT_TOKEN` reached the helper's environment file. The helper started,
+polled the panel with `$AGENT_TOKEN` as its token, was refused, and stayed
+invisible. Nothing failed loudly anywhere.
+
+The substitution happens on the machine now, after the agent has written its
+real token, with a placeholder and a `sed` whose delimiter the token alphabet
+cannot contain. And when there is no token yet the helper is **not installed at
+all**, with a line saying so: installing it with an empty token produces a
+service that runs, polls, is refused, and looks installed — the worst of the
+three outcomes.
+
+**A gateway no longer shows media-server tabs.** Opening one gave *"Server is
+not mapped to a WMSPanel server id"* about a machine that will never be in
+WMSPanel — a category error wearing the clothes of a fault. It now says what
+the machine is, whether it has been prepared and for which domain, and where
+the work actually happens.
+
 ### v0.97.1 — the order of work is no longer a trap
 v0.97.0 left one: install the agent, then set the machine's purpose to gateway,
 and the script had already been built without the helper. The suggested fix was

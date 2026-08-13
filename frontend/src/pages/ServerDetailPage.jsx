@@ -331,6 +331,26 @@ export default function ServerDetailPage() {
           <div style={{ marginTop: 2 }}>{t('server.bannerWmsStats')}</div>
         </div>
       )}
+      {/* A gateway has no Nimble on it. Every tab below asks a media server a
+          question, and answering "not mapped to WMSPanel" on a machine that
+          will never be in WMSPanel reads as a fault rather than as a category
+          error — which is what it is. Said plainly instead. */}
+      {(server?.purpose || 'nimble') === 'gateway' ? (
+        <div className="panel">
+          <div className="gsection">{t('server.gateway.title')}</div>
+          <div className="hint">{t('server.gateway.body')}</div>
+          {server.gateway?.state === 'applied' && (
+            <div className="hint" style={{ marginTop: 8 }}>
+              {t('server.gateway.prepared', {
+                domain: server.gateway.domain,
+                mode: t('gw.mode.' + (server.gateway.mode || 'redirect')),
+              })}
+            </div>
+          )}
+          <div className="hint" style={{ marginTop: 8 }}>{t('server.gateway.where')}</div>
+        </div>
+      ) : (
+      <>
       <div className="tabs">
         {visibleTabs.map((t, i) => {
           const newGroup = i === 0 || visibleTabs[i - 1].group !== t.group;
@@ -344,6 +364,8 @@ export default function ServerDetailPage() {
         })}
       </div>
       {Active && <Active serverId={id} server={server} />}
+      </>
+      )}
       {editOpen && (
         <ServerEditModal serverId={id} onClose={() => setEditOpen(false)}
           onSaved={() => { setEditOpen(false); api('/servers').then(list => setServer(list.find(s => s.id === id) || null)); }} />

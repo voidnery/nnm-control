@@ -236,5 +236,43 @@ check('a missing helper is said before the attempt, not after it refuses', () =>
   assert.ok(before > 0 && before < attempt, 'the warning comes after the buttons that would fail');
 });
 
+check('the token reaches the helper as a value, not as the word for it', () => {
+  // A quoted heredoc expands nothing — which is right, since the helper script
+  // has $ signs of its own that must survive — but it meant the literal
+  // "$AGENT_TOKEN" reached the helper's env file. It then polled the panel
+  // with that string as its token, was refused, and never appeared. Nothing
+  // failed loudly: the install said done, and the helper was simply absent.
+  const gw2 = installScript({ panelUrl: 'http://p:8095', ticket: 'T', purpose: 'gateway' });
+  const a = gw2.indexOf('PRIVEOF');
+  const inner = gw2.slice(a + 8, gw2.indexOf('PRIVEOF', a + 8));
+  assert.ok(!/NNM_TOKEN='\$/.test(inner), 'a shell variable name is embedded as the token');
+  assert.ok(/__NNM_TOKEN__/.test(inner), 'there is no placeholder to substitute');
+  assert.ok(/sed -i .*__NNM_TOKEN__/.test(gw2), 'nothing substitutes the real token on the machine');
+});
+
+check('no token means no helper, said rather than installed broken', () => {
+  // Installing it with an empty token produces a service that runs, polls,
+  // is refused, and looks installed — the worst of the three outcomes.
+  const gw3 = installScript({ panelUrl: 'http://p:8095', ticket: 'T', purpose: 'gateway' });
+  assert.ok(/no agent token yet/.test(gw3));
+});
+
+console.log('\nA GATEWAY IS NOT ASKED MEDIA-SERVER QUESTIONS:');
+
+const detail = readFileSync(new URL('../../frontend/src/pages/ServerDetailPage.jsx', import.meta.url), 'utf8');
+
+check('the media-server tabs are not shown on a gateway', () => {
+  // Every one of them asks a media server a question, and "not mapped to
+  // WMSPanel" on a machine that will never be in WMSPanel reads as a fault
+  // rather than as the category error it is.
+  assert.ok(/\(server\?\.purpose \|\| 'nimble'\) === 'gateway' \?/.test(detail));
+  assert.ok(/server\.gateway\.title/.test(detail));
+});
+
+check('it says where the real work is instead of showing nothing', () => {
+  const d2 = readFileSync(new URL('../../frontend/src/i18n.jsx', import.meta.url), 'utf8');
+  assert.equal((d2.match(/'server\.gateway\.where':/g) || []).length, 2);
+});
+
 console.log(failures ? `\n${failures} privileged-helper check(s) failed` : '\nall privileged-helper checks passed');
 process.exit(failures ? 1 : 0);
