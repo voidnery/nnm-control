@@ -21,6 +21,54 @@ const check = (name, fn) => {
 const script = privilegedInstaller({ panelUrl: 'http://panel:8095', token: 'tok' });
 const agent = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
 
+console.log('\nWHAT THE UNIT REQUIRES OF A CLEAN MACHINE:');
+
+check('every writable path is created before the unit is enabled', () => {
+  // systemd builds the mount namespace before the process runs, so a path that
+  // is not there yet fails the unit outright with 226/NAMESPACE. Five of the
+  // ten only appear once nginx and certbot are installed — by this very
+  // helper, which cannot start to install them.
+  //
+  // ExecStartPre cannot fix it: that also runs inside the namespace, after it
+  // has already failed to be built. It has to be the installer, while the
+  // filesystem is still ordinary.
+  const mkdirAt = script.indexOf('mkdir -p');
+  const unitAt = script.indexOf('[Service]');
+  assert.ok(mkdirAt > 0, 'nothing creates the writable directories');
+  assert.ok(mkdirAt < unitAt, 'the directories are created after the unit is written');
+  for (const p of ALLOWED_PATHS) {
+    assert.ok(script.includes(p), `${p} is never created`);
+  }
+});
+
+check('and every path is also marked optional, as a second line', () => {
+  // A "-" makes systemd ignore a missing path. It fixes the crash and nothing
+  // else — the namespace is fixed at start, so a directory created later is
+  // still not writable. Belt for a path this list gains and the script
+  // forgets; not the mechanism.
+  for (const p of ALLOWED_PATHS) {
+    assert.ok(new RegExp(`ReadWritePaths=[^\\n]*-${p.replace(/\//g, '\\/')}`).test(script),
+      `${p} is not optional in ReadWritePaths`);
+  }
+});
+
+check('a unit that cannot start stops instead of spinning', () => {
+  // It restarted 740 times at two-second intervals while the real fault went
+  // unnoticed. A unit that cannot start should be visibly stopped, not quietly
+  // filling a journal.
+  assert.match(script, /RestartSec=(\d+)/);
+  assert.ok(Number(/RestartSec=(\d+)/.exec(script)[1]) >= 10, 'it restarts too fast to notice');
+  assert.match(script, /StartLimitBurst=\d+/);
+});
+
+check('the state directory is granted by systemd, not by the path list', () => {
+  // StateDirectory= is read-write even under ProtectSystem=strict, and systemd
+  // creates it. Listing it in ReadWritePaths instead would put it back in the
+  // must-exist-first trap.
+  assert.match(script, /StateDirectory=nnm-agent-privileged/);
+  assert.ok(!/ReadWritePaths=[^\n]*\/var\/lib\/nnm-agent/.test(script));
+});
+
 console.log('\nROOT, BUT NOT FREE:');
 
 check('the unit lists what it may write, and it is a short list', () => {

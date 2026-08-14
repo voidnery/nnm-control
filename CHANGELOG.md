@@ -1,5 +1,38 @@
 # Changelog
 
+### v0.99.3 — the whole unit, once, instead of one layer at a time
+Five releases went to the same class of fault: assuming something about the
+machine that was decided elsewhere. Each fix was correct and one layer deep,
+and each shipped with "it should install now". `docs/privileged-helper.md` is
+the pass that should have come first — every directive against a clean Ubuntu,
+with what it requires and whether that is there when it is required.
+
+**`ReadWritePaths` requires every path to exist when the unit starts.** systemd
+builds the mount namespace before the process runs, so a missing one fails the
+unit outright — `226/NAMESPACE`, buried in a journal on a machine nobody was
+sitting at, restarting every two seconds. The counter reached **740**.
+
+Five of the ten paths only appear once nginx and certbot are installed — by
+this helper, which could not start in order to install them.
+
+**A `-` prefix is not the fix**, and this is the part that would have caught me
+twice: it stops the crash and nothing else, because the namespace is fixed at
+start. certbot runs *inside* it, so on a machine where `/etc/letsencrypt` was
+absent at start it cannot create it — everything outside the allow-list is
+read-only. `ExecStartPre` is no better: it also runs inside the namespace,
+after it has already failed to be built.
+
+The installer creates every path before writing the unit, while the filesystem
+is still ordinary. The `-` prefixes stay as a second line for a path the list
+gains and the script forgets.
+
+**And a unit that cannot start now stops.** Ten seconds, five attempts, then it
+stays down where somebody will see it — rather than spinning quietly and
+filling a journal while the real fault goes unnoticed.
+
+Four checks, four proven by contradiction, including the one that matters most
+for next time: a path added to the list and not to the `mkdir`.
+
 ### v0.99.2 — it installed, and then had nowhere to write
 The helper reached the machine this time: it found the agent, found node,
 created its unit, enabled it — and stopped. The log said *"it did not start"*

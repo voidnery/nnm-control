@@ -31,6 +31,26 @@
 // Exactly what gateway preparation touches, and nothing else. Each path is
 // here because a step in `gatewayPlan` needs it; a path nobody can point at a
 // step for does not belong.
+// Directories in `ReadWritePaths` must exist when the unit starts.
+//
+// This is the whole of the last failure and it is worth writing down properly.
+// systemd builds the mount namespace before the process runs, so a path that
+// is not there yet fails the unit outright — `226/NAMESPACE`, with the reason
+// buried in a journal line nobody reads on a machine nobody is sitting at. It
+// restarted 740 times before anyone looked.
+//
+// Two consequences, and the second is the one that is easy to miss:
+//
+//   1. A `-` prefix makes systemd ignore a missing path. That fixes the
+//      crash and nothing else.
+//   2. It does not make the path writable later. The namespace is fixed at
+//      start, and certbot runs *inside* it — so on a machine where
+//      /etc/letsencrypt did not exist at start, certbot cannot create it,
+//      because everything outside the allow-list is read-only.
+//
+// So the installer creates every one of these before the unit is enabled. The
+// `-` stays as a second line of defence for a path this list gains and the
+// script forgets, but it is not the mechanism.
 export const ALLOWED_PATHS = [
   '/etc/nginx',                  // the configuration this writes
   '/etc/letsencrypt',            // certbot's certificates and account
@@ -147,6 +167,16 @@ umask 077
 # and its flag overridden and Nimble's paths cleared — a gateway has no Nimble,
 # and pointing at directories that will never exist means reporting their
 # absence forever.
+# Every writable path, created before the unit exists.
+#
+# Not in ExecStartPre: that runs inside the namespace, after it has already
+# failed to be built. It has to happen here, in the installer, while the
+# filesystem is still ordinary.
+echo "==> creating the directories the helper is allowed to write"
+for d in ${ALLOWED_PATHS.join(' ')}; do
+  [ -d "$d" ] || mkdir -p "$d" || { echo "could not create $d"; exit 1; }
+done
+
 umask 077
 grep -v -E "^(NNM_AGENT_PORT|NNM_PRIVILEGED|NNM_AGENT_LOGS|NNM_AGENT_LOG_DIR)=" \
   /etc/nnm-agent.env > "$ENV_FILE" 2>/dev/null || {
@@ -174,7 +204,12 @@ User=root
 EnvironmentFile=$ENV_FILE
 ExecStart=$NODE_BIN $BIN
 Restart=on-failure
-RestartSec=2
+# Ten seconds, and a limit. At two seconds this restarted 740 times while the
+# real fault went unnoticed — a unit that cannot start should be visibly
+# stopped, not quietly spinning and filling a journal.
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 # Its own state directory, and not a shared one.
 #
@@ -194,7 +229,7 @@ StateDirectory=nnm-agent-privileged
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=${rw}
+ReadWritePaths=${ALLOWED_PATHS.map(p => `-${p}`).join(' ')}
 # Not NoNewPrivileges: apt-get and certbot legitimately re-exec helpers.
 # Everything else stays on.
 ProtectKernelTunables=yes

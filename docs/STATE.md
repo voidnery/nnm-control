@@ -167,6 +167,10 @@ mounts, the declarations and the call sites together.
 the directory they were authored in. It also once recovered a file this work
 had truncated to zero.
 
+The full directive-by-directive analysis of the helper's unit is in
+`docs/privileged-helper.md`, written after the fifth attempt. Read it before
+touching that unit.
+
 **Two scripts that run on the same machine must agree about it, and a gate has
 to make them.** The privileged helper cost three releases in a row by assuming
 a path the agent's installer had decided differently — first the agent binary,
