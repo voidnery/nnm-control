@@ -484,8 +484,12 @@ check('the ACME block serves the challenge and refuses everything else', () => {
 console.log('\nWHY A CHALLENGE WOULD FAIL, BEFORE SPENDING ONE:');
 
 const agentSrc2 = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
-const pre = agentSrc2.slice(agentSrc2.indexOf("'POST /host/acme-precheck'"),
-                            agentSrc2.indexOf("'POST /host/acme-precheck'") + 3000);
+// Bounded by the handler's own end rather than by a character count: adding
+// four lines to the handler pushed `unlink` past a fixed 3000 and the check
+// reported the probe file as left behind. A slice measured in characters
+// measures the wrong thing.
+const preStart = agentSrc2.indexOf("'POST /host/acme-precheck'");
+const pre = agentSrc2.slice(preStart, agentSrc2.indexOf('\n  },', preStart));
 
 check('the machine checks itself, because nobody else can', () => {
   // certbot puts the reason in a log file on a box nobody is sitting at, and
@@ -523,8 +527,7 @@ check('a probe that could not run is a failure, not a pass', () => {
   // walked on to certbot. Written by me, in the code added to prevent exactly
   // this.
   assert.ok(/challengeServed !== true/.test(routes), 'an undefined result passes as a success');
-  const pre2 = agentSrc2.slice(agentSrc2.indexOf("'POST /host/acme-precheck'"),
-                               agentSrc2.indexOf("'POST /host/acme-precheck'") + 4000);
+  const pre2 = pre;
   assert.equal((pre2.match(/out\.challengeServed = false/g) || []).length, 2,
     'the agent leaves the field undefined on one of its failure paths');
 });

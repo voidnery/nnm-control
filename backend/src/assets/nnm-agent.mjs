@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 26;
+const AGENT_VERSION = 27;
 
 // Whether this process is the privileged helper. Set by its unit's
 // environment file and by nothing else — an agent cannot promote itself.
@@ -1119,7 +1119,15 @@ const routes = {
   async 'POST /host/acme-precheck'(_req, _url, body) {
     const domain = String(body?.domain || '').trim().toLowerCase();
     if (!domain) throw new Error('a domain is required');
-    const out = { agent: AGENT_VERSION, domain };
+    // Refused rather than attempted. The ordinary agent is sandboxed out of
+    // /var/www/html, and when this route was not on the privileged list it
+    // came back saying "no such file or directory" about a path the helper
+    // creates on install — a permission problem wearing a missing-file
+    // costume, and an afternoon looking at the wrong machine.
+    if (!PRIVILEGED) {
+      throw Object.assign(new Error('this agent is not the privileged helper'), { needsPrivileged: true });
+    }
+    const out = { agent: AGENT_VERSION, domain, privileged: true };
 
     const dns = await import('node:dns/promises');
     try {

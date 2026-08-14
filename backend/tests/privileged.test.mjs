@@ -572,15 +572,47 @@ check('the claim filters on it, so the wrong agent cannot see the task', () => {
     'the poll does not say which agent it is');
 });
 
+check('every agent route that writes outside Nimble needs the helper', () => {
+  // `acme-precheck` writes /var/www/html and was not on the list, so it went
+  // to the ordinary agent — sandboxed, unable to write there, reporting "no
+  // such file or directory" about a path the helper creates on install. The
+  // second time a route reached the wrong agent, and the first fix listed
+  // three routes and stopped.
+  //
+  // The rule is what the route does, not what it is called: anything writing
+  // outside /srv/nimble, or reading process tables, belongs to the helper.
+  const busSrc = readFileSync(new URL('../src/services/agentBus.js', import.meta.url), 'utf8');
+  const listed = [...busSrc.matchAll(/'((?:GET|POST|PUT|DELETE) \/host\/[a-z-]+)'/g)].map(m => m[1]);
+
+  // Every /host/ route the agent actually has.
+  const routes2 = [...agent.matchAll(/async '((?:GET|POST) \/host\/[a-z-]+)'/g)].map(m => m[1]);
+  assert.ok(routes2.length >= 4, `only ${routes2.length} host routes found`);
+
+  for (const route of routes2) {
+    const body = agent.slice(agent.indexOf(`'${route}'`), agent.indexOf(`'${route}'`) + 3000);
+    // Writing anywhere, or asking who owns a socket, is privileged work.
+    const writes = /fs\.(writeFile|mkdir|unlink|rm)\(/.test(body);
+    const roots = /whoHolds|ss -ltnp|'-ltnp'/.test(body);
+    if (writes || roots) {
+      assert.ok(listed.includes(route),
+        `${route} ${writes ? 'writes files' : 'reads process ownership'} and is not on the privileged list, `
+        + 'so the ordinary agent can claim it and will fail');
+    }
+  }
+});
+
 check('exactly the system routes need the helper', () => {
-  const re = new RegExp(/const PRIVILEGED_ROUTES = (\/.*\/);/.exec(bus)[1].slice(1, -1));
-  for (const r of ['POST /host/apply', 'POST /host/rollback', 'GET /host/ports']) {
-    assert.ok(re.test(r), `${r} would go to the ordinary agent`);
+  // From the list rather than from the regular expression built out of it: the
+  // expression is generated now, and an assertion that parses the generated
+  // form breaks whenever the generation changes without the contract having.
+  const listed = [...bus.matchAll(/'((?:GET|POST|PUT|DELETE) \/host\/[a-z-]+)'/g)].map(m => m[1]);
+  for (const r of ['POST /host/apply', 'POST /host/rollback', 'GET /host/ports', 'POST /host/acme-precheck']) {
+    assert.ok(listed.includes(r), `${r} would go to the ordinary agent`);
   }
   // Reading changes nothing, so it does not need root and must not wait for a
   // helper that a media server will never have.
   for (const r of ['GET /host/readiness', 'PUT /config', 'GET /health', 'POST /media/probe']) {
-    assert.ok(!re.test(r), `${r} would wait for a privileged helper`);
+    assert.ok(!listed.includes(r), `${r} would wait for a privileged helper`);
   }
 });
 

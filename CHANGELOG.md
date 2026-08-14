@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.99.14 — the precheck went to the agent that cannot do it
+The check worked exactly as intended and named a precise cause:
+
+    could not write the challenge file: ENOENT, mkdir '/var/www/html/.well-known'
+
+Which is my fault twice over. `acme-precheck` writes into `/var/www/html`, so
+it is privileged work — and it was not on the privileged list, so the ordinary
+sandboxed agent claimed it and failed. A permission problem wearing a
+missing-file costume.
+
+**This is the second route to reach the wrong agent.** The first fix listed
+three and stopped there, which is the shape of fix that comes back. So the list
+is written out one route at a time with what each does, and a check now derives
+membership from behaviour rather than from the list agreeing with itself: any
+`/host/` route in the agent that writes a file or reads process ownership must
+be on it. That would have caught this one before it shipped.
+
+A check of my own measured a handler by character count, so adding four lines
+to it pushed the cleanup past the boundary and it reported the probe file as
+left behind. Bounded by the handler now — a slice measured in characters
+measures the wrong thing.
+
+The agent refuses the route outright when it is not the helper, rather than
+attempting it and reporting a missing directory — the same guard the apply and
+rollback have had since the queues were split.
+
 ### v0.99.13 — the precheck passed and certbot still failed
 The helper was already v25, so the precheck did run — and said the domain was
 fine while certbot said it was not. Two faults behind that.

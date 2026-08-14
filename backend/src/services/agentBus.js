@@ -130,7 +130,23 @@ export async function enqueueTask(server, route, { query = null, body = null, ti
 // rather than passed by every caller: a flag somebody has to remember is a flag
 // somebody forgets, and the consequence here is a task offered to an agent that
 // will refuse it.
-const PRIVILEGED_ROUTES = /^(POST \/host\/apply|POST \/host\/rollback|GET \/host\/ports)$/;
+// Written out one route at a time, because the list is the contract and a
+// regular expression hides what is missing. `acme-precheck` was absent, so it
+// went to the ordinary agent — which is sandboxed, cannot write
+// /var/www/html, and reported "no such file or directory" about a path the
+// helper creates on install.
+//
+// The test for membership is what the route *does*, not what it is called:
+// anything that writes outside Nimble's own directories or reads process
+// tables needs the helper.
+const PRIVILEGED_ROUTES_LIST = [
+  'POST /host/apply',          // installs packages, writes /etc
+  'POST /host/rollback',       // undoes the same
+  'GET /host/ports',           // needs root to see which process holds a port
+  'POST /host/acme-precheck',  // writes a file into /var/www/html
+];
+const PRIVILEGED_ROUTES = new RegExp(`^(${PRIVILEGED_ROUTES_LIST
+  .map(r => r.replace(/[/]/g, '\\/')).join('|')})$`);
 
 export async function runTask(server, route, { query = null, body = null, timeoutMs = DEFAULT_TIMEOUT_MS, createdBy = '' } = {}) {
   if (!server?.agent?.enabled) {
