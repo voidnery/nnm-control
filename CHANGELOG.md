@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.99.15 — 0700 on a parent directory, three levels up
+The precheck did its job and the machine's own output settled it in one line:
+
+    drwx------  /var/www/html
+    drwxr-xr-x  /var/www/html/.well-known
+    drwxr-xr-x  /var/www/html/.well-known/acme-challenge
+
+nginx runs as `www-data` and cannot enter a directory it has no permission on,
+so it answered 403 — with the config correct, the block loaded and matching,
+and the challenge file present. A permission on a parent, above everything
+anyone was looking at.
+
+**`umask 077` wrapped the whole installer.** I put it there for the environment
+file, which holds the token and should be tight; it then applied to every
+directory created afterwards. It is a subshell around that one file now, and
+the webroot's mode is set explicitly — nginx has to enter it, so it is not
+something to leave to whatever umask happened to be in effect.
+
+**And a step I added and removed in the same release.** Unlinking the
+distribution's default site was my other hypothesis for the 403, and `nginx -T`
+had already ruled it out: our `server_name` is exact and wins over
+`default_server` regardless. Removing it would have been a change to somebody's
+machine that nothing asked for, on a theory already disproved — which is the
+shape of change this plan exists to avoid. The reasoning is in the file so the
+next person does not re-add it.
+
 ### v0.99.14 — the precheck went to the agent that cannot do it
 The check worked exactly as intended and named a precise cause:
 

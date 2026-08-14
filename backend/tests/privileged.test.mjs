@@ -179,6 +179,31 @@ check('a machine without the ordinary agent is refused', () => {
   assert.equal(privilegedEligibility({ purpose: 'gateway', agent: { enabled: false } }).code, 'no-agent');
 });
 
+check('the tight umask covers the token file and nothing else', () => {
+  // It wrapped the whole script, so every directory created afterwards came
+  // out 0700 — and nginx runs as www-data. The result was a 403 on the ACME
+  // challenge from our own nginx, with the config correct and the file
+  // present: a permission on a parent directory, three levels above where
+  // anybody was looking.
+  assert.ok(/\(umask 077/.test(script), 'the umask is not scoped to a subshell');
+  const lines = script.split('\n');
+  const umaskAt = lines.findIndex(l => l.includes('umask 077'));
+  const mkdirAt = lines.findIndex(l => l.includes('mkdir -p'));
+  assert.ok(mkdirAt < umaskAt, 'directories are still created under the tight umask');
+});
+
+check('the webroot mode is set, not inherited', () => {
+  // nginx has to enter it, so this is not a matter of taste and not something
+  // to leave to whatever umask happened to be in effect.
+  assert.ok(/chmod 755 \/var\/www\/html/.test(script), 'the webroot mode is left to chance');
+  // And only that one: the rest are apt's and systemd's own directories.
+  const chmods = [...script.matchAll(/^chmod \d+ ([^\n]*)/gm)].map(m => m[1]);
+  for (const line of chmods) {
+    assert.ok(!/\/var\/lib\/dpkg|\/var\/cache\/apt|\/etc\/systemd/.test(line),
+      `the installer changes the mode of ${line}, which belongs to the system`);
+  }
+});
+
 check('re-running the installer actually applies the new unit', () => {
   // `enable --now` starts a stopped service and does nothing to a running one.
   // So rewriting the unit, reloading it and calling --now left the old process

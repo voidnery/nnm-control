@@ -253,6 +253,16 @@ export function gatewayPlan({
                 `/etc/nginx/sites-enabled/nnm-${domain}.conf`],
       undo: ['rm', '-f', `/etc/nginx/sites-enabled/nnm-${domain}.conf`],
     },
+    // No step removes the distribution's default site.
+    //
+    // It was a candidate for the 403 on the ACME challenge and it was not the
+    // cause: `nginx -T` showed our block loaded and matching, and the fault
+    // was 0700 on /var/www/html. Our server_name is exact, so it wins over
+    // default_server for this host regardless.
+    //
+    // Removing it anyway would be a change to somebody's machine that nothing
+    // asked for, on a hypothesis already ruled out — and that is the shape of
+    // change this whole plan exists to avoid making.
     {
       id: 'test-conf',
       kind: 'command',

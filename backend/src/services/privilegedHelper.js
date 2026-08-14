@@ -192,7 +192,6 @@ fi
 [ -n "$NODE_BIN" ] || { echo "node was not found — looked in the agent's state directory, in PATH, and in the running unit"; exit 1; }
 echo "==> using node: $NODE_BIN"
 
-umask 077
 # The helper's environment is the agent's, plus the flag that makes it the
 # helper.
 #
@@ -216,7 +215,22 @@ for d in ${ALLOWED_PATHS.join(' ')}; do
   [ -d "$d" ] || mkdir -p "$d" || { echo "could not create $d"; exit 1; }
 done
 
-umask 077
+# The webroot is read by nginx, which runs as www-data, so its mode is not a
+# matter of taste. Set explicitly rather than left to whatever umask happened
+# to be in effect — which is how it became 0700 and produced a 403 that looked
+# like a firewall.
+#
+# Only this one: the rest are apt's and systemd's own directories, and their
+# modes belong to them.
+chmod 755 /var/www/html /var/www/html/.well-known 2>/dev/null || true
+
+# Tight only for the environment file, which holds the token — and only for it.
+# It used to wrap the whole script, so the directories created above came out
+# 0700 and nginx, which runs as www-data, could not enter /var/www/html. The
+# symptom was a 403 on the ACME challenge from our own nginx, config correct
+# and file present: a permission on a parent directory, three levels above
+# where anybody was looking.
+(umask 077
 grep -v -E "^(NNM_AGENT_PORT|NNM_PRIVILEGED|NNM_AGENT_LOGS|NNM_AGENT_LOG_DIR)=" \
   /etc/nnm-agent.env > "$ENV_FILE" 2>/dev/null || {
     echo "the agent's environment file was not found at /etc/nnm-agent.env"; exit 1; }
@@ -225,6 +239,8 @@ NNM_PRIVILEGED=1
 NNM_AGENT_PORT='${sh(port)}'
 NNM_AGENT_LOGS=0
 EOF
+)
+)
 chmod 600 "$ENV_FILE"
 
 grep -q '^NNM_AGENT_TOKEN=' "$ENV_FILE" || {
