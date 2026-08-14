@@ -1,5 +1,52 @@
 # Changelog
 
+### v0.99.13 — the precheck passed and certbot still failed
+The helper was already v25, so the precheck did run — and said the domain was
+fine while certbot said it was not. Two faults behind that.
+
+**A probe that could not run reported as a probe that passed.**
+`challengeServed` was left undefined when the fetch threw or the file could not
+be written, and the guard tested `=== false`. So "the check did not happen"
+read as "the check found nothing wrong", and the apply walked on to certbot.
+That is the exact conflation this project refuses everywhere else, written by
+me, in the code added to prevent it. Both paths set the field now, and anything
+other than a clear pass stops the apply.
+
+**And a machine cannot prove it is reachable from the internet by asking
+itself.** The probe fetched the challenge from the machine, where the request
+either loops back locally or leaves and returns through the same firewall that
+would have let it in. Let's Encrypt arrives from outside — the one leg neither
+end could see.
+
+The panel now fetches the same file from its own network, and the agent keeps
+it for thirty seconds so both can look. Neither of us is Let's Encrypt, but a
+machine that answers itself and not the panel is a machine with port 80 closed
+between the two, and **that has its own name** — "not served" would send
+somebody to look at an nginx that is working perfectly.
+
+### v0.99.12 — the precheck did not run, and said nothing about it
+Same certbot sentence as before, which meant the check added to replace it had
+not happened. The helper on that machine is v24; the endpoint arrived in v25.
+
+**The call failed and the result was thrown away** — `catch { acme = null }`,
+and then straight on to certbot. A check that quietly does not occur is worse
+than none: it leaves the operator believing the domain was verified and certbot
+the only thing that disagreed. That is exactly the conflation this project
+keeps refusing to make, and I wrote it myself two releases ago.
+
+The job output now says so before the steps run, while there is still time to
+stop and update the helper — and it tells an **old helper** apart from a
+**broken call**, because "reinstall the helper" and "the call failed" are
+different instructions.
+
+**And the agents page shows the helper's version.** An outdated one was
+invisible until something it could not do failed, which is how a v24 helper let
+certbot run unchecked.
+
+One contradiction found a gap: the check required both codes to exist
+somewhere in the file, which passes when the condition choosing between them is
+wrong. Bound to the condition.
+
 ### v0.99.11 — "some challenges have failed" is not a reason
 Five steps passed and certbot stopped with a sentence that says nothing and a
 log file on a machine nobody is sitting at.

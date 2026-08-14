@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 25;
+const AGENT_VERSION = 26;
 
 // Whether this process is the privileged helper. Set by its unit's
 // environment file and by nothing else — an agent cannot promote itself.
@@ -1162,10 +1162,26 @@ const routes = {
         if (!out.challengeServed) out.challengeBody = text.slice(0, 200);
       } catch (e) {
         out.challengeStatus = null;
+        out.challengeServed = false;
         out.challengeError = String(e?.message || e).slice(0, 200);
       }
-      await fs.unlink(`${dir}/${token}`).catch(() => { /* nothing to clean up */ });
+      // Left in place for a moment so the panel can fetch it too, from its own
+      // network, then removed on a timer.
+      //
+      // A machine cannot prove it is reachable from the internet by asking
+      // itself: the request either loops back locally or leaves and returns
+      // through the same firewall that would let it. Let's Encrypt comes from
+      // outside, and that is the leg neither of us can see from here — but two
+      // vantage points disagreeing says a great deal, and this is the one
+      // check that was passing while certbot failed.
+      out.token = token;
+      out.keptForSeconds = 30;
+      setTimeout(() => { fs.unlink(`${dir}/${token}`).catch(() => {}); }, 30_000).unref?.();
     } catch (e) {
+      // False, not absent. Left undefined, this read as "the check found no
+      // problem" and the apply carried on to certbot — a probe that could not
+      // run reported as a probe that passed.
+      out.challengeServed = false;
       out.challengeError = `could not write the challenge file: ${String(e?.message || e).slice(0, 120)}`;
     }
 

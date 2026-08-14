@@ -107,7 +107,7 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
                     domain: d.acme.domain,
                     resolves: (d.acme.resolves || []).join(', ') || '—',
                     publicIp: d.acme.publicIp || '—',
-                    status: d.acme.challengeStatus ?? '—',
+                    status: d.acme.fromPanel?.status ?? d.acme.challengeStatus ?? '—',
                     server: d.acme.challengeServer || d.acme.challengeBody || '—',
                     error: d.acme.challengeError || '—',
                   })].join(' '));

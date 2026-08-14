@@ -516,12 +516,62 @@ check('a failing precheck stops the apply and names which fault', () => {
   }
 });
 
+check('a probe that could not run is a failure, not a pass', () => {
+  // `challengeServed` was left undefined when the fetch threw or the file
+  // could not be written, and the guard tested `=== false` — so a check that
+  // did not happen read as a check that found nothing wrong, and the apply
+  // walked on to certbot. Written by me, in the code added to prevent exactly
+  // this.
+  assert.ok(/challengeServed !== true/.test(routes), 'an undefined result passes as a success');
+  const pre2 = agentSrc2.slice(agentSrc2.indexOf("'POST /host/acme-precheck'"),
+                               agentSrc2.indexOf("'POST /host/acme-precheck'") + 4000);
+  assert.equal((pre2.match(/out\.challengeServed = false/g) || []).length, 2,
+    'the agent leaves the field undefined on one of its failure paths');
+});
+
+check('the challenge is fetched from a second network as well', () => {
+  // A machine cannot prove it is reachable from the internet by asking itself:
+  // the request loops back locally or leaves and returns through the same
+  // firewall that would have let it. Let's Encrypt comes from outside, and
+  // this check was passing while certbot failed on that very leg.
+  assert.ok(/acme\.fromPanel/.test(routes), 'only the machine is asked');
+  assert.ok(/acme\?\.token/.test(routes), 'the panel has no file to fetch');
+  assert.ok(/keptForSeconds|setTimeout/.test(agentSrc2), 'the probe file is deleted before the panel can look');
+});
+
+check('answering itself but not the panel has its own name', () => {
+  // "not served" would send somebody to look at nginx, and nginx is fine —
+  // the port is closed between the two networks.
+  assert.ok(/closed-from-outside/.test(routes));
+  assert.equal((dict2.match(/'gw\.acme\.closed-from-outside':/g) || []).length, 2);
+});
+
+check('a precheck that could not run is reported, not swallowed', () => {
+  // It silently did not happen — the helper was v24, the endpoint arrived in
+  // v25, and the operator watched certbot fail with the sentence the precheck
+  // exists to replace. A check that quietly does not occur is worse than none:
+  // it leaves somebody believing the domain was verified.
+  assert.ok(/acmeSkipped/.test(routes), 'a skipped precheck leaves no trace');
+  // And told apart by the helper's version rather than both being reported as
+  // a failure: an agent that has no such endpoint is a fact about the fleet,
+  // and "reinstall the helper" is a different instruction from "the call
+  // broke". Checking that both strings exist somewhere was not enough — the
+  // condition choosing between them is the thing.
+  assert.ok(/\(server\.helper\?\.version \?\? 0\) < 25[\s\S]{0,80}'agent-too-old'/.test(routes),
+    'an old helper and a broken call are not told apart');
+  assert.ok(/precheck-failed/.test(routes), 'a broken call has no code of its own');
+  const job = routes.slice(routes.indexOf('const jobId = createJob('), routes.indexOf('return res.status(202)'));
+  assert.ok(/if \(acmeSkipped\)/.test(job), 'the job output does not mention it');
+  assert.ok(job.indexOf('acmeSkipped') < job.indexOf('runTask(server, \'POST /host/apply\''),
+    'it is said after the steps have already run');
+});
+
 check('an unreachable agent does not block the apply', () => {
   // The precheck is help, not a gate on its own behalf: an older agent that
   // cannot answer it must not stop a preparation that would have worked.
   const guard = routes.slice(routes.indexOf('let acme = null;'), routes.indexOf('// The steps the operator saw'));
-  assert.ok(/catch \{ acme = null; \}/.test(guard), 'a failed precheck is treated as a failed domain');
-  assert.ok(/acme && acme\.challengeServed === false/.test(guard),
+  assert.ok(/acme = null;/.test(guard), 'a failed precheck is treated as a failed domain');
+  assert.ok(/if \(acme && \(acme\.challengeServed !== true/.test(guard),
     'a missing precheck result blocks the apply');
 });
 

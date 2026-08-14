@@ -178,6 +178,14 @@ export default function ServerAgentsPage() {
                     {s.privileged === false && (
                       <span className="gw-state failed">{t('agent.gw.noHelper')}</span>
                     )}
+                    {/* Its version, because an outdated helper is invisible
+                        until something it cannot do fails — which is how a
+                        v24 helper let certbot run unchecked. */}
+                    {s.helper?.version > 0 && s.helper.version < 25 && (
+                      <span className="gw-state failed">
+                        {t('agent.gw.helperOld', { have: s.helper.version, need: 25 })}
+                      </span>
+                    )}
                     <button onClick={() => setGwSetup(s)}>
                       {t(s.gateway?.state === 'applied' ? 'agent.gw.redo' : 'agent.prepareGateway')}
                     </button>

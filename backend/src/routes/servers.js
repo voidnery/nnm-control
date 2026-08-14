@@ -321,19 +321,56 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
   // the reason in a log file on a box nobody is sitting at is the least useful
   // sentence in this whole flow. Each of these answers has a different fix.
   let acme = null;
+  let acmeSkipped = null;
   try {
     acme = await runTask(server, 'POST /host/acme-precheck', {
       body: { domain }, timeoutMs: 30_000, createdBy: req.user?.username || '',
     });
-  } catch { acme = null; }
-  if (acme && acme.challengeServed === false) {
+  } catch (e) {
+    // Why it could not be asked, kept rather than swallowed. A precheck that
+    // silently does not happen is worse than none: it leaves the operator
+    // believing the domain was verified and certbot the only thing that
+    // disagreed. An agent below v25 has no such endpoint, which is a fact
+    // about the fleet and not about the domain.
+    acme = null;
+    acmeSkipped = (server.helper?.version ?? 0) < 25
+      ? { code: 'agent-too-old', have: server.helper?.version ?? null, need: 25 }
+      : { code: 'precheck-failed', detail: String(e?.message || e).slice(0, 200) };
+  }
+  // Anything other than a clear pass. `=== false` let an undefined through,
+  // and undefined is what a probe that could not run produced — so a check
+  // that did not happen read as a check that found nothing wrong. The same
+  // conflation as everywhere else in this project, made by me, in the code
+  // written to prevent it.
+  // The same file, fetched from here. The machine's own answer covers its
+  // config and its local firewall; this covers the leg from another network,
+  // which is what Let's Encrypt actually uses. Neither of us is Let's Encrypt,
+  // but a machine that answers itself and not the panel is a machine behind a
+  // closed inbound port — and that was passing the precheck while certbot
+  // failed on it.
+  if (acme?.token) {
+    try {
+      const r = await fetch(`http://${domain}/.well-known/acme-challenge/${acme.token}`,
+                            { signal: AbortSignal.timeout(8000), redirect: 'follow' });
+      const text = await r.text();
+      acme.fromPanel = { status: r.status, served: r.status === 200 && text.trim() === acme.token };
+    } catch (e) {
+      acme.fromPanel = { status: null, served: false, error: String(e?.message || e).slice(0, 160) };
+    }
+  }
+
+  if (acme && (acme.challengeServed !== true || acme.fromPanel?.served === false)) {
     return res.status(422).json({
       error: 'acme-would-fail', code: 'acme-would-fail', acme,
       // Named rather than left to be read off the fields: the operator needs
       // to know which of four things to go and change.
       reason: acme.resolves === null ? 'dns-missing'
             : acme.pointsHere === false ? 'dns-elsewhere'
-            : acme.challengeStatus === null ? 'unreachable'
+            : acme.challengeError ? 'unreachable'
+            // The machine reaches itself and the panel does not: inbound is
+            // blocked somewhere between them, which is exactly the leg Let's
+            // Encrypt has to cross.
+            : (acme.challengeServed === true && acme.fromPanel?.served === false) ? 'closed-from-outside'
             : 'not-served',
     });
   }
@@ -353,6 +390,18 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
   if (req.body?.async !== false) {
     const jobId = createJob({ server: server.name, domain, mode });
     appendJob(jobId, `preparing ${server.name} as a ${mode} gateway for ${domain}\n`);
+    if (acmeSkipped) {
+      // Said before the steps rather than after the failure, because the
+      // operator can still stop and update the helper. It silently did not
+      // happen once, and certbot failed with the sentence this exists to
+      // replace.
+      appendJob(jobId, acmeSkipped.code === 'agent-too-old'
+        ? `note: the domain was not pre-checked — the privileged helper is v${acmeSkipped.have ?? '?'}`
+          + ` and v${acmeSkipped.need} is needed. Reinstall it to have this checked before certbot runs.\n`
+        : `note: the domain could not be pre-checked — ${acmeSkipped.detail}\n`);
+    } else if (acme?.challengeServed) {
+      appendJob(jobId, 'the domain answers its own challenge — certbot should succeed\n');
+    }
     (async () => {
       try {
         const r = await runTask(server, 'POST /host/apply', {
