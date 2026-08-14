@@ -22,12 +22,55 @@ case "${1:-}" in
         mkdir -p "$BDIR"; chmod 700 "$BDIR"
         KEEP=$(grep '^NNM_BACKUP_KEEP=' "$ENV_FILE" 2>/dev/null | cut -d= -f2)
         KEEP=${KEEP:-14}
+        # A cap in bytes as well as in files.
+        #
+        # Counting files works only while their size is stable. The database
+        # grew from 228 MB to 7 GB in twelve days, so fourteen archives came to
+        # 34 GB and kept going — on a 96 GB disk, alongside the database they
+        # were copies of. The count is right and was never the binding
+        # constraint.
+        MAXGB=$(grep '^NNM_BACKUP_MAX_GB=' "$ENV_FILE" 2>/dev/null | cut -d= -f2)
+        MAXGB=${MAXGB:-20}
+
+        # Refuse rather than fill the disk.
+        #
+        # mongodump writes until it runs out of room, and a machine with no
+        # free space stops answering — which is how this was found. The last
+        # archive is the best estimate of the next one's size; twice that is
+        # the margin for a database that is still growing.
+        LAST=$(ls -1t "$BDIR"/nnm-control-*.archive.gz 2>/dev/null | head -1)
+        NEED_MB=1024
+        [ -n "$LAST" ] && NEED_MB=$(( $(du -m "$LAST" | cut -f1) * 2 ))
+        FREE_MB=$(df -Pm "$BDIR" | awk 'NR==2 {print $4}')
+        if [ "$FREE_MB" -lt "$NEED_MB" ]; then
+            echo "Not enough room: ${FREE_MB}MB free, about ${NEED_MB}MB needed." >&2
+            echo "No backup was written. Free space or lower NNM_BACKUP_MAX_GB." >&2
+            exit 1
+        fi
+
         F="$BDIR/nnm-control-$(date +%Y%m%d-%H%M%S).archive.gz"
         echo "Dumping MongoDB to $F ..."
-        $COMPOSE exec -T mongo mongodump --archive --gzip --db nnm_control > "$F"
+        if ! $COMPOSE exec -T mongo mongodump --archive --gzip --db nnm_control > "$F"; then
+            # A dump that failed leaves a partial file that looks like a
+            # backup and is not. Worse than none, because it would be restored.
+            rm -f "$F"
+            echo "The dump failed; the partial file was removed." >&2
+            exit 1
+        fi
         chmod 600 "$F"
-        echo "Done: $(du -h "$F" | cut -f1). Retention: keeping last $KEEP."
+        echo "Done: $(du -h "$F" | cut -f1). Keeping the last $KEEP, up to ${MAXGB}GB."
+
+        # By count first, then by size: oldest goes until the total fits.
         ls -1t "$BDIR"/nnm-control-*.archive.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f
+        while [ "$(du -sm "$BDIR" | cut -f1)" -gt $((MAXGB * 1024)) ]; do
+            OLDEST=$(ls -1t "$BDIR"/nnm-control-*.archive.gz 2>/dev/null | tail -1)
+            # Never the only one left: a size cap smaller than a single archive
+            # would otherwise delete the backup just taken.
+            [ -z "$OLDEST" ] && break
+            [ "$(ls -1 "$BDIR"/nnm-control-*.archive.gz 2>/dev/null | wc -l)" -le 1 ] && break
+            echo "Over ${MAXGB}GB — removing $(basename "$OLDEST")"
+            rm -f "$OLDEST"
+        done
         date -Iseconds > "$BDIR/last-backup.txt" ;;
     backups)
         ls -lh /var/lib/nnm-control/backups/ 2>/dev/null || echo "No backups yet." ;;

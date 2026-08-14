@@ -1,5 +1,69 @@
 # Changelog
 
+### v0.99.20 — the panel filled its own disk
+96 GB full, three projects down, a Redis journal truncated mid-write. The panel
+did this to the machine it runs on, and the cause was four limits that all
+existed and none of which held.
+
+    auditlogs    50 GB    8,598,050 rows
+      POST agent-gw/logs      101,819
+      POST agent-gw/poll       45,286
+      streamtag:set                14   ← a person
+
+**Every agent poll was being audited.** The rule was "record every mutating
+request", which is right for people and wrong for machines: agents post their
+logs, tasks and metrics continuously, and each was a row. Fourteen entries in
+the last two hundred thousand were somebody deciding something. Audit answers
+"who did what", and a polling loop is not a who.
+
+Machine-facing routes are excluded by prefix — a short list, so that a new
+operator action is audited by default rather than by somebody remembering. And
+the window drops from ninety days to thirty: ninety was chosen when this held
+operator actions alone.
+
+**Backups counted files while the database grew thirtyfold.** 228 MB on the
+2nd, 7 GB on the 14th; fourteen of those is 98 GB on a 96 GB disk. The count
+was never the binding constraint. There is a size cap now, the dump refuses
+when the free space is under twice the last archive rather than writing until
+the disk ends, and a failed dump deletes its partial file — which is worse than
+no backup, because it would be restored.
+
+**Container logs had no ceiling**: 4 GB. Both compose files cap them.
+
+`test:retention` checks all of it, and one of its own checks needed the same
+lesson: requiring `NNM_BACKUP_MAX_GB` to exist passed against a cap of 999999.
+A limit that does not bind is a variable. It asserts the default is a number
+that fits on a disk.
+
+### v0.99.19 — the domain was checked before anything served it
+    Connection refused
+    nginx: inactive
+    /etc/nginx/sites-enabled/: No such file or directory
+
+The precheck sat ahead of every step, so on a clean machine it asked a domain
+that nothing was serving yet. "Connection refused" was a correct answer to a
+question asked too early — and it only ever passed on machines where an earlier
+attempt had left nginx behind, which is why it looked right for days.
+
+The steps are split at the certificate now. Everything before it puts a web
+server on the machine that answers this domain; the check runs between the two,
+where the question means something; the certificate follows.
+
+**A stop there does not undo what worked.** nginx is installed and serving the
+challenge, so fixing a DNS record and running again resumes from that point
+rather than starting from nothing — and the job says so, because otherwise the
+sensible assumption is that a failure left the machine as it was found.
+
+Each fault keeps its own sentence: the name does not resolve; it points
+somewhere else, with both addresses; nginx cannot enter a named directory; it
+answered here but not from the panel. And a helper too old to run the check at
+all is announced **before** the steps, while there is still time to update it —
+a fact about the fleet, not about the domain.
+
+`audit:undef` earned its keep during this edit: moving the block left three
+references to a variable that no longer existed, and it named all three with
+line numbers.
+
 ### v0.99.18 — the helper script did not parse
 
     /tmp/helper.sh: 140: Syntax error: ")" unexpected

@@ -4,6 +4,12 @@
 # systemd unit (docker compose --env-file ...).
 services:
   mongo:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
     image: mongo:7
     restart: unless-stopped
     volumes:
@@ -11,6 +17,12 @@ services:
     # Intentionally NOT published to host — internal docker network only.
 
   backend:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
     image: ghcr.io/${NC_GHCR_OWNER:-voidnery}/nnm-control-api:${NC_VERSION:-latest}
     restart: unless-stopped
     environment:
@@ -37,6 +49,12 @@ services:
       - mongo
 
   web:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
     image: ghcr.io/${NC_GHCR_OWNER:-voidnery}/nnm-control-web:${NC_VERSION:-latest}
     restart: unless-stopped
     environment:
@@ -48,5 +66,23 @@ services:
 
 volumes:
   geoip_db:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
   mongo_data:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
   media_spool:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }

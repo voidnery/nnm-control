@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-frontend",
-  "version": "0.99.18",
+  "version": "0.99.20",
   "private": true,
   "type": "module",
   "scripts": {

@@ -509,15 +509,37 @@ check('it writes a real challenge file and fetches it by name', () => {
   assert.ok(/unlink/.test(pre), 'the probe file is left behind');
 });
 
-check('a failing precheck stops the apply and names which fault', () => {
+check('the precheck runs after nginx is up and before the certificate', () => {
+  // It sat ahead of every step, so on a clean machine it asked a domain
+  // nothing was serving yet and got "connection refused" — a correct answer to
+  // a question asked too early. It only ever passed where a previous attempt
+  // had left nginx behind, which is why it looked fine for days.
+  assert.ok(/const certAt = steps\.findIndex\(x => x\.id === 'issue-cert'\)/.test(routes),
+    'the steps are not split at the certificate');
+  const job = routes.slice(routes.indexOf('const certAt'), routes.indexOf('finishJob(jobId, { status: r?.ok'));
+  assert.ok(job.indexOf('steps: before') < job.indexOf("'POST /host/acme-precheck'"),
+    'the domain is checked before anything serves it');
+  assert.ok(job.indexOf("'POST /host/acme-precheck'") < job.indexOf('steps: after'),
+    'the certificate is issued before the domain is checked');
+});
+
+check('a failing precheck stops before the certificate and says why', () => {
   // Let's Encrypt rate-limits failures, so an attempt that cannot succeed is
-  // worth not making. And four faults with four different fixes must not
-  // arrive as one sentence.
-  assert.ok(/acme-would-fail/.test(routes));
-  for (const reason of ['dns-missing', 'dns-elsewhere', 'unreachable', 'not-served']) {
-    assert.ok(routes.includes(reason), `${reason} is not distinguished`);
-    assert.equal((dict2.match(new RegExp(`'gw\\.acme\\.${reason}':`, 'g')) || []).length, 2, reason);
+  // worth not making — and each fault has its own sentence rather than all of
+  // them arriving as one.
+  const job = routes.slice(routes.indexOf('const certAt'));
+  assert.ok(/stopping before the certificate/.test(job));
+  for (const fragment of ['does not resolve', 'points at', 'cannot enter', 'not from the panel']) {
+    assert.ok(job.includes(fragment), `"${fragment}" is not distinguished`);
   }
+});
+
+check('a stop before the certificate does not undo what worked', () => {
+  // nginx is installed and serving the challenge; throwing that away would
+  // mean starting from nothing after fixing a DNS record.
+  const job = routes.slice(routes.indexOf('const certAt'));
+  assert.ok(/nothing was rolled back/.test(job), 'the operator is not told the work survives');
+  assert.ok(!/rollback/.test(job.slice(0, job.indexOf('finishJob'))), 'it rolls back on a precheck failure');
 });
 
 check('a probe that could not run is a failure, not a pass', () => {
@@ -549,44 +571,48 @@ check('the probe says which directory blocks the path', () => {
   // first one nginx cannot enter.
   assert.ok(/pathClosedAt/.test(agentSrc2), 'the probe does not check traversal');
   assert.ok(/0o001/.test(pre), 'it checks readability rather than traversal');
-  assert.ok(/path-closed/.test(routes), 'the panel does not distinguish it');
-  assert.equal((dict2.match(/'gw\.acme\.path-closed':/g) || []).length, 2);
+  assert.ok(/cannot enter \$\{acme\.pathClosedAt\}/.test(routes), 'the panel does not distinguish it');
 });
 
 check('answering itself but not the panel has its own name', () => {
   // "not served" would send somebody to look at nginx, and nginx is fine —
   // the port is closed between the two networks.
-  assert.ok(/closed-from-outside/.test(routes));
-  assert.equal((dict2.match(/'gw\.acme\.closed-from-outside':/g) || []).length, 2);
+  assert.ok(/answered here but not from the panel/.test(routes));
 });
 
-check('a precheck that could not run is reported, not swallowed', () => {
+check('a helper too old to check is named before the steps run', () => {
   // It silently did not happen — the helper was v24, the endpoint arrived in
   // v25, and the operator watched certbot fail with the sentence the precheck
   // exists to replace. A check that quietly does not occur is worse than none:
   // it leaves somebody believing the domain was verified.
-  assert.ok(/acmeSkipped/.test(routes), 'a skipped precheck leaves no trace');
+  // While there is still time to stop and update it, rather than after the
+  // domain has been blamed for something that is a fact about the fleet.
+  assert.ok(/will not be pre-checked/.test(routes), 'a skipped precheck leaves no trace');
+  assert.ok(/\(server\.helper\?\.version \?\? 0\) < 25/.test(routes),
+    'nothing decides whether the check is even possible');
   // And told apart by the helper's version rather than both being reported as
   // a failure: an agent that has no such endpoint is a fact about the fleet,
   // and "reinstall the helper" is a different instruction from "the call
   // broke". Checking that both strings exist somewhere was not enough — the
   // condition choosing between them is the thing.
-  assert.ok(/\(server\.helper\?\.version \?\? 0\) < 25[\s\S]{0,80}'agent-too-old'/.test(routes),
-    'an old helper and a broken call are not told apart');
-  assert.ok(/precheck-failed/.test(routes), 'a broken call has no code of its own');
+  // Two situations, two places, two sentences: a helper too old is announced
+  // before the steps, while there is time to update it; a call that broke
+  // mid-run is reported where it broke. Merging them would send somebody to
+  // reinstall a helper that is fine.
+  assert.ok(/will not be pre-checked/.test(routes), 'an old helper is not announced');
+  assert.ok(/could not be pre-checked/.test(routes), 'a broken call has no message of its own');
   const job = routes.slice(routes.indexOf('const jobId = createJob('), routes.indexOf('return res.status(202)'));
-  assert.ok(/if \(acmeSkipped\)/.test(job), 'the job output does not mention it');
-  assert.ok(job.indexOf('acmeSkipped') < job.indexOf('runTask(server, \'POST /host/apply\''),
+  assert.ok(job.indexOf('will not be pre-checked') < job.indexOf("runTask(server, 'POST /host/apply'"),
     'it is said after the steps have already run');
 });
 
-check('an unreachable agent does not block the apply', () => {
-  // The precheck is help, not a gate on its own behalf: an older agent that
-  // cannot answer it must not stop a preparation that would have worked.
-  const guard = routes.slice(routes.indexOf('let acme = null;'), routes.indexOf('// The steps the operator saw'));
-  assert.ok(/acme = null;/.test(guard), 'a failed precheck is treated as a failed domain');
-  assert.ok(/if \(acme && \(acme\.challengeServed !== true/.test(guard),
-    'a missing precheck result blocks the apply');
+check('an unreachable helper does not block the apply', () => {
+  // The precheck is help, not a gate on its own behalf: a helper that cannot
+  // answer it must not stop a preparation that would have worked.
+  const job = routes.slice(routes.indexOf('const certAt'));
+  assert.ok(/could not be pre-checked/.test(job), 'a failed call is treated as a failed domain');
+  assert.ok(/if \(acme && \(acme\.challengeServed !== true/.test(job),
+    'a missing precheck result blocks the certificate');
 });
 
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');

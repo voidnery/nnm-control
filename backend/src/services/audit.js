@@ -41,8 +41,31 @@ export async function logEvent({ req = null, username = '', action, target = '',
 // Express middleware: records every mutating API request after it finishes.
 // Reading req.user at finish-time works because routers set it before the
 // response completes. GETs are not audited (read-only).
+// Machine traffic that is not a decision anybody made.
+//
+// Agents poll this panel continuously — logs, tasks, metrics — and every one is
+// a POST, so "audit every mutating request" recorded all of them. The result:
+// 8.6 million rows, of which fourteen were people. 50 GB of audit on a 96 GB
+// disk, and a nightly backup that grew from 228 MB to 7 GB in twelve days
+// until the machine stopped.
+//
+// The rule was right for its subject and wrong about what a mutation is. An
+// agent saying "here are my logs" changes rows in a table; it does not change
+// anything a person needs to be able to reconstruct later. Audit answers "who
+// did what", and a polling loop is not a who.
+//
+// Listed by prefix rather than by an allow-list of everything else: these are
+// the machine-facing routes, they are few, and a new operator action must be
+// audited by default rather than by remembering to add it.
+const MACHINE_ROUTES = [
+  '/agent-gw/',      // agents polling for work, reporting logs and metrics
+  '/agents/enroll',  // the one-time handshake, logged explicitly by the route
+];
+
 export function auditMutations(req, res, next) {
   if (req.method === 'GET' || req.method === 'OPTIONS' || req.method === 'HEAD') return next();
+  const full = `${req.baseUrl || ''}${req.path}`;
+  if (MACHINE_ROUTES.some(prefix => full.startsWith(prefix))) return next();
   const startedAt = Date.now();
   res.on('finish', () => {
     // /api/auth/login is logged explicitly with outcome semantics; skip here.

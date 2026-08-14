@@ -2,12 +2,24 @@
 # Usage: docker compose -f docker-compose.dev.yml --env-file dev.env up -d --build
 services:
   mongo:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
     image: mongo:7
     restart: unless-stopped
     volumes:
       - mongo_data:/data/db
 
   backend:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
     build: ./backend
     restart: unless-stopped
     environment:
@@ -23,6 +35,12 @@ services:
       - mongo
 
   web:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
     build: ./frontend
     restart: unless-stopped
     environment:
@@ -34,3 +52,9 @@ services:
 
 volumes:
   mongo_data:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }

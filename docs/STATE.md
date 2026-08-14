@@ -179,6 +179,15 @@ isolation; each failed only on a real machine. The checks now read
 `STATE_DIR` out of the installer and require the helper to contain what it
 builds, so the next divergence fails in the suite rather than on somebody's VM.
 
+**Anything that grows needs a ceiling, expressed in the unit that binds.** The
+panel filled its own 96 GB disk and took three projects down with it. Four
+limits existed and none held: audit retention counted days while agent polls
+wrote 8.6 million rows, backup retention counted files while the database grew
+thirtyfold, container logs had no limit at all, and mongodump wrote until the
+disk ran out instead of refusing. Each was reasonable when written and wrong
+about a subject that had changed. `test:retention` now checks the ceilings —
+including that a cap is a number that binds rather than a variable that exists.
+
 **Anything read from a machine is stamped.** A fact about TLS or delivery from
 last week is not a fact about now, and a green mark that stopped being true is
 worse than an empty one.
