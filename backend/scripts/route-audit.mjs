@@ -173,6 +173,31 @@ for (const [name, prefixes] of mounts) {
   }
 }
 
+// A permission check with nobody to check.
+//
+// `requirePerm` reads the user that `requireAuth` put on the request. Where a
+// router applies auth to everything, per-route ordering does not matter; where
+// it does not — because some route is deliberately public — a route that names
+// a permission and skips auth answers "Missing permission" to a logged-in
+// operator. Which is exactly the wrong message: the fault is not their role.
+for (const file of files) {
+  const src = readFileSync(file, 'utf8');
+  const routerWide = /\.use\(\s*requireAuth\s*\)/.test(src);
+  if (routerWide) continue;
+  // Everything between the path and the handler. `[^)]*?` stopped at the
+  // first bracket — which is `requirePerm(` itself — so the middleware list it
+  // examined never contained the thing it was looking for, and the check
+  // passed on every route by seeing none of them.
+  for (const m of src.matchAll(/\w+\.(?:get|post|put|patch|delete)\(\s*'([^']*)'\s*,([\s\S]*?)(?:async\s*\(|\(\s*req)/g)) {
+    const [, route, middleware] = m;
+    if (!/requirePerm\(/.test(middleware)) continue;
+    if (/requireAuth/.test(middleware)) continue;
+    fail(`${path.relative(BACKEND, file)} — "${route}" checks a permission without requireAuth, `
+       + 'so a logged-in operator is told their role is missing');
+  }
+}
+if (!bad) ok('every permission check has an authenticated user to check');
+
 console.log(bad
   ? `\n${bad} routing problem(s) — a 404 the moment somebody presses the button`
   : 'route reachability audit: OK');

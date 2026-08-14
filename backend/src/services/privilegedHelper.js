@@ -176,6 +176,19 @@ ExecStart=$NODE_BIN $BIN
 Restart=on-failure
 RestartSec=2
 
+# Its own state directory, and not a shared one.
+#
+# The agent writes a log cursor into STATE_DIRECTORY at startup. Without this
+# line the helper inherited nothing, fell back to /var/lib/nnm-agent, and found
+# it read-only under ProtectSystem=strict — so it enabled, started, threw and
+# stopped, which from the installer's point of view was "it did not start" and
+# nothing more.
+#
+# A separate directory rather than write access to the agent's: two processes
+# sharing one cursor file would each rewind the other, and the helper does not
+# tail logs at all.
+StateDirectory=nnm-agent-privileged
+
 # The whole point of the separate unit. Root that may write ten directories is
 # a different thing from root.
 ProtectSystem=strict
@@ -196,9 +209,19 @@ EOF
 systemctl daemon-reload
 systemctl enable --now nnm-agent-privileged
 sleep 1
-systemctl is-active --quiet nnm-agent-privileged \\
-  && echo "==> privileged helper is running on ${bind}:${port}" \\
-  || { echo "==> it did not start; journalctl -u nnm-agent-privileged -n 50"; exit 1; }
+if systemctl is-active --quiet nnm-agent-privileged; then
+  echo "==> privileged helper is running on ${bind}:${port}"
+else
+  # The reason, here, rather than an instruction to go and find it. Somebody
+  # reading an install log is not in a position to run journalctl — they are
+  # often not even on the machine — and "it did not start" tells them nothing
+  # they did not already know.
+  echo "==> it did not start. The last lines from its journal:"
+  journalctl -u nnm-agent-privileged -n 20 --no-pager 2>/dev/null | sed 's/^/    /'
+  echo "==> and its unit status:"
+  systemctl status nnm-agent-privileged --no-pager -n 0 2>/dev/null | sed 's/^/    /'
+  exit 1
+fi
 `;
 }
 

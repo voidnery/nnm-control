@@ -147,6 +147,35 @@ check('it refuses to run as anything but root, and without the agent', () => {
   assert.match(script, /the agent binary was not found/);
 });
 
+check('the helper has somewhere to write its own state', () => {
+  // The agent writes a log cursor into STATE_DIRECTORY at startup. Without the
+  // line the helper inherited nothing, fell back to /var/lib/nnm-agent, and
+  // found it read-only under ProtectSystem=strict — so it enabled, started,
+  // threw and stopped. From the installer that was "it did not start".
+  assert.match(script, /StateDirectory=nnm-agent-privileged/);
+  // Its own, not the agent's: two processes sharing one cursor would each
+  // rewind the other.
+  assert.ok(!/StateDirectory=nnm-agent$/m.test(script));
+});
+
+check('every writable thing it needs is either listed or granted', () => {
+  // ProtectSystem=strict means anything not named is read-only, and a process
+  // that cannot write where it expects to exits without explaining itself.
+  const rw = /ReadWritePaths=([^\n]*)/.exec(script)[1];
+  const state = /StateDirectory=(\S+)/.exec(script)[1];
+  assert.ok(rw.includes('/etc/nginx') && rw.includes('/var/lib/dpkg'));
+  assert.ok(state, 'nothing grants a state directory');
+});
+
+check('a helper that will not start prints why, not where to look', () => {
+  // Somebody reading an install log is often not on the machine, and "run
+  // journalctl" is not something they can act on. It cost a release: the log
+  // said "it did not start" and the reason was one command away on a box
+  // nobody was sitting at.
+  assert.ok(/journalctl -u nnm-agent-privileged -n \d+ --no-pager/.test(script));
+  assert.ok(/systemctl status nnm-agent-privileged/.test(script));
+});
+
 check('the helper looks for node where the agent puts it', () => {
   // The agent installs a private node into its state directory when the system
   // has none, and never touches PATH. The helper looked only at PATH, found

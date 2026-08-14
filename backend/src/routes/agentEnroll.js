@@ -364,7 +364,7 @@ agentEnrollRouter.get('/servers/:id/agent/ssh/jobs/:jobId', requireAuth, require
 // installer it has no undo — an uninstall that goes wrong has already removed
 // the thing somebody would have looked at — so what it removes is fixed and
 // narrow, and it says what it left alone.
-agentEnrollRouter.post('/agents/uninstall/script', requirePerm('servers.manage'), async (req, res) => {
+agentEnrollRouter.post('/agents/uninstall/script', requireAuth, requirePerm('servers.manage'), async (req, res) => {
   const script = uninstallScript({
     removeHelper: req.body?.removeHelper !== false,
     // Off by default. The state directory holds the log cursor, and a
@@ -377,7 +377,7 @@ agentEnrollRouter.post('/agents/uninstall/script', requirePerm('servers.manage')
 });
 
 // The same thing over SSH, when the operator would rather the panel did it.
-agentEnrollRouter.post('/agents/uninstall/ssh', requirePerm('servers.manage'), async (req, res) => {
+agentEnrollRouter.post('/agents/uninstall/ssh', requireAuth, requirePerm('servers.manage'), async (req, res) => {
   const b = req.body || {};
   const server = await NimbleServer.findById(b.serverId);
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });

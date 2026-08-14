@@ -1,5 +1,35 @@
 # Changelog
 
+### v0.99.2 — it installed, and then had nowhere to write
+The helper reached the machine this time: it found the agent, found node,
+created its unit, enabled it — and stopped. The log said *"it did not start"*
+and pointed at journalctl, on a box nobody was sitting at.
+
+**Its unit had no `StateDirectory`.** The agent writes a log cursor into
+`STATE_DIRECTORY` at startup; with none granted the helper fell back to
+`/var/lib/nnm-agent`, which `ProtectSystem=strict` makes read-only. So it
+started, threw, and stopped. It has its own directory now — its own, not the
+agent's, because two processes sharing one cursor file would each rewind the
+other.
+
+**And a helper that will not start now prints the reason.** Twenty lines of its
+journal and its unit status, in the install log. Telling somebody to run
+journalctl is not something they can act on when they are not on the machine,
+and it cost this release: the answer was one command away and nobody was there
+to type it.
+
+**"Missing permission: servers.manage" on removing an agent.** Both uninstall
+routes named a permission and skipped `requireAuth` — and `requirePerm` reads
+the user that `requireAuth` puts on the request, so with nobody there it
+refuses. The message is the worst part: it tells a logged-in operator their
+role is wrong when the fault is entirely ours.
+
+`audit:routes` now catches it, in files where auth is per-route rather than
+router-wide. Its first version examined the middleware with `[^)]*?`, which
+stops at the first bracket — `requirePerm(` itself — so the list it searched
+never contained the thing it was looking for, and it passed on every route by
+seeing none of them.
+
 ### v0.99.1 — node is required and was not found
 The log said it outright: the helper stopped because it could not find node —
 on a machine whose agent was running on node at that moment.
