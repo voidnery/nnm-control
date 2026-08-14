@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 27;
+const AGENT_VERSION = 28;
 
 // Whether this process is the privileged helper. Set by its unit's
 // environment file and by nothing else — an agent cannot promote itself.
@@ -1158,6 +1158,30 @@ const routes = {
     try {
       await fs.mkdir(dir, { recursive: true });
       await fs.writeFile(`${dir}/${token}`, token, { mode: 0o644 });
+
+      // Whether nginx can traverse the path, asked rather than inferred from
+      // modes. A closed parent denies the whole path however open the leaf is,
+      // and reading four modes and reasoning about them is how I fixed the
+      // wrong directory twice: /var/www/html was opened by hand while /var/www
+      // stayed 0700, and the 403 was identical.
+      //
+      // Reported alongside the fetch, because when the fetch fails this is the
+      // difference between "the config is wrong" and "the file cannot be
+      // reached".
+      out.pathClosedAt = null;
+      let walked = '/var';
+      for (const part of ['www', 'html', '.well-known', 'acme-challenge']) {
+        walked = `${walked}/${part}`;
+        try {
+          const st = await fs.stat(walked);
+          // Others need execute to traverse a directory. Not read: a file can
+          // be fetched by name out of a directory nobody may list.
+          if (!(st.mode & 0o001)) { out.pathClosedAt = walked; break; }
+        } catch (e) {
+          out.pathClosedAt = walked;
+          break;
+        }
+      }
       try {
         const r = await fetch(`http://${domain}/.well-known/acme-challenge/${token}`,
                               { signal: AbortSignal.timeout(8000), redirect: 'follow' });

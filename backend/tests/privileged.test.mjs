@@ -192,10 +192,17 @@ check('the tight umask covers the token file and nothing else', () => {
   assert.ok(mkdirAt < umaskAt, 'directories are still created under the tight umask');
 });
 
-check('the webroot mode is set, not inherited', () => {
-  // nginx has to enter it, so this is not a matter of taste and not something
-  // to leave to whatever umask happened to be in effect.
-  assert.ok(/chmod 755 \/var\/www\/html/.test(script), 'the webroot mode is left to chance');
+check('every directory on the way to the webroot is opened, not just the last', () => {
+  // nginx traverses each one, so a closed parent denies the whole path however
+  // open the leaf is. A list of directories is a thing to forget a component
+  // from, and I forgot /var/www — twice fixing the wrong one while the 403
+  // stayed identical. Walked now, and the walk is what this asserts.
+  assert.ok(/for part in www html \.well-known acme-challenge/.test(script),
+    'the path is opened by naming directories rather than by walking it');
+  assert.ok(/chmod 755 "\$d"/.test(script), 'the walk does not open what it visits');
+  assert.ok(/d="\/var"/.test(script), 'the walk starts somewhere other than /var');
+  // And stops where the distribution's own directories begin.
+  assert.ok(!/^chmod 755 \/var$/m.test(script), 'it changes the mode of /var itself');
   // And only that one: the rest are apt's and systemd's own directories.
   const chmods = [...script.matchAll(/^chmod \d+ ([^\n]*)/gm)].map(m => m[1]);
   for (const line of chmods) {

@@ -110,6 +110,7 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
                     status: d.acme.fromPanel?.status ?? d.acme.challengeStatus ?? '—',
                     server: d.acme.challengeServer || d.acme.challengeBody || '—',
                     error: d.acme.challengeError || '—',
+                    closed: d.acme.pathClosedAt || '—',
                   })].join(' '));
         return;
       }

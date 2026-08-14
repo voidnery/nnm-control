@@ -370,6 +370,10 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
             // The machine reaches itself and the panel does not: inbound is
             // blocked somewhere between them, which is exactly the leg Let's
             // Encrypt has to cross.
+            // A directory nginx cannot enter, named exactly. "Answered 403"
+            // sends somebody to look at a config that is correct; this sends
+            // them to one chmod.
+            : acme.pathClosedAt ? 'path-closed'
             : (acme.challengeServed === true && acme.fromPanel?.served === false) ? 'closed-from-outside'
             : 'not-served',
     });

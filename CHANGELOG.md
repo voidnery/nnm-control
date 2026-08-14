@@ -1,5 +1,28 @@
 # Changelog
 
+### v0.99.16 — I fixed the wrong directory, twice
+    drwx------  /var/www          ← this
+    drwxr-xr-x  /var/www/html     ← fixed last release, and by hand
+
+nginx traverses every component to reach a file, so one closed link denies the
+whole path however open the rest is. `/var/www` came out 0700 from the umask
+and stayed there while I opened its child — and the 403 was byte-identical, so
+nothing about the symptom said I had missed.
+
+The installer walks the path now rather than naming directories: a list is a
+thing to forget a component from, and I forgot one. It starts at `/var/www`,
+because everything above belongs to the distribution and its modes are not ours
+to have opinions about, and it fails loudly on any component it cannot open.
+
+**And the probe stops inferring.** Agent v28 walks the same path and reports the
+first directory nginx cannot enter — checking the execute bit, since a file can
+be fetched by name out of a directory nobody may list. "Answered 403" sends
+somebody to a config that is correct; "nginx cannot enter /var/www" sends them
+to one chmod.
+
+Reading four modes and reasoning about them is exactly what I did, and I got it
+wrong both times. The machine can just be asked.
+
 ### v0.99.15 — 0700 on a parent directory, three levels up
 The precheck did its job and the machine's own output settled it in one line:
 

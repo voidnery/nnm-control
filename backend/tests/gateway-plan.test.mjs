@@ -542,6 +542,17 @@ check('the challenge is fetched from a second network as well', () => {
   assert.ok(/keptForSeconds|setTimeout/.test(agentSrc2), 'the probe file is deleted before the panel can look');
 });
 
+check('the probe says which directory blocks the path', () => {
+  // Reading four modes and reasoning about them is how the wrong directory got
+  // fixed twice: /var/www/html was opened by hand while /var/www stayed 0700,
+  // and the 403 was byte-identical. The agent walks the path and names the
+  // first one nginx cannot enter.
+  assert.ok(/pathClosedAt/.test(agentSrc2), 'the probe does not check traversal');
+  assert.ok(/0o001/.test(pre), 'it checks readability rather than traversal');
+  assert.ok(/path-closed/.test(routes), 'the panel does not distinguish it');
+  assert.equal((dict2.match(/'gw\.acme\.path-closed':/g) || []).length, 2);
+});
+
 check('answering itself but not the panel has its own name', () => {
   // "not served" would send somebody to look at nginx, and nginx is fine —
   // the port is closed between the two networks.

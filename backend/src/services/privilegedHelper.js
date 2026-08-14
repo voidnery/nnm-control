@@ -222,7 +222,24 @@ done
 #
 # Only this one: the rest are apt's and systemd's own directories, and their
 # modes belong to them.
-chmod 755 /var/www/html /var/www/html/.well-known 2>/dev/null || true
+# Every component of the path, not the leaf.
+#
+# nginx has to traverse each directory to reach the file, so a closed parent
+# denies the whole path however open the rest is. /var/www came out 0700 from
+# the umask and /var/www/html was fixed by hand — which left exactly one
+# closed link in the chain and a 403 identical to the one before.
+#
+# Walked rather than listed: a list is a thing to forget a component from, and
+# I forgot one.
+# Starting at /var/www rather than at /: everything above it belongs to the
+# distribution and its modes are not ours to have opinions about. Everything
+# from there down is created by this installer, so its modes are.
+d="/var"
+for part in www html .well-known acme-challenge; do
+  d="$d/$part"
+  [ -d "$d" ] || mkdir "$d" || { echo "could not create $d"; exit 1; }
+  chmod 755 "$d" || { echo "could not open $d for nginx"; exit 1; }
+done
 
 # Tight only for the environment file, which holds the token — and only for it.
 # It used to wrap the whole script, so the directories created above came out
