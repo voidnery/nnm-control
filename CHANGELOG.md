@@ -1,5 +1,34 @@
 # Changelog
 
+### v0.99.11 — "some challenges have failed" is not a reason
+Five steps passed and certbot stopped with a sentence that says nothing and a
+log file on a machine nobody is sitting at.
+
+I could not check the domain from here either — this environment answers 403
+for hosts outside its allow-list, so my own probe told me about my proxy rather
+than about the machine. Which is the same problem the operator has: **checking
+the domain from anywhere except the machine answers a different question.** A
+network that reaches it is not the network Let's Encrypt uses.
+
+So the machine checks itself, before certbot spends an attempt on a domain that
+cannot be proved — Let's Encrypt rate-limits failures, and an attempt that
+cannot succeed is worth not making. Agent v25 resolves the name, learns its own
+public address, then **writes a real challenge file, fetches it by name over
+HTTP, and deletes it**. That last part is the only check covering the whole
+path: nginx config, firewall, and whatever sits in front.
+
+Four faults, four fixes, and certbot calls all of them the same thing:
+
+- the name does not resolve at all;
+- it resolves somewhere other than this machine;
+- the machine cannot reach itself by name;
+- the request arrives and something answers with the wrong thing — the panel
+  names what answered, because a 403 from a proxy in front is a different
+  problem from a 404 from nginx.
+
+The precheck is help, not a gate on its own behalf: an agent too old to answer
+it does not block a preparation that would have worked.
+
 ### v0.99.10 — certbot was competing with the nginx we had just installed
 nginx installed, certbot installed, and then:
 

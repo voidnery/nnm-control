@@ -98,6 +98,21 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
       // The detail, when there is one. A bare code sends somebody looking in
       // the wrong place — this one said "this agent is not the privileged
       // helper" and the screen showed "apply-failed".
+      // The precheck, when it refused. Four different faults with four
+      // different fixes, and certbot describes all of them as "some
+      // challenges have failed".
+      if (d.acme) {
+        setError([t('err.acme-would-fail'),
+                  t('gw.acme.' + d.reason, {
+                    domain: d.acme.domain,
+                    resolves: (d.acme.resolves || []).join(', ') || '—',
+                    publicIp: d.acme.publicIp || '—',
+                    status: d.acme.challengeStatus ?? '—',
+                    server: d.acme.challengeServer || d.acme.challengeBody || '—',
+                    error: d.acme.challengeError || '—',
+                  })].join(' '));
+        return;
+      }
       if (d.steps) setResult(d);
       else setError([d.code && t('err.' + d.code) !== 'err.' + d.code ? t('err.' + d.code) : d.error, d.detail]
         .filter(Boolean).join(' — ') || e.message);

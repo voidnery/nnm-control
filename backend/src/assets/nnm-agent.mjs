@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 24;
+const AGENT_VERSION = 25;
 
 // Whether this process is the privileged helper. Set by its unit's
 // environment file and by nothing else — an agent cannot promote itself.
@@ -1103,6 +1103,73 @@ const routes = {
       }
     }
     return { agent: AGENT_VERSION, steps: done };
+  },
+
+  // ---- iter23 m6: can this domain be proved at all ----------------------------
+  //
+  // certbot says "some challenges have failed" and puts the reason in a log
+  // file on the machine. From the panel that is a dead end, and from anywhere
+  // else so is checking the domain by hand: an operator's own network may
+  // reach it when Let's Encrypt cannot, or the other way round.
+  //
+  // So the machine checks itself, in the order the failure actually happens:
+  // does the name resolve, does it resolve *here*, and does a challenge file
+  // written now come back over HTTP. Each answer is a different fix, and
+  // "challenges have failed" is none of them.
+  async 'POST /host/acme-precheck'(_req, _url, body) {
+    const domain = String(body?.domain || '').trim().toLowerCase();
+    if (!domain) throw new Error('a domain is required');
+    const out = { agent: AGENT_VERSION, domain };
+
+    const dns = await import('node:dns/promises');
+    try {
+      out.resolves = await dns.resolve4(domain);
+    } catch (e) {
+      out.resolves = null;
+      out.dnsError = String(e?.code || e?.message || e);
+    }
+
+    // What the world sees as this machine. Compared rather than assumed: a
+    // machine behind NAT has an address it does not know about, and a domain
+    // pointing at the wrong one is the commonest reason a challenge fails.
+    try {
+      const r = await fetch('https://api.ipify.org', { signal: AbortSignal.timeout(6000) });
+      out.publicIp = (await r.text()).trim();
+    } catch { out.publicIp = null; }
+
+    out.pointsHere = (out.resolves && out.publicIp)
+      ? out.resolves.includes(out.publicIp)
+      : null;
+
+    // The challenge itself, end to end: write a file where certbot would put
+    // one, ask for it over HTTP by name, and delete it. This is the only check
+    // that covers the whole path — nginx config, firewall, and whatever sits
+    // in front of the machine.
+    const token = `nnm-precheck-${Date.now()}`;
+    const dir = '/var/www/html/.well-known/acme-challenge';
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(`${dir}/${token}`, token, { mode: 0o644 });
+      try {
+        const r = await fetch(`http://${domain}/.well-known/acme-challenge/${token}`,
+                              { signal: AbortSignal.timeout(8000), redirect: 'follow' });
+        const text = await r.text();
+        out.challengeStatus = r.status;
+        out.challengeServed = r.status === 200 && text.trim() === token;
+        // Whose answer it was, when it was not ours. A 403 from something in
+        // front of the machine is a different problem from a 404 from nginx.
+        out.challengeServer = r.headers.get('server') || null;
+        if (!out.challengeServed) out.challengeBody = text.slice(0, 200);
+      } catch (e) {
+        out.challengeStatus = null;
+        out.challengeError = String(e?.message || e).slice(0, 200);
+      }
+      await fs.unlink(`${dir}/${token}`).catch(() => { /* nothing to clean up */ });
+    } catch (e) {
+      out.challengeError = `could not write the challenge file: ${String(e?.message || e).slice(0, 120)}`;
+    }
+
+    return out;
   },
 
   // ---- iter23 m2: who is holding the ports -----------------------------------

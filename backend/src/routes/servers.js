@@ -314,6 +314,30 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
     return res.status(422).json({ error: 'gateway-blocked', code: 'gateway-blocked', ...plan });
   }
 
+  // Can the domain be proved at all, asked from the machine before certbot
+  // spends an attempt on it.
+  //
+  // Let's Encrypt rate-limits failures, and "some challenges have failed" with
+  // the reason in a log file on a box nobody is sitting at is the least useful
+  // sentence in this whole flow. Each of these answers has a different fix.
+  let acme = null;
+  try {
+    acme = await runTask(server, 'POST /host/acme-precheck', {
+      body: { domain }, timeoutMs: 30_000, createdBy: req.user?.username || '',
+    });
+  } catch { acme = null; }
+  if (acme && acme.challengeServed === false) {
+    return res.status(422).json({
+      error: 'acme-would-fail', code: 'acme-would-fail', acme,
+      // Named rather than left to be read off the fields: the operator needs
+      // to know which of four things to go and change.
+      reason: acme.resolves === null ? 'dns-missing'
+            : acme.pointsHere === false ? 'dns-elsewhere'
+            : acme.challengeStatus === null ? 'unreachable'
+            : 'not-served',
+    });
+  }
+
   // The steps the operator saw, by their ids. Sending anything the plan did
   // not produce would make this a remote shell with extra ceremony.
   const wanted = new Set((req.body?.stepIds || plan.steps.map(s => s.id)));

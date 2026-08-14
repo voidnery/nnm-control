@@ -329,6 +329,7 @@ check('the plan opens in its own window', () => {
 console.log('\nWORK THAT TAKES MINUTES IS NOT ONE REQUEST:');
 
 const uiPoll = readFileSync(new URL('../../frontend/src/components/GatewaySetupModal.jsx', import.meta.url), 'utf8');
+const dict2 = readFileSync(new URL('../../frontend/src/i18n.jsx', import.meta.url), 'utf8');
 
 check('the apply answers at once and is polled after', () => {
   // Installing nginx and issuing a certificate takes minutes. Held open, the
@@ -478,6 +479,50 @@ check('the ACME block serves the challenge and refuses everything else', () => {
   assert.match(c, /location \/\.well-known\/acme-challenge\/ \{ root \/var\/www\/html; \}/);
   assert.match(c, /return 404/);
   assert.ok(!/ssl_certificate/.test(c), 'it references a certificate that does not exist yet');
+});
+
+console.log('\nWHY A CHALLENGE WOULD FAIL, BEFORE SPENDING ONE:');
+
+const agentSrc2 = readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8');
+const pre = agentSrc2.slice(agentSrc2.indexOf("'POST /host/acme-precheck'"),
+                            agentSrc2.indexOf("'POST /host/acme-precheck'") + 3000);
+
+check('the machine checks itself, because nobody else can', () => {
+  // certbot puts the reason in a log file on a box nobody is sitting at, and
+  // checking the domain from anywhere else answers a different question: an
+  // operator's network may reach it when Let's Encrypt cannot, or the reverse.
+  assert.ok(/acme-precheck/.test(agentSrc2), 'nothing can test the challenge path');
+  assert.ok(/dns\/promises/.test(pre), 'it does not check whether the name resolves');
+  assert.ok(/api\.ipify\.org|publicIp/.test(pre), 'it does not learn its own public address');
+});
+
+check('it writes a real challenge file and fetches it by name', () => {
+  // The only check covering the whole path: nginx config, firewall, and
+  // whatever sits in front of the machine. Each of those fails differently and
+  // certbot calls all of them "some challenges have failed".
+  assert.ok(/acme-challenge/.test(pre) && /writeFile/.test(pre), 'no challenge file is written');
+  assert.ok(/http:\/\/\$\{domain\}/.test(pre), 'it fetches by address rather than by name');
+  assert.ok(/unlink/.test(pre), 'the probe file is left behind');
+});
+
+check('a failing precheck stops the apply and names which fault', () => {
+  // Let's Encrypt rate-limits failures, so an attempt that cannot succeed is
+  // worth not making. And four faults with four different fixes must not
+  // arrive as one sentence.
+  assert.ok(/acme-would-fail/.test(routes));
+  for (const reason of ['dns-missing', 'dns-elsewhere', 'unreachable', 'not-served']) {
+    assert.ok(routes.includes(reason), `${reason} is not distinguished`);
+    assert.equal((dict2.match(new RegExp(`'gw\\.acme\\.${reason}':`, 'g')) || []).length, 2, reason);
+  }
+});
+
+check('an unreachable agent does not block the apply', () => {
+  // The precheck is help, not a gate on its own behalf: an older agent that
+  // cannot answer it must not stop a preparation that would have worked.
+  const guard = routes.slice(routes.indexOf('let acme = null;'), routes.indexOf('// The steps the operator saw'));
+  assert.ok(/catch \{ acme = null; \}/.test(guard), 'a failed precheck is treated as a failed domain');
+  assert.ok(/acme && acme\.challengeServed === false/.test(guard),
+    'a missing precheck result blocks the apply');
 });
 
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');
