@@ -114,8 +114,24 @@ fi
 [ -f "$BIN" ] || { echo "the agent binary was not found — looked in /var/lib/nnm-agent, /usr/local/lib and the running unit"; exit 1; }
 echo "==> using agent binary: $BIN"
 
-NODE_BIN=$(command -v node || true)
-[ -n "$NODE_BIN" ] || { echo "node is required and was not found"; exit 1; }
+# Where the agent's own installer puts node when the system has none, then the
+# system's. Looking only at PATH found nothing on a machine the agent had
+# already provisioned — it installs a private node into its state directory and
+# never touches PATH — so the helper stopped with "node is required" on a box
+# with a working node ten centimetres away.
+#
+# The unit that is running is the last resort and the most reliable: whatever
+# is executing the agent right now is, by definition, a node that works.
+NODE_BIN=""
+for candidate in /var/lib/nnm-agent/node/bin/node "$(command -v node 2>/dev/null || true)"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then NODE_BIN="$candidate"; break; fi
+done
+if [ -z "$NODE_BIN" ]; then
+  FROM_UNIT=$(systemctl show -p ExecStart --value nnm-agent 2>/dev/null | tr ' ' '\n' | grep -m1 '/node$' || true)
+  [ -n "$FROM_UNIT" ] && [ -x "$FROM_UNIT" ] && NODE_BIN="$FROM_UNIT"
+fi
+[ -n "$NODE_BIN" ] || { echo "node was not found — looked in the agent's state directory, in PATH, and in the running unit"; exit 1; }
+echo "==> using node: $NODE_BIN"
 
 umask 077
 # The helper's environment is the agent's, plus the flag that makes it the

@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.99.1 — node is required and was not found
+The log said it outright: the helper stopped because it could not find node —
+on a machine whose agent was running on node at that moment.
+
+The agent's installer provisions a private node into `/var/lib/nnm-agent/node`
+when the system has none, and never touches `PATH`. The helper looked only at
+`PATH`. So it stopped with "node is required" ten centimetres from a working
+one.
+
+It now looks in the agent's state directory, then `PATH`, then at whatever the
+running `nnm-agent` unit is executing — the last being the most reliable answer
+available, since a node that is running the agent is by definition a node that
+works — and says which it took.
+
+**This is the third release in a row lost to the same shape**: the helper
+assuming something about the machine that the installer had decided
+differently. The agent binary, then the environment variable names, then node.
+Each was correct-looking in isolation and wrong only on a real machine, which
+is the most expensive way to be wrong.
+
+So the checks now bind the two files together rather than to literals: they
+read `STATE_DIR` out of the installer and require the helper to contain the
+paths it builds from it. A fourth divergence fails in the suite instead of on
+somebody's VM. Recorded in `docs/STATE.md` as well, because the lesson is not
+about node.
+
 ### v0.99.0 — the helper was writing variables the agent does not read
 Third attempt at the same failure, and this time the cause is the one that
 explains all three. The helper's environment file set `NNM_TOKEN`, `PORT` and

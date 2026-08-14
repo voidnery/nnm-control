@@ -167,6 +167,14 @@ mounts, the declarations and the call sites together.
 the directory they were authored in. It also once recovered a file this work
 had truncated to zero.
 
+**Two scripts that run on the same machine must agree about it, and a gate has
+to make them.** The privileged helper cost three releases in a row by assuming
+a path the agent's installer had decided differently — first the agent binary,
+then the environment variable names, then node. Each looked correct in
+isolation; each failed only on a real machine. The checks now read
+`STATE_DIR` out of the installer and require the helper to contain what it
+builds, so the next divergence fails in the suite rather than on somebody's VM.
+
 **Anything read from a machine is stamped.** A fact about TLS or delivery from
 last week is not a fact about now, and a green mark that stopped being true is
 worse than an empty one.

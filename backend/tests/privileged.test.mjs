@@ -147,6 +147,38 @@ check('it refuses to run as anything but root, and without the agent', () => {
   assert.match(script, /the agent binary was not found/);
 });
 
+check('the helper looks for node where the agent puts it', () => {
+  // The agent installs a private node into its state directory when the system
+  // has none, and never touches PATH. The helper looked only at PATH, found
+  // nothing, and stopped with "node is required" on a machine with a working
+  // node ten centimetres away — one the agent was running on at that moment.
+  const inst = readFileSync(new URL('../src/services/agentInstaller.js', import.meta.url), 'utf8');
+  const stateDir = /STATE_DIR=(\S+)/.exec(inst)?.[1];
+  const nodePath = /NODE_BIN="\$STATE_DIR\/(\S+?)"/.exec(inst)?.[1];
+  assert.ok(stateDir && nodePath, 'the installer no longer says where it puts node');
+  assert.ok(script.includes(`${stateDir}/${nodePath}`),
+    `the helper does not look in ${stateDir}/${nodePath}`);
+});
+
+check('and falls back to the node the agent is running on', () => {
+  // The most reliable answer available: whatever is executing the agent right
+  // now is, by definition, a node that works.
+  assert.ok(/systemctl show -p ExecStart[\s\S]{0,120}node/.test(script));
+  assert.ok(/using node:/.test(script), 'it does not say which node it took');
+});
+
+check('every path the helper depends on is one the installer creates', () => {
+  // Two of these have now cost a release each: the agent binary and node, both
+  // hard-coded to somewhere the installer does not write. Bound to the
+  // installer rather than to a literal so the next one cannot.
+  const inst = readFileSync(new URL('../src/services/agentInstaller.js', import.meta.url), 'utf8');
+  const stateDir = /STATE_DIR=(\S+)/.exec(inst)[1];
+  for (const needed of ['/nnm-agent.mjs', '/node/bin/node']) {
+    assert.ok(script.includes(stateDir + needed),
+      `the helper does not know about ${stateDir}${needed}`);
+  }
+});
+
 console.log('\nTHE HELPER TRAVELS WITH THE INSTALL, ON GATEWAYS ONLY:');
 
 const { installScript } = await import('../src/services/agentInstaller.js');
