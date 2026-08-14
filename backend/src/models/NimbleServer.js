@@ -103,6 +103,21 @@ const serverSchema = new mongoose.Schema({
     at: { type: Date, default: null },
   },
 
+  // The privileged helper, tracked apart from the agent proper.
+  //
+  // Both run the same binary against the same server id, so a single
+  // lastHealth was overwritten by whichever polled last and `privileged`
+  // flapped between true and false — the panel said "no helper" and then
+  // stopped saying it, with nothing having changed on the machine. And two
+  // instance ids alternating read as a restart every time, so that counter
+  // climbed forever.
+  helper: {
+    seen: { type: Boolean, default: false },
+    instanceId: { type: String, default: '' },
+    version: { type: Number, default: 0 },
+    lastContactAt: { type: Date, default: null },
+  },
+
   // The machine's own last report about what it has. Kept so a fleet can be
   // shown at a glance without asking every box on every render — and stamped,
   // because a reading from last week is not a statement about now.

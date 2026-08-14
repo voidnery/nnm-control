@@ -55,7 +55,12 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
       if (r.ok) onDone?.();
     } catch (e) {
       const d = e.data || {};
-      if (d.steps) setResult(d); else setError(d.error || e.message);
+      // The detail, when there is one. A bare code sends somebody looking in
+      // the wrong place — this one said "this agent is not the privileged
+      // helper" and the screen showed "apply-failed".
+      if (d.steps) setResult(d);
+      else setError([d.code && t('err.' + d.code) !== 'err.' + d.code ? t('err.' + d.code) : d.error, d.detail]
+        .filter(Boolean).join(' — ') || e.message);
       // A blocked apply carries the plan that blocked it, which is more useful
       // than the word "blocked": the reason is in the findings.
       if (d.blocking) setPlan(d);

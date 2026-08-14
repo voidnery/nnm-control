@@ -55,13 +55,19 @@ async function authAgent(req, res, next) {
 agentGatewayRouter.post('/poll', authAgent, async (req, res) => {
   const server = req.srv;
   const { instanceId = '', version = 0, health = null } = req.body || {};
+  // Which of the two this is. From the agent's own health, which reads it from
+  // its unit's environment — an agent cannot claim to be the helper.
+  const isPrivileged = Boolean(health?.privileged);
 
   const now = new Date();
   const seen = String(instanceId).slice(0, 64);
   // iter12 m4 — a new instance id means the process is not the one we spoke to
   // last time. Counted inside a rolling window so an ordinary restart is not
   // mistaken for a crash loop, and a crash loop is not mistaken for health.
-  if (seen && server.agent.instanceId && seen !== server.agent.instanceId) {
+  // Only the ordinary agent's own identity changing counts. The helper has its
+  // own record, so its polls no longer look like the agent coming back with a
+  // new id every two seconds.
+  if (!isPrivileged && seen && server.agent.instanceId && seen !== server.agent.instanceId) {
     const start = server.agent.restartWindowStart;
     if (!start || now - start > RESTART_WINDOW_MS) {
       server.agent.restartWindowStart = now;
@@ -70,17 +76,31 @@ agentGatewayRouter.post('/poll', authAgent, async (req, res) => {
       server.agent.restarts = (server.agent.restarts || 0) + 1;
     }
   }
-  server.agent.lastContactAt = now;
-  server.agent.instanceId = seen;
-  server.agent.version = Number(version) || 0;
-  if (health && typeof health === 'object') server.agent.lastHealth = health;
+  if (isPrivileged) {
+    // Its own record. Sharing the agent's meant each poll looked like the
+    // other one restarting, and the health they take turns writing disagrees
+    // about the one field the panel reads from it.
+    server.helper.seen = true;
+    server.helper.instanceId = seen;
+    server.helper.version = Number(version) || 0;
+    server.helper.lastContactAt = now;
+  } else {
+    server.agent.lastContactAt = now;
+    server.agent.instanceId = seen;
+    server.agent.version = Number(version) || 0;
+    if (health && typeof health === 'object') server.agent.lastHealth = health;
+  }
   await server.save();
 
   const take = async () => {
     // findOneAndUpdate so two agents for one server — which happens when an
     // operator installs on a cloned VM — cannot both claim the same task.
     return await AgentTask.findOneAndUpdate(
-      { serverId: server._id, status: 'queued', deadlineAt: { $gt: new Date() } },
+      // Only what this agent can actually do. The ordinary agent never sees a
+      // system task and the helper never sees a Nimble one, so "I am not the
+      // privileged helper" stops being an answer anything can produce.
+      { serverId: server._id, status: 'queued', deadlineAt: { $gt: new Date() },
+        needsPrivileged: isPrivileged },
       { $set: { status: 'claimed', claimedAt: new Date(), claimedBy: String(instanceId).slice(0, 64) } },
       { new: true, sort: { createdAt: 1 } },
     );

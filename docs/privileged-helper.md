@@ -71,6 +71,32 @@ seconds, five attempts, then it stays down where somebody will see it.
 
 ---
 
+---
+
+## Two agents, one machine
+
+The helper runs the same binary and inherits the agent's whole environment —
+including `NNM_AGENT_SERVER_ID`, without which it could not reach the panel at
+all. So a gateway has two agents polling as the same server, and that has three
+consequences worth writing down.
+
+**The queue handed tasks to whichever asked first.** A system change went to the
+ordinary agent about half the time and came back "this agent is not the
+privileged helper", surfacing as `apply-failed` with the reason discarded.
+Tasks are targeted now: an ordinary agent cannot *see* a system task, rather
+than being bad at running one.
+
+**One `lastHealth` per server was overwritten by whichever polled last**, so the
+`privileged` flag flapped — the panel said "no helper" and then stopped, with
+nothing having changed on the machine. The helper has its own record.
+
+**Two instance ids alternating read as a restart every time**, and that counter
+climbed forever. Only the ordinary agent's identity counts now.
+
+And a machine with no helper is refused immediately rather than waiting thirty
+seconds for a task nothing can claim — a timeout reads as a network problem,
+which is the wrong place to look.
+
 ## The rule this leaves behind
 
 Anything the helper assumes about the machine must be **derived from what

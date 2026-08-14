@@ -41,9 +41,13 @@ const pub = (s) => ({
   //
   // `null` when no agent has reported yet — an unanswered question, not a
   // missing helper.
-  privileged: s.agent?.lastHealth
-    ? Boolean(s.agent.lastHealth.privileged)
-    : null,
+  // From the helper's own record rather than from whichever instance polled
+  // last. Null when nothing has been heard at all — an unanswered question,
+  // not a missing helper.
+  privileged: s.helper?.seen ? true : (s.agent?.lastContactAt ? false : null),
+  helper: s.helper?.seen ? {
+    version: s.helper.version, lastContactAt: s.helper.lastContactAt,
+  } : null,
   gateway: s.gateway?.state ? {
     domain: s.gateway.domain, mode: s.gateway.mode,
     state: s.gateway.state, at: s.gateway.at, haltedAt: s.gateway.haltedAt,
@@ -320,7 +324,14 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
                                                     createdBy: req.user?.username || '' });
   } catch (e) {
     await logEvent(req, 'server.gateway.apply', { server: server.name, domain, ok: false });
-    return res.status(502).json({ error: 'apply-failed', code: 'apply-failed', detail: String(e?.message || e) });
+    // The reason, not just the fact. "apply-failed" on its own sent us looking
+    // in the wrong place for an afternoon; the message underneath said exactly
+    // what was wrong.
+    return res.status(e?.status === 409 ? 409 : 502).json({
+      error: 'apply-failed',
+      code: e?.code || 'apply-failed',
+      detail: String(e?.message || e),
+    });
   }
 
   // Verified by being a client, not by exit codes. Every step can return zero

@@ -102,6 +102,15 @@ export async function enqueueTask(server, route, { query = null, body = null, ti
   if (!server?.agent?.enabled) {
     throw Object.assign(new Error('agent is not enabled for this server'), { status: 409 });
   }
+  // A task nothing on that machine can claim would sit in the queue until it
+  // timed out, thirty seconds later, and report as a timeout — which reads as
+  // a network problem rather than a missing component.
+  if (PRIVILEGED_ROUTES.test(route) && !server.helper?.seen) {
+    throw Object.assign(
+      new Error('this machine has no privileged helper, so it cannot make system changes'),
+      { status: 409, code: 'no-privileged-helper' },
+    );
+  }
   const task = await AgentTask.create({
     serverId: server._id, route, query, body,
     deadlineAt: new Date(Date.now() + timeoutMs), createdBy,
@@ -117,12 +126,30 @@ export async function enqueueTask(server, route, { query = null, body = null, ti
  * to `await agent.health(server)` keep the same success/failure shape and the
  * routes above them did not have to learn about queues.
  */
+// Routes that only the privileged helper can carry out. Derived from the route
+// rather than passed by every caller: a flag somebody has to remember is a flag
+// somebody forgets, and the consequence here is a task offered to an agent that
+// will refuse it.
+const PRIVILEGED_ROUTES = /^(POST \/host\/apply|POST \/host\/rollback|GET \/host\/ports)$/;
+
 export async function runTask(server, route, { query = null, body = null, timeoutMs = DEFAULT_TIMEOUT_MS, createdBy = '' } = {}) {
   if (!server?.agent?.enabled) {
     throw Object.assign(new Error('agent is not enabled for this server'), { status: 409 });
   }
+  // A task nothing on that machine can claim would sit in the queue until it
+  // timed out, thirty seconds later, and report as a timeout — which reads as
+  // a network problem rather than a missing component.
+  if (PRIVILEGED_ROUTES.test(route) && !server.helper?.seen) {
+    throw Object.assign(
+      new Error('this machine has no privileged helper, so it cannot make system changes'),
+      { status: 409, code: 'no-privileged-helper' },
+    );
+  }
   const deadlineAt = new Date(Date.now() + timeoutMs);
-  const task = await AgentTask.create({ serverId: server._id, route, query, body, deadlineAt, createdBy });
+  const task = await AgentTask.create({
+    serverId: server._id, route, query, body, deadlineAt, createdBy,
+    needsPrivileged: PRIVILEGED_ROUTES.test(route),
+  });
 
   const answer = new Promise((resolve) => resultWaiters.set(String(task._id), resolve));
   wake(server._id);

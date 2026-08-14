@@ -37,6 +37,17 @@ const agentTaskSchema = new mongoose.Schema({
   // distinction NET-Control's agent debugging turned on, where "the agent is
   // broken" and "the panel never handed the task over" looked identical until
   // the two timestamps were compared.
+  // Which of the two agents on this machine may take it.
+  //
+  // A gateway runs the agent proper and the privileged helper, same binary,
+  // same server id, both polling. Without this the queue hands a task to
+  // whichever asked first — so a system change went to the ordinary agent
+  // about half the time and came back "this agent is not the privileged
+  // helper", surfacing as apply-failed with no reason attached.
+  //
+  // Targeted rather than retried: an ordinary agent should not be capable of
+  // seeing a system task, not merely bad at running one.
+  needsPrivileged: { type: Boolean, default: false },
   createdBy: { type: String, default: '' },
   claimedAt: { type: Date, default: null },
   claimedBy: { type: String, default: '' },        // agent instance id

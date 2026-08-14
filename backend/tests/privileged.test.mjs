@@ -354,19 +354,23 @@ check('the ticket keeps its own copy as a fallback', () => {
   assert.ok(/server\?\.purpose \|\| doc\.purpose \|\| 'nimble'/.test(enrollSrc));
 });
 
-check('whether the helper is present comes from the agent, not from memory', () => {
-  // It can be removed with one systemctl command, and a panel reporting it
-  // from its own records would keep claiming it for as long as nobody looked.
-  assert.ok(/s\.agent\?\.lastHealth[\s\S]{0,120}privileged/.test(serversSrc));
+check('whether the helper is present comes from its own polling', () => {
+  // Read from a single shared lastHealth, `privileged` flapped between true
+  // and false as the two instances took turns writing it — the panel said "no
+  // helper" and then stopped, with nothing having changed on the machine.
+  assert.ok(/s\.helper\?\.seen/.test(serversSrc), 'the helper has no record of its own');
   assert.ok(/privileged: PRIVILEGED/.test(readFileSync(new URL('../src/assets/nnm-agent.mjs', import.meta.url), 'utf8')),
     'the agent does not report which unit it is');
+  const gw = readFileSync(new URL('../src/routes/agentGateway.js', import.meta.url), 'utf8');
+  assert.ok(/server\.helper\.seen = true/.test(gw), 'nothing records that a helper polled');
 });
 
 check('never asked is not the same as absent', () => {
-  // `null` for a machine no agent has reported from: an unanswered question,
+  // `null` for a machine nothing has reported from: an unanswered question,
   // not a missing helper.
-  assert.ok(/: null,/.test(serversSrc.slice(serversSrc.indexOf('privileged: s.agent?.lastHealth'),
-                                            serversSrc.indexOf('privileged: s.agent?.lastHealth') + 200)));
+  const line = serversSrc.slice(serversSrc.indexOf('privileged: s.helper?.seen'),
+                                serversSrc.indexOf('privileged: s.helper?.seen') + 160);
+  assert.ok(/: null/.test(line), 'a machine nobody has heard from is reported as having no helper');
   // And the UI only complains about `false`, never about `null`.
   assert.ok(/s\.privileged === false/.test(card), 'the card treats unknown as missing');
   assert.ok(/server\.privileged === false/.test(dlg), 'the dialog treats unknown as missing');
@@ -517,6 +521,64 @@ check('a failed removal does not clear the record', () => {
   const enroll = readFileSync(new URL('../src/routes/agentEnroll.js', import.meta.url), 'utf8');
   const route = enroll.slice(enroll.indexOf("'/agents/uninstall/ssh'"));
   assert.ok(/if \(r\.exitCode === 0\) \{/.test(route), 'the record is cleared regardless of the outcome');
+});
+
+console.log('\nTWO AGENTS, ONE MACHINE, SEPARATE QUEUES:');
+
+const bus = readFileSync(new URL('../src/services/agentBus.js', import.meta.url), 'utf8');
+const gwRoute = readFileSync(new URL('../src/routes/agentGateway.js', import.meta.url), 'utf8');
+const taskModel = readFileSync(new URL('../src/models/AgentTask.js', import.meta.url), 'utf8');
+
+check('a task says which agent may take it', () => {
+  // A gateway runs both, same binary, same server id, both polling. Without
+  // this the queue handed a system change to whichever asked first — so it
+  // went to the ordinary agent about half the time and came back "this agent
+  // is not the privileged helper", surfacing as apply-failed with no reason.
+  assert.ok(/needsPrivileged: \{ type: Boolean/.test(taskModel), 'a task cannot say who it is for');
+  assert.ok(/needsPrivileged: PRIVILEGED_ROUTES\.test\(route\)/.test(bus),
+    'nothing decides which tasks need the helper');
+});
+
+check('the claim filters on it, so the wrong agent cannot see the task', () => {
+  // Targeted rather than retried: an ordinary agent should be incapable of
+  // seeing a system task, not merely bad at running one.
+  assert.ok(/needsPrivileged: isPrivileged/.test(gwRoute), 'the queue does not filter by privilege');
+  assert.ok(/const isPrivileged = Boolean\(health\?\.privileged\)/.test(gwRoute),
+    'the poll does not say which agent it is');
+});
+
+check('exactly the system routes need the helper', () => {
+  const re = new RegExp(/const PRIVILEGED_ROUTES = (\/.*\/);/.exec(bus)[1].slice(1, -1));
+  for (const r of ['POST /host/apply', 'POST /host/rollback', 'GET /host/ports']) {
+    assert.ok(re.test(r), `${r} would go to the ordinary agent`);
+  }
+  // Reading changes nothing, so it does not need root and must not wait for a
+  // helper that a media server will never have.
+  for (const r of ['GET /host/readiness', 'PUT /config', 'GET /health', 'POST /media/probe']) {
+    assert.ok(!re.test(r), `${r} would wait for a privileged helper`);
+  }
+});
+
+check('a machine with no helper is refused at once, not after a timeout', () => {
+  // A task nothing can claim sits in the queue for thirty seconds and then
+  // reports a timeout — which reads as a network problem rather than a missing
+  // component.
+  assert.ok(/no-privileged-helper/.test(bus));
+  assert.ok(/!server\.helper\?\.seen/.test(bus), 'it does not check whether a helper exists');
+});
+
+check('the helper polling is not counted as the agent restarting', () => {
+  // Two instance ids alternating read as a restart every time, and that
+  // counter climbed forever.
+  assert.ok(/if \(!isPrivileged && seen && server\.agent\.instanceId/.test(gwRoute),
+    'the restart counter still counts the two taking turns');
+});
+
+check('the failure reaches the screen with its reason', () => {
+  // "apply-failed" on its own sent us looking in the wrong place for an
+  // afternoon. The message underneath said exactly what was wrong.
+  const ui3 = readFileSync(new URL('../../frontend/src/components/GatewaySetupModal.jsx', import.meta.url), 'utf8');
+  assert.ok(/d\.detail/.test(ui3), 'the detail is discarded');
 });
 
 console.log(failures ? `\n${failures} privileged-helper check(s) failed` : '\nall privileged-helper checks passed');

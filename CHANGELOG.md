@@ -1,5 +1,63 @@
 # Changelog
 
+### v0.99.4 — two agents were racing for the same tasks
+The helper installs now. The apply then failed with `apply-failed` and nothing
+else, and the cause was the thing that made the helper work: it runs the same
+binary and inherits the agent's environment, including the server id. So a
+gateway has **two agents polling as the same server**.
+
+The queue did not distinguish them. `POST /host/apply` went to whichever asked
+first — about half the time the ordinary agent, which correctly refused, and
+that refusal reached the screen as a code with no message.
+
+- **Tasks are targeted.** A task records which agent may take it, derived from
+  the route rather than passed by callers; the claim filters on it. An ordinary
+  agent cannot *see* a system task now, rather than being bad at running one.
+- **A machine with no helper is refused at once**, not after thirty seconds of
+  a task nothing can claim — a timeout reads as a network problem, which is the
+  wrong place to look.
+- **The helper has its own record.** One `lastHealth` per server was
+  overwritten by whichever polled last, so `privileged` flapped: the panel said
+  "no helper", then stopped, with nothing having changed on the machine.
+- **Alternating instance ids no longer count as restarts.** That counter had
+  been climbing forever.
+- **The reason reaches the screen.** The panel was already sending it; the
+  dialog showed the code alone, which cost an afternoon of looking in the wrong
+  place.
+
+Six checks, six proven by contradiction. Two of those contradictions did not
+bite on the first attempt — because the edit did not apply, not because the
+check was weak, which is worth knowing the difference about.
+
+### v0.99.4 — two agents were racing for the same tasks
+The helper installs now. The apply then failed with `apply-failed` and nothing
+else, and the cause was the thing that made the helper work: it runs the same
+binary and inherits the agent's environment, including the server id. So a
+gateway has **two agents polling as the same server**.
+
+The queue did not distinguish them. `POST /host/apply` went to whichever asked
+first — about half the time the ordinary agent, which correctly refused, and
+that refusal reached the screen as a code with no message.
+
+- **Tasks are targeted.** A task records which agent may take it, derived from
+  the route rather than passed by callers; the claim filters on it. An ordinary
+  agent cannot *see* a system task now, rather than being bad at running one.
+- **A machine with no helper is refused at once**, not after thirty seconds of
+  a task nothing can claim — a timeout reads as a network problem, which is the
+  wrong place to look.
+- **The helper has its own record.** One `lastHealth` per server was
+  overwritten by whichever polled last, so `privileged` flapped: the panel said
+  "no helper", then stopped, with nothing having changed on the machine.
+- **Alternating instance ids no longer count as restarts.** That counter had
+  been climbing forever.
+- **The reason reaches the screen.** The panel was already sending it; the
+  dialog showed the code alone, which cost an afternoon of looking in the wrong
+  place.
+
+Six checks, six proven by contradiction. Two of those contradictions did not
+bite on the first attempt — because the edit did not apply, not because the
+check was weak, which is worth knowing the difference about.
+
 ### v0.99.3 — the whole unit, once, instead of one layer at a time
 Five releases went to the same class of fault: assuming something about the
 machine that was decided elsewhere. Each fix was correct and one layer deep,
