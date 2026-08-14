@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.99.7 — 504, which means it was working
+The helper ran, apt got its packages, and the browser gave up. A 504 comes from
+whatever proxies the panel, not from the panel — the work carried on underneath
+and finished.
+
+**Installing nginx and issuing a certificate takes minutes, and an HTTP request
+held open that long is at the mercy of the thing in front.** Raising a timeout
+would have moved the number, not fixed the shape. The agent install solved this
+with a job years of code ago; the gateway apply was written synchronously and
+should not have been.
+
+It answers 202 with a job id now and the dialog polls, showing each step as it
+lands — an animation and nothing else for four minutes is indistinguishable
+from a hang, which is what the bar was added to avoid.
+
+The machine's state is written **inside the job**, not where the response is
+built: by then the request is gone, and a preparation that outlived it would
+have left the panel believing nothing happened.
+
+One contradiction did not bite at first. Disabling the job path with
+`if (false)` leaves the 202 in the file, unreachable, and the check matched the
+text rather than the condition — so it passed on code that could no longer run.
+Bound to the condition now.
+
 ### v0.99.6 — the new unit was written and the old one kept running
 The same error, byte for byte, after the sandbox had been removed. Which was
 the clue: the machine was still running the old unit.

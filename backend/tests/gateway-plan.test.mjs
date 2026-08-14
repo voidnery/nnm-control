@@ -326,5 +326,39 @@ check('the plan opens in its own window', () => {
   assert.ok(/showPlan && plan/.test(ui));
 });
 
+console.log('\nWORK THAT TAKES MINUTES IS NOT ONE REQUEST:');
+
+const uiPoll = readFileSync(new URL('../../frontend/src/components/GatewaySetupModal.jsx', import.meta.url), 'utf8');
+
+check('the apply answers at once and is polled after', () => {
+  // Installing nginx and issuing a certificate takes minutes. Held open, the
+  // request returned 504 from whatever proxies the panel — while the work
+  // carried on underneath and finished. The install flow solved this with a
+  // job long ago; this one was written synchronously and should not have been.
+  // The condition, not just the presence of the line. `if (false)` leaves the
+  // 202 in the file and unreachable, and a check that matches text alone
+  // passes on it — which it did.
+  assert.ok(/if \(req\.body\?\.async !== false\) \{/.test(routes),
+    'the job path is not the default, so an apply can still block until it finishes');
+  assert.ok(/res\.status\(202\)\.json\(\{ jobId/.test(routes), 'nothing returns a job');
+  assert.ok(/gateway\/jobs\/:jobId/.test(routes), 'there is nothing to poll');
+  assert.ok(/gateway\/jobs\/\$\{started\.jobId\}/.test(uiPoll), 'the dialog does not poll');
+});
+
+check('the machine is recorded from the job, not from the request', () => {
+  // The request is gone by then. If the state were written where the response
+  // is built, a preparation that outlived its own request would leave the
+  // panel believing nothing had happened.
+  const job = routes.slice(routes.indexOf('const jobId = createJob('), routes.indexOf('return res.status(202)'));
+  assert.ok(/server\.gateway = \{/.test(job), 'the gateway state is not recorded inside the job');
+  assert.ok(/probeTls\(domain, 443\)/.test(job), 'success is still declared without a handshake');
+});
+
+check('its output is shown while it runs', () => {
+  // An animation and nothing else for four minutes is indistinguishable from
+  // a hang, which is what the bar was added to avoid in the first place.
+  assert.ok(/setProgress\(job\.output/.test(uiPoll));
+});
+
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');
 process.exit(failures ? 1 : 0);

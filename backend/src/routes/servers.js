@@ -7,6 +7,7 @@ import { purposeChangeWarnings, readiness, PREPARE_MIN_AGENT } from '../services
 import { runTask } from '../services/agentBus.js';
 import { gatewayPlan, replacePlan } from '../services/gatewayPlan.js';
 import { probeTls, tlsSummary } from '../services/tlsProbe.js';
+import { createJob, appendJob, finishJob, getJob } from '../services/sshInstaller.js';
 import { privilegedInstaller, privilegedEligibility } from '../services/privilegedHelper.js';
 import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { logEvent } from '../services/audit.js';
@@ -318,6 +319,46 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
   const wanted = new Set((req.body?.stepIds || plan.steps.map(s => s.id)));
   const steps = plan.steps.filter(s => wanted.has(s.id));
 
+  // Answered immediately, then polled.
+  //
+  // Installing nginx and issuing a certificate takes minutes, and an HTTP
+  // request held open that long is at the mercy of whatever sits in front of
+  // the panel — which returned 504 while the work carried on to completion
+  // underneath. The install flow solved this with a job long ago; this one was
+  // written synchronously and should not have been.
+  if (req.body?.async !== false) {
+    const jobId = createJob({ server: server.name, domain, mode });
+    appendJob(jobId, `preparing ${server.name} as a ${mode} gateway for ${domain}\n`);
+    (async () => {
+      try {
+        const r = await runTask(server, 'POST /host/apply', {
+          body: { steps }, timeoutMs: 15 * 60_000, createdBy: req.user?.username || '',
+        });
+        for (const st of r?.steps || []) {
+          appendJob(jobId, `${st.ok ? 'ok  ' : 'FAIL'} ${st.id}${st.error ? ' — ' + st.error : ''}\n`);
+        }
+        let verify = null;
+        if (r?.ok) {
+          verify = await probeTls(domain, 443).catch(() => null);
+          if (verify) { server.tls = tlsSummary(verify); server.httpsPort = 443; }
+          server.purpose = 'gateway';
+        }
+        const sandboxed = (r?.steps || []).some(x => x.sandboxed);
+        server.gateway = {
+          domain, mode, at: new Date(),
+          state: r?.ok ? 'applied' : sandboxed ? 'refused-by-sandbox' : 'failed',
+          haltedAt: r?.halted || null,
+        };
+        await server.save().catch(() => { /* the machine is done either way */ });
+        finishJob(jobId, { status: r?.ok ? 'done' : 'failed', result: { ...r, verify, sandboxed } });
+      } catch (e) {
+        appendJob(jobId, `${String(e?.message || e)}\n`);
+        finishJob(jobId, { status: 'failed', error: String(e?.message || e), code: e?.code || null });
+      }
+    })();
+    return res.status(202).json({ jobId, plan });
+  }
+
   let result;
   try {
     result = await runTask(server, 'POST /host/apply', { body: { steps }, timeoutMs: 15 * 60_000,
@@ -420,4 +461,14 @@ serversRouter.post('/:id/privileged/script', requirePerm('servers.manage'), asyn
   // changed remotely, and that is worth being able to find later.
   await logEvent(req, 'server.privileged.script', { server: server.name, purpose: server.purpose });
   res.json({ script, port: 8091 });
+});
+
+
+// How a gateway preparation is going. Polled, because the work takes minutes
+// and a request held open that long is at the mercy of whatever proxies the
+// panel.
+serversRouter.get('/gateway/jobs/:jobId', requirePerm('servers.manage'), (req, res) => {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job-not-found', code: 'job-not-found' });
+  res.json(job);
 });

@@ -28,6 +28,7 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
   const [showPlan, setShowPlan] = useState(false);
   const [helper, setHelper] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [progress, setProgress] = useState('');
 
   const getHelper = async () => {
     setBusy(true);
@@ -47,12 +48,29 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
     finally { setBusy(false); }
   };
 
+  // Started, then polled. Installing nginx and issuing a certificate takes
+  // minutes; a request held open that long returned 504 from whatever proxies
+  // the panel, while the work carried on underneath and finished fine.
   const apply = async () => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setProgress('');
     try {
-      const r = await api(`/servers/${server.id}/gateway/apply`, { method: 'POST', body: { domain, mode, email } });
-      setResult(r);
-      if (r.ok) onDone?.();
+      const started = await api(`/servers/${server.id}/gateway/apply`, {
+        method: 'POST', body: { domain, mode, email },
+      });
+      if (!started.jobId) { setResult(started); if (started.ok) onDone?.(); return; }
+
+      for (;;) {
+        await new Promise(r => setTimeout(r, 2000));
+        const job = await api(`/servers/${server.id}/gateway/jobs/${started.jobId}`);
+        // Its output as it arrives, so a long install looks like work rather
+        // than like a hang.
+        setProgress(job.output || '');
+        if (job.status === 'done' || job.status === 'failed') {
+          setResult(job.result || { ok: job.status === 'done', steps: [], error: job.error });
+          if (job.status === 'done') onDone?.();
+          break;
+        }
+      }
     } catch (e) {
       const d = e.data || {};
       // The detail, when there is one. A bare code sends somebody looking in
@@ -244,6 +262,11 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
             <span className="hint">{t('gw.setup.runningHint')}</span>
           </div>
           <div className="progress"><div className="progress-fill indeterminate" /></div>
+          {/* What it has actually done so far, rather than an animation and
+              nothing else. */}
+          {progress && (
+            <pre className="mono" style={{ fontSize: 11, maxHeight: 180, overflow: 'auto' }}>{progress}</pre>
+          )}
           <div className="inst-stages">
             {(plan?.steps || []).map((st, i) => (
               <div key={st.id} className="inst-stage running">
