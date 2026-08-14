@@ -117,6 +117,28 @@ check('the size cap never deletes the only archive left', () => {
 console.log('\nCONTAINER LOGS HAVE A CEILING TOO:');
 
 for (const file of ['docker-compose.yml', 'docker-compose.dev.yml']) {
+  check(`${file}: only services carry service keys`, () => {
+    // `logging` on a volume is not a harmless extra: compose validates its
+    // schema and refuses the whole file, so the panel would not start at all.
+    // A script of mine added it by matching two-space indentation, which is
+    // also how volume names are written — and I checked the result with a YAML
+    // parser rather than with the thing that would run it. That is the same
+    // lesson as `sh -n`, one day later, unapplied.
+    const doc = loadYaml(read(file));
+    const SERVICE_ONLY = ['logging', 'image', 'restart', 'ports', 'environment',
+                          'depends_on', 'command', 'healthcheck', 'build'];
+    for (const section of ['volumes', 'networks', 'configs', 'secrets']) {
+      for (const [name, body] of Object.entries(doc[section] || {})) {
+        if (!body || typeof body !== 'object') continue;
+        for (const key of SERVICE_ONLY) {
+          assert.ok(!(key in body),
+            `${section}.${name} has "${key}", which compose only allows on a service — `
+            + 'the file will be rejected and nothing will start');
+        }
+      }
+    }
+  });
+
   check(`${file}: every service caps its log`, () => {
     // Four gigabytes accumulated before anybody looked.
     const doc = loadYaml(read(file));

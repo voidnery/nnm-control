@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.99.21 — the log cap stopped the panel from starting
+
+    validating docker-compose.yml: volumes.geoip_db additional properties
+    'logging' not allowed
+
+The script that added `max-size` to every service matched two-space
+indentation, which is also how volume names are written. So `logging` landed on
+`geoip_db`, `mongo_data` and `media_spool` — and compose validates its schema,
+so it refused the whole file. The package installed, the images published, and
+the panel could not start at all.
+
+I checked the result with a YAML parser. It was valid YAML and invalid compose,
+and the difference is the entire fault.
+
+**That is the lesson from the day before, unapplied.** `test:shell` exists
+because generated code has to be run through the thing that will run it, and
+reading it is not that. One day later I generated a compose file and validated
+it with something else.
+
+`test:retention` now refuses service-only keys — `logging`, `image`, `ports`,
+`depends_on` and the rest — anywhere in `volumes`, `networks`, `configs` or
+`secrets`. Docker is not available in the test environment, so the check
+asserts the schema rule directly rather than pretending to be compose.
+
 ### v0.99.20 — the panel filled its own disk
 96 GB full, three projects down, a Redis journal truncated mid-write. The panel
 did this to the machine it runs on, and the cause was four limits that all
