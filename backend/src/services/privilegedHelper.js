@@ -257,7 +257,6 @@ NNM_AGENT_PORT='${sh(port)}'
 NNM_AGENT_LOGS=0
 EOF
 )
-)
 chmod 600 "$ENV_FILE"
 
 grep -q '^NNM_AGENT_TOKEN=' "$ENV_FILE" || {

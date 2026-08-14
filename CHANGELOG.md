@@ -1,5 +1,32 @@
 # Changelog
 
+### v0.99.18 — the helper script did not parse
+
+    /tmp/helper.sh: 140: Syntax error: ")" unexpected
+
+Two edits to the same subshell each added a closing bracket. `sh` refused the
+whole file, so nothing in it ran — not the unit, not the echo that would have
+named the problem, not the journal dump added specifically to explain failures.
+The install log showed the block starting and then silence, which is why every
+diagnosis pointed somewhere else.
+
+Every other fault in this feature was a disagreement between two places and
+could not be seen from either side alone. This one was one file, wrong by
+itself, checkable in one command — and I read the code instead, eight times,
+including the two edits that broke it.
+
+**`test:shell` runs `sh -n` over every generated script**: the helper
+installer, the agent installer in both variants, the uninstaller. The gateway
+variant is the only one that embeds the helper, so a check that tried a single
+script would have passed. POSIX `sh` rather than bash, since the target is
+Ubuntu's dash and a construct bash forgives is one dash refuses on a real
+machine.
+
+The lesson is not about parentheses: **generated code has to be run through the
+thing that will run it**, and reading it is not that. `nginx -t` is a step in
+the gateway plan for exactly this reason; the shell had no equivalent until
+now.
+
 ### v0.99.17 — the checksum guaranteed the script was never the same script
 On a clean machine the agent installed and the helper did not, again. The cause
 is one line, and it is the most ironic of the eight.

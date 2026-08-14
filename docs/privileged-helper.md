@@ -171,6 +171,34 @@ execution reach the second. Working through the whole surface once — as the
 directive-by-directive pass above did for the unit — closes a class instead of
 an instance.
 
+---
+
+## The one that was visible from here all along
+
+The script did not parse.
+
+    /tmp/helper.sh: 140: Syntax error: ")" unexpected
+
+Two edits to the same subshell each added a closing bracket. `sh` refused the
+file, so nothing in it ran — not the unit, not the echo that would have named
+the problem, not the journal dump added specifically to explain failures. The
+install log showed the helper block starting, and then nothing.
+
+Every other fault in this feature was a disagreement between two places, and
+none could be seen from either side alone. **This one was a single file, wrong
+on its own, checkable in one command** — and I read the code instead, eight
+times, including the two edits that broke it.
+
+`sh -n` parses without executing. It costs milliseconds. `test:shell` now runs
+it over every generated script — the helper installer, the agent installer in
+both its variants, the uninstaller — because the gateway variant is the only
+one that embeds the helper, so a check that tried one script would have passed.
+
+The lesson is not about parentheses. **Code that is generated has to be run
+through the thing that will run it**, and reading it is not that. The same
+applies to the nginx configs this plan writes: `nginx -t` is a step in the plan
+for exactly this reason, and the shell had no equivalent until now.
+
 ## The rule this leaves behind
 
 Anything the helper assumes about the machine must be **derived from what
