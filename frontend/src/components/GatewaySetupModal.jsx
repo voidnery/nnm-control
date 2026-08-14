@@ -29,6 +29,28 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
   const [helper, setHelper] = useState(null);
   const [copied, setCopied] = useState(false);
   const [progress, setProgress] = useState('');
+  const [stopPids, setStopPids] = useState([]);
+  const [freed, setFreed] = useState(false);
+
+  // Stopping what holds the ports. Its own call, after its own list, with the
+  // pids the operator ticked — and the server re-reads them before acting,
+  // because a list a minute old can name something that has since gone and
+  // something that has since started.
+  const freePorts = async () => {
+    setBusy(true); setError('');
+    try {
+      await api(`/servers/${server.id}/gateway/free-ports`, {
+        method: 'POST', body: { domain, pids: stopPids },
+      });
+      setFreed(true);
+      setStopPids([]);
+      await preview();
+    } catch (e) {
+      const d = e.data || {};
+      setError([d.code && t('err.' + d.code) !== 'err.' + d.code ? t('err.' + d.code) : d.error, d.detail]
+        .filter(Boolean).join(' — ') || e.message);
+    } finally { setBusy(false); }
+  };
 
   const getHelper = async () => {
     setBusy(true);
@@ -176,12 +198,34 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
             </div>
           ))}
           <div className="hint">{t('gw.setup.portsChoice')}</div>
-          <div className="row" style={{ gap: 8, marginTop: 6 }}>
-            {/* Not offered as a button here. Stopping somebody else's service
-                is its own decision, and burying it in a setup flow is how
-                somebody stops a production web server by pressing Next. */}
-            <span className="hint">{t('gw.setup.stopByHand')}</span>
+
+          {/* One checkbox per process, ticked by hand. The decision belongs to
+              the operator, and offering it is not the same as making it easy
+              to make carelessly: nothing is stopped that was not named and
+              individually agreed to. */}
+          <div style={{ marginTop: 8 }}>
+            {held.flatMap(h => h.holders.map(x => (
+              <label key={x.pid} style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '4px 0' }}>
+                <input type="checkbox" checked={stopPids.includes(x.pid)}
+                       onChange={e => setStopPids(v => e.target.checked
+                         ? [...v, x.pid] : v.filter(p2 => p2 !== x.pid))} />
+                <span>
+                  <span className="mono">{x.process}</span> · pid {x.pid} · {t('gw.setup.port')} {h.port}
+                  {x.unit
+                    ? <> · <span className="mono">{x.unit}</span></>
+                    : <> · <b>{t('gw.setup.noUnitWarn')}</b></>}
+                </span>
+              </label>
+            )))}
           </div>
+
+          <div className="row" style={{ gap: 8, marginTop: 8, alignItems: 'center' }}>
+            <button className="primary" disabled={busy || !stopPids.length} onClick={freePorts}>
+              {busy ? '…' : t('gw.setup.stopThem', { n: stopPids.length })}
+            </button>
+            <button onClick={onClose}>{t('gw.setup.stopNothing')}</button>
+          </div>
+          {freed && <div className="hint">{t('gw.setup.freed')}</div>}
         </div>
       )}
 

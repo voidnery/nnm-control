@@ -109,17 +109,33 @@ export function gatewayPlan({
   // Ports first, and blocking. Installing nginx where something already holds
   // 80 produces a broken service rather than an error, and the operator finds
   // out by way of an outage somebody else is having.
+  // nginx on 80 and 443 is not a conflict on a machine being prepared for
+  // nginx. It is what a second run looks like: the first one installed it, and
+  // blocking on our own successful work is absurd.
+  //
+  // Named by unit and process rather than assumed: something else called nginx
+  // and started by hand is a different situation from the unit this plan
+  // manages, and only the unit gets the exemption.
+  const isOurs = (h) => h.unit === 'nginx.service' || (h.process === 'nginx' && !h.unit);
+
   const held = [];
   if (ports) {
     for (const p of [80, 443]) {
       const st = ports[p] || ports[String(p)];
-      if (st?.taken) held.push({ port: p, holders: st.holders || [] });
+      const holders = (st?.holders || []).filter(h => !isOurs(h));
+      if (st?.taken && holders.length) held.push({ port: p, holders });
       // Unknown is not free. `ss` missing means the panel could not look, and
       // proceeding on that is exactly the assumption this project keeps
       // refusing to make.
       if (st?.taken === null) problems.push({ code: 'ports-unknown', severity: 'block', port: p });
     }
     if (held.length) problems.push({ code: 'ports-held', severity: 'block', held });
+    // Ours, and only ours: worth saying, because a reload is not an install
+    // and the operator should know which of the two is about to happen.
+    const ours = [80, 443]
+      .map(p => ({ port: p, holders: ((ports[p] || ports[String(p)])?.holders || []).filter(isOurs) }))
+      .filter(x => x.holders.length);
+    if (ours.length) problems.push({ code: 'nginx-already-here', severity: 'note', ours });
   } else {
     problems.push({ code: 'ports-not-checked', severity: 'block' });
   }

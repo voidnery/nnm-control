@@ -127,7 +127,10 @@ const ALLOWED_PATHS = [
   '/var/lib/letsencrypt', '/var/cache/apt', '/var/lib/apt', '/var/lib/dpkg',
   '/var/lib/systemd', '/etc/systemd/system',
 ];
-const ALLOWED_BINARIES = ['apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm'];
+// `kill` is here for a process holding port 80 that belongs to no unit —
+// systemctl cannot reach one, and a blocker the panel cannot clear is a
+// blocker it should not have shown.
+const ALLOWED_BINARIES = ['apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm', 'kill'];
 
 function allowedStep(step) {
   if (step?.kind === 'file') {

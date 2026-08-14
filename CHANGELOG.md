@@ -1,5 +1,38 @@
 # Changelog
 
+### v0.99.8 — blocked by the nginx we installed, with no way to clear it
+Two faults, and the second is mine twice over.
+
+**The ports were held by nginx — the one the previous run installed.** On a
+machine being prepared *for* nginx that is not a conflict, it is what a second
+run looks like. It blocks nothing now and says so; the config is rewritten and
+the service reloaded. Anything else on 80 or 443 still blocks, and a mix
+reports only the parts that are not ours.
+
+**And there was no way to stop what does block.** I built `replacePlan` in
+iter23 and deliberately wired no button, writing that stopping somebody else's
+service should not happen behind a Next button. That was my judgement put in
+place of the operator's — who had asked for exactly this choice when we
+designed it, and said so again.
+
+It is there now, and what makes it safe is that it is explicit rather than
+absent:
+
+- one checkbox per process, ticked by hand, with the pid, the port and the
+  unit;
+- a process with no systemd unit is marked **the panel cannot start it again**,
+  before ticking rather than after;
+- the list is re-read on the server before anything is stopped, because the one
+  the operator saw is a minute old at best and a stale pid can name something
+  that has since started;
+- only confirmed pids are acted on — an empty selection stops nothing rather
+  than everything;
+- the audit records what was stopped and which of it cannot come back.
+
+`kill` joins the helper's permitted binaries for the unit-less case, where
+`systemctl stop` cannot reach. A blocker the panel has no way to clear is a
+blocker it should not have been showing.
+
 ### v0.99.7 — 504, which means it was working
 The helper ran, apt got its packages, and the browser gave up. A 504 comes from
 whatever proxies the panel, not from the panel — the work carried on underneath

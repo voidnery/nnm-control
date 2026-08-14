@@ -101,6 +101,14 @@ export const ALLOWED_PATHS = [
 // Two locks with one key each are worth more than one lock with two.
 export const ALLOWED_BINARIES = [
   'apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm',
+  // Stopping a process that holds port 80 and belongs to no unit. `systemctl
+  // stop` cannot reach it, and refusing to offer anything would mean the panel
+  // showing a blocker it has no way to clear — which is what it did.
+  //
+  // Narrow in practice: the only caller passes pids the operator confirmed
+  // from a list the panel re-read a moment earlier, and the audit records that
+  // it was not reversible.
+  'kill',
 ];
 
 export const PRIVILEGED_PORT = 8091;

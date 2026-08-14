@@ -360,5 +360,76 @@ check('its output is shown while it runs', () => {
   assert.ok(/setProgress\(job\.output/.test(uiPoll));
 });
 
+console.log('\nOUR OWN NGINX IS NOT A CONFLICT:');
+
+check('nginx from a previous run does not block the next one', () => {
+  // The first run installed it; blocking on our own successful work is absurd,
+  // and it is exactly what happened. A second run is a reload, not a refusal.
+  const p2 = plan({ ports: {
+    80: { taken: true, holders: [{ process: 'nginx', pid: 71916, unit: 'nginx.service' }] },
+    443: { taken: false, holders: [] },
+  } });
+  assert.ok(!p2.blocking.some(x => x.code === 'ports-held'), 'our own nginx blocks the plan');
+  assert.ok(p2.problems.some(x => x.code === 'nginx-already-here' && x.severity === 'note'),
+    'and nothing says why the ports are busy');
+});
+
+check('anything else on those ports still blocks', () => {
+  const p2 = plan({ ports: {
+    80: { taken: true, holders: [{ process: 'apache2', pid: 900, unit: 'apache2.service' }] },
+    443: { taken: false, holders: [] },
+  } });
+  assert.ok(p2.blocking.some(x => x.code === 'ports-held'));
+});
+
+check('a mix reports only the ones that are not ours', () => {
+  const p2 = plan({ ports: {
+    80: { taken: true, holders: [
+      { process: 'nginx', pid: 1, unit: 'nginx.service' },
+      { process: 'apache2', pid: 2, unit: 'apache2.service' },
+    ] },
+    443: { taken: false, holders: [] },
+  } });
+  const held = p2.blocking.find(x => x.code === 'ports-held').held;
+  assert.deepEqual(held[0].holders.map(h => h.process), ['apache2']);
+});
+
+console.log('\nAND THE OPERATOR CAN CLEAR THEM:');
+
+const freeRoute = routes.slice(routes.indexOf("'/:id/gateway/free-ports'"));
+
+check('there is an action, not only an explanation', () => {
+  // I built the plan for this and wired no button, on the grounds that
+  // stopping somebody else's service should not happen behind a Next button.
+  // That was my judgement substituted for the operator's, who had asked for
+  // the choice.
+  assert.ok(/gateway\/free-ports/.test(routes), 'nothing can free the ports');
+  assert.ok(/free-ports/.test(uiPoll), 'the dialog offers no way to do it');
+  assert.ok(/stopPids/.test(uiPoll), 'processes are not ticked individually');
+});
+
+check('only the pids the operator confirmed', () => {
+  // Ticked by hand, one box per process. Offering the choice is not the same
+  // as making it easy to make carelessly.
+  assert.ok(/const confirmed = new Set\(\(req\.body\?\.pids/.test(freeRoute));
+  assert.ok(/nothing-confirmed/.test(freeRoute), 'an empty selection would stop everything');
+});
+
+check('the list is re-read before anything is stopped', () => {
+  // The list the operator saw is a minute old at best, and a stale pid can
+  // name something that has since started.
+  assert.ok(/'GET \/host\/ports'/.test(freeRoute), 'it acts on the list from the request');
+});
+
+check('a process with no unit is marked as unrecoverable in the UI', () => {
+  // The panel cannot start it again, and that is the part somebody needs
+  // before ticking rather than after.
+  assert.ok(/gw\.setup\.noUnitWarn/.test(uiPoll));
+});
+
+check('the audit says what was stopped and what cannot come back', () => {
+  assert.ok(/irreversible: steps\.filter/.test(freeRoute));
+});
+
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');
 process.exit(failures ? 1 : 0);

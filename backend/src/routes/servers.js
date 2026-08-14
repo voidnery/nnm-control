@@ -472,3 +472,50 @@ serversRouter.get('/gateway/jobs/:jobId', requirePerm('servers.manage'), (req, r
   if (!job) return res.status(404).json({ error: 'job-not-found', code: 'job-not-found' });
   res.json(job);
 });
+
+
+// Stop what is holding the ports.
+//
+// I built this plan in iter23 and did not wire a button to it, on the grounds
+// that stopping somebody else's service should not happen behind a Next
+// button. That was my judgement substituted for the operator's, and the
+// operator had already asked for the choice.
+//
+// So it is here, and what keeps it safe is that it is explicit rather than
+// absent: a separate call, naming each process, after the plan has shown who
+// they are. Nobody reaches it without having read the list.
+serversRouter.post('/:id/gateway/free-ports', requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+
+  // Re-read, never taken from the request. The list the operator saw is a
+  // minute old at best, and stopping a pid from a stale list can stop
+  // something that started since.
+  let ports = null;
+  try { ports = (await runTask(server, 'GET /host/ports', { createdBy: req.user?.username || '' }))?.ports || null; }
+  catch (e) { return res.status(502).json({ error: 'ports-unreadable', code: 'ports-unreadable', detail: String(e?.message || e) }); }
+  if (!ports) return res.status(502).json({ error: 'ports-unreadable', code: 'ports-unreadable' });
+
+  const plan = gatewayPlan({ server, domain: String(req.body?.domain || 'x.invalid'), ports });
+  const held = plan.blocking.find(b => b.code === 'ports-held')?.held || [];
+  if (!held.length) return res.json({ ok: true, stopped: [], note: 'nothing is holding the ports now' });
+
+  // Only what the operator confirmed, matched by pid: a list that has changed
+  // since they looked is a list they did not agree to.
+  const confirmed = new Set((req.body?.pids || []).map(Number));
+  const steps = replacePlan(held).filter(s2 => confirmed.has(Number(/stop-(\d+)/.exec(s2.id)?.[1])));
+  if (!steps.length) {
+    return res.status(422).json({ error: 'nothing-confirmed', code: 'nothing-confirmed', held });
+  }
+
+  const result = await runTask(server, 'POST /host/apply', {
+    body: { steps }, timeoutMs: 60_000, createdBy: req.user?.username || '',
+  }).catch(e => ({ ok: false, steps: [{ id: 'stop', ok: false, error: String(e?.message || e) }] }));
+
+  await logEvent(req, 'server.gateway.free-ports', {
+    server: server.name,
+    stopped: steps.map(s2 => s2.why),
+    irreversible: steps.filter(s2 => !s2.reversible).map(s2 => s2.why),
+  });
+  res.json(result);
+});
