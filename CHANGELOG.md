@@ -1,5 +1,24 @@
 # Changelog
 
+### v0.99.9 — the job poll went to a route that did not exist
+The dialog polls `/servers/{id}/gateway/jobs/{jobId}`. The route was declared
+`/gateway/jobs/:jobId` — without the server id. A 404 on the button.
+
+**`audit:routes` had waved it past.** It excuses a call when a hole *names* the
+endpoint rather than filling a parameter, and its rule was "the last segment is
+a hole" — which is the shape of every call ending in an id. So it excused the
+one call that was genuinely broken.
+
+It now tries the path as written first, and only then relaxes the last hole to
+a whole fragment to see whether some route covers the family. A call that
+matches neither is a failure rather than a note. That found the real fault, and
+one more thing worth having: a hole glued to the end of a segment with no slash
+before it is a query string assembled in a variable — `…/overview${q}` — and is
+dropped rather than treated as a path segment.
+
+Proven both ways: a route missing the server id fails, and a client calling a
+path nothing answers fails.
+
 ### v0.99.8 — blocked by the nginx we installed, with no way to clear it
 Two faults, and the second is mine twice over.
 

@@ -467,7 +467,7 @@ serversRouter.post('/:id/privileged/script', requirePerm('servers.manage'), asyn
 // How a gateway preparation is going. Polled, because the work takes minutes
 // and a request held open that long is at the mercy of whatever proxies the
 // panel.
-serversRouter.get('/gateway/jobs/:jobId', requirePerm('servers.manage'), (req, res) => {
+serversRouter.get('/:id/gateway/jobs/:jobId', requirePerm('servers.manage'), (req, res) => {
   const job = getJob(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'job-not-found', code: 'job-not-found' });
   res.json(job);

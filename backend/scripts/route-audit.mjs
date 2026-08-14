@@ -107,7 +107,13 @@ for (const file of jsx) {
       raw,
       // A template hole matches one segment; a query string is not part of the
       // path.
-      path: '/api' + raw.split('?')[0].replace(/\$\{[^}]*\}/g, ':x'),
+      // A hole glued to the end of a segment, with no slash before it, is a
+      // query string built in a variable — `…/overview${q}` where q is
+      // "?channels=…". Dropped, because it is not part of the path. A hole
+      // that follows a slash is a real segment and stays.
+      path: '/api' + raw.split('?')[0]
+        .replace(/([^/])\$\{[^}]*\}$/, '$1')
+        .replace(/\$\{[^}]*\}/g, ':x'),
       file: path.relative(FRONTEND, file),
     });
   }
@@ -130,25 +136,28 @@ for (const call of calls) {
   if (seen.has(call.path)) continue;
   seen.add(call.path);
 
-  // Try it as written first. A hole in a parameter position — `/streams/${id}`
-  // — is perfectly checkable, and excluding every call with two holes threw
-  // away thirty real checks to silence five. The first attempt did exactly
-  // that and then reported OK, which is the failure mode this whole file
-  // exists to prevent: a check that passes by not looking.
+  // Try it as written first: every hole is one path segment.
   const probe = call.path.replace(/:x/g, 'X');
   if (declared.some(d => d.re.test(probe))) continue;
 
-  // Only when it does not match: is a hole *naming* the endpoint? Then the
-  // path is a family decided at runtime and cannot be resolved from here.
-  // Reported as unchecked rather than as broken — claiming it is broken would
-  // be as wrong as claiming it is fine, and only one of the two gets the gate
-  // switched off.
-  const endpointIsAHole = /\/:x(\/|$)/.test(call.path.replace(/^\/api\/[^/]+\/:x/, ''));
-  if (endpointIsAHole) { dynamic.push(call); continue; }
+  // Then allow the last hole to be a whole path fragment, which is what
+  // `api(`/nimble/${id}/${path}`)` actually is — a family of routes chosen at
+  // runtime. If some declared route covers the family, the call is fine and
+  // this cannot say more than that.
+  //
+  // The first version excused a call the moment its last segment was a hole,
+  // which is the shape of *every* call ending in an id — and it let
+  // `/servers/:x/gateway/jobs/:x` through while the route was declared without
+  // the server id at all. A 404 on the button, and the check that exists to
+  // catch exactly that had waved it past.
+  const loose = new RegExp('^' + call.path
+    .replace(/:x(?=\/)/g, '[^/]+')
+    .replace(/:x$/, '.+')
+    .replace(/\//g, '\\/') + '$');
+  const covered = declared.some(d => loose.test(d.full.replace(/:[^/]+/g, 'X')) || d.re.test(probe));
+  if (covered) { dynamic.push(call); continue; }
 
-  {
-    fail(`${call.file} calls ${call.raw} — no route answers ${call.path}`);
-  }
+  fail(`${call.file} calls ${call.raw} — no route answers ${call.path}`);
 }
 if (dynamic.length) {
   console.log(`  · ${dynamic.length} call(s) build the endpoint at runtime and cannot be checked here:`);
