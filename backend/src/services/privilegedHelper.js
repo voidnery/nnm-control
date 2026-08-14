@@ -31,7 +31,38 @@
 // Exactly what gateway preparation touches, and nothing else. Each path is
 // here because a step in `gatewayPlan` needs it; a path nobody can point at a
 // step for does not belong.
-// Directories in `ReadWritePaths` must exist when the unit starts.
+// A package install cannot be sandboxed by path, and that changes where the
+// limit lives.
+//
+// `apt-get install nginx` writes /usr/sbin, /usr/share, /var/cache/debconf,
+// /var/lib/update-notifier, /var/log/apt and whatever else the package's
+// maintainer scripts touch. That set belongs to the package, not to us. Every
+// value of ProtectSystem makes /usr read-only — `true` already does — so there
+// is no setting that permits installing a package and also constrains where it
+// writes. Enumerating paths was a treadmill: each release added the ones the
+// last failure named.
+//
+// So the filesystem sandbox comes off, and the limits that remain are the ones
+// that actually hold:
+//
+//   * Six binaries, and no others. The helper will not run bash, curl,
+//     useradd or anything not on the list — checked in its own code, against
+//     the first element of every command, so a compromised panel gains
+//     apt-get and certbot rather than a shell.
+//   * File writes still confined to the same ten paths, checked the same way.
+//     What changed is that systemd no longer enforces it; the helper does, and
+//     it did all along.
+//   * Loopback only, its own unit, installed per machine on purpose, removable
+//     with one command.
+//
+// This is a real reduction and worth naming: root running apt-get can, through
+// a malicious package, do anything. The honest description is no longer "root
+// scoped to ten directories" but "root that can run six programs" — which is
+// what installing software has always meant, and pretending otherwise was the
+// mistake.
+//
+// Directories in the old `ReadWritePaths` must still exist for the file steps,
+// so the installer keeps creating them.
 //
 // This is the whole of the last failure and it is worth writing down properly.
 // systemd builds the mount namespace before the process runs, so a path that
@@ -224,14 +255,18 @@ StartLimitBurst=5
 # tail logs at all.
 StateDirectory=nnm-agent-privileged
 
-# The whole point of the separate unit. Root that may write ten directories is
-# a different thing from root.
-ProtectSystem=strict
+# No ProtectSystem. Installing a package writes /usr, and every value of this
+# setting makes /usr read-only — so it is a choice between a sandbox that works
+# and a helper that can do its job. The limits that remain are in the helper's
+# own code: six permitted binaries, and file writes confined to a fixed list of
+# paths. Those hold against a compromised panel, which is the threat this was
+# built for; they do not hold against a malicious apt package, which nothing
+# here could.
+#
+# What stays on is everything that does not conflict with installing software.
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=${ALLOWED_PATHS.map(p => `-${p}`).join(' ')}
 # Not NoNewPrivileges: apt-get and certbot legitimately re-exec helpers.
-# Everything else stays on.
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes

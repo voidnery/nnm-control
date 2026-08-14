@@ -97,6 +97,44 @@ And a machine with no helper is refused immediately rather than waiting thirty
 seconds for a task nothing can claim — a timeout reads as a network problem,
 which is the wrong place to look.
 
+---
+
+## Why the filesystem sandbox came off
+
+`ReadWritePaths` was the point of the separate unit, and it turned out to be
+incompatible with the unit's job.
+
+`apt-get install nginx` writes `/usr/sbin`, `/usr/share`, `/var/cache/debconf`,
+`/var/lib/update-notifier`, `/var/log/apt` — and whatever else the package's
+maintainer scripts touch. That set belongs to the package, not to us, and it
+differs per package. **Every value of `ProtectSystem` makes `/usr` read-only**,
+`true` included, so there is no setting that permits installing software and
+also constrains where it writes.
+
+Enumerating paths was a treadmill: each attempt added the ones the previous
+failure had named, and the next package would name more.
+
+### What the limits are now
+
+| Lock | Where it lives | Holds against |
+|---|---|---|
+| Six permitted binaries | the helper's own code | a compromised panel |
+| File writes to ten paths | the helper's own code | a compromised panel |
+| Loopback only | the unit | anything off the machine |
+| Installed per machine, on purpose | the operator | itself |
+| One command to remove | the operator | itself |
+
+Both allow-lists were always in the helper as well as in systemd — systemd was
+the belt, not the trousers. What is lost is defence against a **malicious
+package**, and nothing in this design could have provided that: root running
+`apt-get` can do anything a package tells it to.
+
+So the honest description changed. It is no longer "root scoped to ten
+directories". It is **root that can run six named programs**, which is what
+installing software has always meant. Claiming the stronger property was the
+mistake, and it survived four releases because nothing tested it against a real
+package install.
+
 ## The rule this leaves behind
 
 Anything the helper assumes about the machine must be **derived from what

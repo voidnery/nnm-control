@@ -41,14 +41,12 @@ check('every writable path is created before the unit is enabled', () => {
   }
 });
 
-check('and every path is also marked optional, as a second line', () => {
-  // A "-" makes systemd ignore a missing path. It fixes the crash and nothing
-  // else — the namespace is fixed at start, so a directory created later is
-  // still not writable. Belt for a path this list gains and the script
-  // forgets; not the mechanism.
+check('the directories are still created, because file steps need them', () => {
+  // The unit no longer demands they exist, but a write to /etc/nginx on a
+  // machine without nginx would fail just the same — and the helper's own
+  // check permits the path whether or not anything is there.
   for (const p of ALLOWED_PATHS) {
-    assert.ok(new RegExp(`ReadWritePaths=[^\\n]*-${p.replace(/\//g, '\\/')}`).test(script),
-      `${p} is not optional in ReadWritePaths`);
+    assert.ok(script.includes(p), `${p} is never created`);
   }
 });
 
@@ -61,23 +59,39 @@ check('a unit that cannot start stops instead of spinning', () => {
   assert.match(script, /StartLimitBurst=\d+/);
 });
 
-check('the state directory is granted by systemd, not by the path list', () => {
-  // StateDirectory= is read-write even under ProtectSystem=strict, and systemd
-  // creates it. Listing it in ReadWritePaths instead would put it back in the
-  // must-exist-first trap.
-  assert.match(script, /StateDirectory=nnm-agent-privileged/);
-  assert.ok(!/ReadWritePaths=[^\n]*\/var\/lib\/nnm-agent/.test(script));
+check('nothing re-adds a path sandbox by the back door', () => {
+  // ReadOnlyPaths, InaccessiblePaths and TemporaryFileSystem produce the same
+  // 226/NAMESPACE for the same reason. If one of them appears, this whole
+  // analysis has been forgotten.
+  for (const d of ['ReadOnlyPaths', 'InaccessiblePaths', 'TemporaryFileSystem', 'ProtectSystem']) {
+    assert.ok(!new RegExp(`^${d}=`, 'm').test(script), `${d} would block apt again`);
+  }
 });
 
 console.log('\nROOT, BUT NOT FREE:');
 
-check('the unit lists what it may write, and it is a short list', () => {
-  // The whole reason for a separate unit rather than a flag on the existing
-  // one. Root that may write ten directories is a different thing from root.
-  assert.match(script, /ReadWritePaths=/);
-  assert.match(script, /ProtectSystem=strict/);
-  for (const p of ALLOWED_PATHS) assert.ok(script.includes(p), `${p} is not in the unit`);
-  assert.ok(ALLOWED_PATHS.length <= 12, 'the list has grown past the job it was written for');
+check('the filesystem sandbox is off, because a package install cannot have one', () => {
+  // apt writes /usr, /var/cache/debconf, /var/lib/update-notifier and whatever
+  // else a package's maintainer scripts touch — a set that belongs to the
+  // package. Every value of ProtectSystem makes /usr read-only, `true`
+  // included, so there is no setting that permits installing software and also
+  // says where it may write. Enumerating paths was a treadmill: each release
+  // added the ones the last failure named.
+  assert.ok(!/^ProtectSystem=/m.test(script), 'a sandbox that blocks apt is back');
+  // What does not conflict with installing stays on.
+  assert.match(script, /ProtectHome=yes/);
+  assert.match(script, /PrivateTmp=yes/);
+});
+
+check('the limits moved into the helper rather than disappearing', () => {
+  // The threat this was built for is a compromised panel, and against that the
+  // binary list is the stronger lock anyway: root that can run six named
+  // programs is not root with a shell. Both checks live in the agent, and did
+  // all along — systemd was the belt, not the trousers.
+  assert.ok(ALLOWED_BINARIES.length <= 8, 'the binary list has grown past the job');
+  assert.ok(/ALLOWED_BINARIES/.test(agent) && /allowedStep/.test(agent),
+    'the helper no longer checks what it is asked to run');
+  assert.ok(ALLOWED_PATHS.length <= 12, 'the path list has grown past the job it was written for');
 });
 
 check('nothing outside the gateway job is writable', () => {
@@ -206,13 +220,10 @@ check('the helper has somewhere to write its own state', () => {
   assert.ok(!/StateDirectory=nnm-agent$/m.test(script));
 });
 
-check('every writable thing it needs is either listed or granted', () => {
-  // ProtectSystem=strict means anything not named is read-only, and a process
-  // that cannot write where it expects to exits without explaining itself.
-  const rw = /ReadWritePaths=([^\n]*)/.exec(script)[1];
-  const state = /StateDirectory=(\S+)/.exec(script)[1];
-  assert.ok(rw.includes('/etc/nginx') && rw.includes('/var/lib/dpkg'));
-  assert.ok(state, 'nothing grants a state directory');
+check('it still has a state directory of its own', () => {
+  // Its own, not the agent's: two processes sharing one cursor file would each
+  // rewind the other.
+  assert.match(script, /StateDirectory=nnm-agent-privileged/);
 });
 
 check('a helper that will not start prints why, not where to look', () => {

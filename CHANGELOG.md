@@ -1,5 +1,37 @@
 # Changelog
 
+### v0.99.5 — a package install cannot be sandboxed by path
+The helper installs, polls, claims its task, and then apt could not write
+`/var/cache/debconf` — nor `/var/lib/update-notifier`, nor `/var/log/apt`.
+
+Adding those three would have been the fifth patch of the same kind, so this
+went the other way and asked what apt actually needs. The answer settles it:
+`apt-get install nginx` writes `/usr/sbin`, `/usr/share` and whatever a
+package's maintainer scripts touch, and **every value of `ProtectSystem` makes
+`/usr` read-only** — `true` included. There is no setting that permits
+installing software and also constrains where it writes.
+
+So `ProtectSystem` and `ReadWritePaths` are gone from the unit. `ProtectHome`,
+`PrivateTmp` and the kernel protections stay, being the ones that do not
+conflict.
+
+**The limits did not disappear, they moved** — or rather, they were always in
+both places and systemd was the belt rather than the trousers. The helper's own
+code permits six binaries and confines file writes to ten paths, and that is
+what holds against a compromised panel, which is the threat this was built for.
+
+**What is genuinely lost is defence against a malicious package**, and nothing
+in this design could have offered it: root running `apt-get` does what the
+package says. The honest description is no longer "root scoped to ten
+directories" but "root that can run six named programs" — which is what
+installing software has always meant. Claiming the stronger property was the
+mistake, and it survived four releases because nothing tested it against a real
+install.
+
+A check now refuses `ReadOnlyPaths`, `InaccessiblePaths` and
+`TemporaryFileSystem` too: they produce the same `226/NAMESPACE` for the same
+reason, and their appearance would mean this analysis had been forgotten.
+
 ### v0.99.4 — two agents were racing for the same tasks
 The helper installs now. The apply then failed with `apply-failed` and nothing
 else, and the cause was the thing that made the helper work: it runs the same
