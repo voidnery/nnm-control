@@ -5,7 +5,7 @@
 // refused. So this is the half that must be right before anything runs, and it
 // has one rule above all: the plan shown is the plan applied.
 import assert from 'node:assert/strict';
-import { gatewayPlan, nginxConf, replacePlan } from '../src/services/gatewayPlan.js';
+import { gatewayPlan, nginxConf, acmeConf, replacePlan } from '../src/services/gatewayPlan.js';
 
 let failures = 0;
 const check = (name, fn) => {
@@ -429,6 +429,55 @@ check('a process with no unit is marked as unrecoverable in the UI', () => {
 
 check('the audit says what was stopped and what cannot come back', () => {
   assert.ok(/irreversible: steps\.filter/.test(freeRoute));
+});
+
+console.log('\nTHE CERTIFICATE IS ISSUED THROUGH NGINX, NOT AGAINST IT:');
+
+check('certbot uses the running nginx rather than binding 80 itself', () => {
+  // `--standalone` binds port 80, and fails the moment anything is already
+  // there — which this plan made sure of three steps earlier by installing
+  // nginx. Stopping nginx to issue and starting it again would take the
+  // machine down twice per renewal.
+  const cert = plan().steps.find(s2 => s2.id === 'issue-cert');
+  assert.ok(!cert.command.includes('--standalone'), 'certbot competes with the nginx it just installed');
+  assert.ok(cert.command.includes('--webroot'), 'certbot has no way to answer the challenge');
+});
+
+check('something answers the challenge before it is asked for', () => {
+  // And it is a config this plan wrote, not the distribution's default site:
+  // depending on a file nobody here controls is how this works on one image
+  // and not another.
+  const ids = plan().steps.map(s2 => s2.id);
+  for (const needed of ['write-acme-conf', 'enable-acme', 'reload-for-acme']) {
+    assert.ok(ids.includes(needed), `${needed} is missing`);
+  }
+  assert.ok(ids.indexOf('reload-for-acme') < ids.indexOf('issue-cert'),
+    'nginx is not serving the challenge when certbot asks for it');
+});
+
+check('the real config comes after the certificate exists', () => {
+  // It names the certificate files, and nginx refuses to load a config
+  // pointing at a file that is not there — so writing it first would fail the
+  // test step and halt the plan.
+  const ids = plan().steps.map(s2 => s2.id);
+  assert.ok(ids.indexOf('issue-cert') < ids.indexOf('write-conf'),
+    'the real config is written before the certificate it references');
+});
+
+check('the temporary block is removed once the real one is in', () => {
+  // Two server blocks for one name on port 80 is one too many, and leaving
+  // debris behind is how a machine becomes unreadable.
+  const ids = plan().steps.map(s2 => s2.id);
+  assert.ok(ids.includes('drop-acme-conf'));
+  assert.ok(ids.indexOf('drop-acme-conf') < ids.indexOf('test-conf'),
+    'the configuration is tested with both blocks present');
+});
+
+check('the ACME block serves the challenge and refuses everything else', () => {
+  const c = acmeConf({ domain: 'x.example.com' });
+  assert.match(c, /location \/\.well-known\/acme-challenge\/ \{ root \/var\/www\/html; \}/);
+  assert.match(c, /return 404/);
+  assert.ok(!/ssl_certificate/.test(c), 'it references a certificate that does not exist yet');
 });
 
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');

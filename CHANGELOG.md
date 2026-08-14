@@ -1,5 +1,36 @@
 # Changelog
 
+### v0.99.10 — certbot was competing with the nginx we had just installed
+nginx installed, certbot installed, and then:
+
+    Could not bind TCP port 80 because it is already in use by another
+    process on this system (such as a web server).
+
+`certbot --standalone` binds port 80 itself. Three steps earlier this plan had
+made sure something was already there. The previous release taught the plan
+that our own nginx on 80 is fine — and this is the other half of that: if it is
+fine, certbot has to work *through* it rather than against it.
+
+Stopping nginx to issue and starting it again would take the machine down
+twice per renewal, so the certificate is issued by webroot now, and the plan
+grew the steps that makes possible:
+
+1. a server block that answers the ACME challenge and returns 404 to everything
+   else, written by this plan rather than borrowed from the distribution's
+   default site — depending on a file nobody here controls is how something
+   works on one image and not another;
+2. issue the certificate through it;
+3. write the real config, which names the certificate files — nginx refuses to
+   load a config pointing at a file that is not there, so this could never have
+   come first;
+4. remove the temporary block before testing, because two server blocks for one
+   name on port 80 is one too many.
+
+**A gate caught me mid-fix.** The new reload step claimed nothing to undo, and
+the rule that every step changing something must say how to reverse it is not
+one to argue with — reloading again is the undo, by which point the temporary
+block has been unlinked by its own step.
+
 ### v0.99.9 — the job poll went to a route that did not exist
 The dialog polls `/servers/{id}/gateway/jobs/{jobId}`. The route was declared
 `/gateway/jobs/:jobId` — without the server id. A 404 on the button.

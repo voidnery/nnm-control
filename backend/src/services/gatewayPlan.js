@@ -22,6 +22,28 @@ const isDomain = (d) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-
 // restarts it — so an edge that changes address, or is replaced, keeps
 // receiving nothing until a human notices. That is the failure which makes a
 // balancer worse than no balancer, and it is one line.
+// A server block that exists only to answer the ACME challenge.
+//
+// certbot needs something serving the domain on port 80 while it proves
+// ownership. `--standalone` binds 80 itself, which fails once nginx is there —
+// and nginx is there, because this plan just installed it. Stopping nginx to
+// issue and starting it again would take the machine down twice per renewal.
+//
+// So: a config that serves the challenge and nothing else, written before the
+// certificate exists — because the real config references a certificate file
+// and nginx will not load a config pointing at a file that is not there.
+export function acmeConf({ domain }) {
+  return `# Written by NNM Control, to answer the ACME challenge only.
+# Replaced by the real configuration once the certificate exists.
+server {
+    listen 80;
+    server_name ${domain};
+    location /.well-known/acme-challenge/ { root /var/www/html; }
+    location / { return 404; }
+}
+`;
+}
+
 export function nginxConf({ domain, mode = 'redirect', resolvers = '127.0.0.53 1.1.1.1', edges = [] }) {
   const upstreamBlock = mode === 'proxy'
     ? `
@@ -161,13 +183,42 @@ export function gatewayPlan({
       skipIf: 'certbot-installed',
     },
     {
+      id: 'write-acme-conf',
+      kind: 'file',
+      why: 'somewhere for certbot to prove the domain',
+      path: `/etc/nginx/sites-available/nnm-acme-${domain}.conf`,
+      content: acmeConf({ domain }),
+      backup: true,
+      undo: 'restore',
+    },
+    {
+      id: 'enable-acme',
+      kind: 'command',
+      why: 'nginx only reads what is linked',
+      command: ['ln', '-sf', `/etc/nginx/sites-available/nnm-acme-${domain}.conf`,
+                `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
+      undo: ['rm', '-f', `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
+    },
+    {
+      id: 'reload-for-acme',
+      kind: 'command',
+      why: 'so the challenge is answerable before it is asked for',
+      command: ['systemctl', 'reload-or-restart', 'nginx'],
+      // Reloading again is the undo: by then the temporary block has been
+      // unlinked by its own step's undo, so nginx comes back without it. A
+      // step that changes a running service and claims nothing to reverse is
+      // the shape the gate was written to catch, and it caught this.
+      undo: ['systemctl', 'reload-or-restart', 'nginx'],
+    },
+    {
       id: 'issue-cert',
       kind: 'command',
       why: `a certificate for ${domain}`,
-      // Standalone, with nginx stopped for the moment of issue: certbot binds
-      // 80 itself. `--webroot` would need a server already serving the domain,
-      // which is the thing being installed.
-      command: ['certbot', 'certonly', '--standalone', '--non-interactive', '--agree-tos',
+      // Through the nginx this plan just started, not against it. Standalone
+      // binds port 80 itself and fails the moment anything is already there —
+      // which, three steps earlier, this made sure of.
+      command: ['certbot', 'certonly', '--webroot', '-w', '/var/www/html',
+                '--non-interactive', '--agree-tos',
                 ...(email ? ['--email', email] : ['--register-unsafely-without-email']),
                 '-d', String(domain)],
       // Nothing to undo: a certificate that exists harms nothing, and deleting
@@ -185,6 +236,14 @@ export function gatewayPlan({
       // Backed up before writing, and the backup is what the undo restores.
       backup: true,
       undo: 'restore',
+    },
+    {
+      id: 'drop-acme-conf',
+      kind: 'command',
+      why: 'the real configuration answers the challenge too',
+      command: ['rm', '-f', `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
+      undo: ['ln', '-sf', `/etc/nginx/sites-available/nnm-acme-${domain}.conf`,
+             `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
     },
     {
       id: 'enable-site',
