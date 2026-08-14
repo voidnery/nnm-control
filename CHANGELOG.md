@@ -1,5 +1,30 @@
 # Changelog
 
+### v0.99.17 — the checksum guaranteed the script was never the same script
+On a clean machine the agent installed and the helper did not, again. The cause
+is one line, and it is the most ironic of the eight.
+
+The SSH install downloads the script and verifies it with `sha256sum -c`. The
+digest was computed from `scriptFor(doc, ticket)` — **without the server** —
+while the URL serves `scriptFor(doc, ticket, live)`, with it. On a gateway
+those differ by the whole privileged-helper block, so the check failed and the
+install stopped before reaching it. A check meant to prove the script was
+untampered instead proved it was never the same script.
+
+Both digest sites now build from the same call as the download, and a check
+compares the two rather than trusting them to stay aligned.
+
+**Removing an agent reports itself.** It fired the request and said "started",
+leaving a ticked "agent configured" box, no output, and no way to tell whether
+the machine had been touched — the same screen as a button that does nothing.
+It polls now, with a bar, the script's own "removed / left in place" output,
+and a line saying the box is cleared and the server stays listed.
+
+`docs/privileged-helper.md` gains a section on why this took eight releases.
+Every one was a disagreement between two things that had to match — a path, a
+variable name, a route list, a checksum — and none was visible from either side
+alone. The patches were never the fix; the checks that read both sides were.
+
 ### v0.99.16 — I fixed the wrong directory, twice
     drwx------  /var/www          ← this
     drwxr-xr-x  /var/www/html     ← fixed last release, and by hand

@@ -135,6 +135,42 @@ installing software has always meant. Claiming the stronger property was the
 mistake, and it survived four releases because nothing tested it against a real
 package install.
 
+---
+
+## Why it took so long
+
+Eight releases on one feature, each fixing something real and each shipping
+with "it should install now". Worth naming the pattern rather than the bugs.
+
+**Every one was a disagreement between two things that had to match**, and none
+of them could be seen by reading either side alone:
+
+| What disagreed | With what |
+|---|---|
+| the helper's path to the agent binary | where the installer writes it |
+| the environment variables it set | the ones the agent reads |
+| the path it looked for node in | where the installer puts node |
+| the routes needing privilege | the routes that write files |
+| the checksum of the install script | the script the URL serves |
+| `ReadWritePaths` | what exists on a clean machine |
+| `umask` scope | the directories nginx must traverse |
+
+Each was correct in isolation. Each was wrong only in combination, and only on
+a real machine. Unit tests import one side; nothing was reading both.
+
+**The fix was never the patch, it was the check that reads both sides.** The
+ones that now exist — `STATE_DIR` compared against the helper's paths, the
+agent's `process.env` names compared against what the helper writes, every
+`/host/` route that writes checked against the privileged list, `audit:routes`
+joining declarations to call sites — would each have caught their fault before
+it left this machine.
+
+**What made it expensive was fixing one layer at a time.** Every release
+revealed exactly the next disagreement, because a fix to the first one let
+execution reach the second. Working through the whole surface once — as the
+directive-by-directive pass above did for the unit — closes a class instead of
+an instance.
+
 ## The rule this leaves behind
 
 Anything the helper assumes about the machine must be **derived from what

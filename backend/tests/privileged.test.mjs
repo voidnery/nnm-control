@@ -670,5 +670,50 @@ check('the failure reaches the screen with its reason', () => {
   assert.ok(/d\.detail/.test(ui3), 'the detail is discarded');
 });
 
+console.log('\nTHE CHECKSUM COVERS THE SCRIPT THAT IS SERVED:');
+
+const enrollSrc2 = readFileSync(new URL('../src/routes/agentEnroll.js', import.meta.url), 'utf8');
+
+check('the digest is built from the same call as the download', () => {
+  // It was built without the server while the URL served it with — so on a
+  // gateway the two differed, `sha256sum -c` failed, and the install stopped
+  // before the helper block it had been added for. A check meant to guarantee
+  // the script was untampered instead guaranteed it was never the same script.
+  const digests = [...enrollSrc2.matchAll(/sha256\(scriptFor\(([^)]*)\)\)/g)].map(m => m[1]);
+  const served = [...enrollSrc2.matchAll(/send\(scriptFor\(([^)]*)\)\)/g)].map(m => m[1]);
+  assert.ok(digests.length && served.length, 'the script is no longer hashed or no longer served');
+  for (const d of digests) {
+    assert.ok(d.split(',').length === served[0].split(',').length,
+      `the digest is computed from scriptFor(${d}) and the download from scriptFor(${served[0]})`);
+  }
+});
+
+check('a gateway and a media server produce different scripts, deliberately', () => {
+  // Which is why the digest has to know: the difference is the helper.
+  const a = installScript({ panelUrl: 'http://p', ticket: 'T', purpose: 'nimble' });
+  const b = installScript({ panelUrl: 'http://p', ticket: 'T', purpose: 'gateway' });
+  assert.notEqual(a, b);
+  assert.ok(b.includes('nnm-agent-privileged') && !a.includes('nnm-agent-privileged'));
+});
+
+console.log('\nREMOVING AN AGENT REPORTS ITSELF:');
+
+const unUi = readFileSync(new URL('../../frontend/src/components/AgentUninstallModal.jsx', import.meta.url), 'utf8');
+
+check('the removal is polled rather than fired and forgotten', () => {
+  // "Started" left a ticked checkbox, no output and no way to tell whether the
+  // machine had been touched — the same screen as a button that does nothing.
+  assert.ok(/uninstall\/jobs\//.test(unUi), 'the dialog does not poll');
+  assert.ok(/uninstall\/jobs\/:jobId/.test(enrollSrc2), 'there is nothing to poll');
+  assert.ok(/job\.output/.test(unUi), 'its output is not shown');
+});
+
+check('the panel stops claiming an agent once it is gone', () => {
+  // The checkbox stayed ticked while the machine had nothing on it.
+  assert.ok(/onDone\?\.\(\)/.test(unUi), 'nothing refreshes the list afterwards');
+  const route = enrollSrc2.slice(enrollSrc2.indexOf("'/agents/uninstall/ssh'"));
+  assert.ok(/server\.agent\.enabled = false/.test(route));
+});
+
 console.log(failures ? `\n${failures} privileged-helper check(s) failed` : '\nall privileged-helper checks passed');
 process.exit(failures ? 1 : 0);

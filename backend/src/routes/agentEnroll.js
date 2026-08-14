@@ -202,7 +202,15 @@ agentEnrollRouter.post('/servers/:id/agent/enrollment', requireAuth, requirePerm
   });
 
   const url = `${panelUrl}/api/agents/install/${raw}`;
-  const digest = sha256(scriptFor(doc, raw));
+  // The same script the fetch route will serve, including the live purpose.
+  //
+  // This computed the digest without the server while the URL served it with —
+  // so on a gateway the two differed, `sha256sum -c` failed, and the install
+  // stopped before the helper block it had been added for. A check meant to
+  // guarantee the script was untampered instead guaranteed it was never the
+  // same script.
+  const live = await NimbleServer.findById(doc.serverId).catch(() => null);
+  const digest = sha256(scriptFor(doc, raw, live));
 
   logEvent({ req, action: 'agent:enrollment-issued', target: server.name, outcome: 'ok', status: 200 });
   res.json({
@@ -319,7 +327,15 @@ agentEnrollRouter.post('/servers/:id/agent/ssh/install', requireAuth, requirePer
   });
 
   const url = `${panelUrl}/api/agents/install/${raw}`;
-  const digest = sha256(scriptFor(doc, raw));
+  // The same script the fetch route will serve, including the live purpose.
+  //
+  // This computed the digest without the server while the URL served it with —
+  // so on a gateway the two differed, `sha256sum -c` failed, and the install
+  // stopped before the helper block it had been added for. A check meant to
+  // guarantee the script was untampered instead guaranteed it was never the
+  // same script.
+  const live = await NimbleServer.findById(doc.serverId).catch(() => null);
+  const digest = sha256(scriptFor(doc, raw, live));
   // The verified form, not the one-liner: the panel is about to run this as
   // root on a broadcast server, and "it downloaded, so it must be fine" is not
   // a standard we hold operators to either.
@@ -421,4 +437,14 @@ agentEnrollRouter.post('/agents/uninstall/ssh', requireAuth, requirePerm('server
 
   logEvent({ req, action: 'agent:uninstall-ssh', target: server.name, outcome: 'ok', status: 202 });
   res.status(202).json({ jobId });
+});
+
+
+// How a removal is going. Polled like the install, because "started" is not an
+// answer: without it the operator was left with a ticked checkbox, no output,
+// and no way to tell whether the machine had been touched.
+agentEnrollRouter.get('/agents/uninstall/jobs/:jobId', requireAuth, requirePerm('servers.manage'), (req, res) => {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job-not-found', code: 'job-not-found' });
+  res.json(job);
 });

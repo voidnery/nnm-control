@@ -38,12 +38,20 @@ export default function AgentUninstallModal({ server, onClose, onDone }) {
   const runSsh = async () => {
     setBusy(true); setError('');
     try {
-      const r = await api('/agents/uninstall/ssh', {
+      const started = await api('/agents/uninstall/ssh', {
         method: 'POST',
         body: { serverId: server.id, purge, ...ssh },
       });
-      setJob(r);
-      onDone?.();
+      // Polled, like the install. Reporting "started" and stopping there left
+      // the operator with a checkbox still ticked, no output, and no way to
+      // tell whether anything had happened — which is the same screen as a
+      // button that does nothing.
+      for (;;) {
+        await new Promise(r2 => setTimeout(r2, 1500));
+        const j = await api(`/agents/uninstall/jobs/${started.jobId}`);
+        setJob(j);
+        if (j.status === 'done' || j.status === 'failed') { onDone?.(); break; }
+      }
     } catch (e) { setError(e.data?.error || e.message); }
     finally { setBusy(false); }
   };
@@ -108,7 +116,24 @@ export default function AgentUninstallModal({ server, onClose, onDone }) {
           <button className="primary" style={{ marginTop: 8 }} disabled={busy || !ssh.host} onClick={runSsh}>
             {busy ? '…' : t('agent.uninstall.run')}
           </button>
-          {job && <div className="hint" style={{ marginTop: 6 }}>{t('agent.uninstall.started')}</div>}
+          {job && (
+            <div className="inset">
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <b>{t('agent.uninstall.state.' + job.status)}</b>
+                {job.exitCode ? <span className="hint">exit {job.exitCode}</span> : null}
+              </div>
+              <div className={'progress' + (job.status === 'failed' ? ' failed' : '')}>
+                <div className={'progress-fill' + (job.status === 'running' ? ' indeterminate' : '')}
+                     style={job.status === 'running' ? undefined : { width: '100%' }} />
+              </div>
+              {/* Its own output, because "removed: …" and "left in place: …" is
+                  the answer to the question people actually have. */}
+              <pre className="mono" style={{ fontSize: 11, maxHeight: 220, overflow: 'auto' }}>
+                {job.output || '…'}
+              </pre>
+              {job.status === 'done' && <div className="hint">{t('agent.uninstall.doneNote')}</div>}
+            </div>
+          )}
         </>
       )}
 
