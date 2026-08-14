@@ -277,8 +277,16 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now nnm-agent-privileged
-sleep 1
+systemctl enable nnm-agent-privileged
+# Restart, not enable --now.
+#
+# The --now flag starts a service that is stopped and does nothing to one that is
+# already running — so re-running this installer rewrote the unit file,
+# reloaded it, and left the old process in place with the old settings. The
+# machine kept failing in exactly the way the new unit was written to fix, and
+# the log was identical, which is the most misleading kind of no-op.
+systemctl restart nnm-agent-privileged
+sleep 2
 if systemctl is-active --quiet nnm-agent-privileged; then
   echo "==> privileged helper is running on ${bind}:${port}"
 else

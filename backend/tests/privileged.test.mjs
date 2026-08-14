@@ -179,6 +179,20 @@ check('a machine without the ordinary agent is refused', () => {
   assert.equal(privilegedEligibility({ purpose: 'gateway', agent: { enabled: false } }).code, 'no-agent');
 });
 
+check('re-running the installer actually applies the new unit', () => {
+  // `enable --now` starts a stopped service and does nothing to a running one.
+  // So rewriting the unit, reloading it and calling --now left the old process
+  // in place with the old settings — the machine kept failing in exactly the
+  // way the new unit had been written to fix, with an identical log. The most
+  // misleading kind of no-op.
+  assert.ok(/systemctl restart nnm-agent-privileged/.test(script),
+    'the installer does not restart the service, so changes do not take effect');
+  assert.ok(!/enable --now nnm-agent-privileged/.test(script),
+    'it still relies on --now, which no-ops on a running service');
+  assert.ok(script.indexOf('daemon-reload') < script.indexOf('systemctl restart'),
+    'it restarts before reloading the unit file');
+});
+
 check('it listens on loopback only', () => {
   // Nothing outside the machine reaches it, whatever happens to the panel.
   // The variable is the agent's own name for it — the helper's environment is

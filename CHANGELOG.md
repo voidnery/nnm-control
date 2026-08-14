@@ -1,5 +1,25 @@
 # Changelog
 
+### v0.99.6 — the new unit was written and the old one kept running
+The same error, byte for byte, after the sandbox had been removed. Which was
+the clue: the machine was still running the old unit.
+
+The installer ends with `systemctl enable --now`. That starts a service which
+is stopped, and **does nothing to one that is already running**. So re-running
+it rewrote the unit file, reloaded it, and left the old process in place with
+the old settings — the machine failing in exactly the way the new unit had been
+written to fix, with an identical log. The most misleading kind of no-op: every
+step reported success.
+
+It restarts explicitly now, after the reload.
+
+**And a third defect of one shape got a gate.** Backticks in a comment inside a
+template literal end the string and turn the shell below into JavaScript. Twice
+`audit:undef` caught it as an undefined identifier, once it was a bare syntax
+error — all loud, all after the fact, none pointing at the cause. In the three
+modules that carry shell this way, a backtick inside a comment is now a build
+failure with the line number.
+
 ### v0.99.5 — a package install cannot be sandboxed by path
 The helper installs, polls, claims its task, and then apt could not write
 `/var/cache/debconf` — nor `/var/lib/update-notifier`, nor `/var/log/apt`.

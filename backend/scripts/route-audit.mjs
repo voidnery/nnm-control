@@ -198,6 +198,28 @@ for (const file of files) {
 }
 if (!bad) ok('every permission check has an authenticated user to check');
 
+// Backticks inside a template literal.
+//
+// Three times now a comment written as `like this` inside a shell script
+// embedded in a template literal has terminated the string, turning a
+// paragraph of shell into JavaScript. Twice `audit:undef` caught it as an
+// undefined identifier and once it was a plain syntax error — both loud, but
+// both after the fact and neither pointing at the cause.
+//
+// The files that carry shell in template literals are known and few. In them,
+// a backtick inside a comment line is always a mistake.
+for (const file of files.filter(f => /Installer|Helper|Uninstaller/.test(f.pathname || String(f)))) {
+  const src = readFileSync(file, 'utf8');
+  src.split('\n').forEach((line, i) => {
+    const comment = /^\s*(\/\/|#)/.test(line);
+    if (comment && line.includes('`')) {
+      fail(`${path.relative(BACKEND, file)}:${i + 1} — a backtick in a comment inside a template `
+         + 'literal ends the string and turns the shell below it into JavaScript');
+    }
+  });
+}
+if (!bad) ok('no backticks in comments inside the shell-bearing modules');
+
 console.log(bad
   ? `\n${bad} routing problem(s) — a 404 the moment somebody presses the button`
   : 'route reachability audit: OK');
