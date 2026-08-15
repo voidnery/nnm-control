@@ -145,6 +145,14 @@ extra ceremony.
   The panel reports the edge count it wrote, and that number is worth reading —
   a rewrite reporting **0** is a config forwarding nowhere, which is how the
   last defect announced itself while looking like success.
+- **A redirect is an address somebody else will dial**, so every part of it
+  must be true of the machine at the other end — including the scheme. The
+  viewer'"'"'s scheme is not that machine'"'"'s: a viewer on https was sent to
+  `https://<edge>:8081`, which speaks plain HTTP, and the connection died at the
+  handshake. TLS on an edge comes from the panel'"'"'s own probe, not from an
+  `httpsPort` being filled in. Proxy mode hides this class entirely, since it
+  dials the edge itself.
+
 - **Two gateway modes, and they are told apart by the HTTP response.** Proxy
   answers 200 and carries the media; redirect answers 302 and hands over an
   address. A player follows a 302 without saying so, so both look identical on

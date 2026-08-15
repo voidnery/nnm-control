@@ -858,10 +858,48 @@ check('the config reads no variable it does not define', () => {
 check('a redirect names a real edge, or an address that cannot resolve', () => {
   // Same rule as proxy: a placeholder must fail loudly rather than quietly
   // point somewhere real.
+  // Without a TLS handshake on that edge the scheme is http, which is what
+  // 8081 actually speaks — the assertion used to require `$scheme` here, the
+  // very thing that sent viewers to https on a plain-HTTP port.
   const withEdge = nginxConf({ domain: 'x.example.com', mode: 'redirect', edges: [{ name: 'e', host: '1.2.3.4', httpPort: 8081 }] });
-  assert.match(withEdge, /return 302 \$scheme:\/\/1\.2\.3\.4:8081\$request_uri;/);
+  assert.match(withEdge, /return 302 http:\/\/1\.2\.3\.4:8081\$request_uri;/);
   const without = nginxConf({ domain: 'x.example.com', mode: 'redirect', edges: [] });
   assert.match(without, /edge\.invalid/);
+});
+
+check('a redirect names a scheme the edge actually answers on', () => {
+  // `$scheme` inherits how the viewer arrived, so a viewer on https was sent
+  // to https://<edge>:8081 — plain HTTP behind a TLS scheme. The connection
+  // died at the handshake and the player reported only that it could not open
+  // the source. Proxy mode hid this entirely: it dials the edge itself, over
+  // HTTP, so how the viewer arrived never mattered.
+  //
+  // A redirect is an address somebody else will dial, so every part of it has
+  // to be true of the machine at the other end.
+  const line = (edges) => nginxConf({ domain: 'x.example.com', mode: 'redirect', edges })
+    .split('\n').find(l => l.includes('return 302'));
+
+  assert.match(line([{ name: 'e', host: '1.2.3.4', httpPort: 8081, httpsPort: 0 }]),
+    /return 302 http:\/\/1\.2\.3\.4:8081/);
+  assert.match(line([{ name: 'e', host: 'edge.example.com', httpPort: 8081, httpsPort: 443 }]),
+    /return 302 https:\/\/edge\.example\.com\$request_uri/);
+  // A non-standard TLS port is named; 443 is not, because naming it is noise
+  // and a viewer copying the URL out of a log should see what they would type.
+  assert.match(line([{ name: 'e', host: 'edge.example.com', httpPort: 8081, httpsPort: 8443 }]),
+    /https:\/\/edge\.example\.com:8443/);
+  // And no inherited scheme anywhere in the redirect.
+  for (const e of [[], [{ name: 'e', host: 'h', httpPort: 8081, httpsPort: 0 }]]) {
+    assert.ok(!/\$scheme/.test(line(e)), 'the redirect still inherits the viewer scheme');
+  }
+});
+
+check('the TLS answer comes from a handshake, not from a port being set', () => {
+  // `httpsPort` is where the operator says TLS would be; `tls.tls` is whether
+  // the panel got one. Trusting the first alone sends viewers to a port
+  // nothing is listening on.
+  const resyncSrc = readFileSync(new URL('../src/services/gatewayResync.js', import.meta.url), 'utf8');
+  assert.ok(/m\.tls\?\.tls \? \(m\.httpsPort \|\| 443\) : 0/.test(resyncSrc),
+    'the edge scheme is decided without a handshake');
 });
 
 check('the two modes produce configs that differ where it matters', () => {

@@ -1,5 +1,27 @@
 # Changelog
 
+### v1.9.4 — the redirect pointed at https on a plain-HTTP port
+
+    location: https://200.165.225.191:8081/test2/test_stream/playlist.m3u8
+
+`$scheme` inherits how the viewer arrived. A viewer on https was therefore sent
+to `https://<edge>:8081` — and 8081 speaks plain HTTP, so the connection died
+at the handshake and the player said only that it could not open the source.
+
+**A redirect is an address somebody else will dial**, so every part of it has to
+be true of the machine at the other end. The scheme now comes from that edge:
+https when the panel's own TLS probe got a handshake, http otherwise, with a
+non-standard TLS port named and 443 left off.
+
+**And it comes from the handshake, not from a port being filled in.**
+`httpsPort` is where the operator says TLS would be; `tls.tls` is whether the
+panel found any. Trusting the first alone sends viewers to a port nothing
+listens on.
+
+Proxy mode hid this class of fault completely — it dials the edge itself, over
+HTTP, so how the viewer arrived never mattered. Recorded in `docs/STATE.md`,
+because the next thing that hands out an address will have the same problem.
+
 ### v1.9.3 — the redirect config had never been valid
 
     return 302 $scheme://$nnm_edge$request_uri;

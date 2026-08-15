@@ -83,6 +83,16 @@ export async function resyncGateway({ network, actor = '' } = {}) {
       name: m.name,
       host: m.playbackEndpoints?.[0]?.host || m.host || m.wmspanelDomains?.[0] || '',
       httpPort: m.httpPort || 8081,
+      // Whether this edge can be reached over TLS, from the panel's own
+      // handshake rather than from an assumption.
+      //
+      // A redirect hands the viewer an address, and the scheme in it has to be
+      // one the edge answers on. Inheriting the viewer's scheme sent people to
+      // `https://<edge>:8081`, where 8081 is plain HTTP — the connection died
+      // at the handshake and the player said only that it could not open the
+      // source. Proxy mode hid this: it dials the edge itself, over HTTP, so
+      // how the viewer arrived never mattered.
+      httpsPort: m.tls?.tls ? (m.httpsPort || 443) : 0,
     }))
     .filter(e => e.host);
 

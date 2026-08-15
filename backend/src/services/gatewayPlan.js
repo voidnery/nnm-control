@@ -79,7 +79,21 @@ export function nginxConf({ domain, mode = 'redirect', resolvers = '127.0.0.53 1
         # Substituted rather than resolved at request time, exactly as proxy
         # mode does: the panel rewrites this file whenever the network changes,
         # so the address here is as current as the edge list itself.
-        return 302 ${edges[0] ? `$scheme://${edges[0].host}:${edges[0].httpPort || 8081}` : 'https://edge.invalid'}$request_uri;
+        # The scheme is the edge's, not the viewer's.
+        #
+        # The scheme variable inherits how the viewer arrived, so a viewer
+        # on https was sent to https://<edge>:8081 — plain HTTP behind a TLS
+        # scheme. The connection failed at the handshake and the player
+        # reported only that it could not open the source.
+        #
+        # A redirect is an address somebody else will dial, so every part of it
+        # has to be true of the machine at the other end. TLS here comes from
+        # the panel's own handshake with that edge, not from an assumption.
+        return 302 ${edges[0]
+          ? (edges[0].httpsPort
+              ? `https://${edges[0].host}${edges[0].httpsPort === 443 ? '' : `:${edges[0].httpsPort}`}`
+              : `http://${edges[0].host}:${edges[0].httpPort || 8081}`)
+          : 'https://edge.invalid'}$request_uri;
     }`;
 
   return `# Written by NNM Control. Edited by hand? The panel will show a diff
