@@ -134,6 +134,14 @@ extra ceremony.
 - **TLS on the edges** — verified absent on RU-2 by handshake. LL-HLS is
   impossible until it exists. A gateway now gets TLS as part of preparation;
   an edge does not, because an edge already runs something on those ports.
+- **Redirect delivery, working and observed.** `cdn-test-5` answers 302 with a
+  `location` naming the chosen edge, and the viewer then talks to that edge
+  directly — confirmed on the edge's own resource monitor, which is the only
+  place the difference shows. In a player the two modes are identical: it
+  follows the 302 without saying so.
+
+  Both modes are now proved end to end on the same machine, and switching
+  between them rewrites its nginx from the panel.
 - **Delivery through an edge-proxy, working.** `cdn-test-5` serves
   `https://cdn-test-1.bbesport.com/<app>/<stream>/playlist.m3u8` and forwards to
   the three Nimble edges of the network. The viewer's link names the gateway
@@ -267,7 +275,22 @@ was skipped.
 The epoch stays. Removing it is a separate decision, and it should be taken by
 somebody looking at the pool rather than at the version string.
 
-## A release tag is created before the release is published
+## The release tag is created last, not first
+
+An earlier note here claimed the opposite, and it was wrong: the workflow tags
+in its final step, after the apt repository is published, precisely so a run
+that fails halfway leaves no tag behind. Nothing else in the repository creates
+tags.
+
+So `v1.0.0` and `v1.8.7` existing without packages behind them is not
+explained by the ordering, and the cause is still unknown. What is known: a
+release finishing in seconds instead of minutes did not run, the tag is why it
+skipped, and `apt-cache policy nnm-control` is the authority on what exists.
+
+The superseded note follows, kept because the reasoning in it is what led to
+checking the file rather than acting on it.
+
+## Superseded: a release tag is created before the release is published
 
 The workflow tags `vX.Y.Z` and then builds. A run that stops after the tag —
 for any reason — leaves the tag behind, and every later run reads it as "this

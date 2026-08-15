@@ -151,5 +151,57 @@ for (const file of ['docker-compose.yml', 'docker-compose.dev.yml']) {
   });
 }
 
+console.log('\nOLD MACHINE TRAFFIC CAN BE SWEPT FROM THE PANEL:');
+
+const auditSvc = read('backend/src/services/audit.js');
+const auditRoutes = read('backend/src/routes/audit.js');
+const auditPage = read('frontend/src/pages/AuditPage.jsx');
+
+check('the sweep matches exactly what the middleware no longer records', () => {
+  // Built from the same list, so "what we do not write" and "what can be
+  // removed" cannot drift into two different answers — which would either
+  // leave rows behind forever or delete somebody's actions.
+  assert.ok(/export const MACHINE_ROUTES/.test(auditSvc), 'the route list is not shared');
+  assert.ok(/MACHINE_ROUTES\s*\n?\s*\.map/.test(auditSvc), 'the filter is written out separately');
+});
+
+check('the count is shown before anything is deleted', () => {
+  // Deleting millions of rows from a log people rely on is not something to
+  // learn the size of afterwards.
+  assert.ok(/'\/sweepable'/.test(auditRoutes), 'nothing counts first');
+  assert.ok(/keeping:/.test(auditRoutes), 'it does not say what survives');
+});
+
+check('the operator confirms the number they were shown', () => {
+  // Agreeing to "delete 8,598,036 rows" is a different act from clicking a
+  // button that happened to be under the cursor.
+  // The conditions, not the strings. `if (false)` leaves both messages in the
+  // file and unreachable, and a check that greps passes on it — which is what
+  // the first version of this did, twice in the same block.
+  assert.ok(/if \(!Number\.isFinite\(expected\)\)/.test(auditRoutes),
+    'a sweep runs without confirmation');
+  assert.ok(/if \(Math\.abs\(actual - expected\) >/.test(auditRoutes),
+    'a count that changed since the operator looked is deleted anyway');
+  assert.ok(/confirm-count-required/.test(auditRoutes) && /count-changed/.test(auditRoutes),
+    'the refusals have no codes of their own');
+  assert.ok(/expect: sweep\.machine/.test(auditPage), 'the panel does not send back what it showed');
+});
+
+check('sweeping is its own permission', () => {
+  // Somebody who may read the audit trail is not automatically somebody who
+  // may delete part of it.
+  assert.ok(/audit\.manage/.test(read('backend/src/permissions.js')), 'the permission is not declared');
+  assert.ok(/requirePerm\('audit\.manage'\)/.test(auditRoutes));
+  assert.ok(/requireAuth, requirePerm\('audit\.manage'\)/.test(auditRoutes),
+    'the permission check has no authenticated user');
+});
+
+check('it compacts, because deleting rows returns no disk', () => {
+  // WiredTiger does not shrink its file. A sweep that frees nothing looks
+  // broken, and the operator came here because the disk was full.
+  assert.ok(/compact:/.test(auditRoutes), 'nothing reclaims the space');
+  assert.ok(/aud\.sweepCompact/.test(auditPage), 'the lock it takes is not mentioned');
+});
+
 console.log(failures ? `\n${failures} retention check(s) failed` : '\nall retention checks passed');
 process.exit(failures ? 1 : 0);

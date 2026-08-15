@@ -57,7 +57,7 @@ export async function logEvent({ req = null, username = '', action, target = '',
 // Listed by prefix rather than by an allow-list of everything else: these are
 // the machine-facing routes, they are few, and a new operator action must be
 // audited by default rather than by remembering to add it.
-const MACHINE_ROUTES = [
+export const MACHINE_ROUTES = [
   '/agent-gw/',      // agents polling for work, reporting logs and metrics
   '/agents/enroll',  // the one-time handshake, logged explicitly by the route
 ];
@@ -79,4 +79,23 @@ export function auditMutations(req, res, next) {
     });
   });
   next();
+}
+
+
+// Rows this panel would not write today.
+//
+// Machine polling was audited until v0.99.20 and left 8.6 million rows behind
+// — 50 GB on the disk the panel runs on, which it twice filled. The source is
+// closed; the history is not, and TTL will take thirty days to reach it.
+//
+// Built from the same list the middleware skips, so "what we no longer record"
+// and "what can be swept" cannot drift into two different answers.
+export function machineTrafficFilter() {
+  return {
+    action: {
+      $regex: `^(GET|POST|PUT|PATCH|DELETE) (${MACHINE_ROUTES
+        .map(r => r.replace(/^\//, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('|')})`,
+    },
+  };
 }

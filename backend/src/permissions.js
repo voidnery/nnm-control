@@ -29,6 +29,10 @@ export const PERMISSIONS = [
   { key: 'functions.manage',  label: 'Functions: create / edit engineering functions' },
   { key: 'functions.execute', label: 'Functions: execute assigned functions' },
   { key: 'audit.view',        label: 'Audit: view the action log' },
+  // Sweeping machine traffic out of the log is irreversible and separate from
+  // reading it: somebody who may look at the audit trail is not automatically
+  // somebody who may delete part of it.
+  { key: 'audit.manage',      label: 'Audit: remove machine traffic from the log' },
   // iter20 m1 — delivery networks. Separate from wmsobjects.* because a
   // network is a plan the panel holds, not an object on a Nimble box, and
   // separate from servers.manage because editing the topology does not imply

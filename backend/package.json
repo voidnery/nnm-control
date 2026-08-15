@@ -1,6 +1,6 @@
 {
   "name": "nnm-control-backend",
-  "version": "1.9.4",
+  "version": "1.9.5",
   "private": true,
   "type": "module",
   "scripts": {

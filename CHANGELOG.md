@@ -1,5 +1,37 @@
 # Changelog
 
+### v1.9.5 — sweeping the audit log from the panel
+Machine polling was audited until v0.99.20 and left 8.6 million rows behind —
+50 GB on the disk the panel runs on, which it twice filled. The source is
+closed; the history is not, and the TTL takes thirty days to reach it.
+
+The audit page now offers to remove it, and every part of that is a safeguard:
+
+- **The count comes first**, with what survives named beside it. Deleting
+  millions of rows from a log people rely on is not something to learn the size
+  of afterwards.
+- **The operator confirms the number they were shown.** Agreeing to "delete
+  8,598,036 rows" is a different act from clicking a button that happened to be
+  under the cursor, and a count that moved meanwhile is refused rather than
+  applied.
+- **The filter is built from the same list the middleware skips**, so "what we
+  no longer record" and "what may be removed" cannot drift into two answers.
+- **Sweeping is its own permission.** Reading an audit trail and deleting part
+  of it are different rights.
+- **It compacts**, because deleting rows returns no disk — and says so, along
+  with the lock that takes.
+
+**And the CI change I proposed is not needed.** I said the release tag is
+created before publishing and that a failed run leaves it behind. The workflow
+tags in its final step, after the apt repository is published, with a comment
+saying exactly why. Nothing else creates tags. So the dead `v1.0.0` and
+`v1.8.7` are still unexplained, and `docs/STATE.md` now says that rather than
+carrying my wrong model.
+
+Two of this release's own checks passed against `if (false)`: they matched the
+error strings, which stay in the file when the branch becomes unreachable.
+Bound to the conditions.
+
 ### v1.9.4 — the redirect pointed at https on a plain-HTTP port
 
     location: https://200.165.225.191:8081/test2/test_stream/playlist.m3u8

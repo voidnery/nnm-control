@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import Select from '../components/Select.jsx';
 import DataView from '../components/DataView.jsx';
 import { useI18n } from '../i18n.jsx';
+import { useAuth } from '../auth.jsx';
 
 export default function AuditPage() {
   const { t } = useI18n();
@@ -13,6 +14,35 @@ export default function AuditPage() {
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [sweep, setSweep] = useState(null);
+  const [swept, setSwept] = useState(null);
+  const { can } = useAuth();
+
+  // What a sweep would remove, asked before it is offered.
+  //
+  // Machine polling was audited until v0.99.20 and left millions of rows —
+  // 50 GB on the disk the panel runs on, which it twice filled. The source is
+  // closed; the history is not, and the TTL takes thirty days to reach it.
+  const loadSweep = async () => {
+    try { setSweep(await api('/audit/sweepable')); }
+    catch { setSweep(null); }
+  };
+
+  const doSweep = async () => {
+    setBusy(true); setError('');
+    try {
+      // The count the operator was shown, sent back. Agreeing to "delete
+      // 8,598,036 rows" is a different act from clicking a button that
+      // happened to be under the cursor.
+      setSwept(await api('/audit/sweep', { method: 'POST', body: { expect: sweep.machine } }));
+      await loadSweep();
+      await load();
+    } catch (e) {
+      setError(e.data?.code === 'count-changed'
+        ? t('aud.sweepChanged', { expected: e.data.expected, actual: e.data.actual })
+        : (e.data?.error || e.message));
+    } finally { setBusy(false); }
+  };
 
   const query = (before) => {
     const p = new URLSearchParams();
@@ -25,7 +55,7 @@ export default function AuditPage() {
 
   const load = async () => {
     setBusy(true); setError('');
-    try { setItems((await api(query())).items); }
+    try { setItems((await api(query())).items); await loadSweep(); }
     catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
@@ -42,6 +72,27 @@ export default function AuditPage() {
 
   return (
     <div>
+      {/* Only when there is something to sweep. A control for a problem
+          nobody has is noise on the page. */}
+      {can('audit.manage') && sweep?.machine > 0 && (
+        <div className="inset">
+          <div className="eyebrow">{t('aud.sweepTitle')}</div>
+          <div className="hint">
+            {t('aud.sweepWhat', { machine: sweep.machine.toLocaleString('ru'), keeping: sweep.keeping.toLocaleString('ru') })}
+            {sweep.storageMb != null && <> · {t('aud.sweepSize', { mb: sweep.storageMb.toLocaleString('ru') })}</>}
+          </div>
+          <div className="hint">{t('aud.sweepCompact')}</div>
+          <button className="primary" style={{ marginTop: 8 }} disabled={busy} onClick={doSweep}>
+            {busy ? '…' : t('aud.sweepDo', { n: sweep.machine.toLocaleString('ru') })}
+          </button>
+        </div>
+      )}
+      {swept && (
+        <div className="hint" style={{ color: 'var(--ok, #5ad18f)' }}>
+          {t('aud.sweptOk', { n: swept.removed.toLocaleString('ru'), mb: swept.storageMb ?? '?' })}
+          {swept.compacted === false && <> · {t('aud.sweptNoCompact')}</>}
+        </div>
+      )}
       <h1>{t('page.audit.title')}</h1>
       <div className="sub">Who changed what and when. Mutating actions, logins and function runs; secrets are masked; retention 90 days.</div>
       {error && <div className="error-box">{error}</div>}
