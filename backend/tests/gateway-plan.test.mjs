@@ -802,6 +802,33 @@ check('changing the network rewrites the edge-proxy, rather than reporting it', 
     'saving the gateway settings does not bring the machine into step');
 });
 
+check('edge addresses come from the machines, not from the network nodes', () => {
+  // A node holds a reference to a machine and nothing else — no host, no port.
+  // Reading `n.host` off it gave undefined for every edge, the filter dropped
+  // them all, and the config was rewritten with none. The panel then reported
+  // "edge in the config — 0", which was true, cheerful, and a gateway
+  // forwarding viewers nowhere.
+  const resyncSrc = readFileSync(new URL('../src/services/gatewayResync.js', import.meta.url), 'utf8');
+  assert.ok(/NimbleServer\.find\(\{ _id: \{ \$in: edgeIds \}/.test(resyncSrc),
+    'the machines behind the edge nodes are never loaded');
+  assert.ok(!/n\.publicHost \|\| n\.host/.test(resyncSrc),
+    'it still reads an address off a node that has none');
+  // Same order as the delivery page, so one machine does not resolve to two
+  // different addresses depending on which page asked.
+  assert.ok(/m\.playbackEndpoints\?\.\[0\]\?\.host \|\| m\.host \|\| m\.wmspanelDomains/.test(resyncSrc),
+    'the address order differs from the one the links use');
+});
+
+check('a rewrite with no edges is refused, not reported as success', () => {
+  // Writing a proxy config that forwards to nothing and calling it done is
+  // worse than not writing it: the machine looks configured and serves
+  // nothing, which is the state this whole resync exists to prevent.
+  const resyncSrc = readFileSync(new URL('../src/services/gatewayResync.js', import.meta.url), 'utf8');
+  assert.ok(/if \(!edges\.length\)/.test(resyncSrc), 'an empty edge list is written anyway');
+  assert.ok(/no-edge-addresses/.test(resyncSrc));
+  assert.ok(/addressless/.test(resyncSrc), 'it does not name the machines it could not resolve');
+});
+
 check('it needs no credentials, because the helper is already there', () => {
   // The privileged helper installed nginx on that machine and issued its
   // certificate. Rewriting a file it owns is less than it has done, and

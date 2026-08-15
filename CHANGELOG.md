@@ -1,5 +1,28 @@
 # Changelog
 
+### v1.8.7 — "edge in the config — 0"
+The rewrite worked, reported success, and wrote a proxy configuration
+forwarding to nothing. The number was in the message the whole time.
+
+**A network node holds a reference to a machine and nothing else** — no host,
+no port, no name. `resyncGateway` read `n.host` off the node, got undefined for
+every edge, and its own filter dropped them all. The panel then said "edge in
+the config — 0", which was true, cheerful, and exactly the state the resync
+exists to prevent.
+
+Addresses are resolved from the machines now, in the same order the delivery
+page uses — the Host field the operator typed, then a playback endpoint, then a
+name from WMSPanel — so one machine does not resolve to two different addresses
+depending on which page asked.
+
+**And a rewrite with no usable address is refused rather than written.** A
+proxy config that forwards nowhere looks configured and serves nothing, which
+is worse than not writing it. The panel names the edges whose address it could
+not find and points at the Host field.
+
+Third time this shape has cost a release: reading a field off an object that
+does not carry it. The checks now bind to where the value actually lives.
+
 ### v1.8.6 — continuing above the stray package
 There is a `1.8.5` in the apt pool, published before this scheme and not
 removable from a repository people have already added. Every release since has

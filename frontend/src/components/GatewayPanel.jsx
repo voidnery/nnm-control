@@ -176,6 +176,17 @@ export default function GatewayPanel({ network, servers = [] }) {
           {resync?.skipped === 'never-prepared' && (
             <div className="hint">{t('gw.resyncNeverPrepared')}</div>
           )}
+          {/* A rewrite that found no usable edge address. Refused rather than
+              written, since a proxy config forwarding to nothing looks
+              configured and serves nothing. */}
+          {resync?.skipped === 'no-edge-addresses' && (
+            <div className="error-box">
+              <b>{t('gw.resyncNoEdges', { n: resync.edgeCount })}</b>
+              {resync.addressless?.length > 0 && (
+                <div className="hint">{t('gw.resyncAddressless', { names: resync.addressless.join(', ') })}</div>
+              )}
+            </div>
+          )}
           {resync?.skipped === 'no-privileged-helper' && (
             <div className="error-box">{t('gw.resyncNoHelper')}</div>
           )}

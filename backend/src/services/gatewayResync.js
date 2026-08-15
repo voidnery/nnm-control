@@ -54,12 +54,40 @@ export async function resyncGateway({ network, actor = '' } = {}) {
   if (server.gateway?.state !== 'applied') return { skipped: 'never-prepared' };
   if (!server.helper?.seen) return { skipped: 'no-privileged-helper' };
 
-  const edges = (network.nodes || [])
-    .filter(n => n.role === 'edge')
-    .map(n => ({
-      name: n.name, host: n.publicHost || n.host, httpPort: n.httpPort || 8081,
+  // A network node holds a reference to a machine and nothing else — no name,
+  // no host, no port. Reading `n.host` off it produced undefined for every
+  // edge, so the filter dropped them all and the config was rewritten with
+  // none: "edge in the config — 0", which is what the panel truthfully
+  // reported while the gateway forwarded viewers nowhere.
+  //
+  // The addresses live on the machine, resolved in the same order the delivery
+  // page uses: the Host field the operator typed, then a playback endpoint,
+  // then a name synced from WMSPanel.
+  const edgeIds = (network.nodes || [])
+    .filter(n => n.role === 'edge' && n.enabled !== false)
+    .map(n => String(n.server));
+  const machines = edgeIds.length
+    ? await NimbleServer.find({ _id: { $in: edgeIds } }).catch(() => [])
+    : [];
+  const edges = machines
+    .map(m => ({
+      name: m.name,
+      host: m.playbackEndpoints?.[0]?.host || m.host || m.wmspanelDomains?.[0] || '',
+      httpPort: m.httpPort || 8081,
     }))
     .filter(e => e.host);
+
+  // An edge whose address nobody can resolve is worth naming rather than
+  // silently leaving out of the config.
+  const addressless = machines.filter(m => !(m.playbackEndpoints?.[0]?.host || m.host || m.wmspanelDomains?.[0]));
+  if (!edges.length) {
+    return {
+      skipped: 'no-edge-addresses',
+      machine: server.name,
+      edgeCount: edgeIds.length,
+      addressless: addressless.map(m => m.name),
+    };
+  }
 
   // Ports are not re-read: this changes a file and reloads a service that is
   // already running on them, so who holds them is not in question. Passing an
