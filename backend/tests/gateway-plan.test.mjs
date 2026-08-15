@@ -104,8 +104,19 @@ check('the resolver line is there, with a validity', () => {
   assert.match(c, /^resolver .+ valid=/m);
 });
 
-check('HTTP/2 is on, because LL-HLS silently falls back without it', () => {
-  assert.match(nginxConf({ domain: 'x.example.com' }), /http2 on;/);
+check('HTTP/2 is on, in the spelling both nginx versions accept', () => {
+  // LL-HLS requires it, and a player without it falls back to ordinary HLS in
+  // silence. But `http2 on;` on its own line is nginx 1.25.1 and later, and
+  // Ubuntu 24.04 ships 1.24 — where it is an unknown directive and the whole
+  // configuration fails to load. `nginx -t` caught it one step before a reload
+  // would have taken the machine off the air.
+  //
+  // The listen-line form works on both; newer nginx warns and accepts. A
+  // warning on a working server beats an error on half of them, and the plan
+  // cannot read the version before nginx is installed.
+  const c = nginxConf({ domain: 'x.example.com' });
+  assert.match(c, /listen 443 ssl http2;/);
+  assert.ok(!/^\s*http2 on;/m.test(c), 'the 1.25-only directive is back');
 });
 
 check('ACME is served before the redirect, or renewal breaks', () => {

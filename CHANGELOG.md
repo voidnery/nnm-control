@@ -1,5 +1,32 @@
 # Changelog
 
+### v0.99.22 — nine steps, a certificate, and one directive too new
+
+    unknown directive "http2" in nnm-cdn-test-1.bbesport.com.conf:26
+
+Nine of ten steps passed and the certificate was issued. `nginx -t` refused the
+configuration one step before a reload would have taken the machine off the
+air — which is why that step is in the plan and why it halts everything after
+it.
+
+`http2 on;` on its own line is nginx 1.25.1 and later. Ubuntu 24.04 ships 1.24.
+The `listen 443 ssl http2;` form works on both — newer nginx warns that it is
+deprecated and accepts it, and a warning on a working server beats an error on
+half the machines this runs on. The plan cannot read the version before nginx
+is installed, so the compatible spelling is the only one that is right
+everywhere.
+
+**And the backtick gate had a list of three filenames.** `gatewayPlan.js` was
+not among them, so a backtick in one of its comments closed the template for
+the fourth time. It now finds config-bearing modules by looking for template
+literals containing `#`-commented lines, rather than by naming files.
+
+Its own first two attempts are worth recording: one filtered the router walk
+and found zero modules, then said it had lost its subject — which was the one
+thing it got right. The next flagged seventeen backticks in ordinary
+JavaScript comments, where they are harmless. It now tracks whether a line is
+inside a template literal, and fires only there.
+
 ### v0.99.21 — the log cap stopped the panel from starting
 
     validating docker-compose.yml: volumes.geoip_db additional properties

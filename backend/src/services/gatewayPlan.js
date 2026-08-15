@@ -93,10 +93,22 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    # HTTP/2 is not optional here: LL-HLS requires it, and a player without it
-    # falls back to ordinary HLS in silence.
-    http2 on;
+    # HTTP/2 on the listen line, not as its own directive.
+    #
+    # The http2 directive on its own line is nginx 1.25.1 and later. Ubuntu
+    # 24.04 ships 1.24, where it is unknown and the whole configuration fails
+    # to load — which nginx -t caught, one step before a reload would have
+    # taken the machine off the air.
+    #
+    # This form works on both. Newer nginx warns that it is deprecated and
+    # accepts it; a warning on a working server beats an error on half the
+    # ones this will run on. The plan cannot read the version before nginx is
+    # installed, so the compatible spelling is the only one that is right
+    # everywhere.
+    #
+    # It is not optional either way: LL-HLS requires HTTP/2, and a player
+    # without it falls back to ordinary HLS in silence.
+    listen 443 ssl http2;
     server_name ${domain};
 
     ssl_certificate     /etc/letsencrypt/live/${domain}/fullchain.pem;

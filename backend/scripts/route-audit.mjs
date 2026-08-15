@@ -217,14 +217,51 @@ if (!bad) ok('every permission check has an authenticated user to check');
 //
 // The files that carry shell in template literals are known and few. In them,
 // a backtick inside a comment line is always a mistake.
-for (const file of files.filter(f => /Installer|Helper|Uninstaller/.test(f.pathname || String(f)))) {
+// Any file that builds a config or a script inside a template literal, found
+// by looking rather than by a list of three names. The list missed
+// gatewayPlan.js, which writes nginx configs the same way — and a backtick in
+// one of its comments closed the template for the fourth time.
+// Over services/, not routes/ — `files` above is the router walk, and the
+// modules that build configs live elsewhere. The first version of this filtered
+// `files` and found nothing, then reported that it had lost its subject, which
+// is the one thing it got right.
+const serviceFiles = [];
+(function walkServices(dir) {
+  for (const e of readdirSync(dir)) {
+    const q = path.join(dir, e);
+    if (statSync(q).isDirectory()) walkServices(q);
+    else if (e.endsWith('.js')) serviceFiles.push(q);
+  }
+})(path.join(BACKEND, 'services'));
+
+const CARRIES_SHELL = serviceFiles.filter((f) => {
+  const src = readFileSync(f, 'utf8');
+  // A template literal holding lines that begin with a comment marker in
+  // another language: shell, nginx and systemd all use #.
+  return /`[^`]*\n\s*#/.test(src);
+});
+if (CARRIES_SHELL.length < 3) {
+  fail(`only ${CARRIES_SHELL.length} config-bearing modules found; this check has lost its subject`);
+}
+for (const file of CARRIES_SHELL) {
   const src = readFileSync(file, 'utf8');
+  // Only inside template literals. A backtick in a JavaScript `//` comment is
+  // ordinary prose and harmless; the first version flagged seventeen of those
+  // and none of the real thing. A check that fires on correct code gets
+  // switched off, and this one was written because the real fault had already
+  // happened four times.
+  let inTemplate = false;
   src.split('\n').forEach((line, i) => {
-    const comment = /^\s*(\/\/|#)/.test(line);
-    if (comment && line.includes('`')) {
+    const shellComment = /^\s*#/.test(line);
+    if (inTemplate && shellComment && line.includes('`')) {
       fail(`${path.relative(BACKEND, file)}:${i + 1} — a backtick in a comment inside a template `
-         + 'literal ends the string and turns the shell below it into JavaScript');
+         + 'literal ends the string and turns the config below it into JavaScript');
     }
+    // Count the backticks that are not inside a JavaScript line comment: an
+    // odd number flips whether the next line is inside a template.
+    const code = line.replace(/\/\/.*$/, '');
+    const ticks = (code.match(/`/g) || []).length;
+    if (ticks % 2 === 1) inTemplate = !inTemplate;
   });
 }
 if (!bad) ok('no backticks in comments inside the shell-bearing modules');
