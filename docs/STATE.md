@@ -216,3 +216,28 @@ panel cannot know which name resolves correctly today.
 **Anything read from a machine is stamped.** A fact about TLS or delivery from
 last week is not a fact about now, and a green mark that stopped being true is
 worse than an empty one.
+
+## Why the version jumped from 0.99.26 to 1.8.6
+
+There is a stray package in the apt pool:
+
+    1.8.5 500  https://voidnery.github.io/nnm-control/apt stable/main
+
+It predates this scheme and nobody is going to remove it from a published
+repository. Every release since has carried a Debian epoch — `1:0.99.26` — for
+one reason: apt compares the epoch first, so `1:0.x` outranks a bare `1.8.5`
+that would otherwise win every upgrade.
+
+That worked, and it hid something. **1.0.0 sits below 1.8.5.** The moment the
+version scheme reached 1.x, the epoch stopped being a convenience and became
+the only thing standing between an upgrade and a rollback to a package nobody
+maintains. Anyone later reasoning "we are on 1.x now, the epoch is noise" would
+be right about the shape and wrong about the pool.
+
+So the version continues from **1.8.6**: above the stray package on its own
+merits, with the epoch as a second line rather than the only one. Nothing about
+the numbering means anything else — there is no 1.1 through 1.8, and no release
+was skipped.
+
+The epoch stays. Removing it is a separate decision, and it should be taken by
+somebody looking at the pool rather than at the version string.

@@ -1,5 +1,20 @@
 # Changelog
 
+### v1.8.6 — continuing above the stray package
+There is a `1.8.5` in the apt pool, published before this scheme and not
+removable from a repository people have already added. Every release since has
+carried a Debian epoch so that `1:0.x` outranks it.
+
+That worked and it hid something: **1.0.0 sits below 1.8.5.** Numbering the last
+release 1.0.0 put it in the range the epoch had been quietly covering — safe
+only for as long as nobody decides the epoch is noise now that the versions
+look like 1.x.
+
+So the numbering continues from 1.8.6, which is above the stray package on its
+own merits. There is no 1.1 through 1.8 and nothing was skipped; the epoch stays
+as a second line rather than the only one. The reasoning is in `docs/STATE.md`
+so the next person meets it before the pool does.
+
 ### v1.0.0 — the panel configures the machines it configured
 The previous release detected that an edge-proxy's nginx did not know about the
 network's edges, said so clearly, and asked the operator to go and press a
