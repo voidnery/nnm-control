@@ -1,5 +1,31 @@
 # Changelog
 
+### v1.9.2 — redirect mode was proxy mode wearing its name
+Selecting redirect kept the stream working, which is why nobody questioned it.
+The machine was serving proxy.
+
+    /etc/nginx/sites-enabled/nnm-cdn-test-1.bbesport.com.conf
+        proxy_pass http://$edge;        ← with "redirect" selected in the panel
+
+Two faults, both mine, in the resync I wrote yesterday:
+
+- **The mode was hard-coded to `proxy`.** Whatever the operator chose, a proxy
+  config was written.
+- **Redirect was refused outright**, on the reasoning — written in that file, by
+  me — that a redirect config names no edges and so cannot go stale. It names
+  them in the map it redirects into, and refusing to resync meant switching the
+  mode left the machine serving the previous one.
+
+**A player follows a 302 without saying so**, so the two modes look identical on
+screen. `curl -sI` on the viewer URL is the only honest check: 200 and a
+playlist is proxy, 302 with a `Location` is redirect. Recorded in
+`docs/STATE.md`, because "the stream plays" answered the wrong question for a
+day.
+
+The plan itself was right the whole time — it produces `return 302` for
+redirect and `proxy_pass` for proxy. Only the resync, standing between the
+operator's choice and the machine, replaced one with the other.
+
 ### v1.9.1 — same release, a version the tags do not block
 `v1.8.7` was tagged and never published: the workflow tags before it builds, so
 a run that stopped after the tag left it behind, and every run since read it as

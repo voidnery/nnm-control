@@ -819,6 +819,29 @@ check('edge addresses come from the machines, not from the network nodes', () =>
     'the address order differs from the one the links use');
 });
 
+check('the resync writes the mode the operator chose', () => {
+  // Hard-coded to proxy, it wrote a proxy config whichever mode was selected —
+  // and refused redirect outright, so switching the mode left the machine
+  // serving the previous one. The operator selected redirect, watched the
+  // stream keep working, and was watching proxy: a player follows a 302
+  // without saying so, and only the HTTP response tells the two apart.
+  const resyncSrc = readFileSync(new URL('../src/services/gatewayResync.js', import.meta.url), 'utf8');
+  assert.ok(/mode: gw\.mode/.test(resyncSrc), 'the resync writes a mode of its own choosing');
+  assert.ok(!/mode: 'proxy'/.test(resyncSrc), 'a mode is still hard-coded');
+  assert.ok(/\['proxy', 'redirect'\]\.includes\(gw\.mode\)/.test(resyncSrc),
+    'one of the two modes that write a config is refused');
+});
+
+check('the two modes produce configs that differ where it matters', () => {
+  // Not a cosmetic difference: proxy carries the media and hides the edges,
+  // redirect hands the viewer an address and carries nothing. A resync that
+  // writes the wrong one changes what the whole delivery path does.
+  const proxy = nginxConf({ domain: 'x.example.com', mode: 'proxy', edges: [{ name: 'e', host: '1.2.3.4', httpPort: 8081 }] });
+  const redirect = nginxConf({ domain: 'x.example.com', mode: 'redirect', edges: [{ name: 'e', host: '1.2.3.4', httpPort: 8081 }] });
+  assert.ok(/proxy_pass/.test(proxy) && !/return 302/.test(proxy));
+  assert.ok(/return 302/.test(redirect) && !/proxy_pass/.test(redirect));
+});
+
 check('a rewrite with no edges is refused, not reported as success', () => {
   // Writing a proxy config that forwards to nothing and calling it done is
   // worse than not writing it: the machine looks configured and serves

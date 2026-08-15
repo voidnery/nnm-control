@@ -44,7 +44,16 @@ export function resyncSteps(plan) {
 
 export async function resyncGateway({ network, actor = '' } = {}) {
   const gw = network?.gateway;
-  if (!gw || gw.mode !== 'proxy' || !gw.node) return { skipped: 'not-a-proxy-gateway' };
+  // Both modes that put a config on a machine.
+  //
+  // This refused anything but proxy, on the reasoning — written here, by me —
+  // that a redirect config names no edges and so cannot go stale. That is
+  // wrong twice: it names them in the map it redirects into, and refusing to
+  // resync meant switching the mode in the panel left the machine serving the
+  // previous one. An operator selected redirect, saw the stream keep working,
+  // and was watching proxy.
+  if (!gw || !gw.node) return { skipped: 'no-gateway-machine' };
+  if (!['proxy', 'redirect'].includes(gw.mode)) return { skipped: 'direct-mode' };
 
   const server = await NimbleServer.findById(gw.node).catch(() => null);
   if (!server) return { skipped: 'machine-not-found' };
@@ -95,7 +104,11 @@ export async function resyncGateway({ network, actor = '' } = {}) {
   const plan = gatewayPlan({
     server,
     domain: gw.domain || server.gateway.domain,
-    mode: 'proxy',
+    // The mode the operator chose, not the one this was written against.
+    // Hard-coded to proxy, it wrote a proxy config whichever mode was
+    // selected — and the difference is invisible in a player, which follows a
+    // 302 without saying so. Only the HTTP response tells them apart.
+    mode: gw.mode,
     edges,
     ports: { 80: { taken: false, holders: [] }, 443: { taken: false, holders: [] } },
   });

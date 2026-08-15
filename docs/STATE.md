@@ -134,6 +134,23 @@ extra ceremony.
 - **TLS on the edges** — verified absent on RU-2 by handshake. LL-HLS is
   impossible until it exists. A gateway now gets TLS as part of preparation;
   an edge does not, because an edge already runs something on those ports.
+- **Delivery through an edge-proxy, working.** `cdn-test-5` serves
+  `https://cdn-test-1.bbesport.com/<app>/<stream>/playlist.m3u8` and forwards to
+  the three Nimble edges of the network. The viewer's link names the gateway
+  and nothing else — the edges' addresses do not appear in it, which is the
+  whole difference between proxy and redirect.
+
+  Its nginx is kept current by the panel: adding or removing an edge rewrites
+  the config through the privileged helper, in the same request as the save.
+  The panel reports the edge count it wrote, and that number is worth reading —
+  a rewrite reporting **0** is a config forwarding nowhere, which is how the
+  last defect announced itself while looking like success.
+- **Two gateway modes, and they are told apart by the HTTP response.** Proxy
+  answers 200 and carries the media; redirect answers 302 and hands over an
+  address. A player follows a 302 without saying so, so both look identical on
+  screen — which is how a machine served proxy for a day while the panel said
+  redirect. `curl -sI` on the viewer URL is the only honest check.
+
 - **A gateway, prepared end to end and proved.** `cdn-test-5` (89.125.121.218)
   was taken from a bare Ubuntu 24.04 to a working TLS gateway for
   `cdn-test-1.bbesport.com` by the panel: nginx and certbot installed, a
