@@ -37,6 +37,7 @@ export default function GatewayPanel({ network, servers = [] }) {
   //
   // Keyed on the network id and the saved gateway, so switching networks or
   // saving replaces the form, and typing in it does not.
+  const [stale, setStale] = useState(null);
   const savedKey = JSON.stringify(network.gateway || null);
   useEffect(() => { setGw(network.gateway || EMPTY); }, [network.id, savedKey]);
   const [preview, setPreview] = useState(null);
@@ -69,6 +70,12 @@ export default function GatewayPanel({ network, servers = [] }) {
     try {
       const r = await api(`/cdn/networks/${network.id}/gateway`, { method: 'PUT', body: gw });
       setGw(r.gateway);
+      // Whether the machine's nginx knows about these edges. Saving here
+      // changes the panel's model and nothing on the machine, so a proxy
+      // gateway prepared before the network had edges forwards viewers to a
+      // placeholder that never resolves — accepting connections and serving
+      // nothing.
+      setStale(r.staleConfig || null);
       push({ type: 'ok', message: t('gw.saved') });
     } catch (e) { setProblem(explainError(e, t)); }
     finally { setBusy(false); }
@@ -150,6 +157,12 @@ export default function GatewayPanel({ network, servers = [] }) {
               question without an answer — and it was empty on every fleet for
               a while, which nothing on the screen explained. */}
           {!withAgent.length && <div className="error-box">{t('gw.noNodes')}</div>}
+          {stale && (
+            <div className="error-box">
+              <b>{t('gw.staleConfig')}</b>
+              <div className="hint">{t('gw.staleConfigWhy', { machine: stale.machine, edges: stale.edges })}</div>
+            </div>
+          )}
           <div className="hint" >{t('gw.nodeHint')}</div>
 
           <label>{t('gw.domain')}</label>

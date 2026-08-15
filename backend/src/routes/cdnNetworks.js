@@ -17,6 +17,21 @@ const pubNode = (n) => ({
 const pub = (n) => ({
   id: n.id, name: n.name, description: n.description, audience: n.audience,
   nodes: (n.nodes || []).map(pubNode),
+  // The gateway settings, which this list did not send at all.
+  //
+  // The panel initialises its form from `network.gateway`, so the form was
+  // always empty no matter what had been saved — and reopening the page showed
+  // the saved value gone. I fixed the form twice before checking whether the
+  // field was ever sent. Second time in two days: a field nobody sends looks
+  // exactly like a field nobody set.
+  gateway: n.gateway ? {
+    enabled: n.gateway.enabled,
+    mode: n.gateway.mode,
+    node: n.gateway.node ? String(n.gateway.node) : null,
+    domain: n.gateway.domain || '',
+    policy: n.gateway.policy,
+    whenAllDown: n.gateway.whenAllDown,
+  } : null,
   createdBy: n.createdBy, updatedAt: n.updatedAt,
 });
 

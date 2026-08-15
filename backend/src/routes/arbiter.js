@@ -135,5 +135,36 @@ arbiterRouter.put('/networks/:id/gateway', requireAuth, requirePerm('cdn.manage'
   });
   await n.save();
   await logEvent(req, 'cdn.gateway.update', { network: n.name, mode, policy: n.gateway.policy });
-  res.json({ gateway: n.gateway, modes: GATEWAY_MODES, policies: GATEWAY_POLICIES });
+
+  // Whether the machine's nginx knows about these edges yet.
+  //
+  // The config is written once, when the machine is prepared — and a machine
+  // is prepared before it joins a network, so it points at `edge.invalid`, a
+  // placeholder that never resolves. Saving the network here changes the
+  // panel's model and nothing on the machine, so a proxy gateway configured
+  // this way accepts viewers and forwards them nowhere.
+  //
+  // Reported rather than silently rewritten: rewriting nginx from a settings
+  // save would be a config change nobody asked for at a moment nobody expects
+  // it. The operator re-runs the preparation, which is one button and shows
+  // what it will do first.
+  let staleConfig = null;
+  if (mode === 'proxy' && node) {
+    const machine = await NimbleServer.findById(node).catch(() => null);
+    const edges = (n.nodes || []).filter(x => x.role === 'edge');
+    if (machine?.gateway?.state === 'applied' && edges.length) {
+      const preparedAt = machine.gateway.at ? new Date(machine.gateway.at).getTime() : 0;
+      staleConfig = {
+        machine: machine.name,
+        preparedAt: machine.gateway.at,
+        edges: edges.length,
+        // Prepared before the edges existed in this network, so the config it
+        // wrote cannot name them.
+        why: 'prepared-before-edges',
+        stale: preparedAt < new Date(n.updatedAt || 0).getTime(),
+      };
+    }
+  }
+
+  res.json({ gateway: n.gateway, modes: GATEWAY_MODES, policies: GATEWAY_POLICIES, staleConfig });
 });

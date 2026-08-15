@@ -760,5 +760,67 @@ check('choosing a prepared machine fills in the domain it was prepared with', ()
   assert.ok(/gw\.domain \|\| picked/.test(gwPanel2), 'it overwrites what the operator typed');
 });
 
+console.log('\nTHE NETWORK SENDS ITS GATEWAY:');
+
+const netRoutes = readFileSync(new URL('../src/routes/cdnNetworks.js', import.meta.url), 'utf8');
+const arbRoutes = readFileSync(new URL('../src/routes/arbiter.js', import.meta.url), 'utf8');
+
+check('the networks list includes the gateway settings', () => {
+  // The panel initialises its form from `network.gateway`, and this list never
+  // sent it — so the form was empty no matter what had been saved, and
+  // reopening the page showed the saved value gone. I fixed the form twice
+  // before checking whether the field was ever sent. Second time in two days:
+  // a field nobody sends looks exactly like a field nobody set.
+  const i = netRoutes.indexOf('const pub = (n) => ({');
+  const body = netRoutes.slice(i, netRoutes.indexOf('\n});', i));
+  assert.ok(/(^|\s)gateway:/.test(body), 'the networks list omits the gateway');
+  for (const field of ['mode', 'node', 'domain', 'policy', 'whenAllDown']) {
+    assert.ok(body.includes(`${field}:`), `the gateway is sent without ${field}`);
+  }
+});
+
+check('the node is a string, so a select can match it', () => {
+  // An ObjectId does not equal the option value the panel renders.
+  const i = netRoutes.indexOf('const pub = (n) => ({');
+  const body = netRoutes.slice(i, netRoutes.indexOf('\n});', i));
+  assert.ok(/node: n\.gateway\.node \? String\(/.test(body), 'the node is not stringified');
+});
+
+console.log('\nA MACHINE PREPARED BEFORE THE EDGES SAYS SO:');
+
+check('saving a proxy gateway reports whether the machine knows the edges', () => {
+  // The config is written once, when the machine is prepared — and a machine
+  // is prepared before it joins a network, so it points at `edge.invalid`.
+  // Saving the network changes the panel's model and nothing on the machine:
+  // the gateway accepts viewers and forwards them nowhere.
+  // In the response, not merely somewhere in the file. Declaring the variable
+  // and not sending it passes a check that greps — and that is exactly what
+  // the first version of this did.
+  assert.ok(/res\.json\([^)]*staleConfig/.test(arbRoutes),
+    'the stale-config finding is computed and not sent');
+  assert.ok(/prepared-before-edges/.test(arbRoutes));
+  assert.ok(/staleConfig/.test(gwPanel2 ?? ''), 'the panel does not show it');
+});
+
+check('saving does not rewrite nginx behind the operator', () => {
+  // A config change nobody asked for, at a moment nobody expects it. The
+  // operator re-runs the preparation, which is one button and shows the plan
+  // first.
+  const route = arbRoutes.slice(arbRoutes.indexOf("put('/networks/:id/gateway'"));
+  assert.ok(!/host\/apply|gatewayPlan\(/.test(route), 'saving settings writes to the machine');
+});
+
+console.log('\nEACH MACHINE GETS ITS OWN ADDRESS SELECTOR:');
+
+check('the selector sits beside its own link, not above the previous one', () => {
+  // Rendered above the label it belonged to, one selector read as though it
+  // belonged to the edge before it — a control next to the wrong name is worse
+  // than no control.
+  const panel = readFileSync(new URL('../../frontend/src/components/ChannelsPanel.jsx', import.meta.url), 'utf8');
+  assert.ok(/addresses = null/.test(panel), 'Copyable cannot carry a selector');
+  assert.ok(/addresses=\{x\.urls\?\.length > 1/.test(panel), 'the selector is not per machine');
+  assert.ok(/pickedHost\[x\.edge\]/.test(panel), 'the choice is shared between machines');
+});
+
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');
 process.exit(failures ? 1 : 0);

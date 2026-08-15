@@ -1,5 +1,35 @@
 # Changelog
 
+### v0.99.26 — the form was empty because the field was never sent
+The gateway settings still did not survive a reload. I had fixed the form
+twice — once with `useEffect`, once with a key — before checking whether the
+value ever arrived.
+
+**The networks list never sent `gateway` at all.** The panel initialises from
+`network.gateway`, so the form was empty whatever had been saved. Second time
+in two days, after `/servers` and `agent`: a field nobody sends looks exactly
+like a field nobody set, and the screen cannot tell them apart either. `node`
+is stringified too, since an ObjectId never equals the option value a select
+renders.
+
+**And a proxy gateway prepared before its network had edges forwards viewers
+nowhere.** The nginx config is written once, during preparation — and a machine
+is prepared *before* it joins a network, so it points at `edge.invalid`. Saving
+the network changes the panel's model and nothing on the machine.
+
+The panel now says so, naming the machine and the edges it does not know about,
+and points at "Configure again". It does **not** rewrite nginx from a settings
+save: that would be a config change nobody asked for at a moment nobody expects
+it, and the preparation flow shows its plan before running.
+
+**Each machine gets its own address selector.** The previous one rendered above
+the label it belonged to, so it read as belonging to the edge before it — a
+control next to the wrong name is worse than no control. It now sits beside its
+own link.
+
+One check greped the whole file for `staleConfig` and passed when the value was
+computed and not sent. Bound to the response.
+
 ### v0.99.25 — the panel was handing out a name nobody had corrected
 Two edges changed address, their DNS had not caught up, and the stream stopped.
 The operator had already fixed the Host field on both servers — and the panel

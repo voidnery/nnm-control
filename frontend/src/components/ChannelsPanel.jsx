@@ -19,7 +19,7 @@ import { copyText } from '../lib/clipboard.js';
 // Rows are not all good news, on purpose. A stream with no network is listed
 // too — it is the state worth seeing before an event, and it was invisible.
 
-function Copyable({ url, label, note, tone = '' }) {
+function Copyable({ url, label, note, tone = '', addresses = null }) {
   const { t } = useI18n();
   const { push } = useToast();
   const [playing, setPlaying] = useState(false);
@@ -30,7 +30,12 @@ function Copyable({ url, label, note, tone = '' }) {
         <span className="eyebrow">{label}</span>
         {tone && <span className={'badge ' + tone}>{note}</span>}
       </div>
-      <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+      <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Beside its own link, under its own heading. Rendered above the
+            label it belonged to, one selector read as though it belonged to
+            the edge before it — a control next to the wrong name is worse than
+            no control. */}
+        {addresses}
         <span className="mono ch-url">{url}</span>
         {/* copyText reports whether it actually worked; the toast follows it
             rather than assuming, because on plain HTTP the clipboard API is
@@ -215,21 +220,20 @@ function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signi
             <div className="inset">
               <div className="eyebrow">{t('ch.tests')}</div>
               <div className="hint">{t('ch.testsHint')}</div>
+              {/* Every machine with more than one address gets its own
+                  selector: the panel cannot know which name resolves correctly
+                  today, the operator can, and the answer differs per machine. */}
               {l.tests.map(x => (
                 <div key={x.edge}>
-                  {/* A choice of address when the machine has more than one.
-                      A single name was baked in, and when its DNS was stale
-                      there was nothing to switch to — though the machine
-                      answered on its address the whole time. */}
-                  {x.urls?.length > 1 && (
-                    <select className="mono" style={{ marginBottom: 4, maxWidth: 380 }}
-                            value={pickedHost[x.edge] || x.urls[0].host}
-                            onChange={e => setPickedHost({ ...pickedHost, [x.edge]: e.target.value })}>
-                      {x.urls.map(u => <option key={u.host} value={u.host}>{u.host}</option>)}
-                    </select>
-                  )}
                   <Copyable url={x.urls?.find(u => u.host === (pickedHost[x.edge] || x.urls?.[0]?.host))?.url || x.url}
                             label={x.edge}
+                            addresses={x.urls?.length > 1 ? (
+                              <select className="mono" style={{ maxWidth: 260 }}
+                                      value={pickedHost[x.edge] || x.urls[0].host}
+                                      onChange={e => setPickedHost({ ...pickedHost, [x.edge]: e.target.value })}>
+                                {x.urls.map(u => <option key={u.host} value={u.host}>{u.host}</option>)}
+                              </select>
+                            ) : null}
                           tone={x.routed === false ? 'err' : x.healthy ? '' : 'warn'}
                           note={x.routed === false ? t('ch.noRoute') : x.healthy ? '' : t('ch.edgeDown')} />
                 </div>
