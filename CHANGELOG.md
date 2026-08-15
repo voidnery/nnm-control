@@ -1,5 +1,20 @@
 # Changelog
 
+### v1.9.1 — same release, a version the tags do not block
+`v1.8.7` was tagged and never published: the workflow tags before it builds, so
+a run that stopped after the tag left it behind, and every run since read it as
+"already released" and skipped everything in thirteen seconds under a green
+tick. Same for `v1.0.0`.
+
+The contents are v1.8.7's, unchanged. The number moves because deleting a tag
+is not available here, and a version nothing has claimed is the cheapest way
+past it.
+
+`docs/STATE.md` now records the trap: a release finishing in seconds instead of
+minutes did not run, dead tags do not mean published versions, and
+`apt-cache policy nnm-control` is the authority on what exists. Tagging after
+publishing is the actual fix and is still not made.
+
 ### v1.8.7 — "edge in the config — 0"
 The rewrite worked, reported success, and wrote a proxy configuration
 forwarding to nothing. The number was in the message the whole time.

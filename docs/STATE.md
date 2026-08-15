@@ -241,3 +241,24 @@ was skipped.
 
 The epoch stays. Removing it is a separate decision, and it should be taken by
 somebody looking at the pool rather than at the version string.
+
+## A release tag is created before the release is published
+
+The workflow tags `vX.Y.Z` and then builds. A run that stops after the tag —
+for any reason — leaves the tag behind, and every later run reads it as "this
+version is already out" and skips everything. Thirteen seconds, green tick,
+nothing published.
+
+It has happened twice: `v1.0.0` and `v1.8.7` are both tagged with nothing in
+the pool behind them.
+
+The fix is to tag after publishing, and it has not been made yet — the delivery
+path was worth more at the time. Until then:
+
+* a release that finishes in seconds instead of minutes did not run;
+* `git ls-remote --tags <repo> | grep vX.Y.Z` confirms it;
+* deleting the tag and pushing again releases it, or bumping to the next
+  version sidesteps it.
+
+Neither `v1.0.0` nor `v1.8.7` corresponds to a published package. They are dead
+tags, and `apt-cache policy nnm-control` is the authority on what exists.
