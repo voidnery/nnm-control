@@ -168,7 +168,11 @@ export default function GatewayPanel({ network, servers = [] }) {
           {resync && !resync.ok && !resync.skipped && (
             <div className="error-box">
               <b>{t('gw.resyncFailed', { machine: resync.machine })}</b>
-              <div className="hint">{resync.error || resync.haltedAt || ''}</div>
+              {/* The reason, then which step. A step name alone sends
+                  somebody to the machine to find out what nginx already
+                  said. */}
+              {resync.error && <div className="mono hint">{resync.error}</div>}
+              {resync.haltedAt && <div className="hint">{t('gw.resyncHaltedAt', { step: resync.haltedAt })}</div>}
             </div>
           )}
           {/* A machine never prepared is not a fault: it is simply not a

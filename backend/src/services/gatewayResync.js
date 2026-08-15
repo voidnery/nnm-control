@@ -128,9 +128,14 @@ export async function resyncGateway({ network, actor = '' } = {}) {
       server.gateway.edges = edges.length;
       await server.save().catch(() => { /* the machine is written either way */ });
     }
+    // The failing step's own output, not just its name. "test-conf" says which
+    // step refused and nothing about why — and nginx had put the reason in the
+    // very message this discarded.
+    const failed = (r?.steps || []).find(x => x.ok === false);
     return {
       ok: Boolean(r?.ok), machine: server.name, edges: edges.length,
       steps: r?.steps || [], haltedAt: r?.halted || null,
+      error: failed?.error || null,
     };
   } catch (e) {
     // Reported, not thrown: the operator's edit is saved and this is a fact

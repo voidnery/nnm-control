@@ -1,5 +1,24 @@
 # Changelog
 
+### v1.9.3 — the redirect config had never been valid
+
+    return 302 $scheme://$nnm_edge$request_uri;
+
+`$nnm_edge` was read once and defined nowhere. nginx refuses a configuration
+that reads an unknown variable, so redirect mode could never have loaded — and
+nobody found out, because until yesterday nothing ever applied it. The resync
+learned to write redirect, and `nginx -t` refused it one step before the reload.
+
+Which is the system working: the machine stayed on the proxy config it was
+already serving rather than going down. The edge address is written in now,
+exactly as proxy mode does it, and a check refuses any variable the file reads
+without defining — nginx's own are known, anything invented here must be
+declared here.
+
+**And a failure names its reason.** The panel said "test-conf" — which step
+refused, and nothing about why, while nginx had put the reason in the message
+that was being discarded. It shows the output first and the step second.
+
 ### v1.9.2 — redirect mode was proxy mode wearing its name
 Selecting redirect kept the stream working, which is why nobody questioned it.
 The machine was serving proxy.

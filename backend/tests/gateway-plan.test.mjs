@@ -832,6 +832,38 @@ check('the resync writes the mode the operator chose', () => {
     'one of the two modes that write a config is refused');
 });
 
+check('the config reads no variable it does not define', () => {
+  // `$nnm_edge` was read once and defined nowhere. nginx refuses a
+  // configuration that reads an unknown variable, so redirect mode had never
+  // been valid — unnoticed because nothing applied it until the resync learned
+  // to write it, and then `nginx -t` caught it one step before the reload.
+  //
+  // nginx's own variables are fine; anything this file invents must be defined
+  // in it.
+  const BUILTIN = new Set(['scheme', 'host', 'request_uri', 'uri', 'args', 'remote_addr',
+    'http_host', 'proxy_add_x_forwarded_for', 'server_name', 'status', 'body_bytes_sent',
+    'http_user_agent', 'http_referer', 'request', 'time_local', 'upstream_addr',
+    'upstream_cache_status', 'request_method', 'document_root', 'is_args']);
+  for (const mode of ['proxy', 'redirect']) {
+    const c = nginxConf({ domain: 'x.example.com', mode, edges: [{ name: 'e', host: '1.2.3.4', httpPort: 8081 }] });
+    const used = new Set([...c.matchAll(/\$([a-z_][a-z0-9_]*)/gi)].map(m => m[1]));
+    const defined = new Set([...c.matchAll(/(?:set|map[^;]*?)\s+\$([a-z_][a-z0-9_]*)/gi)].map(m => m[1]));
+    for (const v of used) {
+      if (BUILTIN.has(v) || defined.has(v)) continue;
+      assert.fail(`${mode} mode reads $${v}, which nothing defines — nginx will refuse the file`);
+    }
+  }
+});
+
+check('a redirect names a real edge, or an address that cannot resolve', () => {
+  // Same rule as proxy: a placeholder must fail loudly rather than quietly
+  // point somewhere real.
+  const withEdge = nginxConf({ domain: 'x.example.com', mode: 'redirect', edges: [{ name: 'e', host: '1.2.3.4', httpPort: 8081 }] });
+  assert.match(withEdge, /return 302 \$scheme:\/\/1\.2\.3\.4:8081\$request_uri;/);
+  const without = nginxConf({ domain: 'x.example.com', mode: 'redirect', edges: [] });
+  assert.match(without, /edge\.invalid/);
+});
+
 check('the two modes produce configs that differ where it matters', () => {
   // Not a cosmetic difference: proxy carries the media and hides the edges,
   // redirect hands the viewer an address and carries nothing. A resync that

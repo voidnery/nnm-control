@@ -68,7 +68,18 @@ export function nginxConf({ domain, mode = 'redirect', resolvers = '127.0.0.53 1
     # The viewer then talks to the edge directly, so this box carries decisions
     # and not video — and the edge address ends up in the viewer's hands.
     location / {
-        return 302 $scheme://$nnm_edge$request_uri;
+        # The edge, written in.
+        #
+        # This named a variable nothing ever defined — and nginx
+        # refuses a configuration that reads one, so this config was never
+        # valid. It went unnoticed because nothing applied it until the resync
+        # learned to write redirect mode, and then nginx -t caught it one
+        # step before the reload.
+        #
+        # Substituted rather than resolved at request time, exactly as proxy
+        # mode does: the panel rewrites this file whenever the network changes,
+        # so the address here is as current as the edge list itself.
+        return 302 ${edges[0] ? `$scheme://${edges[0].host}:${edges[0].httpPort || 8081}` : 'https://edge.invalid'}$request_uri;
     }`;
 
   return `# Written by NNM Control. Edited by hand? The panel will show a diff
