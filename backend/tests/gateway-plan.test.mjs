@@ -89,7 +89,11 @@ check('every step that changes something says how to undo it', () => {
   // exists harms nothing and is rate-limited to replace.
   for (const s of plan().steps) {
     if (s.undo === null) {
-      assert.ok(['issue-cert', 'test-conf'].includes(s.id), `${s.id} changes something and cannot undo it`);
+      // The exceptions, named rather than left implicit: a certificate that
+      // exists harms nothing and is rate-limited to replace, and testing a
+      // configuration changes nothing at all.
+      assert.ok(['issue-cert', 'test-conf', 'test-acme-conf'].includes(s.id),
+        `${s.id} changes something and cannot undo it`);
     }
   }
 });
@@ -141,6 +145,33 @@ check('a bad configuration cannot reach a reload', () => {
   const reload = steps.findIndex(s => s.id === 'reload');
   assert.ok(test < reload, 'the reload happens before the configuration is tested');
   assert.equal(steps[test].halting, true);
+});
+
+check('a stale config from a halted run is removed before the reload', () => {
+  // A halt happens at `nginx -t`, which is after `enable-site` — so the
+  // production config is already written and enabled when a run stops. The
+  // next run then reloads nginx for the ACME phase and fails on that file,
+  // with a message about a config it has not written yet.
+  const ids = plan().steps.map(s2 => s2.id);
+  assert.ok(ids.includes('drop-stale-site'), 'a previous run can still break the next one');
+  assert.ok(ids.indexOf('drop-stale-site') < ids.indexOf('reload-for-acme'),
+    'the stale config is still loaded when nginx is reloaded');
+});
+
+check('every reload is preceded by a test', () => {
+  // There was a test before the final reload and none before the first, so
+  // that one failed with "Job for nginx.service failed" and the reason lived
+  // in the journal. nginx says what is wrong when asked, not when reloaded.
+  const steps = plan().steps;
+  steps.forEach((s2, i) => {
+    if (!/reload/.test(s2.id)) return;
+    const before = steps.slice(0, i).reverse();
+    const test = before.find(x => x.command?.join(' ') === 'nginx -t');
+    const anotherReload = before.findIndex(x => /reload/.test(x.id));
+    const testAt = before.indexOf(test);
+    assert.ok(test && (anotherReload === -1 || testAt < anotherReload),
+      `${s2.id} reloads nginx without testing the configuration first`);
+  });
 });
 
 check('the file step backs up before writing', () => {

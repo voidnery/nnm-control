@@ -195,6 +195,22 @@ export function gatewayPlan({
       skipIf: 'certbot-installed',
     },
     {
+      id: 'drop-stale-site',
+      kind: 'command',
+      why: 'a previous run may have left a configuration nginx now refuses',
+      // A halted plan leaves the production config written and enabled: the
+      // halt happens at `nginx -t`, which is after `enable-site`. The next run
+      // then reloads nginx for the ACME phase and trips over that file — a
+      // failure with nothing to do with the run causing it, and the message
+      // points at a config this run has not written yet.
+      //
+      // Unlinked, not deleted: the file stays in sites-available, and the undo
+      // puts the link back for anyone who wants to look at what failed.
+      command: ['rm', '-f', `/etc/nginx/sites-enabled/nnm-${domain}.conf`],
+      undo: ['ln', '-sf', `/etc/nginx/sites-available/nnm-${domain}.conf`,
+             `/etc/nginx/sites-enabled/nnm-${domain}.conf`],
+    },
+    {
       id: 'write-acme-conf',
       kind: 'file',
       why: 'somewhere for certbot to prove the domain',
@@ -210,6 +226,18 @@ export function gatewayPlan({
       command: ['ln', '-sf', `/etc/nginx/sites-available/nnm-acme-${domain}.conf`,
                 `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
       undo: ['rm', '-f', `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
+    },
+    {
+      id: 'test-acme-conf',
+      kind: 'command',
+      why: 'a bad configuration must not reach a reload — either reload',
+      // There was a test before the final reload and none before this one, so
+      // the first reload failed with "Job for nginx.service failed" and the
+      // reason lived in the journal. Same rule, both times: nginx tells you
+      // what is wrong when you ask it, and not when you reload it.
+      command: ['nginx', '-t'],
+      undo: null,
+      halting: true,
     },
     {
       id: 'reload-for-acme',

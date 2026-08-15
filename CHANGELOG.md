@@ -1,5 +1,27 @@
 # Changelog
 
+### v0.99.23 — a halted run left a configuration the next run tripped over
+`reload-for-acme` failed with "Job for nginx.service failed", and the config it
+choked on was not one this run had written. The previous run halted at
+`nginx -t` over `http2 on;` — which is *after* `enable-site`, so the broken
+production config was left written and enabled. Every subsequent run then
+failed at its first reload, pointing at a file it had not touched.
+
+**A run now unlinks any previous configuration for this domain before the ACME
+phase**, since it is about to write a new one anyway. Unlinked rather than
+deleted: the file stays in sites-available for anyone who wants to see what
+failed, and the undo puts the link back.
+
+**And every reload is preceded by a test.** There was one before the final
+reload and none before the first, so the first failed as "Job for
+nginx.service failed" with the reason in the journal — on a machine nobody is
+sitting at. nginx says what is wrong when you ask it and not when you reload
+it, which is the same lesson as `nginx -t` being in the plan at all.
+
+A check enforces the rule generally: any step whose id contains `reload` must
+have `nginx -t` between it and the previous reload. Both proven by
+contradiction.
+
 ### v0.99.22 — nine steps, a certificate, and one directive too new
 
     unknown directive "http2" in nnm-cdn-test-1.bbesport.com.conf:26
