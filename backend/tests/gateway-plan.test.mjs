@@ -764,6 +764,7 @@ console.log('\nTHE NETWORK SENDS ITS GATEWAY:');
 
 const netRoutes = readFileSync(new URL('../src/routes/cdnNetworks.js', import.meta.url), 'utf8');
 const arbRoutes = readFileSync(new URL('../src/routes/arbiter.js', import.meta.url), 'utf8');
+const resyncModule = await import('../src/services/gatewayResync.js');
 
 check('the networks list includes the gateway settings', () => {
   // The panel initialises its form from `network.gateway`, and this list never
@@ -788,26 +789,53 @@ check('the node is a string, so a select can match it', () => {
 
 console.log('\nA MACHINE PREPARED BEFORE THE EDGES SAYS SO:');
 
-check('saving a proxy gateway reports whether the machine knows the edges', () => {
-  // The config is written once, when the machine is prepared — and a machine
-  // is prepared before it joins a network, so it points at `edge.invalid`.
-  // Saving the network changes the panel's model and nothing on the machine:
-  // the gateway accepts viewers and forwards them nowhere.
-  // In the response, not merely somewhere in the file. Declaring the variable
-  // and not sending it passes a check that greps — and that is exactly what
-  // the first version of this did.
-  assert.ok(/res\.json\([^)]*staleConfig/.test(arbRoutes),
-    'the stale-config finding is computed and not sent');
-  assert.ok(/prepared-before-edges/.test(arbRoutes));
-  assert.ok(/staleConfig/.test(gwPanel2 ?? ''), 'the panel does not show it');
+check('changing the network rewrites the edge-proxy, rather than reporting it', () => {
+  // The config names the edges and was written during preparation, which
+  // happens before a machine joins a network — so it pointed at a placeholder.
+  // The previous version detected this and asked the operator to press a
+  // button on another page: a fact the panel holds, a change only the panel
+  // can make, and a person sent to do it by hand.
+  const netRoutes2 = readFileSync(new URL('../src/routes/cdnNetworks.js', import.meta.url), 'utf8');
+  assert.ok(/resyncGateway\(\{ network: n/.test(netRoutes2),
+    'changing which machines are edges leaves the gateway pointing at the old ones');
+  assert.ok(/resyncGateway\(\{ network: n/.test(arbRoutes),
+    'saving the gateway settings does not bring the machine into step');
 });
 
-check('saving does not rewrite nginx behind the operator', () => {
-  // A config change nobody asked for, at a moment nobody expects it. The
-  // operator re-runs the preparation, which is one button and shows the plan
-  // first.
-  const route = arbRoutes.slice(arbRoutes.indexOf("put('/networks/:id/gateway'"));
-  assert.ok(!/host\/apply|gatewayPlan\(/.test(route), 'saving settings writes to the machine');
+check('it needs no credentials, because the helper is already there', () => {
+  // The privileged helper installed nginx on that machine and issued its
+  // certificate. Rewriting a file it owns is less than it has done, and
+  // storing an SSH password to do it would be a new secret for no new
+  // capability.
+  const resyncSrc = readFileSync(new URL('../src/services/gatewayResync.js', import.meta.url), 'utf8');
+  assert.ok(/runTask\(server, 'POST \/host\/apply'/.test(resyncSrc), 'it does not go through the helper');
+  assert.ok(!/ssh|password|privateKey/i.test(resyncSrc), 'it reaches for credentials');
+});
+
+check('only a machine already prepared is touched', () => {
+  // Adding an edge must not quietly turn an untouched machine into a gateway.
+  const resyncSrc = readFileSync(new URL('../src/services/gatewayResync.js', import.meta.url), 'utf8');
+  assert.ok(/state !== 'applied'/.test(resyncSrc), 'an unprepared machine would be configured');
+  assert.ok(/helper\?\.seen/.test(resyncSrc), 'a machine without the helper is attempted anyway');
+});
+
+check('it writes the configuration and nothing else', () => {
+  // Taken from the same plan that prepares a machine rather than composed
+  // separately, so a resync writes what a preparation would write — one
+  // description of what an edge-proxy's nginx looks like. And no apt, no
+  // certbot: this is a file and a reload.
+  const { resyncSteps } = resyncModule;
+  const ids = resyncSteps(plan({ mode: 'proxy', edges: [{ name: 'e', host: '1.2.3.4', httpPort: 8081 }] }))
+    .map(s2 => s2.id);
+  assert.deepEqual(ids, ['write-conf', 'enable-site', 'test-conf', 'reload']);
+});
+
+check('a machine that cannot be reached does not fail the save', () => {
+  // The network is the operator's edit. A machine being unreachable is a fact
+  // to report, not a reason to refuse it.
+  const resyncSrc = readFileSync(new URL('../src/services/gatewayResync.js', import.meta.url), 'utf8');
+  assert.ok(/catch \(e\) \{[\s\S]{0,200}return \{ ok: false/.test(resyncSrc),
+    'an unreachable machine throws out of the save');
 });
 
 console.log('\nEACH MACHINE GETS ITS OWN ADDRESS SELECTOR:');

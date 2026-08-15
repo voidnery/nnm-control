@@ -37,7 +37,7 @@ export default function GatewayPanel({ network, servers = [] }) {
   //
   // Keyed on the network id and the saved gateway, so switching networks or
   // saving replaces the form, and typing in it does not.
-  const [stale, setStale] = useState(null);
+  const [resync, setResync] = useState(null);
   const savedKey = JSON.stringify(network.gateway || null);
   useEffect(() => { setGw(network.gateway || EMPTY); }, [network.id, savedKey]);
   const [preview, setPreview] = useState(null);
@@ -75,7 +75,10 @@ export default function GatewayPanel({ network, servers = [] }) {
       // gateway prepared before the network had edges forwards viewers to a
       // placeholder that never resolves — accepting connections and serving
       // nothing.
-      setStale(r.staleConfig || null);
+      // What the machine did with it. The panel rewrites its nginx on save,
+      // so the operator should learn in the same breath whether it took —
+      // silence after a change to a live delivery path is the wrong default.
+      setResync(r.resync || null);
       push({ type: 'ok', message: t('gw.saved') });
     } catch (e) { setProblem(explainError(e, t)); }
     finally { setBusy(false); }
@@ -157,11 +160,24 @@ export default function GatewayPanel({ network, servers = [] }) {
               question without an answer — and it was empty on every fleet for
               a while, which nothing on the screen explained. */}
           {!withAgent.length && <div className="error-box">{t('gw.noNodes')}</div>}
-          {stale && (
-            <div className="error-box">
-              <b>{t('gw.staleConfig')}</b>
-              <div className="hint">{t('gw.staleConfigWhy', { machine: stale.machine, edges: stale.edges })}</div>
+          {resync?.ok && (
+            <div className="hint" style={{ color: 'var(--ok, #5ad18f)' }}>
+              {t('gw.resynced', { machine: resync.machine, edges: resync.edges })}
             </div>
+          )}
+          {resync && !resync.ok && !resync.skipped && (
+            <div className="error-box">
+              <b>{t('gw.resyncFailed', { machine: resync.machine })}</b>
+              <div className="hint">{resync.error || resync.haltedAt || ''}</div>
+            </div>
+          )}
+          {/* A machine never prepared is not a fault: it is simply not a
+              gateway yet, and saying so beats silence. */}
+          {resync?.skipped === 'never-prepared' && (
+            <div className="hint">{t('gw.resyncNeverPrepared')}</div>
+          )}
+          {resync?.skipped === 'no-privileged-helper' && (
+            <div className="error-box">{t('gw.resyncNoHelper')}</div>
           )}
           <div className="hint" >{t('gw.nodeHint')}</div>
 

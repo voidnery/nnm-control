@@ -1,5 +1,32 @@
 # Changelog
 
+### v1.0.0 — the panel configures the machines it configured
+The previous release detected that an edge-proxy's nginx did not know about the
+network's edges, said so clearly, and asked the operator to go and press a
+button on another page. That was wrong, and the objection was right: a fact the
+panel holds, a change only the panel can make, and a person sent to do it by
+hand.
+
+**Changing a network now rewrites the edge-proxy that serves it.** Adding an
+edge, removing one, or saving the gateway settings brings the machine into step
+in the same request, and the answer arrives with the save.
+
+**It needs no credentials.** The offer to store SSH passwords was not necessary:
+the privileged helper installed nginx on that machine and issued its
+certificate, so rewriting a file it owns and reloading a service it manages is
+less than it has already done. No new secret buys no new capability.
+
+The steps come from the same plan that prepares a machine, filtered to
+`write-conf`, `enable-site`, `test-conf`, `reload` — one description of what an
+edge-proxy's nginx looks like, not two that can drift. It installs nothing,
+touches only machines already prepared (adding an edge must not quietly turn an
+untouched machine into a gateway), leaves redirect gateways alone (their config
+names no edges — the arbiter reads the network live), and an unreachable
+machine is reported rather than failing the operator's edit.
+
+Called it 1.0.0: a delivery network can now be built, and the machines carrying
+it stay correct without anybody remembering to make them so.
+
 ### v0.99.26 — the form was empty because the field was never sent
 The gateway settings still did not survive a reload. I had fixed the form
 twice — once with `useEffect`, once with a key — before checking whether the

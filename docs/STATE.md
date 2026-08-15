@@ -198,6 +198,15 @@ disk ran out instead of refusing. Each was reasonable when written and wrong
 about a subject that had changed. `test:retention` now checks the ceilings —
 including that a cap is a number that binds rather than a variable that exists.
 
+**A machine the panel configured, the panel keeps current.** An edge-proxy'"'"'s
+nginx names the edges it forwards to, so changing which machines are edges
+changes what that file must say. The panel rewrites it on save, through the
+privileged helper that installed nginx there in the first place — no
+credentials are stored and none are needed. Detecting the drift and asking the
+operator to press a button elsewhere was the panel declining to do its job. It
+touches only machines already prepared, writes only the config, and an
+unreachable machine is reported rather than failing the operator'"'"'s edit.
+
 **An address comes from the operator.** The Host field on a server outranks
 anything synced from WMSPanel: WMSPanel'"'"'s domains are a fact about WMSPanel,
 and the Host field is a person saying where the machine is. Where a machine has

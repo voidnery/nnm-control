@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
+import { resyncGateway } from '../services/gatewayResync.js';
 import { DeliveryNetwork, ROLES, ALLOWED_UPSTREAM } from '../models/DeliveryNetwork.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { ATTRIBUTION } from '../services/geoip.js';
@@ -162,8 +163,22 @@ cdnNetworkRouter.put('/networks/:id', requirePerm('cdn.manage'), async (req, res
     // field is wrong or that their edits were not stored.
     return res.status(422).json({ error: `network could not be saved: ${e.message}` });
   }
-  await logEvent(req, 'cdn.network.update', { id: n.id, nodes: n.nodes.length });
-  res.json({ ...pub(n), problems });
+  // The edge-proxy follows the network it serves.
+  //
+  // Changing which machines are edges changes what its nginx must forward to,
+  // and that config is only right if something rewrites it. Doing it here is
+  // the whole point: the operator adds an edge and the delivery path is
+  // correct, rather than correct in the panel and stale on the machine.
+  //
+  // Awaited rather than fired off, so the answer arrives with the save and the
+  // operator learns in the same breath whether the machine took it.
+  const resync = await resyncGateway({ network: n, actor: req.user?.username || '' });
+
+  await logEvent(req, 'cdn.network.update', {
+    id: n.id, nodes: n.nodes.length,
+    resync: resync?.skipped || (resync?.ok ? 'written' : 'failed'),
+  });
+  res.json({ resync, ...pub(n), problems });
 });
 
 cdnNetworkRouter.delete('/networks/:id', requirePerm('cdn.manage'), async (req, res) => {
