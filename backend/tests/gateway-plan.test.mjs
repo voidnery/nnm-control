@@ -705,5 +705,60 @@ check('an empty list explains itself', () => {
   assert.equal((dict2.match(/'gw\.noNodes':/g) || []).length, 2);
 });
 
+console.log('\nAN ADDRESS COMES FROM THE OPERATOR, NOT FROM WMSPANEL:');
+
+const chRoutes = readFileSync(new URL('../src/routes/channels.js', import.meta.url), 'utf8');
+const chLinks = readFileSync(new URL('../src/services/channelLinks.js', import.meta.url), 'utf8');
+const chPanel = readFileSync(new URL('../../frontend/src/components/ChannelsPanel.jsx', import.meta.url), 'utf8');
+
+check('the Host field outranks a name synced from WMSPanel', () => {
+  // The order was the other way round, so when two edges changed address and
+  // their DNS had not caught up, the panel kept handing viewers the stale name
+  // — while the Host field, which the operator had corrected, was never
+  // consulted. WMSPanel's domains are a fact about WMSPanel; the Host field is
+  // the operator saying where the machine is.
+  const m = /publicHost: ([^,]+),/.exec(chRoutes);
+  assert.ok(m, 'nothing decides the public host');
+  const order = m[1];
+  assert.ok(order.indexOf('s.host') < order.indexOf('wmspanelDomains'),
+    `WMSPanel outranks the operator: ${order}`);
+});
+
+check('every address a machine answers on is offered', () => {
+  // One name was baked into each test link. When its DNS was stale there was
+  // nothing to switch to, though the machine answered on its address the whole
+  // time — and the panel cannot know which resolves correctly today.
+  assert.ok(/hosts: \[\.\.\.new Set\(/.test(chRoutes), 'only one address is sent');
+  assert.ok(/urls: \(e\.hosts/.test(chLinks), 'the links are built for one address');
+  assert.ok(/pickedHost/.test(chPanel), 'the operator cannot choose');
+});
+
+check('the choice is not remembered', () => {
+  // It is a question about right now: tomorrow the stale name may be the
+  // working one, and a remembered pick would quietly outlive its reason.
+  assert.ok(!/localStorage|api\(.*pickedHost/.test(chPanel), 'the picked address is persisted');
+});
+
+console.log('\nTHE FORM SHOWS WHAT WAS SAVED:');
+
+const gwPanel2 = readFileSync(new URL('../../frontend/src/components/GatewayPanel.jsx', import.meta.url), 'utf8');
+
+check('the gateway form follows a reloaded network', () => {
+  // `useState` runs once. The parent reloads after a save and passes the new
+  // network down, but the component was already mounted — so it kept showing
+  // what had been typed, and reopening the page showed something else again.
+  // Saved correctly, displayed from a stale copy.
+  assert.ok(/useEffect\(\(\) => \{ setGw\(network\.gateway/.test(gwPanel2),
+    'the form never re-reads the network it was given');
+  assert.ok(/\[network\.id, savedKey\]/.test(gwPanel2),
+    'the effect does not depend on the saved gateway, so a save does not refresh it');
+});
+
+check('choosing a prepared machine fills in the domain it was prepared with', () => {
+  // Otherwise it is retyped from another page, which is where typos come from.
+  assert.ok(/picked\?\.gateway\?\.domain/.test(gwPanel2), 'the domain is not offered');
+  assert.ok(/gw\.domain \|\| picked/.test(gwPanel2), 'it overwrites what the operator typed');
+});
+
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');
 process.exit(failures ? 1 : 0);

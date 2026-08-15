@@ -1,5 +1,30 @@
 # Changelog
 
+### v0.99.25 — the panel was handing out a name nobody had corrected
+Two edges changed address, their DNS had not caught up, and the stream stopped.
+The operator had already fixed the Host field on both servers — and the panel
+never looked at it.
+
+`publicHost` was `playbackEndpoints[0] || wmspanelDomains[0]`, with the Host
+field nowhere in the chain. **WMSPanel's domains are a fact about WMSPanel; the
+Host field is a person saying where the machine is**, and between the two the
+person wins. The order is fixed and a check binds it.
+
+**Every address a machine answers on is now offered.** One name was baked into
+each test link, so when its DNS was stale there was nothing to switch to —
+though the machine answered on its address the whole time. The panel cannot
+know which name resolves correctly today; the operator can. The choice is not
+remembered, because tomorrow the stale name may be the working one.
+
+**The gateway form was displaying a stale copy.** `useState` runs once: the
+parent reloaded after a save and passed the new network down, but the component
+was already mounted, so it kept showing what had been typed and reopening the
+page showed something else again. Saved correctly, displayed wrongly — which is
+the shape that makes people save twice.
+
+**And choosing a prepared machine fills in the domain it was prepared with**,
+rather than leaving it to be retyped from another page.
+
 ### v0.99.24 — the machine list was empty on every fleet
 "Choose a server with an agent" offered nothing, on a fleet with seven agents
 and a gateway prepared and proved that morning.

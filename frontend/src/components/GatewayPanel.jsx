@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { useI18n } from '../i18n.jsx';
@@ -25,7 +25,20 @@ export default function GatewayPanel({ network, servers = [] }) {
   const { push } = useToast();
   const canManage = can('cdn.manage');
 
-  const [gw, setGw] = useState(network.gateway || { mode: 'direct', policy: 'nearest', whenAllDown: 'fail', domain: '', node: null });
+  const EMPTY = { mode: 'direct', policy: 'nearest', whenAllDown: 'fail', domain: '', node: null };
+  const [gw, setGw] = useState(network.gateway || EMPTY);
+
+  // Follow the network when it is reloaded.
+  //
+  // `useState` runs once. The parent reloads after a save and passes the new
+  // network down, but this component was already mounted — so it kept showing
+  // what had been typed before the save, and reopening the page showed
+  // something different again. Saved correctly, displayed from a stale copy.
+  //
+  // Keyed on the network id and the saved gateway, so switching networks or
+  // saving replaces the form, and typing in it does not.
+  const savedKey = JSON.stringify(network.gateway || null);
+  useEffect(() => { setGw(network.gateway || EMPTY); }, [network.id, savedKey]);
   const [preview, setPreview] = useState(null);
   const [probe, setProbe] = useState({ channel: '', stream: '', viewerIp: '' });
   const [busy, setBusy] = useState(false);
@@ -105,7 +118,18 @@ export default function GatewayPanel({ network, servers = [] }) {
         <>
           <label>{t('gw.node')}</label>
           <select value={gw.node || ''} disabled={!canManage}
-                  onChange={e => setGw({ ...gw, node: e.target.value || null })}>
+                  onChange={e => {
+                    const id = e.target.value || null;
+                    const picked = servers.find(x => x.id === id);
+                    // The domain the chosen machine was actually prepared
+                    // with, filled in rather than left for the operator to
+                    // retype from another page — and only when the field is
+                    // empty, since a value they entered is a decision.
+                    setGw({
+                      ...gw, node: id,
+                      domain: gw.domain || picked?.gateway?.domain || '',
+                    });
+                  }}>
             <option value="">{t('gw.pickNode')}</option>
             {proxies.length > 0 && (
               <optgroup label={t('gw.group.proxy')}>

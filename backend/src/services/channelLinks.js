@@ -37,6 +37,21 @@ export function channelLinks({ channel, network, edges, node = null }) {
     const ready = protocolReadiness(channel.protocol, e);
     return {
       edge: e.name, url: link.url, exposes: link.exposes,
+      // Every address this machine answers on, not just the first.
+      //
+      // One name was baked into the link, and when that name still pointed at
+      // an old address the operator had nothing to switch to — the machine was
+      // reachable by IP the whole time. The panel does not know which of a
+      // machine's addresses resolves correctly today; the operator does, so
+      // the choice belongs to them.
+      urls: (e.hosts && e.hosts.length > 1 ? e.hosts : [])
+        .map(h => ({
+          host: h,
+          url: viewerUrl({
+            mode: 'direct', edge: { ...e, publicHost: h }, channel: channel.application,
+            stream: channel.stream, protocol: channel.protocol,
+          }).url,
+        })),
       // An edge that cannot carry this packaging is named here rather than
       // handing out a link that plays the wrong thing. For LL-HLS the failure
       // is a silent fallback to ordinary HLS, which is worse than an error

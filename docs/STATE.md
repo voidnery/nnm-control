@@ -198,6 +198,12 @@ disk ran out instead of refusing. Each was reasonable when written and wrong
 about a subject that had changed. `test:retention` now checks the ceilings —
 including that a cap is a number that binds rather than a variable that exists.
 
+**An address comes from the operator.** The Host field on a server outranks
+anything synced from WMSPanel: WMSPanel'"'"'s domains are a fact about WMSPanel,
+and the Host field is a person saying where the machine is. Where a machine has
+several addresses, all of them are offered rather than one being chosen — the
+panel cannot know which name resolves correctly today.
+
 **Anything read from a machine is stamped.** A fact about TLS or delivery from
 last week is not a fact about now, and a green mark that stopped being true is
 worse than an empty one.

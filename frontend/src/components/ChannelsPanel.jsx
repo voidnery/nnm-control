@@ -57,6 +57,10 @@ function Copyable({ url, label, note, tone = '' }) {
 
 function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signing, signIp, setSignIp,
                onReplay, replay, replayAt, setReplayAt, replayPad, setReplayPad, busy }) {
+  // Which address the operator picked per edge, when a machine has more than
+  // one. Not persisted: it is a question about right now, and tomorrow the
+  // stale name may be the working one.
+  const [pickedHost, setPickedHost] = useState({});
   const { t } = useI18n();
   const c = row.channel;
   const l = row.links;
@@ -212,9 +216,23 @@ function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signi
               <div className="eyebrow">{t('ch.tests')}</div>
               <div className="hint">{t('ch.testsHint')}</div>
               {l.tests.map(x => (
-                <Copyable key={x.edge} url={x.url} label={x.edge}
+                <div key={x.edge}>
+                  {/* A choice of address when the machine has more than one.
+                      A single name was baked in, and when its DNS was stale
+                      there was nothing to switch to — though the machine
+                      answered on its address the whole time. */}
+                  {x.urls?.length > 1 && (
+                    <select className="mono" style={{ marginBottom: 4, maxWidth: 380 }}
+                            value={pickedHost[x.edge] || x.urls[0].host}
+                            onChange={e => setPickedHost({ ...pickedHost, [x.edge]: e.target.value })}>
+                      {x.urls.map(u => <option key={u.host} value={u.host}>{u.host}</option>)}
+                    </select>
+                  )}
+                  <Copyable url={x.urls?.find(u => u.host === (pickedHost[x.edge] || x.urls?.[0]?.host))?.url || x.url}
+                            label={x.edge}
                           tone={x.routed === false ? 'err' : x.healthy ? '' : 'warn'}
                           note={x.routed === false ? t('ch.noRoute') : x.healthy ? '' : t('ch.edgeDown')} />
+                </div>
               ))}
             </div>
           )}

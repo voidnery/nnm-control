@@ -469,7 +469,27 @@ async function edgesOf(network, servers, routes) {
     catch { channels = undefined; healthy = false; }
     out.push({
       name: s.name, host: s.host,
-      publicHost: s.playbackEndpoints?.[0]?.host || s.wmspanelDomains?.[0] || '',
+      // What the operator typed first, and only then what WMSPanel synced.
+      //
+      // The order was the other way round, so a domain pulled from WMSPanel
+      // outranked the Host field on the server. When two edges changed address
+      // and their DNS had not caught up, the panel kept handing viewers the
+      // stale name — and the Host field, which the operator had corrected, was
+      // never consulted.
+      //
+      // WMSPanel's domains are a fact about WMSPanel. The Host field is the
+      // operator saying where this machine is, and between the two the person
+      // wins.
+      publicHost: s.playbackEndpoints?.[0]?.host || s.host || s.wmspanelDomains?.[0] || '',
+      // Everything this machine can be reached by, so the operator can choose
+      // rather than being given one. Host first, since it is the answer they
+      // gave; duplicates dropped, since a name repeated in two places is still
+      // one address.
+      hosts: [...new Set([
+        s.host,
+        ...(s.playbackEndpoints || []).map(e => e.host),
+        ...(s.wmspanelDomains || []),
+      ].filter(Boolean))],
       httpPort: s.httpPort || 8081,
       weight: n.weight ?? 100, enabled: true, healthy,
       lat: s.geo?.lat ?? null, lon: s.geo?.lon ?? null,
