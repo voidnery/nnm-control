@@ -35,6 +35,17 @@ const pub = (s) => ({
   order: s.order ?? 0, httpPort: s.httpPort || 0,
   wmspanelDomains: Array.isArray(s.wmspanelDomains) ? s.wmspanelDomains : [],
   purpose: s.purpose || 'nimble',
+  // Whether an agent is configured, which the delivery page filters on. It was
+  // absent from this list entirely, so the filter `s.agent?.enabled` matched
+  // nothing on every machine and the gateway dropdown was empty no matter what
+  // had been prepared — a field nobody sends is indistinguishable from a fleet
+  // with no agents.
+  hasAgent: Boolean(s.agent?.enabled),
+  agent: s.agent?.enabled ? {
+    enabled: true,
+    version: s.agent.version || 0,
+    lastContactAt: s.agent.lastContactAt || null,
+  } : null,
   // Whether the privileged helper is on this machine, from the agent's own
   // health rather than from anything the panel remembers: the helper can be
   // removed with one systemctl command, and a panel that reports it from its

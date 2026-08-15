@@ -1,5 +1,29 @@
 # Changelog
 
+### v0.99.24 — the machine list was empty on every fleet
+"Choose a server with an agent" offered nothing, on a fleet with seven agents
+and a gateway prepared and proved that morning.
+
+The dropdown filters on `s.agent?.enabled`. **`/servers` never sent `agent` at
+all** — not `enabled`, not `hasAgent`, nothing. So it was empty everywhere and
+always had been: a field nobody sends is indistinguishable from a fleet with no
+agents, and the screen had no way to tell them apart either.
+
+A check now binds the two files together, reading every `s.<field>` the panel
+touches and requiring the response builder to send it. Its own first version
+searched the whole file and reported `name` as missing while it was plainly
+there — a check finding a fault in correct code, which is how checks get
+switched off.
+
+**And the two kinds of machine are now named and listed apart.** A machine that
+carries delivery without Nimble is an **edge-proxy**: it terminates TLS on one
+name and hands viewers on. A Nimble edge serves video from those same ports and
+is a different thing. They appear under separate headings wherever a machine is
+chosen, because one list invites putting a gateway on a media server without
+noticing — and an edge-proxy shows the domain it already serves.
+
+An empty list now says why it is empty.
+
 ### v0.99.23 — a halted run left a configuration the next run tripped over
 `reload-for-acme` failed with "Job for nginx.service failed", and the config it
 choked on was not one this run had written. The previous run halted at

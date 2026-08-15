@@ -36,7 +36,20 @@ export default function GatewayPanel({ network, servers = [] }) {
   const [watch, setWatch] = useState(null);
   const [playing, setPlaying] = useState('');
 
-  const agents = servers.filter(s => s.agent?.enabled || s.hasAgent);
+  // Machines that can carry a gateway, and only those.
+  //
+  // The filter was right and the list was empty on every fleet, because
+  // /servers never sent `agent` at all — a field nobody sends looks exactly
+  // like a fleet with no agents.
+  //
+  // Split by purpose, because they are different machines doing different
+  // jobs: an edge-proxy has no Nimble and exists to hand viewers on, while a
+  // Nimble box can host the gateway but is also serving video from the same
+  // ports. Offering them as one list invites putting a gateway on a media
+  // server without noticing.
+  const withAgent = servers.filter(s => s.agent?.enabled || s.hasAgent);
+  const proxies = withAgent.filter(s => (s.purpose || 'nimble') === 'gateway');
+  const nimbles = withAgent.filter(s => (s.purpose || 'nimble') !== 'gateway');
 
   const save = async () => {
     setBusy(true);
@@ -94,8 +107,25 @@ export default function GatewayPanel({ network, servers = [] }) {
           <select value={gw.node || ''} disabled={!canManage}
                   onChange={e => setGw({ ...gw, node: e.target.value || null })}>
             <option value="">{t('gw.pickNode')}</option>
-            {agents.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {proxies.length > 0 && (
+              <optgroup label={t('gw.group.proxy')}>
+                {proxies.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}{s.gateway?.state === 'applied' ? ` — ${s.gateway.domain}` : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {nimbles.length > 0 && (
+              <optgroup label={t('gw.group.nimble')}>
+                {nimbles.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </optgroup>
+            )}
           </select>
+          {/* Said when the list is empty, because an empty dropdown is a
+              question without an answer — and it was empty on every fleet for
+              a while, which nothing on the screen explained. */}
+          {!withAgent.length && <div className="error-box">{t('gw.noNodes')}</div>}
           <div className="hint" >{t('gw.nodeHint')}</div>
 
           <label>{t('gw.domain')}</label>

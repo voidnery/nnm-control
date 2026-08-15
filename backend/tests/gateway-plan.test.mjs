@@ -657,5 +657,53 @@ check('an unreachable helper does not block the apply', () => {
     'a missing precheck result blocks the certificate');
 });
 
+console.log('\nTHE MACHINE LIST IS NOT EMPTY ON EVERY FLEET:');
+
+const gwPanel = readFileSync(new URL('../../frontend/src/components/GatewayPanel.jsx', import.meta.url), 'utf8');
+
+check('the servers list says whether a machine has an agent', () => {
+  // The dropdown filtered on `s.agent?.enabled`, which /servers never sent —
+  // so it was empty on every fleet, including one with a gateway prepared and
+  // proved that morning. A field nobody sends is indistinguishable from a
+  // fleet with no agents.
+  assert.ok(/hasAgent: Boolean\(s\.agent\?\.enabled\)/.test(routes), 'the list omits hasAgent');
+  assert.ok(/agent: s\.agent\?\.enabled \? \{/.test(routes), 'the list omits the agent itself');
+});
+
+check('every field the delivery page filters on is actually sent', () => {
+  // Bound to the consumer rather than to a literal: the filter and the
+  // response are in different files and were wrong together for weeks.
+  const filters = [...gwPanel.matchAll(/s\.(\w+)\?\.\w+|s\.(\w+)\b/g)]
+    .map(m => m[1] || m[2])
+    .filter(n => ['agent', 'hasAgent', 'purpose', 'gateway', 'id', 'name'].includes(n));
+  for (const field of new Set(filters)) {
+    // Searched inside the response builder, not the whole file, and allowing
+    // the leading whitespace the object literal actually has. Matching
+    // `^\\s*name:` against the file found `name` in a dozen unrelated places
+    // and missed it in the one that mattered — a check reporting a fault in
+    // correct code, which is how checks get switched off.
+    const i = routes.indexOf('const pub = (s) => ({');
+    const body = routes.slice(i, routes.indexOf('\n});', i));
+    assert.ok(new RegExp(`(^|\\s)${field}:`).test(body),
+      `GatewayPanel reads s.${field} and /servers does not send it`);
+  }
+});
+
+check('edge-proxy machines are listed apart from media servers', () => {
+  // Different machines doing different jobs: an edge-proxy has no Nimble and
+  // exists to hand viewers on, while a Nimble box can host a gateway and is
+  // also serving video from the same ports. One list invites putting a gateway
+  // on a media server without noticing.
+  assert.ok(/=== 'gateway'\)/.test(gwPanel), 'the list is not split by purpose');
+  assert.ok(/optgroup/.test(gwPanel), 'the split is not visible');
+  assert.equal((dict2.match(/'gw\.group\.proxy':/g) || []).length, 2);
+});
+
+check('an empty list explains itself', () => {
+  // It was empty on every fleet and nothing on the screen said why.
+  assert.ok(/!withAgent\.length/.test(gwPanel), 'an empty dropdown is left unexplained');
+  assert.equal((dict2.match(/'gw\.noNodes':/g) || []).length, 2);
+});
+
 console.log(failures ? `\n${failures} gateway-plan check(s) failed` : '\nall gateway-plan checks passed');
 process.exit(failures ? 1 : 0);

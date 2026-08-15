@@ -134,8 +134,18 @@ extra ceremony.
 - **TLS on the edges** — verified absent on RU-2 by handshake. LL-HLS is
   impossible until it exists. A gateway now gets TLS as part of preparation;
   an edge does not, because an edge already runs something on those ports.
-- **A machine to run a gateway on.** The panel can now prepare one end to end
-  (iter23 m3); there is no VM yet to prepare.
+- **A gateway, prepared end to end and proved.** `cdn-test-5` (89.125.121.218)
+  was taken from a bare Ubuntu 24.04 to a working TLS gateway for
+  `cdn-test-1.bbesport.com` by the panel: nginx and certbot installed, a
+  certificate issued through the challenge, the configuration written, tested
+  and reloaded — thirteen steps, then a TLS handshake from the panel that
+  reported h2 negotiated. The last line is the one that matters: success is
+  read from being a client, not from thirteen exit codes.
+- **Naming.** A machine that carries delivery without Nimble is an
+  **edge-proxy**: it terminates TLS on one name and hands viewers on, and it is
+  a different thing from a Nimble edge, which serves video from those same
+  ports. The two are listed apart wherever a machine is chosen, because one
+  list invites putting a gateway on a media server without noticing.
 - **LL-HLS on the edges** — the same envelope applied to `nimble.conf` is not
   written yet. TLS on an edge is what it waits for.
 - **Agent fleet** — several edges have no agent, so they are read by direct
