@@ -130,5 +130,56 @@ check('a failed inside check does not fail the outside one', () => {
     'an agent error throws out of the whole probe');
 });
 
+console.log('\nTHE RECONNAISSANCE SCRIPT ONLY LOOKS:');
+
+const reconRaw = readFileSync(new URL('../tools/wms-recon.mjs', import.meta.url), 'utf8');
+// Code, not prose. A comment explaining why `.lean()` is wrong is not a call
+// to it — and flagging one is how a check starts firing on the documentation
+// written to prevent the fault. Third time this exact distinction has been
+// needed.
+const recon = reconRaw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+check('it cannot write, by having no way to', () => {
+  // A script that probes an API by permutation is a script that eventually
+  // POSTs something. This one asks a named list of paths, and there is no
+  // code path that sends a method or a body at all.
+  for (const verb of ['POST', 'PUT', 'DELETE', 'PATCH']) {
+    assert.ok(!new RegExp(`'${verb}'`).test(recon), `the script can send ${verb}`);
+  }
+  assert.ok(!/body:/.test(recon), 'the script can send a body');
+});
+
+check('the paths it asks about are named, not generated', () => {
+  const list = /const PROBES = \[([\s\S]*?)\n\];/.exec(recon);
+  assert.ok(list, 'the probe list is not a literal');
+  assert.ok(!/for \(|map\(|\.\.\./.test(list[1]), 'the paths are built rather than written down');
+});
+
+check('it reads credentials through the models, which decrypt', () => {
+  // `apiKey` is stored encrypted with the decryption on the schema getter.
+  // Read through the driver, or through `.lean()`, it comes back as
+  // ciphertext — every request returns 403 and the output reads as "the API
+  // refuses us" when nothing had been asked properly.
+  assert.ok(/from '\.\.\/src\/models\/Settings\.js'/.test(recon), 'it reads settings some other way');
+  assert.ok(!/\.lean\(\)/.test(recon), 'a lean() read would skip the getters');
+  const model = readFileSync(new URL('../src/models/Settings.js', import.meta.url), 'utf8');
+  assert.ok(/apiKey:[^\n]*get: decryptField/.test(model),
+    'the key is no longer decrypted by a getter — this reasoning needs rechecking');
+});
+
+check('it carries a control probe, so a blanket failure is legible', () => {
+  // If the server itself cannot be read, the credentials or the IP allow-list
+  // are the problem and nothing else in the output means anything.
+  assert.ok(/a control probe/.test(recon), 'a total failure would look like a missing feature');
+});
+
+check('it lives where its dependencies resolve', () => {
+  // Under backend/, because mongoose and the panel's models are in
+  // backend/node_modules and backend/src — from the repository root neither
+  // resolves, and the script died on its import before reaching anything.
+  const here = new URL('../tools/wms-recon.mjs', import.meta.url).pathname;
+  assert.ok(here.includes('/backend/tools/'), `the script sits at ${here}`);
+});
+
 console.log(failures ? `\n${failures} inside/outside check(s) failed` : '\nall inside/outside checks passed');
 process.exit(failures ? 1 : 0);

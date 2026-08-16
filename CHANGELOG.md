@@ -1,5 +1,29 @@
 # Changelog
 
+### v1.10.2 — a reconnaissance script that can only look
+`backend/tools/wms-recon.mjs` asks WMSPanel what it exposes about transmuxing
+settings — where the LL-HLS toggle lives — and reports the status of each path
+tried, including the ones that failed. `404` and `403` are different answers,
+and only one means the feature is out of reach.
+
+It cannot write, and not by intention: there is no code path that sends a
+method or a body, and the paths are a written-down list rather than generated,
+because a script that probes an API by permutation is one that eventually POSTs
+something.
+
+Two things it got wrong first, both caught here rather than on a live panel:
+
+- **It read the credentials through the driver.** `apiKey` is stored encrypted
+  with the decryption on the schema getter, so a raw read — or a `.lean()` one
+  — returns ciphertext. Every request would have come back 403 and the output
+  would have read as "the API refuses us" when nothing had been asked properly.
+- **It sat in the wrong directory.** `mongoose` and the panel's models live
+  under `backend/`, so from the repository root the script died on its imports.
+
+It carries a control probe for the server itself: if that fails too, the
+credentials or the IP allow-list are the problem and nothing else in the output
+means anything.
+
 ### v1.10.1 — asking WMSPanel what it will let us do
 LL-HLS is two halves. The `nimble.conf` half — a certificate and
 `ssl_http2_enabled` — is a file on the machine, and the panel can write it. The
