@@ -1,5 +1,23 @@
 # Changelog
 
+### v1.10.3 — the recon script takes its credentials on the command line
+The previous version read them out of the panel's database. That needs
+mongoose, the panel's models and a reachable Mongo — three things that are only
+together inside the container, which is not where anybody runs a one-off
+script. It would have failed on its first import.
+
+It now takes `client_id` and `api_key` as arguments, imports nothing, and runs
+wherever Node is:
+
+    node wms-recon.mjs <client_id> <api_key> [server_id ...]
+
+With no server ids it lists the servers and asks about all of them. `WMS_BASE`
+switches to the `.ru` mirror. Run without arguments it prints how to use it,
+because a script whose first output is a stack trace is one nobody runs twice.
+
+Still read-only by construction: no code path sends a method or a body, and the
+paths are a written-down list rather than generated.
+
 ### v1.10.2 — a reconnaissance script that can only look
 `backend/tools/wms-recon.mjs` asks WMSPanel what it exposes about transmuxing
 settings — where the LL-HLS toggle lives — and reports the status of each path

@@ -155,16 +155,21 @@ check('the paths it asks about are named, not generated', () => {
   assert.ok(!/for \(|map\(|\.\.\./.test(list[1]), 'the paths are built rather than written down');
 });
 
-check('it reads credentials through the models, which decrypt', () => {
-  // `apiKey` is stored encrypted with the decryption on the schema getter.
-  // Read through the driver, or through `.lean()`, it comes back as
-  // ciphertext — every request returns 403 and the output reads as "the API
-  // refuses us" when nothing had been asked properly.
-  assert.ok(/from '\.\.\/src\/models\/Settings\.js'/.test(recon), 'it reads settings some other way');
-  assert.ok(!/\.lean\(\)/.test(recon), 'a lean() read would skip the getters');
-  const model = readFileSync(new URL('../src/models/Settings.js', import.meta.url), 'utf8');
-  assert.ok(/apiKey:[^\n]*get: decryptField/.test(model),
-    'the key is no longer decrypted by a getter — this reasoning needs rechecking');
+check('it takes credentials as arguments and depends on nothing', () => {
+  // The first version read them out of the panel's database. That needs
+  // mongoose, the panel's models and a reachable Mongo — three things only
+  // together inside the container, which is not where somebody runs a one-off
+  // script. It also read them past the schema getters, so the encrypted key
+  // would have arrived as ciphertext and every request would have come back
+  // 403, reading as "the API refuses us" when nothing had been asked properly.
+  assert.ok(/process\.argv/.test(recon), 'the credentials do not come from the command line');
+  assert.ok(!/^import /m.test(recon), 'the script imports something, so it only runs where that resolves');
+  assert.ok(!/mongoose|models\//.test(recon), 'it still reaches into the panel');
+});
+
+check('it says how to run it when run wrong', () => {
+  // A script whose first output is a stack trace is one nobody runs twice.
+  assert.ok(/usage: node wms-recon\.mjs/.test(recon));
 });
 
 check('it carries a control probe, so a blanket failure is legible', () => {
