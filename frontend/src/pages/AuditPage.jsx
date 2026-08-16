@@ -16,6 +16,7 @@ export default function AuditPage() {
   const [busy, setBusy] = useState(false);
   const [sweep, setSweep] = useState(null);
   const [swept, setSwept] = useState(null);
+  const [sweepError, setSweepError] = useState('');
   const { can } = useAuth();
 
   // What a sweep would remove, asked before it is offered.
@@ -24,8 +25,14 @@ export default function AuditPage() {
   // 50 GB on the disk the panel runs on, which it twice filled. The source is
   // closed; the history is not, and the TTL takes thirty days to reach it.
   const loadSweep = async () => {
-    try { setSweep(await api('/audit/sweepable')); }
-    catch { setSweep(null); }
+    try { setSweep(await api('/audit/sweepable')); setSweepError(''); }
+    catch (e) {
+      // Said, not swallowed. The first version caught this and set null, so a
+      // server-side exception showed up as "no button" — indistinguishable
+      // from "nothing to sweep", and it took a code read to tell them apart.
+      setSweep(null);
+      setSweepError(e.data?.error || e.message);
+    }
   };
 
   const doSweep = async () => {
@@ -86,6 +93,9 @@ export default function AuditPage() {
             {busy ? '…' : t('aud.sweepDo', { n: sweep.machine.toLocaleString('ru') })}
           </button>
         </div>
+      )}
+      {can('audit.manage') && sweepError && (
+        <div className="error-box">{t('aud.sweepUnavailable')}<div className="mono hint">{sweepError}</div></div>
       )}
       {swept && (
         <div className="hint" style={{ color: 'var(--ok, #5ad18f)' }}>

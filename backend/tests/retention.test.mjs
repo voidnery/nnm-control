@@ -15,7 +15,9 @@
 // None was a bug. Each was a limit expressed in the wrong unit, or against a
 // subject that changed. These checks are about the ceilings, not the numbers.
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // A named import: this build of js-yaml has no default export, and the
@@ -201,6 +203,52 @@ check('it compacts, because deleting rows returns no disk', () => {
   // broken, and the operator came here because the disk was full.
   assert.ok(/compact:/.test(auditRoutes), 'nothing reclaims the space');
   assert.ok(/aud\.sweepCompact/.test(auditPage), 'the lock it takes is not mentioned');
+});
+
+check('nothing calls a driver method this Mongoose no longer has', () => {
+  // `collection.stats()` was removed from the driver Mongoose 8 carries. The
+  // call threw at runtime, the panel's catch swallowed it, and the button was
+  // simply absent — indistinguishable from "nothing to sweep". Checked against
+  // the installed driver rather than against a list of names, so this stays
+  // true across upgrades.
+  const mongoose = require('mongoose');
+  const coll = mongoose.connection.collection('probe');
+  const REMOVED = ['stats', 'count', 'ensureIndex', 'group', 'mapReduce'];
+  const gone = REMOVED.filter(m => typeof coll[m] !== 'function');
+  assert.ok(gone.length, 'nothing is actually removed in this driver — this check has lost its subject');
+
+  const files = [];
+  (function walk(dir) {
+    for (const e of readdirSync(dir)) {
+      const p2 = path.join(dir, e);
+      if (statSync(p2).isDirectory()) walk(p2);
+      else if (e.endsWith('.js')) files.push(p2);
+    }
+  })(path.join(ROOT, 'backend/src'));
+
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
+    for (const m of gone) {
+      const re = new RegExp(`\\.collection\\.${m}\\(`);
+      assert.ok(!re.test(src),
+        `${path.relative(ROOT, file)} calls collection.${m}(), which this driver does not provide`);
+    }
+  }
+});
+
+check('a count that cannot be read leaves a working page', () => {
+  // A number the panel could not fetch is worth a null; an exception is worth
+  // neither, and this one hid the whole feature.
+  assert.ok(/async function collectionSize\(\)/.test(auditRoutes), 'the size read is not isolated');
+  assert.ok(/return null;/.test(auditRoutes), 'a failed size read takes the request with it');
+  // In the catch, not merely somewhere in the file: declaring the state and
+  // never setting it on failure leaves the button absent and silent, and a
+  // check that greps passes on exactly that.
+  const catchBlock = auditPage.slice(auditPage.indexOf("api('/audit/sweepable')"),
+                                     auditPage.indexOf('const doSweep'));
+  assert.ok(/catch \(e\)[\s\S]*setSweepError\(/.test(catchBlock),
+    'the panel still hides a failure as an absent button');
+  assert.ok(/sweepError &&/.test(auditPage), 'the message is stored and never shown');
 });
 
 console.log(failures ? `\n${failures} retention check(s) failed` : '\nall retention checks passed');

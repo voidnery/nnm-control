@@ -24,13 +24,28 @@ auditRouter.get('/', async (req, res) => {
 // Counted rather than estimated, and shown before the button does anything:
 // deleting millions of rows from a log people rely on is not something to
 // discover the size of afterwards.
+// How much disk the collection occupies.
+//
+// `collection.stats()` was removed from the driver that Mongoose 8 carries, so
+// the call threw — and the panel's `catch` swallowed it, leaving the button
+// absent with nothing said. A number that cannot be read is worth a null and a
+// working page; an exception is worth neither.
+async function collectionSize() {
+  try {
+    const out = await AuditLog.db.command({ collStats: AuditLog.collection.collectionName });
+    return Math.round((out?.storageSize || 0) / 1048576);
+  } catch {
+    return null;
+  }
+}
+
 auditRouter.get('/sweepable', requireAuth, requirePerm('audit.view'), async (req, res) => {
   const filter = machineTrafficFilter();
   const [machine, total] = await Promise.all([
     AuditLog.countDocuments(filter),
     AuditLog.estimatedDocumentCount(),
   ]);
-  const stats = await AuditLog.collection.stats().catch(() => null);
+  const stats = await collectionSize();
   res.json({
     machine,
     total,
@@ -38,7 +53,7 @@ auditRouter.get('/sweepable', requireAuth, requirePerm('audit.view'), async (req
     keeping: Math.max(0, total - machine),
     // Bytes are what the operator is actually short of. Storage size rather
     // than data size, since that is the file on the disk.
-    storageMb: stats ? Math.round(stats.storageSize / 1048576) : null,
+    storageMb: stats,
     // Removing rows does not shrink a WiredTiger file. Said here rather than
     // discovered after a sweep that appears to free nothing.
     needsCompact: true,
@@ -82,12 +97,12 @@ auditRouter.post('/sweep', requireAuth, requirePerm('audit.manage'), async (req,
                detail: { error: String(e?.message || e).slice(0, 200) } });
   }
 
-  const stats = await AuditLog.collection.stats().catch(() => null);
+  const stats = await collectionSize();
   logEvent({ req, action: 'audit:sweep', outcome: 'ok', status: 200,
              detail: { removed: r.deletedCount, compacted } });
   res.json({
     removed: r.deletedCount,
     compacted,
-    storageMb: stats ? Math.round(stats.storageSize / 1048576) : null,
+    storageMb: stats,
   });
 });

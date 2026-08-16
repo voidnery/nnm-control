@@ -1,5 +1,25 @@
 # Changelog
 
+### v1.9.6 — the sweep button was absent, and said nothing about why
+`collection.stats()` was removed from the driver Mongoose 8 carries. The count
+endpoint called it, threw, and the panel's `catch` turned that into
+`setSweep(null)` — so the button simply was not there, indistinguishable from
+"nothing to sweep". Finding out took reading the code.
+
+Two fixes, and the second matters more:
+
+- the size comes from a `collStats` command, isolated so that a number the
+  panel cannot read is a null rather than a failed request;
+- **the failure is shown.** Catching an error and rendering nothing is how a
+  feature disappears without a trace, and it is the same conflation this
+  project keeps refusing everywhere else.
+
+A check now walks the backend and refuses any `collection.<method>()` the
+installed driver does not actually provide — tested against the driver rather
+than a list of names, so it stays true across upgrades. It first confirms those
+methods really are gone, since a check whose subject no longer exists passes by
+being empty.
+
 ### v1.9.5 — sweeping the audit log from the panel
 Machine polling was audited until v0.99.20 and left 8.6 million rows behind —
 50 GB on the disk the panel runs on, which it twice filled. The source is
