@@ -1,5 +1,31 @@
 # Changelog
 
+### v1.10.4 — an inventory, because a partial probe produced a confident wrong answer
+`docs/STATE.md` recorded that DVR could not be managed through the WMSPanel
+API. It can. The probe behind that note sent `GET` and `DELETE`, found no
+`POST`, and "we did not find a write method" was written down as "there is no
+write method" — repeated for weeks and used to decide what to build. `geo`,
+`asn` and the transmuxing settings were recorded the same way and are now
+marked suspect.
+
+`backend/tools/wms-dump.mjs` asks every route family about every method and
+writes a table to `docs/wmspanel-api.md`, which is from now on **the** answer
+to what that API allows. The distinction it exists to make: `404` means no such
+route, `405` or `400` means the route is there and the request was wrong — and
+a probe sending one method cannot tell them apart.
+
+Write probing is off unless `--probe-writes` is typed, and even then the body
+is an empty object so the API rejects it: a `400` proves the method is accepted
+and creates nothing.
+
+**And the port question is settled.** Softvelum's own LL-HLS article uses
+`https://localhost:8443/` and their parameter reference shows `ssl_port` taking
+a list, so Nimble's TLS port is free. The 443 in `nimble.conf` is Nimble's
+*outbound* connection to WMSPanel, which binds no local port. No reverse proxy
+is needed — and one would be actively worse, since it would have to pass
+HTTP/2 through without downgrading, and a downgrade is exactly what LL-HLS
+shows as a silent fallback to ordinary HLS.
+
 ### v1.10.3 — the recon script takes its credentials on the command line
 The previous version read them out of the panel's database. That needs
 mongoose, the panel's models and a reachable Mongo — three things that are only
