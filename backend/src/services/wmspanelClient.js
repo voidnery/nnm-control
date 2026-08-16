@@ -123,6 +123,26 @@ export const wmspanel = {
   republishUpdate:  (cfg, sid, ruleId, patch) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'PUT', body: patch }),
   republishDelete:  (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}`, { method: 'DELETE' }),
   republishRestart: (cfg, sid, ruleId) => call(cfg, `/server/${sid}/rtmp/republish/${ruleId}/restart`),
+  // Transmuxing settings — where LL-HLS actually lives.
+  //
+  // The nimble.conf half of LL-HLS (a certificate and ssl_http2_enabled) is a
+  // file on the machine and the panel can write it. The other half — the
+  // container, the "Enable Apple's Low Latency HLS" checkbox and the part
+  // duration — is a WMSPanel setting, and whether that family accepts writes
+  // is not something to assume: `geo`, `asn` and `dvr_streams` are all
+  // read-only here, each discovered the hard way.
+  //
+  // Read-only for now, deliberately. The shape of what comes back decides
+  // whether the panel can offer to enable LL-HLS at all or must say plainly
+  // that this part is done in WMSPanel — and a guess in either direction would
+  // be a button that lies.
+  //
+  // Two paths because the documentation names the feature "Live streams
+  // settings" while the API reference is not explicit about its route; both
+  // are tried and whichever answers is reported, along with what did not.
+  transmuxSettings: (cfg, sid) => call(cfg, `/server/${encodeURIComponent(sid)}/transmuxer/settings`),
+  hlsSettings: (cfg, sid) => call(cfg, `/server/${encodeURIComponent(sid)}/hls/settings`),
+
   // Streams helpers (for source pickers). Streams API needs Deep stats
   // enabled on the account; callers must handle failure and fall back.
   dataSlices: (cfg) => call(cfg, '/data_slices'),

@@ -215,3 +215,62 @@ r.put('/transcoders/:objId/pipeline/:kind(video|audio)/:pid/:io(input|filter|out
   proxy(async rq => wmspanel.pipelineIoUpdate(await cfg(), rq.params.objId, rq.params.kind, rq.params.pid, rq.params.io, rq.params.ioId, rq.body || {})));
 r.delete('/transcoders/:objId/pipeline/:kind(video|audio)/:pid/:io(input|filter|output)/:ioId', requirePerm('wmsobjects.manage'),
   proxy(async rq => wmspanel.pipelineIoDelete(await cfg(), rq.params.objId, rq.params.kind, rq.params.pid, rq.params.io, rq.params.ioId)));
+
+
+// Reconnaissance: what does WMSPanel actually expose about transmuxing?
+//
+// LL-HLS is two halves. The nimble.conf half — a certificate and
+// `ssl_http2_enabled` — is a file on the machine, and the panel can write it.
+// The other half is a WMSPanel setting: container, the Low Latency checkbox,
+// part duration.
+//
+// Whether that family accepts writes is unknown, and three families here are
+// already read-only: `geo`, `asn`, `dvr_streams`. Each was discovered by
+// trying, after a UI had been built that assumed otherwise. So this asks
+// first, changes nothing, and reports what answered alongside what did not —
+// including the failures, because "no such route" and "forbidden" are
+// different answers and only one of them means the feature is unreachable.
+r.get('/server/:id/transmux-settings', requirePerm('wmsobjects.view'), loadMapped, async (req, res) => {
+  // The same access every other handler here uses. An earlier version of this
+  // invented two field names that loadMapped does not set — it sets
+  // req.mapped, and the credentials come from cfg(). Both would have been
+  // undefined at the first live call and perfect until then.
+  const conf = await cfg();
+  const sid = req.mapped.wmspanelServerId;
+
+  const attempt = async (name, fn) => {
+    const started = Date.now();
+    try {
+      const data = await fn();
+      return { name, ok: true, ms: Date.now() - started, data };
+    } catch (e) {
+      return {
+        name, ok: false, ms: Date.now() - started,
+        // The status matters more than the message: 404 means the route is not
+        // there, 403 means it is and we may not have it, and the two lead
+        // different places.
+        status: e?.status ?? null,
+        error: String(e?.message || e).slice(0, 300),
+      };
+    }
+  };
+
+  const tried = [
+    await attempt('transmuxer/settings', () => wmspanel.transmuxSettings(conf, sid)),
+    await attempt('hls/settings', () => wmspanel.hlsSettings(conf, sid)),
+  ];
+
+  res.json({
+    server: req.mapped?.name || null,
+    wmsServerId: sid,
+    tried,
+    // Named rather than left to be read off the list: the answer to "can the
+    // panel do this" is the point of the whole request.
+    answered: tried.filter(t => t.ok).map(t => t.name),
+    // What a caller should conclude, stated once so two readers do not reach
+    // two conclusions.
+    verdict: tried.some(t => t.ok)
+      ? 'a settings family answered — the shape of its data decides what the panel can offer'
+      : 'nothing answered; on these statuses LL-HLS may have to be enabled in WMSPanel by hand',
+  });
+});

@@ -266,6 +266,49 @@ for (const file of CARRIES_SHELL) {
 }
 if (!bad) ok('no backticks in comments inside the shell-bearing modules');
 
+// Fields read off the request that nothing puts there.
+//
+// A handler reading `req.wmsCfg` when the middleware sets `req.mapped` is
+// undefined at the first live call and syntactically perfect until then — I
+// invented two such names in one handler, and no existing check looked at
+// them. Collected per file, since middleware is local to a router.
+// Across the whole backend, not per file: middleware lives in its own module,
+// so `req.perms` is set in middleware/auth.js and read in two routers. Scoped
+// per file, this reported both as faults — a check firing on correct code,
+// which is how checks get switched off.
+const allSources = [];
+(function walkAll(dir) {
+  for (const e of readdirSync(dir)) {
+    const p2 = path.join(dir, e);
+    if (statSync(p2).isDirectory()) walkAll(p2);
+    else if (e.endsWith('.js')) allSources.push(p2);
+  }
+})(BACKEND);
+
+const assigned = new Set();
+for (const f of allSources) {
+  for (const m of readFileSync(f, 'utf8').matchAll(/req\.(\w+)\s*=[^=]/g)) assigned.add(m[1]);
+}
+
+// Express's own surface. `header` and `get` are methods, not fields somebody
+// forgot to set.
+const EXPRESS = new Set(['body', 'query', 'params', 'headers', 'header', 'get', 'ip', 'ips',
+  'method', 'path', 'baseUrl', 'originalUrl', 'protocol', 'secure', 'cookies', 'hostname',
+  'host', 'url', 'socket', 'session', 'signedCookies', 'route', 'accepts', 'is', 'xhr',
+  'subdomains', 'fresh', 'stale', 'app', 'res', 'next', 'aborted', 'complete', 'on']);
+
+for (const file of files) {
+  const src = readFileSync(file, 'utf8')
+    .replace(/\/\/.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of src.matchAll(/req\.(\w+)/g)) {
+    const name = m[1];
+    if (EXPRESS.has(name) || assigned.has(name)) continue;
+    fail(`${path.relative(BACKEND, file)} reads req.${name}, which nothing in the backend sets`);
+  }
+}
+if (!bad) ok('every request field a handler reads is one something sets');
+
 console.log(bad
   ? `\n${bad} routing problem(s) — a 404 the moment somebody presses the button`
   : 'route reachability audit: OK');

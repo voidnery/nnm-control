@@ -1,5 +1,35 @@
 # Changelog
 
+### v1.10.1 — asking WMSPanel what it will let us do
+LL-HLS is two halves. The `nimble.conf` half — a certificate and
+`ssl_http2_enabled` — is a file on the machine, and the panel can write it. The
+other half is a WMSPanel setting: the container, the Low Latency checkbox, the
+part duration.
+
+Whether that family accepts writes is unknown, and three families here are
+already read-only: `geo`, `asn`, `dvr_streams`. Each was found by trying, after
+something had been built assuming otherwise. So this release asks and changes
+nothing: a read-only route tries both plausible paths and reports what
+answered **alongside what did not**, with status codes — "no such route" and
+"forbidden" are different answers and only one means the feature is out of
+reach.
+
+Nothing about LL-HLS is implemented yet, deliberately. The shape of what comes
+back decides whether the panel can offer to enable it or must say plainly that
+this part is done in WMSPanel, and a guess either way would be a button that
+lies.
+
+**And a new check, earned during this change.** My first version of the handler
+read `req.wmsCfg` and `req.wmsServerId` — two field names I invented, which
+`loadMapped` does not set. Syntactically perfect, undefined at the first live
+call. `audit:routes` now refuses any `req.<field>` that nothing in the backend
+assigns.
+
+Its own first version was scoped per file and reported `req.perms` in two
+routers as faults — it is set in middleware, in a third file. A check that
+fires on correct code gets switched off, so it now collects assignments across
+the whole backend and knows Express's own surface.
+
 ### v1.10.0 — asking the edge as well as asking about it
 The agents were there all along. A note in `docs/STATE.md` said several edges
 had none, it stopped being true without the line changing, and I repeated it as
