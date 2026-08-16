@@ -182,11 +182,48 @@ check('the operator confirms the number they were shown', () => {
   // the first version of this did, twice in the same block.
   assert.ok(/if \(!Number\.isFinite\(expected\)\)/.test(auditRoutes),
     'a sweep runs without confirmation');
-  assert.ok(/if \(Math\.abs\(actual - expected\) >/.test(auditRoutes),
-    'a count that changed since the operator looked is deleted anyway');
+  // Against the estimate, since counting every document is what made this time
+  // out. The confirmation's job is that the operator agreed to a number of the
+  // right magnitude — not that it matched to the row.
+  assert.ok(/if \(expected > actual \* 1\.5 \+ 1000\)/.test(auditRoutes),
+    'a figure that moved by an order of magnitude is swept anyway');
   assert.ok(/confirm-count-required/.test(auditRoutes) && /count-changed/.test(auditRoutes),
     'the refusals have no codes of their own');
   assert.ok(/expect: sweep\.machine/.test(auditPage), 'the panel does not send back what it showed');
+});
+
+check('counting does not walk eight million documents', () => {
+  // `countDocuments` with a regular expression scans the collection — minutes
+  // of work, and whatever proxies the panel gives up long before that. The
+  // page showed HTTP 504 where a number belonged, which is the same shape as
+  // the gateway apply that had to become a job.
+  assert.ok(!/countDocuments\(filter\)/.test(auditRoutes),
+    'the sweep still counts every matching document');
+  assert.ok(/estimatedDocumentCount\(\)/.test(auditRoutes), 'nothing reads the cheap total');
+  assert.ok(/\.limit\(SAMPLE\)/.test(auditRoutes), 'the machine share is not sampled');
+});
+
+check('the sweep itself is a job, not a held-open request', () => {
+  // Deleting millions of rows and compacting the file takes minutes. Counting
+  // them already timed out that way; doing the work in a request would time
+  // out too, with the difference that it would carry on underneath and the
+  // operator would not know.
+  assert.ok(/res\.status\(202\)\.json\(\{ jobId/.test(auditRoutes), 'the sweep blocks until it finishes');
+  assert.ok(/sweep\/jobs\/:jobId/.test(auditRoutes), 'there is nothing to poll');
+  assert.ok(/sweep\/jobs\/\$\{started\.jobId\}/.test(auditPage), 'the page does not poll');
+});
+
+check('it says what it is doing while it does it', () => {
+  // Compaction holds a lock for minutes, and a page that looks frozen is one
+  // somebody reloads — during a delete.
+  assert.ok(/compacting the collection/.test(auditRoutes), 'the lock is not announced');
+  assert.ok(/setSweptLog/.test(auditPage), 'its output is not shown');
+});
+
+check('an estimate is labelled as one', () => {
+  // A number shown to somebody about to delete millions of rows should not
+  // pretend to a precision it does not have.
+  assert.ok(/estimated: true/.test(auditRoutes));
 });
 
 check('sweeping is its own permission', () => {

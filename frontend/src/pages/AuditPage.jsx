@@ -17,6 +17,7 @@ export default function AuditPage() {
   const [sweep, setSweep] = useState(null);
   const [swept, setSwept] = useState(null);
   const [sweepError, setSweepError] = useState('');
+  const [sweptLog, setSweptLog] = useState('');
   const { can } = useAuth();
 
   // What a sweep would remove, asked before it is offered.
@@ -41,7 +42,19 @@ export default function AuditPage() {
       // The count the operator was shown, sent back. Agreeing to "delete
       // 8,598,036 rows" is a different act from clicking a button that
       // happened to be under the cursor.
-      setSwept(await api('/audit/sweep', { method: 'POST', body: { expect: sweep.machine } }));
+      const started = await api('/audit/sweep', { method: 'POST', body: { expect: sweep.machine } });
+      // Polled: deleting millions of rows and compacting the file takes
+      // minutes, and a request held open that long is at the mercy of whatever
+      // proxies the panel — the counting already timed out that way once.
+      for (;;) {
+        await new Promise(r => setTimeout(r, 2000));
+        const job = await api(`/audit/sweep/jobs/${started.jobId}`);
+        setSweptLog(job.output || '');
+        if (job.status === 'done' || job.status === 'failed') {
+          setSwept(job.result || { removed: 0, error: job.error });
+          break;
+        }
+      }
       await loadSweep();
       await load();
     } catch (e) {
@@ -85,7 +98,8 @@ export default function AuditPage() {
         <div className="inset">
           <div className="eyebrow">{t('aud.sweepTitle')}</div>
           <div className="hint">
-            {t('aud.sweepWhat', { machine: sweep.machine.toLocaleString('ru'), keeping: sweep.keeping.toLocaleString('ru') })}
+            {t(sweep.estimated ? 'aud.sweepWhatApprox' : 'aud.sweepWhat',
+               { machine: sweep.machine.toLocaleString('ru'), keeping: sweep.keeping.toLocaleString('ru') })}
             {sweep.storageMb != null && <> · {t('aud.sweepSize', { mb: sweep.storageMb.toLocaleString('ru') })}</>}
           </div>
           <div className="hint">{t('aud.sweepCompact')}</div>
@@ -97,9 +111,17 @@ export default function AuditPage() {
       {can('audit.manage') && sweepError && (
         <div className="error-box">{t('aud.sweepUnavailable')}<div className="mono hint">{sweepError}</div></div>
       )}
+      {/* What it is doing while it does it. Compaction holds a lock for
+          minutes, and a page that looks frozen is one somebody reloads. */}
+      {busy && sweptLog && (
+        <div className="inset">
+          <div className="progress"><div className="progress-fill indeterminate" /></div>
+          <pre className="mono" style={{ fontSize: 11, maxHeight: 160, overflow: 'auto' }}>{sweptLog}</pre>
+        </div>
+      )}
       {swept && (
         <div className="hint" style={{ color: 'var(--ok, #5ad18f)' }}>
-          {t('aud.sweptOk', { n: swept.removed.toLocaleString('ru'), mb: swept.storageMb ?? '?' })}
+          {t('aud.sweptOk', { n: (swept.removed || 0).toLocaleString('ru'), mb: swept.storageMb ?? '?' })}
           {swept.compacted === false && <> · {t('aud.sweptNoCompact')}</>}
         </div>
       )}

@@ -1,5 +1,26 @@
 # Changelog
 
+### v1.9.7 — HTTP 504 where a number belonged
+The error message worked: instead of an absent button with no explanation, the
+page said 504. That is what it was added for, one release ago.
+
+The 504 was mine. `countDocuments` with a regular expression walks the
+collection — 8.6 million documents, minutes of work — and whatever proxies the
+panel gave up long before it finished. **Third time this shape has cost a
+release**, after the gateway apply and the initial audit query: work measured
+in minutes does not belong in a held-open request.
+
+- **The count is an estimate.** The total is metadata and free; the machine
+  share is sampled from the newest few thousand rows and scaled. The page says
+  it is approximate, because a number shown to somebody about to delete
+  millions of rows should not pretend to a precision it does not have.
+- **The sweep is a job.** Deleting the rows and compacting the file takes
+  minutes too. It answers 202 and the page polls, showing the output — including
+  the line about compaction holding a lock, since a page that looks frozen is
+  one somebody reloads during a delete.
+- **Confirmation compares magnitudes**, not exact figures: it exists so nobody
+  agrees to sweep ten times what they were shown, and an estimate serves that.
+
 ### v1.9.6 — the sweep button was absent, and said nothing about why
 `collection.stats()` was removed from the driver Mongoose 8 carries. The count
 endpoint called it, threw, and the panel's `catch` turned that into

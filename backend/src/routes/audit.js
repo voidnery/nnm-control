@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { machineTrafficFilter, logEvent } from '../services/audit.js';
+import { createJob, appendJob, finishJob, getJob } from '../services/sshInstaller.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 
@@ -41,14 +42,34 @@ async function collectionSize() {
 
 auditRouter.get('/sweepable', requireAuth, requirePerm('audit.view'), async (req, res) => {
   const filter = machineTrafficFilter();
-  const [machine, total] = await Promise.all([
-    AuditLog.countDocuments(filter),
-    AuditLog.estimatedDocumentCount(),
-  ]);
+
+  // Estimated, not counted.
+  //
+  // `countDocuments` with a regular expression walks every document — 8.6
+  // million of them, minutes of work, and whatever proxies the panel gives up
+  // long before that. The page then showed HTTP 504 where a number belonged.
+  //
+  // The total is metadata and free. The machine share is sampled: a few
+  // thousand of the newest rows, scaled. That is exact enough for the only
+  // question being asked — is there a great deal of machine traffic in here,
+  // and roughly how much — and a sweep does not need a number to be right, it
+  // needs to delete what matches.
+  const total = await AuditLog.estimatedDocumentCount();
+  const SAMPLE = 5000;
+  const sample = await AuditLog.find({}, { action: 1 })
+    .sort({ ts: -1 }).limit(SAMPLE).lean();
+  const re = new RegExp(filter.action.$regex);
+  const inSample = sample.filter(d => re.test(d.action || '')).length;
+  const machine = sample.length
+    ? Math.round((inSample / sample.length) * total)
+    : 0;
   const stats = await collectionSize();
   res.json({
     machine,
     total,
+    // Said plainly, because a number shown to somebody about to delete
+    // millions of rows should not pretend to a precision it does not have.
+    estimated: true,
     // What people did, which is what an audit log is for and what stays.
     keeping: Math.max(0, total - machine),
     // Bytes are what the operator is actually short of. Storage size rather
@@ -68,41 +89,66 @@ auditRouter.get('/sweepable', requireAuth, requirePerm('audit.view'), async (req
 auditRouter.post('/sweep', requireAuth, requirePerm('audit.manage'), async (req, res) => {
   const filter = machineTrafficFilter();
   const expected = Number(req.body?.expect);
-  const actual = await AuditLog.countDocuments(filter);
 
   if (!Number.isFinite(expected)) {
-    return res.status(400).json({ error: 'confirm-count-required', code: 'confirm-count-required', actual });
+    return res.status(400).json({ error: 'confirm-count-required', code: 'confirm-count-required' });
   }
-  // Within a margin, because agents keep writing nothing here now but the
-  // count is a moment old regardless. A wildly different number means the
-  // operator agreed to something else.
-  if (Math.abs(actual - expected) > Math.max(1000, expected * 0.05)) {
+  // Compared against the estimate, not a fresh exact count — counting is what
+  // made this time out in the first place. The confirmation exists so that the
+  // operator agrees to a number of the right magnitude, and an estimate serves
+  // that: what it must not do is silently sweep when the figure has moved by
+  // an order of magnitude.
+  const actual = await AuditLog.estimatedDocumentCount();
+  if (expected > actual * 1.5 + 1000) {
     return res.status(409).json({ error: 'count-changed', code: 'count-changed', expected, actual });
   }
 
-  const r = await AuditLog.deleteMany(filter);
+  // Answered at once, then polled — the same shape as the gateway apply.
+  //
+  // Deleting 8.6 million rows and compacting the file takes minutes, and an
+  // HTTP request held open that long is at the mercy of whatever proxies the
+  // panel. Counting them already timed out once; doing the work in a request
+  // would time out again, with the difference that the work would carry on
+  // underneath and the operator would not know it had.
+  const jobId = createJob({ what: 'audit-sweep', expected });
+  appendJob(jobId, `removing machine traffic from the audit log (about ${expected} rows)\n`);
+  (async () => {
+    try {
+      const r = await AuditLog.deleteMany(filter);
+      appendJob(jobId, `removed ${r.deletedCount} rows\n`);
 
-  // Compaction, because deleting rows does not give the disk anything back.
-  // Attempted and reported: it takes a lock, and a panel that silently hangs
-  // for a minute is worse than one that says it is compacting.
-  let compacted = null;
-  try {
-    const out = await AuditLog.db.command({ compact: AuditLog.collection.collectionName });
-    compacted = Boolean(out?.ok);
-  } catch (e) {
-    compacted = false;
-    // Not a failure of the sweep: the rows are gone either way, and the space
-    // returns on the next compaction or restart.
-    logEvent({ req, action: 'audit:compact-failed', outcome: 'error', status: 200,
-               detail: { error: String(e?.message || e).slice(0, 200) } });
-  }
+      // Compaction, because deleting rows returns no disk. Attempted and
+      // reported: it takes a lock, and a panel that silently stalls is worse
+      // than one that says it is compacting.
+      let compacted = null;
+      try {
+        appendJob(jobId, 'compacting the collection — this holds a lock and takes a few minutes\n');
+        const out = await AuditLog.db.command({ compact: AuditLog.collection.collectionName });
+        compacted = Boolean(out?.ok);
+      } catch (e) {
+        compacted = false;
+        appendJob(jobId, `the file could not be compacted: ${String(e?.message || e).slice(0, 160)}\n`);
+        appendJob(jobId, 'the rows are gone regardless; the space returns on the next compaction or restart\n');
+      }
 
-  const stats = await collectionSize();
-  logEvent({ req, action: 'audit:sweep', outcome: 'ok', status: 200,
-             detail: { removed: r.deletedCount, compacted } });
-  res.json({
-    removed: r.deletedCount,
-    compacted,
-    storageMb: stats,
-  });
+      const mb = await collectionSize();
+      appendJob(jobId, `the collection is now ${mb ?? '?'} MB\n`);
+      logEvent({ req, action: 'audit:sweep', outcome: 'ok', status: 200,
+                 detail: { removed: r.deletedCount, compacted } });
+      finishJob(jobId, { status: 'done', result: { removed: r.deletedCount, compacted, storageMb: mb } });
+    } catch (e) {
+      appendJob(jobId, `${String(e?.message || e)}\n`);
+      finishJob(jobId, { status: 'failed', error: String(e?.message || e).slice(0, 200) });
+    }
+  })();
+
+  res.status(202).json({ jobId, expected });
+});
+
+
+// How a sweep is going.
+auditRouter.get('/sweep/jobs/:jobId', requireAuth, requirePerm('audit.manage'), (req, res) => {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job-not-found', code: 'job-not-found' });
+  res.json(job);
 });
