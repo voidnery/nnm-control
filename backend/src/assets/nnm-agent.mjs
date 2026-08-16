@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 28;
+const AGENT_VERSION = 29;
 
 // Whether this process is the privileged helper. Set by its unit's
 // environment file and by nothing else — an agent cannot promote itself.
@@ -1103,6 +1103,90 @@ const routes = {
       }
     }
     return { agent: AGENT_VERSION, steps: done };
+  },
+
+  // ---- iter24 m1: what this machine sees of its own delivery ------------------
+  //
+  // Everything the panel knew about an edge came from outside it: fetch the
+  // playlist over the network and see what comes back. That answers "can a
+  // viewer get this" and nothing else — a failure could be Nimble, the
+  // machine's firewall, the route between, or the panel's own network, and the
+  // four are fixed differently.
+  //
+  // From here the same question has a second half. Loopback reaches Nimble
+  // without crossing anything, so "the edge serves it" and "the edge is
+  // reachable" stop being one answer. And the management API on 127.0.0.1
+  // gives cache figures without WMSPanel in the middle, which is a mapping
+  // that has to be right and a sync that lags.
+  async 'POST /nimble/delivery'(_req, _url, body) {
+    const app = String(body?.app || '').replace(/[^A-Za-z0-9_.-]/g, '');
+    const stream = String(body?.stream || '').replace(/[^A-Za-z0-9_.-]/g, '');
+    const path = String(body?.path || '');
+    if (!app || !stream) throw new Error('an application and a stream are required');
+    // The playback path is the panel's to decide — it knows the protocol and
+    // the packaging. Constrained here anyway, since a path from a request is a
+    // path somebody can point elsewhere.
+    if (path && !/^\/[A-Za-z0-9_./-]*$/.test(path)) throw new Error('bad playback path');
+
+    const out = { agent: AGENT_VERSION, app, stream };
+    const port = Number(body?.httpPort) || 8081;
+    const url = `http://127.0.0.1:${port}${path || `/${app}/${stream}/playlist.m3u8`}`;
+    out.url = url;
+
+    // Fetched twice, a few seconds apart.
+    //
+    // A live playlist that does not move is a playlist nobody is refreshing —
+    // the file exists, the request succeeds, and the stream is dead. One fetch
+    // cannot tell those apart, and "200 OK" on a frozen playlist is the most
+    // convincing wrong answer this check could give.
+    const read = async () => {
+      const started = Date.now();
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const text = await r.text();
+        return {
+          status: r.status,
+          ms: Date.now() - started,
+          // The media sequence is what moves when a live stream is being
+          // written. Segment names alone can repeat across a restart.
+          seq: Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(text)?.[1] ?? -1),
+          segments: (text.match(/^[^#\n].*$/gm) || []).length,
+          bytes: text.length,
+        };
+      } catch (e) {
+        return { status: null, ms: Date.now() - started, error: String(e?.message || e).slice(0, 160) };
+      }
+    };
+
+    out.first = await read();
+    if (out.first.status === 200) {
+      await new Promise(r => setTimeout(r, Number(body?.gapMs) || 6000));
+      out.second = await read();
+      out.moving = Number.isFinite(out.second?.seq) && out.second.seq > out.first.seq;
+    }
+
+    // Cache figures from the management API on loopback: no WMSPanel mapping
+    // to be right about, no sync to be stale.
+    try {
+      const r = await fetch(`${NIMBLE_URL}/manage/server_status`, { signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        const st = await r.json();
+        out.status = {
+          RamCacheSize: st?.RamCacheSize, MaxRamCacheSize: st?.MaxRamCacheSize,
+          FileCacheSize: st?.FileCacheSize, MaxFileCacheSize: st?.MaxFileCacheSize,
+          // Traffic counters, when this build carries them: the ratio of what
+          // leaves to what is pulled in is the only cache-effectiveness figure
+          // Nimble makes available, since it exposes no hit counters at all.
+          OutBytes: st?.OutBytes ?? st?.OutRate, InBytes: st?.InBytes ?? st?.InRate,
+        };
+      } else {
+        out.statusError = `management API answered ${r.status}`;
+      }
+    } catch (e) {
+      out.statusError = String(e?.message || e).slice(0, 160);
+    }
+
+    return out;
   },
 
   // ---- iter23 m6: can this domain be proved at all ----------------------------

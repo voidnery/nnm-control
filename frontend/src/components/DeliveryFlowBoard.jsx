@@ -127,6 +127,36 @@ export default function DeliveryFlowBoard({ row, watch = null, onWatch = null, b
             : <span className="badge">{t('cdn.notChecked')}</span>}
           {watch?.ms != null && <span className="mono" > · {watch.ms} ms</span>}
         </span>
+        {/* What the machine says of itself, when it can. The panel's own fetch
+            answers "could a viewer get this"; it cannot say why not, because
+            Nimble, the firewall, the route and the panel's own network all
+            look identical from outside. Loopback crosses none of them. */}
+        {watch?.reconciled && watch.reconciled.verdict !== 'outside-only' && (
+          <span className="hint">
+            {t('cdn.inside')}{' '}
+            <span className={'badge ' + (watch.reconciled.verdict === 'ok' ? 'live' : 'err')}>
+              {t('cdn.inside.' + watch.reconciled.verdict)}
+            </span>
+            {watch.inside?.ms != null && <span className="mono"> · {watch.inside.ms} ms</span>}
+          </span>
+        )}
+        {/* Occupancy is what Nimble reports; amplification is the only
+            effectiveness figure it makes possible, since it exposes no hit
+            counters at all. An idle edge measures neither, and that is health,
+            not a gap. */}
+        {watch?.cache && (
+          <span className="hint">
+            {t('cdn.cache')}{' '}
+            {watch.cache.measured
+              ? <span className={'badge ' + (watch.cache.caching ? 'live' : 'err')}>
+                  {t('cdn.cache.amp', { x: watch.cache.amplification })}
+                </span>
+              : <span className="badge">{t('cdn.cache.unmeasured')}</span>}
+            {watch.cache.occupancy && (
+              <span className="mono"> · {watch.cache.occupancy.usedMb}/{watch.cache.occupancy.capacityMb} MB</span>
+            )}
+          </span>
+        )}
         <span className="hint">
           {t('cdn.f.inUse')}{' '}
           <span className="badge">{row.edgeStreams ? t('cdn.watching') : t('cdn.resting')}</span>

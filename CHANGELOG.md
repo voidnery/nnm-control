@@ -1,5 +1,36 @@
 # Changelog
 
+### v1.10.0 — asking the edge as well as asking about it
+The agents were there all along. A note in `docs/STATE.md` said several edges
+had none, it stopped being true without the line changing, and I repeated it as
+fact for several sessions — including in a list of what to build next. It is
+corrected and dated now, because a claim about the fleet goes stale exactly
+like any other reading from a machine.
+
+So the edges can be asked directly, and agent v29 does two things over loopback
+that no external check can:
+
+**It reads the playlist where nothing can intervene.** A failure seen from the
+panel could be Nimble, the machine's firewall, the route between, or the
+panel's own network. Loopback crosses none of those, so the pair separates "not
+serving" from "not reachable" — and those are different repairs. A combination
+that cannot happen, the panel served and the machine not, is reported as the
+checks disagreeing rather than as a verdict about the machine.
+
+**It reads the playlist twice.** 200 on a frozen playlist is the most
+convincing wrong answer this check could give: the file exists, the request
+succeeds, the stream is dead.
+
+**And it reads the cache from the management API on 127.0.0.1** — no WMSPanel
+mapping to be right about, no sync to be stale. The figure is amplification,
+bytes out over bytes in, because Nimble exposes no hit counters at all. An idle
+edge measures nothing and is healthy, which the panel says rather than calling
+it a cache failure.
+
+Fifteen checks, four proven by contradiction — including the two that matter
+most: an idle edge declared broken, and a playlist that has stopped moving
+declared fine.
+
 ### v1.9.8 — 10.5 million rows gone, and the disk did not notice
 The sweep worked. The compaction did not, and the size came back as "? MB" —
 both for the same reason, and neither said what it was.

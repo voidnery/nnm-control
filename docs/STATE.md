@@ -181,8 +181,16 @@ extra ceremony.
   list invites putting a gateway on a media server without noticing.
 - **LL-HLS on the edges** — the same envelope applied to `nimble.conf` is not
   written yet. TLS on an edge is what it waits for.
-- **Agent fleet** — several edges have no agent, so they are read by direct
-  dial and cannot be measured *from*.
+- **Agent fleet** — seven machines run the agent, all on v28 and all polling:
+  `selectel(24/7)` (origin), the three edges `Nimble RU-2`, `NimbleRU-3` and
+  `NimbleFIN-1`, plus `NimbleRU-5`, `Сердце Пальмиры` and the edge-proxy
+  `cdn-test-5`. The other nine are read by direct dial.
+
+  An earlier version of this line said the edges had no agent. That was true
+  once and stopped being true without the line changing, and I repeated it as
+  fact for several sessions — including in a list of what to build next. A note
+  about the fleet is a claim about a machine, and it goes stale exactly like
+  any other reading from one. Checked against the database on 2026-08-16.
 
 ---
 
@@ -310,3 +318,55 @@ path was worth more at the time. Until then:
 
 Neither `v1.0.0` nor `v1.8.7` corresponds to a published package. They are dead
 tags, and `apt-cache policy nnm-control` is the authority on what exists.
+
+## The audit log, swept
+
+The panel filled its own 96 GB disk with its own audit rows: every agent poll
+was recorded until v0.99.20. The source is closed, and the history was removed
+from the panel itself — 10.6 million rows in two passes, `50,653 MB → 4 MB`.
+
+What the operation is made of is worth keeping, because the next bulk operation
+in this panel will need the same parts:
+
+* **The count is an estimate**, sampled and scaled. Counting 8.6 million
+  documents by regular expression took minutes and returned HTTP 504.
+* **The work is a job**, answered 202 and polled. Deleting and compacting takes
+  minutes too, and a held-open request is at the mercy of whatever proxies the
+  panel.
+* **Deleting rows returns no disk.** WiredTiger keeps the file; `compact` gives
+  it back, holds a lock while it does, and the panel says so.
+* **Commands go through `db.getClient().db(name)`.** `Model.db` is a Mongoose
+  Connection and has no `.command()` — calls to it throw, and a `catch` turns
+  that into a plausible-looking failure.
+
+## Two views of an edge
+
+A check from the panel answers "could a viewer get this" and nothing more.
+Nimble refusing, the machine's firewall, the route between and the panel's own
+network are indistinguishable from outside, and they are four different
+repairs.
+
+An agent on the edge asks the same question over loopback, where none of those
+can intervene. The pair is what carries the meaning:
+
+| inside | outside | what it is |
+|---|---|---|
+| serving | reachable | working |
+| serving | not reachable | the path, not Nimble |
+| not serving | not reachable | Nimble is not serving this |
+| not serving | reachable | the two checks are asking different questions |
+
+The last row is kept deliberately. A combination that cannot happen means the
+comparison is wrong, and reporting it as a verdict about the machine would be
+worse than saying nothing.
+
+**A playlist is read twice.** One fetch cannot tell a live stream from a file a
+dead one left behind — 200 on a frozen playlist is the most convincing wrong
+answer this check could give.
+
+**Cache is measured as amplification**, bytes out over bytes in, because Nimble
+exposes no hit counters at all — confirmed against the fleet. An idle edge
+measures nothing and is healthy: a pull cache with no viewers pulls nothing,
+and calling that a cache failure is the conflation the whole design avoids.
+Occupancy comes from different fields and survives when traffic cannot be
+measured.
