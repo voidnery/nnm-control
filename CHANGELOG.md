@@ -1,5 +1,29 @@
 # Changelog
 
+### v1.9.8 — 10.5 million rows gone, and the disk did not notice
+The sweep worked. The compaction did not, and the size came back as "? MB" —
+both for the same reason, and neither said what it was.
+
+**`Model.db` is a Mongoose Connection and has no `.command()`.** Every call went
+straight to a TypeError that a `catch` turned into "could not compact" and a
+null size. Commands now go through `db.getClient().db(name)`, and the size is
+read with the `$collStats` aggregation — the supported route in MongoDB 7,
+needing no admin rights.
+
+**The check found the same fault in a second file.** `stats.js` has been
+reporting zero storage for the metrics collection for as long as Mongoose 8 has
+been installed, with the TypeError tucked into a field nobody reads. Fixed
+there too — that is what a check binding to the installed driver is for, rather
+than to the file I happened to be editing.
+
+Its own first version flagged the comment explaining the fault as if it were
+the fault. Comments are stripped now: a check that fires on the documentation
+written to prevent something is a check that gets switched off.
+
+**And the sweep moved into a window of its own**, behind a button in the top
+right. It is occasional and irreversible, and inline it pushed the log — what
+the page is actually for — down the screen for everybody who never sweeps.
+
 ### v1.9.7 — HTTP 504 where a number belonged
 The error message worked: instead of an absent button with no explanation, the
 page said 504. That is what it was added for, one release ago.

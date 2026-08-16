@@ -31,10 +31,24 @@ auditRouter.get('/', async (req, res) => {
 // the call threw — and the panel's `catch` swallowed it, leaving the button
 // absent with nothing said. A number that cannot be read is worth a null and a
 // working page; an exception is worth neither.
+// The database handle a command can actually be sent to.
+//
+// `Model.db` is a Mongoose Connection, and it has no `.command()` — the calls
+// went straight to a TypeError, which two `catch` blocks swallowed. The size
+// came back as "? MB" and the compaction reported failure, both for the same
+// reason and neither saying it.
+function nativeDb() {
+  return AuditLog.db.getClient().db(AuditLog.db.name);
+}
+
 async function collectionSize() {
   try {
-    const out = await AuditLog.db.command({ collStats: AuditLog.collection.collectionName });
-    return Math.round((out?.storageSize || 0) / 1048576);
+    // Through the aggregation stage rather than the collStats command: it is
+    // the supported way in MongoDB 7 and needs no admin rights.
+    const [row] = await AuditLog.collection
+      .aggregate([{ $collStats: { storageStats: {} } }]).toArray();
+    const bytes = row?.storageStats?.storageSize;
+    return Number.isFinite(bytes) ? Math.round(bytes / 1048576) : null;
   } catch {
     return null;
   }
@@ -123,7 +137,7 @@ auditRouter.post('/sweep', requireAuth, requirePerm('audit.manage'), async (req,
       let compacted = null;
       try {
         appendJob(jobId, 'compacting the collection — this holds a lock and takes a few minutes\n');
-        const out = await AuditLog.db.command({ compact: AuditLog.collection.collectionName });
+        const out = await nativeDb().command({ compact: AuditLog.collection.collectionName });
         compacted = Boolean(out?.ok);
       } catch (e) {
         compacted = false;

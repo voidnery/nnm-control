@@ -203,6 +203,46 @@ check('counting does not walk eight million documents', () => {
   assert.ok(/\.limit\(SAMPLE\)/.test(auditRoutes), 'the machine share is not sampled');
 });
 
+check('database commands go through a handle that has command()', () => {
+  // `Model.db` is a Mongoose Connection and has no `.command()`. Both calls
+  // hit a TypeError that two catch blocks swallowed: the size came back as
+  // "? MB" and the compaction reported failure, for the same reason, and
+  // neither said so. Verified against the installed Mongoose rather than
+  // asserted from memory.
+  const mongoose = require('mongoose');
+  const conn = mongoose.connection;
+  assert.equal(typeof conn.command, 'undefined',
+    'a Connection now has command() — this check has lost its subject');
+  assert.equal(typeof conn.getClient, 'function');
+
+  const files = [];
+  (function walk(dir) {
+    for (const e of readdirSync(dir)) {
+      const p2 = path.join(dir, e);
+      if (statSync(p2).isDirectory()) walk(p2);
+      else if (e.endsWith('.js')) files.push(p2);
+    }
+  })(path.join(ROOT, 'backend/src'));
+
+  for (const file of files) {
+    // Code, not prose. A comment explaining why the call is wrong is not the
+    // call — and flagging one is how a check starts firing on the very
+    // documentation written to prevent the fault.
+    const src = readFileSync(file, 'utf8')
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(!/\.db\.command\(/.test(src),
+      `${path.relative(ROOT, file)} calls .db.command(), which a Mongoose Connection does not provide`);
+  }
+});
+
+check('the size is read through an aggregation that exists', () => {
+  // `$collStats` is the supported route in MongoDB 7 and needs no admin
+  // rights, unlike the collStats command it replaced.
+  assert.ok(/\$collStats/.test(auditRoutes), 'the size is read some other way');
+  assert.ok(/storageStats/.test(auditRoutes));
+});
+
 check('the sweep itself is a job, not a held-open request', () => {
   // Deleting millions of rows and compacting the file takes minutes. Counting
   // them already timed out that way; doing the work in a request would time
@@ -218,6 +258,15 @@ check('it says what it is doing while it does it', () => {
   // somebody reloads — during a delete.
   assert.ok(/compacting the collection/.test(auditRoutes), 'the lock is not announced');
   assert.ok(/setSweptLog/.test(auditPage), 'its output is not shown');
+  // In a window of its own, because it is occasional and irreversible — and
+  // inline it pushed the log, which is what the page is for, down the screen
+  // for everybody who never sweeps.
+  // The render condition, not the state declaration: `useState` keeps the
+  // name alive whatever happens to the window, and a check that greps passes
+  // on a modal nothing opens.
+  assert.ok(/\{sweepOpen && \(/.test(auditPage), 'the sweep window is never rendered');
+  assert.ok(/<Modal/.test(auditPage), 'it is not a window at all');
+  assert.ok(/setSweepOpen\(true\)/.test(auditPage), 'nothing opens it');
 });
 
 check('an estimate is labelled as one', () => {

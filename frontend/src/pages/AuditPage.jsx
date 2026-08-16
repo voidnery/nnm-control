@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Select from '../components/Select.jsx';
 import DataView from '../components/DataView.jsx';
+import Modal from '../components/Modal.jsx';
 import { useI18n } from '../i18n.jsx';
 import { useAuth } from '../auth.jsx';
 
@@ -18,6 +19,10 @@ export default function AuditPage() {
   const [swept, setSwept] = useState(null);
   const [sweepError, setSweepError] = useState('');
   const [sweptLog, setSweptLog] = useState('');
+  // The sweep lives in its own window: it is an occasional, irreversible
+  // operation, and inline it pushed the log — the thing this page is for —
+  // down the screen every time somebody opened it.
+  const [sweepOpen, setSweepOpen] = useState(false);
   const { can } = useAuth();
 
   // What a sweep would remove, asked before it is offered.
@@ -92,39 +97,62 @@ export default function AuditPage() {
 
   return (
     <div>
-      {/* Only when there is something to sweep. A control for a problem
-          nobody has is noise on the page. */}
       {can('audit.manage') && sweep?.machine > 0 && (
-        <div className="inset">
-          <div className="eyebrow">{t('aud.sweepTitle')}</div>
+        <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button onClick={() => setSweepOpen(true)}>{t('aud.sweepOpen')}</button>
+        </div>
+      )}
+
+      {sweepOpen && (
+        <Modal onClose={() => !busy && setSweepOpen(false)} size="wide">
+          <h3>{t('aud.sweepTitle')}</h3>
           <div className="hint">
             {t(sweep.estimated ? 'aud.sweepWhatApprox' : 'aud.sweepWhat',
                { machine: sweep.machine.toLocaleString('ru'), keeping: sweep.keeping.toLocaleString('ru') })}
             {sweep.storageMb != null && <> · {t('aud.sweepSize', { mb: sweep.storageMb.toLocaleString('ru') })}</>}
           </div>
           <div className="hint">{t('aud.sweepCompact')}</div>
-          <button className="primary" style={{ marginTop: 8 }} disabled={busy} onClick={doSweep}>
-            {busy ? '…' : t('aud.sweepDo', { n: sweep.machine.toLocaleString('ru') })}
-          </button>
-        </div>
+
+          {sweepError && (
+            <div className="error-box">{t('aud.sweepUnavailable')}<div className="mono hint">{sweepError}</div></div>
+          )}
+
+          {/* What it is doing while it does it. Compaction holds a lock for
+              minutes, and a window that looks frozen is one somebody closes
+              mid-delete. */}
+          {busy && (
+            <div className="inset">
+              <div className="progress"><div className="progress-fill indeterminate" /></div>
+              <pre className="mono" style={{ fontSize: 11, maxHeight: 200, overflow: 'auto' }}>{sweptLog || '…'}</pre>
+            </div>
+          )}
+
+          {swept && !busy && (
+            <div className="inset">
+              <div className="hint" style={{ color: swept.compacted === false ? 'var(--err, #c66)' : 'var(--ok, #5ad18f)' }}>
+                {t('aud.sweptOk', { n: (swept.removed || 0).toLocaleString('ru'), mb: swept.storageMb ?? '?' })}
+              </div>
+              {swept.compacted === false && <div className="hint">{t('aud.sweptNoCompact')}</div>}
+              {sweptLog && (
+                <pre className="mono" style={{ fontSize: 11, maxHeight: 200, overflow: 'auto' }}>{sweptLog}</pre>
+              )}
+            </div>
+          )}
+
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+            <button onClick={() => setSweepOpen(false)} disabled={busy}>{t('action.close')}</button>
+            {!swept && (
+              <button className="primary" disabled={busy} onClick={doSweep}>
+                {busy ? '…' : t('aud.sweepDo', { n: sweep.machine.toLocaleString('ru') })}
+              </button>
+            )}
+          </div>
+        </Modal>
       )}
-      {can('audit.manage') && sweepError && (
-        <div className="error-box">{t('aud.sweepUnavailable')}<div className="mono hint">{sweepError}</div></div>
-      )}
-      {/* What it is doing while it does it. Compaction holds a lock for
-          minutes, and a page that looks frozen is one somebody reloads. */}
-      {busy && sweptLog && (
-        <div className="inset">
-          <div className="progress"><div className="progress-fill indeterminate" /></div>
-          <pre className="mono" style={{ fontSize: 11, maxHeight: 160, overflow: 'auto' }}>{sweptLog}</pre>
-        </div>
-      )}
-      {swept && (
-        <div className="hint" style={{ color: 'var(--ok, #5ad18f)' }}>
-          {t('aud.sweptOk', { n: (swept.removed || 0).toLocaleString('ru'), mb: swept.storageMb ?? '?' })}
-          {swept.compacted === false && <> · {t('aud.sweptNoCompact')}</>}
-        </div>
-      )}
+      
+      
+      
+      
       <h1>{t('page.audit.title')}</h1>
       <div className="sub">Who changed what and when. Mutating actions, logins and function runs; secrets are masked; retention 90 days.</div>
       {error && <div className="error-box">{error}</div>}

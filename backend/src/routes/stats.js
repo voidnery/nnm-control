@@ -344,7 +344,13 @@ statsRouter.get('/_health', requirePerm('streams.view'), (_req, res) => {
 // Rough storage cost, so enabling collection is an informed decision.
 statsRouter.get('/_usage', requirePerm('settings.manage'), async (_req, res) => {
   try {
-    const stats = await mongoose.connection.db.command({ collStats: StatSample.collection.collectionName });
-    res.json({ docs: stats.count || 0, sizeBytes: stats.size || 0, storageBytes: stats.storageSize || 0 });
+    // Through the aggregation stage. `connection.db.command()` does not exist
+    // in Mongoose 8 — the call threw and the catch below reported zeroes with
+    // the TypeError tucked into a field nobody reads, so this page has been
+    // showing "no storage used" for as long as that has been true.
+    const [row] = await StatSample.collection
+      .aggregate([{ $collStats: { storageStats: {} } }]).toArray();
+    const st = row?.storageStats || {};
+    res.json({ docs: st.count || 0, sizeBytes: st.size || 0, storageBytes: st.storageSize || 0 });
   } catch (e) { res.json({ docs: 0, sizeBytes: 0, storageBytes: 0, error: e.message }); }
 });
