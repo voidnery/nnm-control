@@ -287,7 +287,7 @@ echo "==> installing the privileged helper (this machine's purpose is a gateway)
 # the token passes through this script. An earlier version substituted it here
 # and got the variable names wrong; there is now no substitution to get wrong.
 cat > /tmp/nnm-privileged.sh <<'PRIVEOF'
-${privilegedInstaller({ panelUrl, port: PRIVILEGED_PORT, bind })}
+${privilegedInstaller({ panelUrl, port: PRIVILEGED_PORT, bind, profile: 'gateway' })}
 PRIVEOF
 if sh /tmp/nnm-privileged.sh; then
   HELPER_OK=1

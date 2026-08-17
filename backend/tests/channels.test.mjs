@@ -144,9 +144,12 @@ check('an edge that cannot carry the packaging says so on its own link', () => {
   assert.deepEqual(l.tests[0].protocolMissing, ['not-checked']);
 });
 
-check('an unverified path is flagged on the production link', () => {
+check('no protocol flags its path as unverified any more, DASH included', () => {
+  // DASH was the only one, and `manifest.mpd` has now been fetched from a live
+  // Nimble: 200, an MPD, 2026-08-17. The link stops warning about a path that
+  // has been seen to work.
   const l = channelLinks({ channel: { ...CH, protocol: 'dash' }, network: net(), edges: [RU2] });
-  assert.equal(l.production.pathUnverified, true);
+  assert.equal(l.production.pathUnverified, false);
   const h = channelLinks({ channel: CH, network: net(), edges: [RU2] });
   assert.equal(h.production.pathUnverified, false);
 });

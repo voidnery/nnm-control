@@ -113,7 +113,7 @@ const PANEL_ENABLED = Boolean(PANEL_URL && SERVER_ID);
 // exactly the pair that was indistinguishable in NET-Control until the agent
 // started reporting it.
 const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-const AGENT_VERSION = 29;
+const AGENT_VERSION = 30;
 
 // Whether this process is the privileged helper. Set by its unit's
 // environment file and by nothing else — an agent cannot promote itself.
@@ -122,15 +122,35 @@ const PRIVILEGED = process.env.NNM_PRIVILEGED === '1';
 // What the helper may touch, kept here rather than only in the panel so the
 // limit survives a compromised caller. Mirrors ALLOWED_PATHS and
 // ALLOWED_BINARIES in privilegedHelper.js, and a check keeps them equal.
-const ALLOWED_PATHS = [
-  '/etc/nginx', '/etc/letsencrypt', '/var/www/html', '/var/log/letsencrypt',
-  '/var/lib/letsencrypt', '/var/cache/apt', '/var/lib/apt', '/var/lib/dpkg',
-  '/var/lib/systemd', '/etc/systemd/system',
-];
-// `kill` is here for a process holding port 80 that belongs to no unit —
-// systemctl cannot reach one, and a blocker the panel cannot clear is a
-// blocker it should not have shown.
-const ALLOWED_BINARIES = ['apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm', 'kill'];
+// Two profiles. A gateway installs nginx and serves an ACME webroot from it;
+// an edge has neither and needs /etc/nimble instead, so the edge lists are
+// strictly smaller — no nginx, no webroot, and no `kill`.
+//
+// The profile comes from the unit's environment file, written once by the
+// installer. It is never read from a request: an agent that could be told its
+// own profile could be told a bigger one.
+const PROFILES = {
+  gateway: {
+    paths: ['/etc/nginx', '/etc/letsencrypt', '/var/www/html', '/var/log/letsencrypt',
+            '/var/lib/letsencrypt', '/var/cache/apt', '/var/lib/apt', '/var/lib/dpkg',
+            '/var/lib/systemd', '/etc/systemd/system'],
+    // `kill` is here for a process holding port 80 that belongs to no unit —
+    // systemctl cannot reach one, and a blocker the panel cannot clear is a
+    // blocker it should not have shown. Not on an edge: there, a process on
+    // port 80 belongs to somebody.
+    binaries: ['apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm', 'kill'],
+  },
+  edge: {
+    paths: ['/etc/nimble', '/etc/letsencrypt', '/var/log/letsencrypt',
+            '/var/lib/letsencrypt', '/var/cache/apt', '/var/lib/apt', '/var/lib/dpkg',
+            '/var/lib/systemd', '/etc/systemd/system'],
+    binaries: ['apt-get', 'certbot', 'systemctl'],
+  },
+};
+// An unrecognised value falls to the smaller profile, not the larger one.
+const PRIVILEGED_PROFILE = PROFILES[process.env.NNM_PRIVILEGED_PROFILE] ? process.env.NNM_PRIVILEGED_PROFILE : 'edge';
+const ALLOWED_PATHS = PROFILES[PRIVILEGED_PROFILE].paths;
+const ALLOWED_BINARIES = PROFILES[PRIVILEGED_PROFILE].binaries;
 
 function allowedStep(step) {
   if (step?.kind === 'file') {
@@ -425,6 +445,56 @@ const routes = {
   // against `server-playlist.json`. The panel reported "no playlist", which
   // was true of the name it asked for and false of the server. A guess at a
   // name is not something to build on when the directory can simply be read.
+  // Nimble's own configuration file, which is not in CONF_DIR.
+  //
+  // CONF_DIR is /srv/nimble/conf — playlists and the like. `nimble.conf` lives
+  // in /etc/nimble, and LL-HLS needs four settings in it. So this is its own
+  // endpoint with a fixed path rather than a widening of `GET /config`, whose
+  // whole safety argument is that it cannot leave one directory.
+  //
+  // Read-only, and available to the ordinary agent: ProtectSystem=strict stops
+  // writes, not reads. Writing this file needs the privileged helper and the
+  // edge profile.
+  //
+  // `secrets` names which sensitive keys are present without giving their
+  // values, so the panel can say "the credentials are there" without holding
+  // them for that purpose. The content itself is returned unmasked: the panel
+  // has to compute the new file from the real one, and it already holds these
+  // same WMSPanel credentials — they are how it talks to the API. What must
+  // not happen is this text reaching a log or an audit record, and that is the
+  // caller's job, marked at every step that carries it.
+  async 'GET /nimble/conf'() {
+    const NIMBLE_CONF = '/etc/nimble/nimble.conf';
+    const SECRET_KEYS = ['client_id', 'api_key', 'ssl_certificate_key_pass', 'token'];
+    try {
+      const [content, stat] = await Promise.all([
+        fs.readFile(NIMBLE_CONF, 'utf8'), fs.stat(NIMBLE_CONF),
+      ]);
+      const secrets = [];
+      for (const raw of content.split('\n')) {
+        const line = raw.trim();
+        if (!line || line.startsWith('#')) continue;
+        const eq = line.indexOf('=');
+        if (eq < 0) continue;
+        const key = line.slice(0, eq).trim();
+        if (SECRET_KEYS.includes(key)) secrets.push(key);
+      }
+      // A digest so the panel can tell whether the file moved between showing
+      // a plan and applying it. Comparing whole files across two requests is
+      // the same check done expensively.
+      const sha256 = crypto.createHash('sha256').update(content).digest('hex');
+      return { path: NIMBLE_CONF, content, sha256, size: stat.size,
+               mtime: stat.mtime, secrets, exists: true };
+    } catch (e) {
+      // The path travels with the answer, as it does for GET /config: "no such
+      // file" is not actionable without knowing where it was looked for, and a
+      // Nimble installed somewhere unusual looks exactly like a missing one.
+      if (e.code === 'ENOENT') return { path: NIMBLE_CONF, content: null, exists: false };
+      if (e.code === 'EACCES') return { path: NIMBLE_CONF, content: null, exists: true, readable: false };
+      throw e;
+    }
+  },
+
   async 'GET /config/list'() {
     let names = [];
     try { names = await fs.readdir(CONF_DIR); } catch { return { dir: CONF_DIR, files: [], readable: false }; }

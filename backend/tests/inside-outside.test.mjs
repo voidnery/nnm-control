@@ -130,61 +130,144 @@ check('a failed inside check does not fail the outside one', () => {
     'an agent error throws out of the whole probe');
 });
 
-console.log('\nTHE RECONNAISSANCE SCRIPT ONLY LOOKS:');
+console.log('\nRECONNAISSANCE SCRIPTS FOLLOW THEIR OWN RULES:');
 
-const reconRaw = readFileSync(new URL('../tools/wms-recon.mjs', import.meta.url), 'utf8');
-// Code, not prose. A comment explaining why `.lean()` is wrong is not a call
-// to it — and flagging one is how a check starts firing on the documentation
-// written to prevent the fault. Third time this exact distinction has been
-// needed.
-const recon = reconRaw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-
-check('it cannot write, by having no way to', () => {
-  // A script that probes an API by permutation is a script that eventually
-  // POSTs something. This one asks a named list of paths, and there is no
-  // code path that sends a method or a body at all.
-  for (const verb of ['POST', 'PUT', 'DELETE', 'PATCH']) {
-    assert.ok(!new RegExp(`'${verb}'`).test(recon), `the script can send ${verb}`);
-  }
-  assert.ok(!/body:/.test(recon), 'the script can send a body');
+// Applied to every script in tools/, not to the one being written at the time.
+// Both of these have already failed on their first run, for different reasons,
+// and each rule below is one of those reasons.
+const { readdirSync } = await import('node:fs');
+const toolDir = new URL('../tools/', import.meta.url);
+// Only the ones meant to leave this machine.
+//
+// `join-report.mjs` and `pipeline-check.mjs` are run inside the API container
+// on purpose, where the database and the credentials already are — they may
+// import what they like and read what they like. The rules here are about
+// scripts copied somewhere else, and applying them to a tool that says it
+// belongs in the container would be a check firing on correct code.
+//
+// Read from the file's own statement of where it runs, not from a list of
+// names: a new script declares its own kind, and a list is a thing to forget
+// to update.
+const tools = readdirSync(toolDir).filter((f) => {
+  if (!f.endsWith('.mjs')) return false;
+  const head = readFileSync(new URL(f, toolDir), 'utf8').slice(0, 2000);
+  // The explicit declaration wins. `wms-recon.mjs` says STANDALONE at the top
+  // and mentions the container further down, while explaining why it no longer
+  // reads from it — and "mentions a word" lost to "declares its kind", which
+  // is the wrong way round.
+  if (/\bSTANDALONE\b/.test(head)) return true;
+  if (/Run inside the (API )?container/i.test(head)) return false;
+  return /copied to a machine|runs anywhere/i.test(head);
 });
+assert.ok(tools.length >= 2, `only ${tools.length} standalone tools found; this check has lost its subject`);
 
-check('the paths it asks about are named, not generated', () => {
-  const list = /const PROBES = \[([\s\S]*?)\n\];/.exec(recon);
-  assert.ok(list, 'the probe list is not a literal');
-  assert.ok(!/for \(|map\(|\.\.\./.test(list[1]), 'the paths are built rather than written down');
-});
+for (const name of tools) {
+  const raw = readFileSync(new URL(name, toolDir), 'utf8');
+  const src = raw.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 
-check('it takes credentials as arguments and depends on nothing', () => {
-  // The first version read them out of the panel's database. That needs
-  // mongoose, the panel's models and a reachable Mongo — three things only
-  // together inside the container, which is not where somebody runs a one-off
-  // script. It also read them past the schema getters, so the encrypted key
-  // would have arrived as ciphertext and every request would have come back
-  // 403, reading as "the API refuses us" when nothing had been asked properly.
-  assert.ok(/process\.argv/.test(recon), 'the credentials do not come from the command line');
-  assert.ok(!/^import /m.test(recon), 'the script imports something, so it only runs where that resolves');
-  assert.ok(!/mongoose|models\//.test(recon), 'it still reaches into the panel');
-});
+  check(`${name}: imports nothing that has to be installed`, () => {
+    // The first version imported mongoose and the panel's models to read
+    // credentials from the database. Those exist together only inside the
+    // container, which is not where anybody runs a one-off script — it died
+    // on its import line.
+    for (const m of src.matchAll(/^import .*? from '([^']+)'/gm)) {
+      assert.ok(m[1].startsWith('node:'),
+        `imports ${m[1]}, so it only runs where that resolves`);
+    }
+  });
 
-check('it says how to run it when run wrong', () => {
-  // A script whose first output is a stack trace is one nobody runs twice.
-  assert.ok(/usage: node wms-recon\.mjs/.test(recon));
-});
+  check(`${name}: takes its inputs on the command line`, () => {
+    assert.ok(/process\.argv/.test(src), 'it finds its inputs somewhere else');
+  });
 
-check('it carries a control probe, so a blanket failure is legible', () => {
-  // If the server itself cannot be read, the credentials or the IP allow-list
-  // are the problem and nothing else in the output means anything.
-  assert.ok(/a control probe/.test(recon), 'a total failure would look like a missing feature');
-});
+  check(`${name}: writes its report beside itself`, () => {
+    // Not to a path derived from the current directory, and not to stdout
+    // alone: an earlier instruction sent output to `../docs/`, which exists in
+    // a clone and nowhere else, and the shell answered "No such file or
+    // directory".
+    assert.ok(/fileURLToPath\(import\.meta\.url\)/.test(src), 'it does not know where it is');
+    assert.ok(/writeFileSync/.test(src), 'it writes no file');
+    assert.ok(!/process\.cwd\(\)/.test(src), 'it writes relative to wherever it was run from');
+  });
 
-check('it lives where its dependencies resolve', () => {
-  // Under backend/, because mongoose and the panel's models are in
-  // backend/node_modules and backend/src — from the repository root neither
-  // resolves, and the script died on its import before reaching anything.
-  const here = new URL('../tools/wms-recon.mjs', import.meta.url).pathname;
-  assert.ok(here.includes('/backend/tools/'), `the script sits at ${here}`);
-});
+  check(`${name}: keeps its report when the run fails`, () => {
+    // `process.exit` before the write skipped the report entirely, so a run
+    // that failed at the first request left nothing behind — not even the
+    // record of why.
+    // Inside the catch, not merely somewhere in the file. Declaring the
+    // function and calling it only on success passes a check that greps —
+    // which is exactly what the first version of this did.
+    const tail = src.slice(src.lastIndexOf('.catch('));
+    assert.ok(/writeReport\(\)/.test(tail),
+      'a failed run loses everything it had learned');
+    const beforeMain = src.slice(0, src.indexOf('main()'));
+    assert.ok(!/process\.exit\(1\)/.test(beforeMain.slice(beforeMain.indexOf('async function main'))),
+      'an early exit skips the report');
+  });
+
+  check(`${name}: never sends DELETE`, () => {
+    // There is no body that makes a DELETE harmless. Against a real id it
+    // either fails or removes somebody's group, rule or recording — and a
+    // reconnaissance script that deletes things is one nobody may run.
+    // Discovering that a family accepts DELETE is what the vendor's
+    // documentation is for.
+    const sends = [...src.matchAll(/(?:method|ask\([^,]+,)\s*['"]DELETE['"]/g)];
+    assert.equal(sends.length, 0, 'the script can send DELETE');
+  });
+
+  check(`${name}: cannot write to the API by accident`, () => {
+    // Read-only unless a flag is typed. This check used to name
+    // `--probe-writes` literally, which made it a check on one script rather
+    // than on the rule, and it fired on the first new tool that spelled its
+    // flag differently. The rule is: a constant derived from the command line
+    // decides, and something branches on it.
+    const sendsWrites = /'(POST|PUT|DELETE|PATCH)'/.test(src);
+    if (!sendsWrites) return;
+
+    const flag = src.match(/const ([A-Z_]+) = (?:args|argv|process\.argv[^\n]*)\.includes\('(--[a-z-]+)'\)/);
+    assert.ok(flag, 'no write flag is read from the command line');
+    const [, name_, spelling] = flag;
+    // The flag must decide, not merely exist. `const WRITE = true` would leave
+    // the string in the file and send writes unasked.
+    assert.ok(new RegExp(`(?:if \\(!?${name_}\\b|${name_}\\s*\\?)`).test(src),
+      `nothing branches on ${name_}`);
+    assert.ok(new RegExp(`${spelling}`).test(src.slice(src.indexOf('usage'))) ||
+              new RegExp(`${spelling}`).test(src),
+      `${spelling} is never mentioned where somebody would read about it`);
+
+    // And the payload must be one that cannot quietly do something. Two
+    // shapes qualify: a body designed to be rejected, or a guard naming the
+    // one object the script may touch. `PUT {}` returned 200 here once, which
+    // means it executed — safe only because every field is optional, and a
+    // safety argument that depends on luck is not one.
+    const throwaway = /body: [^\n]*'\{\}'/.test(src);
+    const guarded = /GUARD_NAME/.test(src);
+    assert.ok(throwaway || guarded,
+      'it writes a real body to an object it has not been restricted to');
+  });
+
+  check(`${name}: its paths cite where they came from`, () => {
+    // The first WMSPanel inventory was invented. It tried `/settings` and
+    // never `/global` — the spelling Softvelum's own RTSP article uses — so an
+    // entire family read as absent because of a word. A list nobody can check
+    // is a list that will be wrong again.
+    const at = raw.search(/const (ROUTES|PROBES) = \[/);
+    if (at < 0) return;
+    // In the comment block immediately above the list, not anywhere in the
+    // file: a URL in the usage text says nothing about where the paths came
+    // from, and the first version of this passed on exactly that.
+    const preamble = raw.slice(Math.max(0, at - 2000), at);
+    assert.ok(/wmspanel\.com|softvelum\.com|blog\.wmspanel/.test(preamble),
+      'nothing next to the route list says where the paths came from');
+  });
+
+  check(`${name}: carries a control probe`, () => {
+    // Without one, a blanket failure is indistinguishable from a missing
+    // feature — a mistake made here more than once.
+    assert.ok(/control probe|control/i.test(raw), 'a total failure would read as an absent feature');
+  });
+}
+
 
 console.log(failures ? `\n${failures} inside/outside check(s) failed` : '\nall inside/outside checks passed');
 process.exit(failures ? 1 : 0);

@@ -40,6 +40,57 @@ export function parsePlaylist(text) {
     targetDuration: Number.isFinite(target) ? target : null,
     ended,
     bytes: body.length,
+    ...readShape(lines, body),
+  };
+}
+
+// What the playlist says about container and low latency.
+//
+// Added because the question "does adding HLS_FMP4 change the playback path"
+// cannot be answered from configuration — the panel has to be the viewer and
+// look. The same reading also tells LL-HLS apart from a silent fallback to
+// ordinary HLS, which looks identical from the server side.
+//
+// Kept as a separate function so the standalone probe tool can carry a copy
+// and `backend/tests/playback-probe.test.mjs` can hold the two to the same
+// answers on the same fixtures.
+export function readShape(lines, body) {
+  // Every URI line: not a comment, not blank. Query strings stay — Nimble
+  // hangs `?nimblesessionid=` off them and dropping it produces a URL that
+  // does not work.
+  const uris = lines.map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+  // fMP4 announces its initialisation segment. MPEG-TS never does, so this is
+  // the one unambiguous container signal in the text.
+  const map = (body.match(/#EXT-X-MAP:URI="([^"]+)"/) || [])[1] || null;
+  const exts = [...new Set(uris.map(u => (u.split('?')[0].match(/\.([a-z0-9]+)$/i) || [])[1]).filter(Boolean))];
+
+  let container = null;
+  if (map || exts.some(e => ['fmp4', 'm4s', 'mp4'].includes(e))) container = 'fmp4';
+  else if (exts.includes('ts')) container = 'mpegts';
+
+  const parts = lines.filter(l => l.startsWith('#EXT-X-PART:')).length;
+  const partTarget = Number((body.match(/#EXT-X-PART-INF:PART-TARGET=([\d.]+)/) || [])[1]);
+  const holdBack = Number((body.match(/PART-HOLD-BACK=([\d.]+)/) || [])[1]);
+
+  return {
+    uris,
+    initSegment: map,
+    container,
+    segmentExtensions: exts,
+    // Three independent marks of a real LL-HLS playlist. A player falling back
+    // to ordinary HLS produces a playlist with none of them, and the fallback
+    // is silent — so their absence is the only way to catch it.
+    lowLatency: {
+      parts,
+      partTarget: Number.isFinite(partTarget) ? partTarget : null,
+      holdBack: Number.isFinite(holdBack) ? holdBack : null,
+      canBlockReload: /CAN-BLOCK-RELOAD=YES/.test(body),
+      preloadHint: /#EXT-X-PRELOAD-HINT/.test(body),
+      // All of it, not any of it: a playlist can carry EXT-X-SERVER-CONTROL
+      // without ever emitting a part.
+      confirmed: parts > 0 && Number.isFinite(partTarget) && /CAN-BLOCK-RELOAD=YES/.test(body),
+    },
   };
 }
 

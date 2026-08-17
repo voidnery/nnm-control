@@ -859,3 +859,39 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .gw-state { font-size: var(--fs-meta); }
 .gw-state.applied { color: var(--ok, #5ad18f); }
 .gw-state.failed, .gw-state.refused-by-sandbox { color: var(--err, #c66); }
+
+
+/* ---- Low-Latency HLS --------------------------------------------------- */
+/* Three states, three shapes as well as three colours: a tick, a cross and a
+   question mark stay distinguishable when the colours do not — on a projector,
+   in a screenshot, and for the eight per cent of men who cannot tell the first
+   two apart by hue. */
+.llhls-mark { font-weight: 700; display: inline-block; min-width: 1.1em; text-align: center; }
+.llhls-mark.ok { color: var(--ok, #2e7d32); }
+.llhls-mark.bad { color: var(--bad, #c62828); }
+.llhls-mark.unknown { color: var(--muted, #888); }
+.llhls-bad { color: var(--bad, #c62828); }
+
+.llhls-grid { width: 100%; border-collapse: collapse; }
+.llhls-grid th, .llhls-grid td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line, #2a2a2a); }
+.llhls-grid tbody tr:hover { background: var(--hover, rgba(255,255,255,0.04)); }
+.llhls-grid tr.open { background: var(--hover, rgba(255,255,255,0.06)); }
+
+.llhls-detail { padding: 12px 4px 18px; }
+.llhls-detail .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 10px 0; }
+.llhls-detail .form-grid label { display: flex; flex-direction: column; gap: 4px; }
+.llhls-detail .form-grid label.wide { grid-column: 1 / -1; }
+.llhls-detail textarea { font-family: var(--mono, monospace); font-size: 12px; }
+
+/* The diff is the thing an operator approves, so it is readable rather than
+   compact: added and removed lines are marked with a character as well as a
+   colour, because this is exactly the place where a misread is expensive. */
+.llhls-diff { background: var(--inset, rgba(0,0,0,0.25)); padding: 10px; overflow-x: auto;
+              font-family: var(--mono, monospace); font-size: 12px; line-height: 1.5; }
+.llhls-diff .add { color: var(--ok, #2e7d32); }
+.llhls-diff .del { color: var(--bad, #c62828); }
+
+.llhls-applied ul { list-style: none; padding: 0; margin: 8px 0; }
+.llhls-applied li { padding: 2px 0; }
+.linkish { background: none; border: none; padding: 0; text-decoration: underline; cursor: pointer;
+           color: inherit; font: inherit; }

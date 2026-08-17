@@ -15,7 +15,10 @@
 // script that probes an API by permutation is one that eventually POSTs
 // something.
 //
-// Usage — no dependencies, no database, runs anywhere Node is:
+// STANDALONE: copied to a machine and run there. No dependencies, no
+// database, no repository around it — see docs/recon-scripts.md.
+//
+// Usage:
 //
 //     node wms-recon.mjs <client_id> <api_key> [server_id ...]
 //
@@ -29,7 +32,25 @@ const [, , CLIENT_ID, API_KEY, ...SERVER_IDS] = process.argv;
 const BASE = (process.env.WMS_BASE || 'https://api.wmspanel.com/v1').replace(/\/+$/, '');
 const TIMEOUT_MS = 12000;
 
-const line = (s = '') => process.stdout.write(s + '\n');
+// Beside this file. The rules in docs/recon-scripts.md apply to every
+// reconnaissance script, not only the newest one.
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPORT = path.join(HERE, `wms-recon-${new Date().toISOString().slice(0, 10)}.txt`);
+const out = [];
+const line = (s = '') => { process.stdout.write(s + '\n'); out.push(s); };
+
+function writeReport() {
+  try {
+    writeFileSync(REPORT, out.join('\n') + '\n');
+    process.stderr.write(`\nwritten: ${REPORT}\n`);
+  } catch (e) {
+    process.stderr.write(`\ncould not write ${REPORT}: ${e?.message || e}\n`);
+  }
+}
 
 if (!CLIENT_ID || !API_KEY) {
   line('usage: node wms-recon.mjs <client_id> <api_key> [server_id ...]');
@@ -81,7 +102,7 @@ async function main() {
     if (r.status !== 200) {
       line(`Could not list servers: ${r.status ?? r.error}`);
       line('If this is 403, check the credentials and that this host is in the API IP allow-list.');
-      process.exit(1);
+      throw new Error('could not list servers');
     }
     try {
       const j = JSON.parse(r.text);
@@ -91,7 +112,7 @@ async function main() {
       line('');
     } catch {
       line('The server list did not parse as JSON; pass server ids explicitly.');
-      process.exit(1);
+      throw new Error('unparseable server list');
     }
   }
 
@@ -134,4 +155,6 @@ async function main() {
   line('  403 including the control probe → credentials or the IP allow-list, not the feature.');
 }
 
-main().catch((e) => { line(`failed: ${e?.message || e}`); process.exit(1); });
+main()
+  .then(writeReport)
+  .catch((e) => { line(`failed: ${e?.message || e}`); writeReport(); process.exit(1); });

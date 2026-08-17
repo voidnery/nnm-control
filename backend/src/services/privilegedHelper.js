@@ -82,34 +82,82 @@
 // So the installer creates every one of these before the unit is enabled. The
 // `-` stays as a second line of defence for a path this list gains and the
 // script forgets, but it is not the mechanism.
-export const ALLOWED_PATHS = [
-  '/etc/nginx',                  // the configuration this writes
-  '/etc/letsencrypt',            // certbot's certificates and account
-  '/var/www/html',               // the ACME challenge webroot
-  '/var/log/letsencrypt',        // certbot refuses to run without somewhere to log
-  '/var/lib/letsencrypt',        // and somewhere to keep its lock
-  '/var/cache/apt',              // apt's download cache
-  '/var/lib/apt',                // apt's lists
-  '/var/lib/dpkg',               // dpkg's database — installing writes here
-  '/var/lib/systemd',            // enabling a unit
-  '/etc/systemd/system',         // where an nginx drop-in would land
-];
+// Two profiles, because a gateway and an edge need different things and the
+// larger of the two should not be handed to a machine that does not need it.
+//
+// A gateway installs nginx and runs certbot against a webroot nginx serves.
+// An edge has neither: Nimble serves the playlists itself, so the edge profile
+// drops `/etc/nginx`, `/var/www/html` and the `nginx` binary entirely, and adds
+// the one thing LL-HLS needs — `/etc/nimble`.
+//
+// It also drops `kill`. That exists on a gateway to clear a process holding
+// port 80 that belongs to no unit; on a media server, a process holding port
+// 80 is somebody's, and a panel that can kill it is a panel that can stop
+// production. The plan stops and says what holds the port instead.
+//
+// So the edge helper is strictly smaller than the gateway one, and that is on
+// purpose: full control of a compromised panel buys certbot and a Nimble
+// configuration there, and not nginx, not a webroot, not a signal.
+export const PROFILES = {
+  gateway: {
+    id: 'gateway',
+    paths: [
+      '/etc/nginx',                  // the configuration this writes
+      '/etc/letsencrypt',            // certbot's certificates and account
+      '/var/www/html',               // the ACME challenge webroot
+      '/var/log/letsencrypt',        // certbot refuses to run without somewhere to log
+      '/var/lib/letsencrypt',        // and somewhere to keep its lock
+      '/var/cache/apt',              // apt's download cache
+      '/var/lib/apt',                // apt's lists
+      '/var/lib/dpkg',               // dpkg's database — installing writes here
+      '/var/lib/systemd',            // enabling a unit
+      '/etc/systemd/system',         // where an nginx drop-in would land
+    ],
+    binaries: [
+      'apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm',
+      // Stopping a process that holds port 80 and belongs to no unit.
+      // `systemctl stop` cannot reach it, and refusing to offer anything would
+      // mean the panel showing a blocker it has no way to clear.
+      'kill',
+    ],
+  },
+  edge: {
+    id: 'edge',
+    paths: [
+      // The reason this profile exists. LL-HLS needs ssl_port,
+      // ssl_certificate, ssl_certificate_key and ssl_http2_enabled in
+      // nimble.conf, and nothing else on the machine can write them.
+      '/etc/nimble',
+      '/etc/letsencrypt',
+      '/var/log/letsencrypt',
+      '/var/lib/letsencrypt',
+      '/var/cache/apt',
+      '/var/lib/apt',
+      '/var/lib/dpkg',
+      '/var/lib/systemd',
+      '/etc/systemd/system',         // certbot's renewal timer is enabled here
+    ],
+    // `systemctl` restarts Nimble after a configuration change — Softvelum's
+    // own instruction is `service nimble restart`, and nothing about that
+    // writes a path.
+    binaries: ['apt-get', 'certbot', 'systemctl'],
+  },
+};
 
-// Commands the helper will run. A fixed list, checked against the first
-// element of every step: the plan already constrains this, but the plan is
-// composed by the panel and the panel is the thing that might be compromised.
-// Two locks with one key each are worth more than one lock with two.
-export const ALLOWED_BINARIES = [
-  'apt-get', 'certbot', 'nginx', 'systemctl', 'ln', 'rm',
-  // Stopping a process that holds port 80 and belongs to no unit. `systemctl
-  // stop` cannot reach it, and refusing to offer anything would mean the panel
-  // showing a blocker it has no way to clear — which is what it did.
-  //
-  // Narrow in practice: the only caller passes pids the operator confirmed
-  // from a list the panel re-read a moment earlier, and the audit records that
-  // it was not reversible.
-  'kill',
-];
+export const PROFILE_IDS = Object.keys(PROFILES);
+
+// The gateway lists under their old names. Everything that imported them
+// before this change was about a gateway, so the meaning is unchanged and the
+// callers do not have to be found and edited to keep working.
+export const ALLOWED_PATHS = PROFILES.gateway.paths;
+export const ALLOWED_BINARIES = PROFILES.gateway.binaries;
+
+// Which profile a machine gets, from what it is for. Derived rather than
+// stored: a purpose that changes should change what the machine may do, and a
+// second field to keep in step is a second field to forget.
+export function profileFor(purpose) {
+  return purpose === 'gateway' ? 'gateway' : 'edge';
+}
 
 export const PRIVILEGED_PORT = 8091;
 
@@ -124,9 +172,14 @@ export function privilegedInstaller({
   // default that is wrong is worse than no default: it looks like a decision.
   panelUrl, token, port = PRIVILEGED_PORT, bind = '127.0.0.1',
   agentBin = '/var/lib/nnm-agent/nnm-agent.mjs',
+  // Defaults to the gateway profile so that every existing caller keeps the
+  // behaviour it had. A default that silently widened what a machine may do
+  // would be the worst possible one here.
+  profile = 'gateway',
 }) {
   const sh = (v) => String(v).replace(/'/g, `'\\''`);
-  const rw = ALLOWED_PATHS.join(' ');
+  const prof = PROFILES[profile] || PROFILES.gateway;
+  const rw = prof.paths.join(' ');
 
   return `#!/bin/sh
 # NNM Control — privileged helper.
@@ -138,10 +191,11 @@ export function privilegedInstaller({
 #
 # What limits it:
 #
+#   * Profile: ${prof.id}.
 #   * It runs only the binaries listed in ReadWritePaths' companion check
-#     inside the helper itself: ${ALLOWED_BINARIES.join(', ')}.
+#     inside the helper itself: ${prof.binaries.join(', ')}.
 #   * It can write only these paths:
-#       ${ALLOWED_PATHS.join('\n#       ')}
+#       ${prof.paths.join('\n#       ')}
 #     So even full control of the panel does not reach /etc/passwd, /root/.ssh
 #     or a Nimble configuration on a machine that runs both.
 #   * It listens on ${bind} only. Nothing outside this machine can reach it.
@@ -211,7 +265,7 @@ echo "==> using node: $NODE_BIN"
 # failed to be built. It has to happen here, in the installer, while the
 # filesystem is still ordinary.
 echo "==> creating the directories the helper is allowed to write"
-for d in ${ALLOWED_PATHS.join(' ')}; do
+for d in ${prof.paths.join(' ')}; do
   [ -d "$d" ] || mkdir -p "$d" || { echo "could not create $d"; exit 1; }
 done
 
@@ -253,6 +307,10 @@ grep -v -E "^(NNM_AGENT_PORT|NNM_PRIVILEGED|NNM_AGENT_LOGS|NNM_AGENT_LOG_DIR)=" 
     echo "the agent's environment file was not found at /etc/nnm-agent.env"; exit 1; }
 cat >> "$ENV_FILE" <<EOF
 NNM_PRIVILEGED=1
+# The helper's own copy of the limits is chosen by this. It is written here by
+# the installer and read by nothing else — an agent cannot widen its own
+# profile, because the value never travels with a request.
+NNM_PRIVILEGED_PROFILE='${sh(prof.id)}'
 NNM_AGENT_PORT='${sh(port)}'
 NNM_AGENT_LOGS=0
 EOF
@@ -350,29 +408,37 @@ fi
 // not, and an installer offered everywhere would end up everywhere.
 export function privilegedEligibility(server) {
   const purpose = server?.purpose || 'nimble';
-  if (purpose !== 'gateway') {
-    return { ok: false, code: 'not-a-gateway', purpose };
+  // Opened to media servers in v1.14.0, with a smaller profile. Until then the
+  // answer here was "not a gateway" and LL-HLS could not be configured at all:
+  // the ordinary agent runs under ProtectSystem=strict and cannot write
+  // /etc/nimble, which is where half of LL-HLS lives.
+  //
+  // Still not automatic. This says a machine *may* be offered the helper; an
+  // operator still runs the installer on it, one machine at a time.
+  if (!PROFILE_IDS.includes(profileFor(purpose))) {
+    return { ok: false, code: 'unknown-purpose', purpose };
   }
   if (!server?.agent?.enabled) {
     // The helper reuses the agent's binary and its enrolment. Without the
     // ordinary agent there is nothing to add privilege to.
     return { ok: false, code: 'no-agent' };
   }
-  return { ok: true };
+  return { ok: true, profile: profileFor(purpose), purpose };
 }
 
 // A step the helper is willing to run. Checked here as well as in the plan,
 // because the plan is composed by the panel and the panel is the thing that
 // might be compromised — the helper's own list is the lock that does not
 // depend on its caller being honest.
-export function stepAllowed(step) {
+export function stepAllowed(step, profile = 'gateway') {
+  const prof = PROFILES[profile] || PROFILES.gateway;
   if (step?.kind === 'file') {
     const p = String(step.path || '');
-    return ALLOWED_PATHS.some(root => p === root || p.startsWith(`${root}/`));
+    return prof.paths.some(root => p === root || p.startsWith(`${root}/`));
   }
   if (step?.kind === 'package' || step?.kind === 'command') {
     const bin = Array.isArray(step.command) ? String(step.command[0] || '') : '';
-    return ALLOWED_BINARIES.includes(bin.split('/').pop());
+    return prof.binaries.includes(bin.split('/').pop());
   }
   return false;
 }

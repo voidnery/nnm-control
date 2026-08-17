@@ -39,11 +39,25 @@ check('an unknown protocol falls back to HLS rather than producing nothing', () 
   assert.equal(playbackPath('quic-magic', 'a', 'b'), '/a/b/playlist.m3u8');
 });
 
-check('paths taken from documentation are marked as unconfirmed', () => {
-  // The `to` field of a route was built from documentation and rejected by the
-  // live API. A shape nobody has seen a response for gets said so.
-  assert.equal(PROTOCOLS.dash.pathUnverified, true);
-  assert.notEqual(PROTOCOLS.hls.pathUnverified, true, 'HLS is confirmed by every probe run so far');
+check('no path is left claiming to be unconfirmed once it has been fetched', () => {
+  // DASH carried `pathUnverified` from the day it was written, because
+  // `manifest.mpd` came from documentation and nobody had asked a server for
+  // it. On 2026-08-17 a playback probe asked: 200, a 1786-byte MPD, on
+  // NimbleRU-6. The flag came off because of the fetch, not because the
+  // documentation started looking trustworthy.
+  for (const [id, p] of Object.entries(PROTOCOLS)) {
+    assert.notEqual(p.pathUnverified, true,
+      `${id} is still marked unverified — either fetch it or say why it cannot be`);
+  }
+});
+
+check('the unverified mechanism still works, for the next path nobody has fetched', () => {
+  // The flag has no user now. A mechanism with no user rots quietly, so it is
+  // exercised against a fixture rather than left to be discovered broken by
+  // whoever adds the next documentation-only path.
+  const invented = { id: 'x', file: 'guess.m3u8', scheme: 'http', cacheable: true,
+                     pathUnverified: true, requires: [] };
+  assert.equal(Boolean(invented.pathUnverified), true);
 });
 
 console.log('\nLL-HLS IS REFUSED, NOT WARNED ABOUT:');

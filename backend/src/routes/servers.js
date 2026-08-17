@@ -528,11 +528,17 @@ serversRouter.post('/:id/privileged/script', requirePerm('servers.manage'), asyn
   }
 
   const panelUrl = String(req.body?.panelUrl || '').trim() || `${req.protocol}://${req.get('host')}`;
-  const script = privilegedInstaller({ panelUrl, token: server.agent?.token || '' });
+  // The profile comes from the machine's purpose, decided in one place. A
+  // gateway gets nginx and a webroot; anything else gets the smaller edge
+  // profile, which trades those for /etc/nimble.
+  const script = privilegedInstaller({
+    panelUrl, token: server.agent?.token || '', profile: eligible.profile,
+  });
 
   // Recorded because it is the moment a machine gained the ability to be
   // changed remotely, and that is worth being able to find later.
-  await logEvent(req, 'server.privileged.script', { server: server.name, purpose: server.purpose });
+  await logEvent(req, 'server.privileged.script',
+    { server: server.name, purpose: server.purpose, profile: eligible.profile });
   res.json({ script, port: 8091 });
 });
 

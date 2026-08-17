@@ -130,15 +130,21 @@ check('an unknown step kind is refused rather than attempted', () => {
 
 console.log('\nTHE LIMIT LIVES ON THE MACHINE TOO:');
 
-check('the agent carries the same lists, and they match', () => {
+check('the agent carries the same gateway list, and nothing extra', () => {
   // Checked in the panel *and* in the helper. The plan is composed by the
   // panel, and the panel is the thing that might be compromised: a lock that
   // depends on its caller being honest is not a lock.
+  //
+  // v1.14.0 split both sides into two profiles, so the list is read out of the
+  // agent's gateway block rather than out of a single constant. The per-profile
+  // equality in both directions is checked in llhls-transport.test.mjs; this
+  // one stays because it is about the gateway, which is what this file is
+  // about.
   for (const p of ALLOWED_PATHS) assert.ok(agent.includes(`'${p}'`), `the agent does not allow ${p}`);
   for (const b of ALLOWED_BINARIES) assert.ok(agent.includes(`'${b}'`), `the agent does not allow ${b}`);
-  // And nothing extra on the agent's side, which would be a hole the panel
-  // cannot see.
-  const m = /const ALLOWED_BINARIES = \[([^\]]*)\]/.exec(agent);
+  const block = agent.slice(agent.indexOf('gateway: {'), agent.indexOf('edge: {'));
+  const m = /binaries: \[([^\]]*)\]/.exec(block);
+  assert.ok(m, "the agent's gateway profile has no binaries list");
   const onAgent = [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
   assert.deepEqual(onAgent.sort(), [...ALLOWED_BINARIES].sort());
 });
@@ -165,12 +171,18 @@ check('an agent cannot promote itself', () => {
 
 console.log('\nIT IS INSTALLED ON PURPOSE, AND ONLY WHERE IT IS NEEDED:');
 
-check('a media server is refused it', () => {
-  // Its whole justification is that a gateway needs system changes and a media
-  // server does not. An installer offered everywhere ends up everywhere.
-  assert.equal(privilegedEligibility({ purpose: 'nimble', agent: { enabled: true } }).code, 'not-a-gateway');
-  assert.equal(privilegedEligibility({ purpose: 'nimble-cdn', agent: { enabled: true } }).ok, false);
-  assert.equal(privilegedEligibility({ purpose: 'gateway', agent: { enabled: true } }).ok, true);
+check('a media server is offered the smaller profile, not the gateway one', () => {
+  // Until v1.14.0 this was a refusal, on the grounds that a gateway needs
+  // system changes and a media server does not. LL-HLS made that false: half
+  // of it is ssl_port and ssl_http2_enabled in /etc/nimble/nimble.conf, and
+  // the ordinary agent runs under ProtectSystem=strict.
+  //
+  // So the answer is now yes, with a profile that trades nginx, the ACME
+  // webroot and `kill` for one directory. The offer is still per machine and
+  // still an operator's action.
+  assert.equal(privilegedEligibility({ purpose: 'nimble', agent: { enabled: true } }).profile, 'edge');
+  assert.equal(privilegedEligibility({ purpose: 'nimble-cdn', agent: { enabled: true } }).ok, true);
+  assert.equal(privilegedEligibility({ purpose: 'gateway', agent: { enabled: true } }).profile, 'gateway');
 });
 
 check('a machine without the ordinary agent is refused', () => {

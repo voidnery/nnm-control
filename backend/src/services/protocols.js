@@ -32,11 +32,11 @@ export const PROTOCOLS = {
     file: 'manifest.mpd',
     scheme: 'http',
     cacheable: true,
-    // The path is from Softvelum's documentation rather than from a response
-    // we have seen, so the first watch probe against a DASH channel is what
-    // confirms it. Flagged rather than assumed — the `to` field of a route
-    // taught us what documentation-only shapes cost.
-    pathUnverified: true,
+    // MEASURED 2026-08-17: `GET /nnm-probe/feed1/manifest.mpd` on NimbleRU-6
+    // returned 200 with a 1786-byte MPD, on an application whose protocols
+    // were HLS, DASH, SLDP. The `pathUnverified` flag this carried since it
+    // was written is gone, and it was removed by a fetch rather than by
+    // somebody deciding the documentation was probably right.
     requires: [],
   },
 

@@ -22,6 +22,10 @@ const NAV_GROUPS = [
     { to: '/functions', key: 'nav.functions', show: ({ can }) => can('functions.execute') || can('functions.manage') },
     { to: '/transcoders', key: 'nav.transcoders', show: ({ can, sys }) => can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' },
     { to: '/distribution', key: 'nav.distribution', show: ({ can, sys }) => can('wmsobjects.view') && sys?.controlPlane === 'wmspanel' },
+    // Under broadcast rather than infrastructure: it is a delivery property of
+    // channels, and the operator who cares about latency is the one who lives
+    // on these pages.
+    { to: '/llhls', key: 'nav.llhls', show: ({ can }) => can('servers.view') },
     { to: '/playlists', key: 'nav.playlists', show: ({ can }) => can('playlist.view') },
   ] },
   { key: 'logs', items: [
@@ -73,6 +77,7 @@ import SharedLogsPage from './pages/SharedLogsPage.jsx';
 import CategoriesPage from './pages/CategoriesPage.jsx';
 import TranscodersPage from './pages/TranscodersPage.jsx';
 import DistributionPage from './pages/DistributionPage.jsx';
+import LlhlsPage from './pages/LlhlsPage.jsx';
 import AccountObjectsPage from './pages/AccountObjectsPage.jsx';
 import { NoticeTray } from './notices.jsx';
 
@@ -167,6 +172,7 @@ export default function App() {
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/transcoders" element={<TranscodersPage />} />
         <Route path="/distribution" element={<DistributionPage />} />
+        <Route path="/llhls" element={<LlhlsPage />} />
         <Route path="/account-objects" element={<AccountObjectsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

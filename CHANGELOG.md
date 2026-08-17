@@ -1,5 +1,657 @@
 # Changelog
 
+### v1.16.0 — the screen
+`frontend/src/pages/LlhlsPage.jsx`, under Broadcast rather than
+Infrastructure: LL-HLS is a delivery property of channels, and the operator who
+cares about latency lives on those pages.
+
+One row per edge with **four separate marks** — helper, nimble.conf, HTTP/2,
+parts — and no roll-up into a single tick. That is the whole design constraint:
+everything can apply and the viewer still get ordinary HLS, so a screen that
+answers "is it on" with one symbol would be lying in exactly the way this
+feature exists to prevent.
+
+Each mark has **three** states, not two. `?` means nobody asked, and it is a
+question mark rather than a grey cross because the two are fixed differently —
+one by opening the row, the other by getting a certificate. The list is cheap
+on purpose: reading nimble.conf and shaking hands with fourteen machines inside
+one request is a pattern this project has been caught by three times, so the
+detail is fetched for one edge when it is opened.
+
+The last column says **what to do next** in a phrase, rather than a status word
+the operator has to translate into an action.
+
+Opening a row gives the setup: domain, TLS port with the reason it is not 443,
+and the three certificate methods each shown **with its cost** rather than as
+three equal words in a dropdown — including that the uploaded one renews itself
+never, and that Ministry of Digital Development certificates go through it but
+are not in Apple's trust store while LL-HLS players mostly are Apple's.
+
+Preview before apply, and the nimble.conf diff behind a "details" button —
+masked, so the WMSPanel credentials are `<16 characters, hidden>` on screen as
+they are in the audit. The interruption is stated on the button that causes it.
+Apply sends back the digest the preview was computed from and is refused if the
+file moved. The result is **per step**, because a run where the certificate was
+issued and the restart failed is a different machine from one where nothing
+happened, and rollback offers the backups that same run reported.
+
+Marks carry a shape as well as a colour, and the diff marks lines with `+` and
+`-` as well as green and red: this is the screen where a misread is expensive.
+
+Thirty-nine new strings in both languages; the frontend audit holds EN and RU
+equal and catches a key used before it exists, which it did once here.
+
+### v1.15.0 — reading nimble.conf, and seven routes over both halves
+**Agent v30** answers `GET /nimble/conf`. Its own endpoint with a fixed path
+rather than a widening of `GET /config`, whose entire safety argument is that
+it cannot leave `/srv/nimble/conf`. Read-only and available to the ordinary
+agent: `ProtectSystem=strict` stops writes, not reads.
+
+It returns a `sha256`, which is what lets an apply notice that the file moved
+between the preview and the press, and a `secrets` list naming which sensitive
+keys are present without their values. The content itself comes back unmasked
+because the panel has to compute the new file from the real one — and because
+the credentials in question are the panel's own WMSPanel client id and API key,
+which it already holds. What must not happen is that text reaching a log, a
+response or an audit record, and every place it could is marked.
+
+**`backend/src/routes/llhls.js`** — state per edge, state for one edge, plan,
+apply, rollback, and the channel half as its own two routes. The apply
+recomputes the plan, compares the digest, refuses with `configuration-changed`
+if the file moved, orders the certificate before the configuration because
+Nimble will not start pointing at a certificate that is not there, and verifies
+with a TLS handshake rather than an exit code.
+
+The channel routes are separate on purpose. They write to WMSPanel rather than
+to a machine, they interrupt a different set of people, and one button over
+both would hide which half failed. The container switch needs its own consent
+flag: measured, adding `HLS_FMP4` removes plain `HLS`.
+
+**`backend/src/services/llhlsState.js`** assembles one answer out of four
+conditions, and keeps two distinctions that this project has paid for:
+
+- **Not asked is not asked-and-failed.** An edge nobody has probed reports
+  `ready: null` and an empty blocker list, with what is unknown listed
+  separately. Collapsing the two is how "we have not checked this edge" became
+  "this edge cannot do LL-HLS" the first time round.
+- **Three of four is not nearly working.** Transport up and no parts in the
+  playlist is `ready: false` with the silent fallback named, because a viewer
+  gets ordinary HLS and nobody is told.
+
+`channelPlan` refuses a part outside the range rather than clamping it — a
+clamp applies something nobody asked for and reports success — names a
+sub-second chunk as the reason rather than blaming the part, warns that the
+shortest legal part is the most expensive one, and states the input-stream
+restart every single time rather than once in a manual.
+
+Certificates warn at 20 days, not 30: certbot renews at 30, so a warning there
+would fire on every healthy machine for a month and be ignored by the second
+week.
+
+Eight contradictions proven across the two services.
+
+**Still to come**: the screen. Everything above is reachable by API and by
+nothing an operator would enjoy using.
+
+### v1.14.0 — the helper on an edge, and the half of LL-HLS that lives in a file
+Approved and done: the privileged helper can be installed on a media server,
+and `/etc/nimble` is writable there. Both come with a **second profile** rather
+than a wider single one.
+
+| | gateway | edge |
+|---|---|---|
+| paths | nginx, letsencrypt, webroot, apt, systemd | **/etc/nimble**, letsencrypt, apt, systemd |
+| binaries | apt-get, certbot, nginx, systemctl, ln, rm, kill | apt-get, certbot, systemctl |
+
+The edge profile is **strictly smaller** apart from the one directory it exists
+for: no nginx, no ACME webroot, and no `kill`. `kill` clears a process holding
+port 80 that belongs to no unit — on a gateway that is a blocker to remove, on
+a media server that process is somebody's, and a panel that can signal it is a
+panel that can stop production. The plan reports what holds the port instead.
+
+The profile is written into the unit's environment file by the installer and
+read from nothing else, so an agent cannot be told a larger one by a request.
+The panel's fallback for an unknown profile is `gateway`, because every caller
+before this change was one and a silent widening there would be worse; the
+agent's fallback is `edge`, because a helper that cannot read its own
+environment should end up with less. Both directions are asserted.
+
+**`backend/src/services/llhlsPlan.js`** writes the transport half. Parameter
+names are from Softvelum's configuration reference, not memory: `ssl_port`,
+`ssl_certificate`, `ssl_certificate_key`, `ssl_http2_enabled`, `ssl_protocols`,
+and `service nimble restart` to pick them up.
+
+It is an **upsert on the file that is there**, not a template. `nimble.conf`
+carries the WMSPanel credentials that bind the server to the account and
+whatever fifteen machines have accumulated; writing a composed file would be a
+remote `rm` with extra steps. Existing keys change in place, new ones append in
+one labelled block, every other byte — comments, blank lines, order — survives.
+A file with no trailing newline does not get two settings joined into one.
+
+**A commented-out setting is not a setting.** Reading `# ssl_http2_enabled =
+true` as configuration produces a plan that changes nothing and reports
+success, which is this project's most-collected failure shape.
+
+**The credentials are masked at the source**, in the parse, not at the point of
+printing — so the diff an operator reads, the audit record and the file step
+all carry `client_id = <16 characters, hidden>`. The file step is marked
+`secretContent`.
+
+Four refusals rather than a guess: no certificate; an `ssl_port` equal to the
+HTTP port, caught here instead of at restart; `port = 0`, because turning HTTPS
+on while HTTP is already off is not this feature's business; and an existing
+`ssl_server { }` block, which answers the certificate question per host name
+and would make a global setting a second answer.
+
+`verdict()` needs **both** halves: ALPN `h2` with a trusted certificate, and
+parts actually present in the playlist. TLS up with no parts gets its own
+sentence naming the two causes, because that is exactly the silent fallback the
+whole feature exists to prevent.
+
+And `certPlan.js` learned the difference the profiles imply: `--webroot` needs
+something serving the directory, which on an edge does not exist, so an edge
+answers the HTTP challenge with `--standalone`. Getting that wrong fails
+silently — certbot writes a file into a directory nobody serves.
+
+Six contradictions proven. One had to be aimed three times before it landed:
+the comment rule is protected twice over, and only a mutation a real "be
+lenient about spacing" refactor would produce could defeat it.
+
+**Not yet built**: the routes and the screen. This milestone is the machinery.
+
+### v1.13.0 — the ports were never the problem, and there are three ways to a certificate
+**A correction first.** `HANDOVER.md` said edges were awkward because "ports 80
+and 443 are held by Nimble there", and this project repeated it for weeks. It
+is not true: Nimble is on 8081, 1935 and 8082, and every playback probe in this
+project reaches the fleet over 8081. The claim grew out of the sentence beside
+it — the agent *reports which processes hold* 80 and 443, as a readiness check,
+because something might. A check for a possibility became a statement of fact,
+and it survived because it sounded plausible. Same shape as the WMSPanel
+live-applications family, and the same fix: grep before repeating.
+
+**The real blocker is structural.** The privileged helper installs only where
+the purpose is `gateway`, and on other purposes the block is *absent from the
+script* rather than disabled. An edge today has an agent that reads and nothing
+that writes `/etc`. Three decisions follow, recorded in `docs/STATE.md` and not
+taken here: whether the helper may be installed on edges at all, whether
+`/etc/nimble` joins its allow-list, and whether the edge version should be
+strictly smaller than the gateway one by leaving `nginx` out. That is a
+security scope change and it belongs to the operator.
+
+**`backend/src/services/certPlan.js`** offers three methods rather than
+choosing one:
+
+| method | needs | renews itself | wildcard |
+|---|---|---|---|
+| `acme-http` | port 80 reachable, an A record | yes | no |
+| `acme-dns` | a DNS provider API token | yes | yes |
+| `upload` | a certificate you already have | no | as issued |
+
+`acme-http` is the gateway plan's existing code. `acme-dns` needs nothing
+inbound and can issue wildcards. `upload` exists because the first two depend
+on a foreign service that has begun drawing lines — Subscriber Agreement 1.7,
+4 June 2026 — and because an edge whose certificate cannot be renewed stops
+serving LL-HLS. The Ministry of Digital Development's free certificates go
+through `upload` with the warning that decides it here: their root is not in
+Apple's or Chrome's stores, and LL-HLS players are overwhelmingly Apple's.
+
+An uploaded certificate is read before it is placed: parse, key match, name
+from the **SAN** rather than the subject CN, both ends of the validity window,
+self-signed refused outright, and a missing intermediate noted rather than
+refused — because that one fails on some clients and not others, which is worse
+than failing on all. Wildcards are matched to one label, not two, and not the
+bare domain. The result carries `trustUnknown: true`: passing here is not
+approval, and only the handshake `tlsProbe.js` makes decides.
+
+Secrets by construction: the DNS token goes to a `0600` file and never onto a
+command line, where the process list and the audit record would both have it.
+A test asserts that for every step of every method.
+
+And two checks hold the plans against the helper's own allow-lists, so a step
+that the machine would refuse fails here instead of at 3am.
+
+Five contradictions proven, including one that had to be rewritten after the
+first attempt silently failed to patch the file it meant to.
+
+### v1.12.3 — the link held; it was the variant that moved
+The third live run had the restart the first two lacked — media sequence 333 →
+10 — and answered the question:
+
+| | entry point | variant | container |
+|---|---|---|---|
+| before | `/playlist.m3u8` | `chunks.m3u8` | MPEG-TS |
+| after | `/playlist.m3u8` | `video.m3u8` | fMP4 |
+
+And the tool called it wrong. It printed *"paths disappeared — not safe without
+changing the links"*, when `/playlist.m3u8`, the only path the panel actually
+publishes, had not moved at all. Two kinds of path were being compared as one:
+**entry points**, which operators hand out and `channelLinks` builds, and
+**variants**, which a player discovers by following the master and which nobody
+bookmarks. Third time in this tool that the comparison key was wrong for the
+question — session ids, then containers-without-restart, now this.
+
+Compared separately, the answer is that switching container is **not a link
+migration**. It is an operation with an interruption: the switch needs the
+input stream restarted, and a restart ends every session in flight whatever the
+variant is called. `llhls.js` records it as `CONTAINER_SWITCH` for the form to
+present it that way — a short outage on one application, not re-issued links.
+
+Also recorded, and easy to miss: **putting the protocols back does not put the
+output back.** The running stream keeps the container it was restarted with,
+so the tool now says the restore is accepted and not yet in effect instead of
+letting it read as done.
+
+The check written for the new split passed with the split disabled — the
+verdict came out right while both lists were empty and the classification did
+nothing. Strengthened to assert the lists themselves: the master on the entry
+line and not on the variant line. Fifth check in this project found unable to
+fail, and the second one found by running the diversion rather than by reading.
+
+### v1.12.2 — the server dropped a container and said Ok
+Three lines of the second live run carried the finding, and the readback check
+written for exactly this nearly missed it:
+
+```
+PUT protocols ["HLS","DASH","SLDP","HLS_FMP4"] → accepted
+Read back: HLS_FMP4, DASH, SLDP
+```
+
+**Four sent, three stored. Plain HLS was dropped.** The API reference names
+only HLS + HLS_MPEGTS as an illegal pair and says the rest combine freely; on
+this deployment `HLS_FMP4` takes plain HLS's slot, and the API reports success
+while doing it. So there is no "adding fMP4" — there is only switching to it,
+and on a live application that is every current viewer's container changing
+under them. `llhls.js` gains `CONTAINER_REPLACES` and `protocolsAfterWrite()`
+so the panel shows what a write will store before sending it.
+
+The readback compared only whether the field it wanted had arrived, which is
+how a write that removed something passed as a write that added something. It
+now compares the whole set both ways — dropped and uninvited — and says so in
+capitals.
+
+**And the question the run was for is still open, but for a reason we can now
+see.** Nothing moved, the container stayed MPEG-TS, and there was no way to
+tell that from "the stream was never restarted". The tool now reads the media
+sequence: higher means the same run kept going, lower means it started over,
+unchanged means a stalled playlist that answers nothing. Three outcomes — and
+the third is not rounded up: an earlier draft of that branch announced "across
+a restart" on precisely the case where it could not tell.
+
+The test that caught that had to be fixed twice first. Counting requests put
+both censuses on the same sequence value, so it could not fail; a 1.5-second
+clock then raced the run and lost by a hundred milliseconds. The boundary
+between the two censuses is the PUT, and the WMSPanel stub knows when that
+happened.
+
+Six contradictions proven across the tool and the rules.
+
+### v1.12.1 — a session id is not a path
+The first live run of the playback probe produced one fact and one false alarm.
+
+**The fact: `manifest.mpd` answers.** 200, a 1786-byte MPD, on NimbleRU-6. The
+`pathUnverified` flag DASH has carried in `protocols.js` since the day it was
+written is gone — removed by a fetch, not by deciding the documentation was
+probably right. No protocol claims an unverified path now, so the mechanism has
+no user; it is exercised against a fixture rather than left to rot until the
+next documentation-only path finds it broken.
+
+**The false alarm: the tool reported that paths had disappeared.** They had
+not. Nimble mints a `nimblesessionid` per request, the comparison used the raw
+URI as its key, and `chunks.m3u8?nimblesessionid=1` versus `…=3` read as one
+path gone and one appeared — printing the most alarming of the three verdicts,
+that adding the container had moved existing viewers. Fetching and comparing
+are two jobs: the session id belongs in the first and must not be in the
+second. Volatile parameters are now stripped for comparison only, and a genuine
+path change is still seen.
+
+**Under the false alarm, a real gap.** The result was *no observable change*,
+and the tool had no way to tell that from *the change never took effect*: the
+vendor is explicit that the input stream must be restarted, `llhls.js` records
+it, and this tool ignored it and waited ten seconds. Now the wait is a window
+the operator is told, in capitals, to restart the stream inside — `--wait=`
+sets its length — and when nothing moves the report says both explanations
+plainly instead of picking one.
+
+Also: the container write is read back before anything is concluded from the
+fetches. Accepted is not applied, and this project has been caught by that
+before. A stub that answers `Ok` and changes nothing now stops the run.
+
+Five contradictions proven: comparing raw URIs again, emptying the volatile
+list, skipping the readback, and calling no-change safe — each fails the checks
+written for it.
+
+### v1.12.0 — being the viewer, to answer what configuration cannot
+`backend/tools/wms-playback-probe.mjs`. Two questions neither WMSPanel nor
+`nimble.conf` can answer, both settled by fetching a playlist and reading it.
+
+**Does the DASH path exist.** `protocols.js` has carried `pathUnverified: true`
+on `manifest.mpd` since it was written — the path came from documentation and
+nothing had ever asked for it. One request per application settles it.
+
+**Does adding `HLS_FMP4` move the playback path.** The whole fleet runs plain
+`HLS`, which the vendor describes as the audio-optimised container. The probe
+reads the paths, adds the container behind the same `nnm-probe` guard the write
+probe uses, re-reads, and diffs — and names which of the three outcomes
+happened: same paths (safe on a live application), new paths alongside the old
+(the panel picks which one a link points at), or paths gone (existing viewers
+would have been moved).
+
+Only two paths are asked for blind — the HLS master and the DASH manifest, both
+of which the panel already builds. Everything else is *followed* from what the
+master said, because guessing spellings is how a week went missing here once.
+
+**No stream, no evidence.** An application nothing publishes into answers 404 to
+everything, and the run says that is not a finding about paths rather than
+recording an absence.
+
+`playlistProbe.js` gained `readShape`: container from `EXT-X-MAP` or the segment
+extension, and the three marks of real LL-HLS — parts present, a part target,
+blocking reload. **All three, not any**: a playlist can announce
+`CAN-BLOCK-RELOAD` and never emit a part, and a player without HTTP/2 falls back
+to ordinary HLS in silence. The tool carries a copy and the test holds the two
+to the same answers.
+
+That drift check passed while the copy's container logic was rewritten. Every
+fixture carried both an `EXT-X-MAP` **and** an `.fmp4` extension, so dropping
+either branch changed no answer. Two fixtures added that isolate one signal
+each, and the same diversion now fails two checks. Fourth time a check in this
+project could not fail; the shape this time is new — not a narrow literal, but
+a fixture set that never exercised the branch.
+
+### v1.11.3 — the floor is 500, and the chunk was never the problem
+The write probe came back and corrected two numbers, one of them ours.
+
+**The part duration floor is 500 ms, not 250.** The API reference published at
+`api_info?g=application` says 250; the live server answers *"HLS part duration
+must be greater or equal to 500 ms."* Softvelum's own setup article agrees —
+500 is the lowest their web UI allows, because shorter parts do not pay for
+their overhead. Two documents from one vendor disagree and the server decides.
+It follows that a chunk under one second has no legal part at all, and at
+exactly one second the only legal value is 500.
+
+**The claim that 85 applications needed their chunk lowered from 6 to 2 is
+withdrawn.** It was inferred here from "the ceiling at chunk 6 is 3000 ms" and
+never checked against a source. The vendor recommends a 2000 ms part **at a 6
+second chunk**, for about 6 seconds of latency; 1000 ms gives 4–5, and 500 ms
+gives about 2. The fleet's chunk is already the recommended one, and the
+question put to the operator about lowering it should never have been asked.
+
+The warning that grew out of that mistake — *"a part over 1000 ms is not low
+latency in any useful sense"* — fired on the vendor's own recommendation.
+Replaced with the PART-HOLD-BACK, which is three times the part in every
+playlist Nimble publishes and is a floor on what a viewer can see rather than
+an opinion.
+
+**No illegal state is reachable**: the server refuses a chunk change that would
+orphan an existing part, quoting the new ceiling. So field order is free, and
+the probe's summary line — which read "chunk and part must be sent together —
+no" and could be understood either way — now says which of the two it means.
+
+`backend/src/services/llhls.js` is new, and is where these numbers live with
+each one's source beside it. The two standalone tools cannot import it, so they
+carry copies and `backend/tests/llhls-rules.test.mjs` fails when a copy drifts.
+Proven by contradiction in both directions: move the floor in the panel, or in
+one tool, and it fails either way.
+
+Three constraints recorded that no API call can satisfy: **the input stream
+must be restarted** after enabling, or Nimble keeps producing ordinary output —
+and for published streams the panel has no restart at all; **keyframe alignment
+is on the encoder**, carried as the vendor's two examples rather than a formula,
+because a rule was not derivable from them; and **interleaving compensation**
+with zero minimum delay, which is the one of the three the panel can actually
+do.
+
+**The container is the real gap.** All 89 candidates carry plain `HLS`, which
+the vendor describes as optimised for audio-only. For video they highly
+recommend `HLS_FMP4`, and no application in the fleet has it.
+
+The inventory gate had to be corrected too: it required the string `250` and
+would have kept the wrong figure in the document by insisting on it.
+
+### v1.11.2 — the write contract, probed behind a guard
+`backend/tools/wms-app-write-probe.mjs`. The fleet read answered where LL-HLS
+lives and confirmed nothing about writing it: **all 103 applications have it
+off**, so there is not one enabled example anywhere to learn the contract from.
+
+Eight steps, each a PUT followed by a GET, because HTTP 200 with
+`{"status":"Error"}` is how this API refuses and a write is not believed until
+the value comes back. They settle six things: whether `alhls_enabled` is
+writable here, whether `hls_part_duration` returns once on, whether the server
+enforces the ceiling and the 250 ms floor, whether lowering the chunk alone
+leaves a part above the new ceiling, and whether the field really is
+conditional on an HLS protocol as 103 reads suggest.
+
+**The guard is a constant, not an argument.** It writes only to an application
+named `nnm-probe`, which the operator creates and deletes by hand; DELETE is
+never sent. Without `--write` it prints the plan and sends nothing. It restores
+what it found and says whether the restore worked.
+
+`backend/tests/write-probe.test.mjs` runs it against two stub servers, one that
+enforces the bounds and one that does not, and asserts they reach **opposite**
+conclusions — a probe that reports the same either way measures nothing. Three
+diversions proven: removing the name guard must let it write to a production
+application, reading the status code without the body status must misread the
+strict server as lax, and skipping the restore must be noticed.
+
+Fleet reading recorded in `docs/STATE.md`: `alhls_enabled` present on exactly
+the 89 applications carrying an HLS protocol and no others, chunk 6 s almost
+everywhere, and the anomalies — an application name beginning with a tab on
+NimbleGER-1, an empty protocol list on Сердце Пальмиры, WHEP on a delivery
+edge, a 100-second chunk on a test application.
+
+The recon-script gate in `inside-outside.test.mjs` caught the new tool on its
+first full run — correctly, and for the wrong reason: it named `--probe-writes`
+literally, so it was a check on one script rather than on the rule. Widened to
+the rule itself — a constant read from the command line, something branching on
+it, and either a throwaway body or a named guard — and it now covers all three
+tools. Proven by contradiction: hardcoding the flag true, or removing the guard
+constant, each fails it.
+
+`wms-apps-recon.mjs` had promised about 43 requests and sent 30. The item route
+is asked once per run, not once per server. Corrected — an estimate that errs
+safe is still one that was never checked against the code beside it.
+
+### v1.11.1 — a recon script for the applications, and it is tested before it runs
+`backend/tools/wms-apps-recon.mjs`. Standalone, read-only, one run per fleet.
+It does not look for the route — that is published — it asks what *these*
+machines return, because a form built from the reference example is a form
+built from somebody else's server.
+
+Per application it reports `chunk_duration`, `protocols`, `alhls_enabled`,
+`hls_part_duration` and a verdict: **on**, **off, can be turned on**,
+**blocked by chunk**, **n/a**, or **field absent**. Warnings where the numbers
+disagree with the reference: a part above half the chunk, a chunk too short for
+the 250 ms floor, `HLS` and `HLS_MPEGTS` set together, and — the one this was
+written for — LL-HLS enabled with a part long enough that nothing is low
+latency about it.
+
+Then a field census: which documented fields this deployment never returns, and
+which it returns that `docs/wmspanel-api-application.md` does not name. The
+second list is the useful one; anything in it means the published copy is out
+of date.
+
+**Push credentials are removed from the object, not hidden at print time.** A
+live application carries `push_login` and `push_password` in clear text, and
+this report is a file that gets pasted into a chat window.
+
+`backend/tests/apps-recon.test.mjs` runs the verdicts against fixtures and the
+whole script against a stub WMSPanel. Proven by contradiction: emptying the
+secret-field list must fail the masking checks, and removing the "not low
+latency" warning must fail the 6-second case. Both do — but the end-to-end
+masking check did not, at first, because the stub run had no `--full` and never
+printed an application. It does now. A check that cannot fail is not one, and
+that is the third time this project has found one of those by trying.
+
+Two rules added to `docs/recon-scripts.md`: secrets leave at the source, and a
+recon script's reasoning is importable and tested without a network — which
+means `main()` runs only when the file is the one being executed.
+
+### v1.11.0 — the route was in our own client the whole time
+`/server/{server_id}/live/app`, full CRUD, published. It carries
+`alhls_enabled`, `hls_part_duration`, `chunk_duration`, `chunk_count` and
+`protocols` — everything the last two versions concluded was out of reach.
+`docs/wmspanel-api.md` and `docs/STATE.md` said the WMSPanel half of LL-HLS
+had no API route. **That is withdrawn.** Both halves are the panel's.
+
+Two failures produced it, and the second is the one worth keeping:
+
+- The probe asked `applications`, `application` and `apps`. The route is `app`.
+  Fifteen spellings across fourteen protocols, and the singular was not among
+  them — the same letter that hid `interface` behind "interfaces list". Third
+  instance.
+- **`wmspanelClient.js` already had `liveAppList`, `liveAppCreate`,
+  `liveAppUpdate` and `liveAppDelete` on that exact path**, with a comment
+  naming it, exposed at `/server/:id/apps` in `wmspanelProxy.js`. No frontend
+  calls them, so they were invisible. An inventory of somebody else's API that
+  never reads our own client can only ever be half an inventory.
+
+So `backend/tests/wms-inventory.test.mjs` now requires every path reachable
+from the client to appear in `docs/wmspanel-api.md`, with a census block listing
+all twenty-five, and a `routes-probe-only` block for the two that exist to ask
+a question rather than do a thing (`hls/settings`, `transmuxer/settings` — both
+404). Proven by contradiction twice: cut `live/app` out of the inventory and
+the check must notice; add an uncatalogued method to the client and the run
+must fail. Both do.
+
+The bound that decides whether LL-HLS is real is written down in both docs:
+`hls_part_duration` ≥ 250 ms and ≤ `chunk_duration` × 1000 ÷ 2. At the fleet's
+chunk of 6 s the ceiling is 3000 ms, which is not low latency — so enabling the
+checkbox without shortening the chunk gives a setting that applied, a UI that
+agrees and a viewer who feels nothing. The panel will write the pair together
+or refuse.
+
+`docs/wmspanel-api-application.md` holds the published section verbatim, copied
+by hand because the URL is refused to automated readers. The eight spellings
+guessed from the anchor are deleted — a guess outlives its usefulness the
+moment the answer exists, and keeping them would cost four hundred requests a
+run for nothing.
+
+### v1.10.9 — applications are a family of their own
+The reference's own anchor for the section is `sb_nimble_liveapps`, and its
+filter is `?g=application`. That answers why every `<protocol>/applications`
+came back 404: applications are not a per-protocol object, they are their own
+family — and the LL-HLS container choice, the checkbox and the part duration
+live there.
+
+Eight candidate spellings derived from the anchor are added to the inventory:
+`live_apps`, `liveapps`, `live_app`, `live_apps/settings`, `live_global`,
+`live_globals`, bare `global`, and an account-wide `live_apps`.
+
+The section itself still cannot be read. `/api_info` serves only its stats
+half, and the filtered URL is refused to automated readers — so the name is
+approached from the anchor rather than from the prose, which is the same
+lesson as `interface` versus "interfaces list".
+
+239 routes, 717 calls with `--probe-writes` — about 5% of the daily ceiling.
+
+### v1.10.8 — the documentation covers half the API, and the probe covers the other
+`wmspanel.com/api_info` is titled "WMSPanel stats, WMSAuth, Dispersa API" and
+carries an "All" filter. The Nimble Streamer control section — republishing,
+DVR, live pull, MPEG-TS, interfaces — is loaded by script and is not in the
+served HTML. Fetching with a 200,000-token limit ends at the same byte as the
+default: mid-sentence in WMSAuth rules.
+
+So `docs/wmspanel-api.md` now merges both readings, and says which is which.
+The measured half is not a shortcut there; it is the only reading available.
+
+**The spelling is `interface`, singular** — while Softvelum's RTSP article
+calls the method "Get RTSP interfaces list". That one letter is why the first
+inventory missed a family, and why guessing from prose does not work.
+
+Confirmed writable: `routes`, `data_slices`, `wmsauth/groups`,
+`rtmp/republish`, `rtmp/interface`, `rtmp/live_pull`, `mpegts/incoming`,
+`mpegts/outgoing`, `dvr/settings`. Not present on any of fifteen spellings
+across fourteen protocols: the transmuxing-settings family, where LL-HLS lives.
+
+That is a measured statement, not a proof of absence — the documentation for
+that half cannot be read. **One helpdesk question to Softvelum settles what no
+amount of probing can**, and the file says so.
+
+**And a safety argument of mine turned out to rest on luck.** Write probes
+carried an empty body because "the API will reject it, and a 400 proves the
+method". WMSPanel answered 200: the `PUT` was executed. It was harmless only
+because every update field there is optional. `docs/recon-scripts.md` now says
+what is actually safe, and that a probe needing a real write should create its
+own object rather than touch somebody else's.
+
+### v1.10.7 — the write columns meant nothing
+Comparing the inventory against Softvelum's reference found two faults in the
+probe, not in the API.
+
+**PUT and DELETE were asked of collections.** The documentation puts them on
+items: `PUT /ip_ranges/[id]`, `DELETE /user_agent_groups/[group_id]`. A
+collection is supposed to refuse them, so the 404s filling those columns were
+the correct answer to the wrong question — and the report looked conclusive.
+Writes are now asked on an item, using an id taken from the collection's own
+response; where there is no id, nothing is asked, since an invented one
+produces a 404 that says nothing.
+
+**And `DELETE` is now never sent at all.** Working through the item-path
+change made the obvious plain: unlike POST and PUT, no body makes a DELETE
+harmless. Against a real id it either fails or removes somebody's WMSAuth
+group. A script that deletes things is one nobody may run, so whether a family
+accepts DELETE is read from the documentation instead. A check enforces this
+across every standalone tool.
+
+**The object-name list is widened.** `live_pull` answered for rtmp, rtsp and
+icecast, so the `/server/<id>/<protocol>/<object>` pattern is confirmed — but
+`global`, `applications` and `interfaces` all 404 even for RTSP, whose control
+API article names exactly those methods. The pattern is right and the spelling
+is not; the list now carries fifteen plausible forms rather than the three I
+happened to try.
+
+The Nimble control API section of the reference could not be retrieved — it
+disallows automated access — so this is the honest way to find the spelling.
+
+### v1.10.6 — the inventory's own route list was invented
+The dump answered clearly and answered the wrong question. Its paths were
+guessed, and the guess was wrong in a specific way: it tried `/settings` and
+never `/global` — the spelling Softvelum's RTSP control API article uses for
+exactly this kind of family. A whole family could read as absent because of a
+word.
+
+The list is now derived from the documented pattern
+`/server/<id>/<protocol>/<object>`, with the sources cited beside it so the
+next person can check rather than trust. 91 routes instead of 40, including the
+`global` and `applications` spellings that were missing.
+
+**DVR is confirmed manageable**, which settles the earlier dispute: `dvr`
+answers GET and POST, `dvr/settings` answers GET, PUT and DELETE. The note in
+`docs/STATE.md` claiming otherwise is corrected with the evidence.
+
+**And the LL-HLS finding is withdrawn**, not merely qualified. It rested on the
+invented paths. The question is open again until the inventory is re-run.
+
+Two rules added to `docs/recon-scripts.md`: a route list comes from the
+vendor's documentation with the source cited next to it, and a tool says what
+it will cost before it runs — the account ceiling is 15000 calls a day, and
+this run is 364 of them.
+
+### v1.10.5 — a recon script writes its report beside itself
+`../docs/wmspanel-api.md` exists in a clone and nowhere else. The instruction to
+redirect output there met `No such file or directory`, and the run was lost —
+after a script that imports nothing and needs no install had been written
+precisely so it could run anywhere.
+
+Both recon scripts now write `<name>-<date>` next to their own file, print the
+path, and do so **whichever way the run ends**: an early `process.exit` skipped
+the report entirely, so a run failing at the first request left nothing behind,
+not even the record of why.
+
+`docs/recon-scripts.md` writes down what a reconnaissance script is, and every
+rule in it was paid for by one that failed on its first run: import nothing,
+take inputs on the command line, write beside yourself, keep the report on
+failure, stay read-only unless a flag is typed, carry a control probe, and
+never confuse "we did not find it" with "it is not there".
+
+A check applies those rules to every standalone tool — identified by what each
+file says about where it runs, not by a list of names, so a new script declares
+its own kind. It immediately found that `wms-dump.mjs` had no control probe.
+
+Two of its own assertions passed against edits that broke the thing they were
+about: `writeReport` present but not in the catch, and `--probe-writes`
+mentioned but not read. Both bound to behaviour now.
+
 ### v1.10.4 — an inventory, because a partial probe produced a confident wrong answer
 `docs/STATE.md` recorded that DVR could not be managed through the WMSPanel
 API. It can. The probe behind that note sent `GET` and `DELETE`, found no
