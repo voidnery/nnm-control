@@ -1,0 +1,165 @@
+# .github/workflows/probe-dist-control.yml
+#
+# Measures the CI -> DIST-Control path before anything is built on top of it.
+#
+# The whole ingest design rests on one unverified assumption: that a GitHub
+# Actions runner can reach a Russian host reliably enough to push a .deb and a
+# few hundred megabytes of container layers. That direction is usually healthier
+# than the reverse, but "usually" is not a measurement. This workflow is the
+# measurement.
+#
+# What it answers:
+#   1. Does DNS resolve, and to what?
+#   2. Is the host reachable at all, and how consistently over N attempts?
+#   3. Download throughput CI <- host.
+#   4. Upload throughput CI -> host. This is the one that matters: it is the
+#      direction releases travel.
+#   5. Does a large upload survive, or does it break mid-transfer? A path that
+#      passes /ping and dies at 100MB is the worst case, because it looks fine
+#      in every quick test and fails only on release day.
+#
+# Run it from the Actions tab (workflow_dispatch). Start the listener on the
+# host first:
+#     sudo python3 dc-probe-listener.py --port 80 --minutes 30 --token <secret>
+#
+# Put the same token in repository secret DC_PROBE_TOKEN.
+#
+# Nothing here is part of the release pipeline. Delete this file once the real
+# ingest endpoint exists.
+
+name: probe-dist-control
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: 'Host to probe (no scheme)'
+        required: true
+        default: 'updates.eterix.pro'
+      attempts:
+        description: 'Reachability attempts'
+        required: true
+        default: '20'
+      upload_mb:
+        description: 'Upload size in MB (the release-day rehearsal)'
+        required: true
+        default: '200'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      HOST: ${{ inputs.host }}
+      TOKEN: ${{ secrets.DC_PROBE_TOKEN }}
+      ATTEMPTS: ${{ inputs.attempts }}
+      UPLOAD_MB: ${{ inputs.upload_mb }}
+    steps:
+      - name: Guard
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::secret DC_PROBE_TOKEN is not set"
+            exit 1
+          fi
+
+      - name: Runner identity and DNS
+        run: |
+          set +e
+          echo "### Runner and DNS" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "runner egress IP: $(curl -sS -m 10 https://api.ipify.org || echo unknown)"
+          echo "resolving $HOST:"
+          getent hosts "$HOST" || echo "  DNS FAILED — no A record?"
+          {
+            echo "runner egress IP: $(curl -sS -m 10 https://api.ipify.org || echo unknown)"
+            getent hosts "$HOST" 2>/dev/null || echo "DNS FAILED for $HOST"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reachability — ${{ inputs.attempts }} attempts
+        run: |
+          set +e
+          ok=0; fail=0; times=""
+          for i in $(seq 1 "$ATTEMPTS"); do
+            t=$(curl -sS -o /dev/null -m 15 \
+                  -w '%{time_total}' "http://$HOST/ping?t=$TOKEN" 2>/dev/null)
+            rc=$?
+            if [ $rc -eq 0 ]; then ok=$((ok+1)); times="$times $t";
+            else fail=$((fail+1)); times="$times ERR($rc)"; fi
+            sleep 1
+          done
+          echo "ok=$ok fail=$fail"
+          echo "times:$times"
+          {
+            echo "### Reachability"
+            echo ""
+            echo "| attempts | ok | fail |"
+            echo "|---|---|---|"
+            echo "| $ATTEMPTS | $ok | $fail |"
+            echo ""
+            echo '```'
+            echo "per-attempt seconds:$times"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # A single failure out of twenty is already meaningful for a release
+          # pipeline, so record it rather than swallow it — but do not fail the
+          # job: a partial result is the finding.
+          if [ "$ok" -eq 0 ]; then
+            echo "::error::host never answered — check DNS, firewall, and that the listener is running"
+          elif [ "$fail" -gt 0 ]; then
+            echo "::warning::$fail of $ATTEMPTS attempts failed — the path is not clean"
+          fi
+
+      - name: Download throughput (CI <- host)
+        run: |
+          set +e
+          for mb in 10 50; do
+            out=$(curl -sS -o /dev/null -m 300 \
+                    -w 'http=%{http_code} bytes=%{size_download} time=%{time_total} speed=%{speed_download}' \
+                    "http://$HOST/blob/$mb?t=$TOKEN" 2>&1)
+            echo "blob ${mb}MB: $out"
+            echo "- download ${mb}MB: \`$out\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload rehearsal (CI -> host) — ${{ inputs.upload_mb }}MB
+        run: |
+          set +e
+          echo "### Upload (the direction releases travel)" >> "$GITHUB_STEP_SUMMARY"
+          # Random, not zeros: a compressing middlebox would flatter a zero-filled
+          # payload and give a number that does not survive contact with real
+          # container layers.
+          head -c "$((UPLOAD_MB * 1024 * 1024))" /dev/urandom > /tmp/payload.bin
+          ls -l /tmp/payload.bin
+          out=$(curl -sS -o /tmp/resp.txt -m 900 \
+                  -X POST --data-binary @/tmp/payload.bin \
+                  -H 'Content-Type: application/octet-stream' \
+                  -w 'http=%{http_code} sent=%{size_upload} time=%{time_total} speed=%{speed_upload}' \
+                  "http://$HOST/upload?t=$TOKEN" 2>&1)
+          rc=$?
+          echo "curl rc=$rc  $out"
+          echo "server said: $(cat /tmp/resp.txt 2>/dev/null)"
+          {
+            echo '```'
+            echo "curl rc=$rc"
+            echo "$out"
+            echo "server: $(cat /tmp/resp.txt 2>/dev/null)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc -ne 0 ]; then
+            echo "::error::upload failed (curl rc=$rc). Compare against the listener log on the host — a truncated POST there means the path breaks under size, which /ping would never reveal."
+          fi
+
+      - name: Repeat the upload twice more
+        run: |
+          set +e
+          # One success proves the path can work. Three tell you whether it
+          # works reliably, which is the actual question for a release pipeline.
+          for n in 2 3; do
+            out=$(curl -sS -o /dev/null -m 900 \
+                    -X POST --data-binary @/tmp/payload.bin \
+                    -H 'Content-Type: application/octet-stream' \
+                    -w 'http=%{http_code} sent=%{size_upload} time=%{time_total} speed=%{speed_upload}' \
+                    "http://$HOST/upload?t=$TOKEN" 2>&1)
+            echo "run $n: rc=$? $out"
+            echo "- upload run $n: \`$out\`" >> "$GITHUB_STEP_SUMMARY"
+          done
