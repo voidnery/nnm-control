@@ -895,3 +895,43 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .llhls-applied li { padding: 2px 0; }
 .linkish { background: none; border: none; padding: 0; text-decoration: underline; cursor: pointer;
            color: inherit; font: inherit; }
+
+
+/* ---- LL-HLS: a run in progress ----------------------------------------- */
+/* A step list and a bar, not a spinner. A spinner over a five-minute run says
+   only that something is happening; this says which part, and which one
+   failed. */
+.llhls-steps { list-style: none; padding: 0; margin: 10px 0; }
+.llhls-step { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+.llhls-step-mark { width: 1.2em; text-align: center; font-weight: 700; }
+.llhls-step.ok .llhls-step-mark { color: var(--ok, #2e7d32); }
+.llhls-step.bad .llhls-step-mark { color: var(--bad, #c62828); }
+.llhls-step.skip .llhls-step-mark,
+.llhls-step.pending .llhls-step-mark { color: var(--muted, #888); }
+.llhls-step.pending { opacity: 0.6; }
+.llhls-step-id { font-family: var(--mono, monospace); font-size: 12px; }
+
+.llhls-bar { height: 6px; border-radius: 3px; background: var(--inset, rgba(0,0,0,0.3));
+             overflow: hidden; margin: 8px 0 4px; }
+.llhls-bar-fill { height: 100%; background: var(--accent, #3aa8e8);
+                  transition: width 400ms ease; }
+.llhls-bar.running .llhls-bar-fill {
+  /* Moving while it waits, so a slow step does not read as a frozen page —
+     and never reaching the end, because a full bar that keeps moving is worse
+     than no bar. */
+  background-image: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: llhls-sheen 1.4s linear infinite;
+}
+.llhls-bar.done .llhls-bar-fill { background: var(--ok, #2e7d32); }
+.llhls-bar.failed .llhls-bar-fill { background: var(--bad, #c62828); }
+@keyframes llhls-sheen { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+.llhls-log { background: var(--inset, rgba(0,0,0,0.25)); padding: 10px; margin-top: 8px;
+             max-height: 320px; overflow: auto; font-size: 11px; line-height: 1.5;
+             white-space: pre-wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .llhls-bar.running .llhls-bar-fill { animation: none; }
+  .llhls-bar-fill { transition: none; }
+}

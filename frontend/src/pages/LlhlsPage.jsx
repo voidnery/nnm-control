@@ -26,6 +26,19 @@ import ConfError from '../lib/confErrors.jsx';
 // fourteen machines inside one request is a pattern this project has been
 // caught by three times; the detail is fetched for one edge, when it is opened.
 
+// How far the run has got, by counting the steps the machine has answered
+// about rather than by a timer. A bar driven by elapsed time is a bar that
+// lies whenever the work is faster or slower than somebody guessed.
+function progressOf(job) {
+  if (job.status !== 'running') return 100;
+  const total = job.steps.length || 1;
+  const done = (job.output || '').split('\n')
+    .filter(l => /^(ok|FAIL|skip)/.test(l.trim())).length;
+  // Never a full bar while it is still running: a bar at 100% that keeps
+  // moving is worse than no bar.
+  return Math.min(95, Math.round((done / total) * 100));
+}
+
 // Three-valued on purpose. `null` renders as a question mark and reads as a
 // question, not as a failure.
 function Mark({ value, title }) {
@@ -84,6 +97,11 @@ function Detail({ id, onProblem, onChanged }) {
   const [showDiff, setShowDiff] = useState(false);
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState(null);
+  // The steps the plan will run, and where the machine has got to. Held apart
+  // from the transcript: a bar answers "how far", a log answers "what
+  // happened", and one pane doing both answers neither well.
+  const [job, setJob] = useState(null);
+  const [showLog, setShowLog] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -102,18 +120,39 @@ function Detail({ id, onProblem, onChanged }) {
     finally { setBusy(false); }
   };
 
+  // Started, then followed.
+  //
+  // This used to hold the browser's request for the whole run. Installing
+  // certbot and issuing a certificate takes minutes, and whatever proxies the
+  // panel closed the connection at sixty seconds and answered 504 — while the
+  // work carried on underneath and, from here, simply vanished.
   const apply = async () => {
-    setBusy(true);
+    setBusy(true); setApplied(null); setShowLog(false);
     try {
       // The digest goes back with the request. If nimble.conf moved between
       // the preview and this click, the panel refuses rather than applying a
       // plan computed from a file that no longer exists.
-      const r = await api(`/llhls/edges/${id}/apply`, {
+      const started = await api(`/llhls/edges/${id}/apply`, {
         method: 'POST', body: { ...form, confSha: plan?.confSha },
       });
-      setApplied(r);
-      push(r.applied ? t('llhls.applied') : t('llhls.nothingToDo'));
-      onChanged?.();
+      if (!started.jobId) {
+        setApplied(started);
+        push(t('llhls.nothingToDo'));
+        return;
+      }
+      setJob({ status: 'running', output: '', steps: started.steps || [] });
+
+      for (;;) {
+        await new Promise(r => setTimeout(r, 2000));
+        const j = await api(`/llhls/edges/${id}/jobs/${started.jobId}`);
+        setJob(prev => ({ ...j, steps: prev?.steps || [] }));
+        if (j.status === 'done' || j.status === 'failed') {
+          setApplied(j.result || { applied: false, error: j.error });
+          push(j.status === 'done' ? t('llhls.applied') : t('llhls.applyFailed'));
+          onChanged?.();
+          break;
+        }
+      }
     } catch (e) { onProblem(explainError(e, t)); }
     finally { setBusy(false); }
   };
@@ -243,6 +282,47 @@ function Detail({ id, onProblem, onChanged }) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {job && (
+        <div className="llhls-job">
+          {/* Each step, in order, with what the machine said about it. A
+              single spinner over a five-minute run tells an operator nothing
+              about which part is slow or which one failed. */}
+          <ol className="llhls-steps">
+            {job.steps.map(st => {
+              const line = (job.output || '').split('\n')
+                .find(l => l.includes(` ${st.id}`) && /^(ok|FAIL|skip)/.test(l.trim()));
+              const state = !line ? (job.status === 'running' ? 'pending' : 'unknown')
+                : line.startsWith('ok') ? 'ok' : line.startsWith('skip') ? 'skip' : 'bad';
+              return (
+                <li key={st.id} className={`llhls-step ${state}`}>
+                  <span className="llhls-step-mark">
+                    {state === 'ok' ? '✓' : state === 'bad' ? '✗' : state === 'skip' ? '·' : '…'}
+                  </span>
+                  <span className="llhls-step-id">{st.id}</span>
+                  <span className="hint">{st.why}</span>
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className={`llhls-bar ${job.status}`}>
+            <div className="llhls-bar-fill" style={{ width: `${progressOf(job)}%` }} />
+          </div>
+          <div className="hint">
+            {job.status === 'running' ? t('llhls.job.running')
+              : job.status === 'done' ? t('llhls.job.done') : t('llhls.job.failed')}
+          </div>
+
+          {/* The transcript, on request. It is what the machine actually said
+              and it is not an explanation — offered rather than shown, so the
+              step list stays readable. */}
+          <button className="linkish" onClick={() => setShowLog(v => !v)}>
+            {showLog ? t('llhls.job.hideLog') : t('llhls.job.showLog')}
+          </button>
+          {showLog && <pre className="llhls-log mono">{job.output || ''}</pre>}
         </div>
       )}
 

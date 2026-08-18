@@ -212,5 +212,45 @@ check('a missing application is a problem, not an empty plan', () => {
   assert.equal(p.halves.application.write, null);
 });
 
+// --- the run itself, which used to be a held-open request -------------------
+//
+// These were appended to the end of this file and therefore sat *after*
+// `process.exit`, so they never ran at all — and two diversions aimed at them
+// changed nothing, which read as "the checks hold". A check that does not run
+// is the purest form of a check that cannot fail.
+
+import { readFileSync as rf } from 'node:fs';
+import { fileURLToPath as fu } from 'node:url';
+import { dirname as dn, join as jn } from 'node:path';
+const routesSrc = rf(jn(dn(fu(import.meta.url)), '..', 'src', 'routes', 'llhls.js'), 'utf8');
+const pageSrc = rf(jn(dn(fu(import.meta.url)), '..', '..', 'frontend', 'src', 'pages', 'LlhlsPage.jsx'), 'utf8');
+
+check('applying starts a job instead of holding the request open', () => {
+  // Installing certbot and issuing a certificate takes minutes. Held open,
+  // whatever proxies the panel answered 504 at sixty seconds while the work
+  // carried on underneath — the fourth time this project has done that.
+  assert.match(routesSrc, /const jobId = createJob\(/);
+  assert.match(routesSrc, /res\.json\(\{ jobId/);
+  assert.match(routesSrc, /llhlsRouter\.get\('\/edges\/:id\/jobs\/:jobId'/,
+    'nothing can be polled, so the job is as invisible as the held request was');
+});
+
+check('the browser follows the job rather than awaiting the work', () => {
+  assert.match(pageSrc, /jobs\/\$\{started\.jobId\}/);
+  assert.match(pageSrc, /if \(!started\.jobId\)/,
+    'a response with no job would leave the screen waiting forever');
+});
+
+check('the bar counts answered steps, not elapsed time', () => {
+  // A bar driven by a timer lies whenever the work is faster or slower than
+  // whoever wrote the timer guessed.
+  assert.match(pageSrc, /function progressOf/);
+  assert.ok(!/setInterval|Date\.now\(\)/.test(pageSrc.slice(pageSrc.indexOf('function progressOf'),
+                                                              pageSrc.indexOf('function progressOf') + 600)),
+    'the progress bar is driven by a clock');
+  assert.match(pageSrc, /Math\.min\(95/,
+    'the bar reaches 100% while still running, which is worse than no bar');
+});
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nall LL-HLS state checks passed');
 process.exit(failures ? 1 : 0);

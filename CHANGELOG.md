@@ -1,5 +1,42 @@
 # Changelog
 
+### v1.20.0 — the 504 was ours, and a run you can watch
+`HTTP 504` with no code in it does not come from a route; it comes from
+whatever proxies the panel. The LL-HLS apply ran inside the browser's request,
+and installing certbot plus issuing a certificate takes minutes — so the
+connection was closed at sixty seconds while the work carried on underneath
+and, from the screen, vanished.
+
+**Fourth instance of "work measured in minutes inside a held-open HTTP
+request"** in this project's own list. And, as with the helper field a version
+ago, the fix already existed one file away: the gateway preparation starts a
+job and the browser follows it, with the same job store, and this route did not
+use it. Now it does.
+
+The screen follows it properly: **each step of the plan listed in order** with
+what the machine said about it — `ok`, `skip`, `FAIL` — a bar underneath, and
+the transcript behind a button rather than in front of one. A bar answers "how
+far", a log answers "what happened", and one pane doing both does neither well.
+
+The bar counts **steps answered**, not seconds elapsed: a bar driven by a timer
+lies whenever the work is faster or slower than whoever wrote the timer
+guessed. It stops at 95% while running, because a full bar that keeps moving is
+worse than no bar, and it respects `prefers-reduced-motion`.
+
+Three checks written for this, and **all three passed while doing nothing**:
+appended to the end of the test file, they sat after `process.exit` and never
+ran. Two diversions aimed at them changed no output, which read as "the checks
+hold". A check that does not run is the purest form of a check that cannot
+fail — sixth in this project, and the first of that particular kind. Moved
+above the exit; all three now fail on their diversions.
+
+Also narrowed: `error-codes`' "a message is never returned where a code
+belongs" matched the whole route file and fired on the job transcript, where
+`error` is a line for a human and the code travels in its own field beside it.
+Scoped to `readConf`, which is what the rule is about, with a guard that fails
+if the function cannot be found — otherwise scoping it would have been another
+way of switching it off.
+
 ### v1.19.1 — reading a field the object does not have, again
 NimbleRU-6 reported "this machine has never said whether it has a helper" with
 a helper installed on it by hand. The cause was one identifier:

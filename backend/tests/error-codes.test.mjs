@@ -91,11 +91,23 @@ check('the page builds no translation key out of a value', () => {
 });
 
 check('a message is never returned where a code belongs', () => {
-  // The catch used to be `return { error: String(e.message) }`.
-  assert.ok(!/error: String\(e\?\.message/.test(routes),
+  // Scoped to `readConf`, which is what the rule is about. Whole-file matching
+  // fired on a job transcript where `error` is a line for a human to read and
+  // the code travels beside it in its own field — a check on a field name
+  // rather than on a role. Sixth narrowing of this kind; the shape is always
+  // the same, a pattern that describes the fault imprecisely.
+  const src = code(routes);
+  // To the end of the function, which is the first line-start `}` after it.
+  // Comments are already stripped, so a marker comment cannot be the bound.
+  const at = src.indexOf('async function readConf');
+  const end = src.indexOf('\n}', at);
+  const fn = src.slice(at, end);
+  assert.ok(fn.length > 100, 'readConf was not found — this check is measuring nothing');
+  assert.ok(!/error: String\(e\?\.message/.test(fn),
     'an exception message is being returned as an error code again');
-  assert.match(routes, /detail: String\(e\?\.message/,
+  assert.match(fn, /detail: String\(e\?\.message/,
     'the raw message should still travel, beside the code and never instead of it');
+  assert.match(fn, /error: code/, 'readConf no longer returns a code');
 });
 
 check('an unrecognised code becomes `unknown` rather than being passed through', () => {

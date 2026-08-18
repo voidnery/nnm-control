@@ -26,6 +26,7 @@ import { capabilities, canChangeSystem, helperReported } from '../services/serve
 import { buildSteps as certSteps, METHODS, inspectUploaded } from '../services/certPlan.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { Settings } from '../models/Settings.js';
+import { createJob, appendJob, finishJob, getJob } from '../services/sshInstaller.js';
 
 export const llhlsRouter = Router();
 llhlsRouter.use(requireAuth);
@@ -234,40 +235,75 @@ llhlsRouter.post('/edges/:id/apply', requirePerm('servers.manage'), async (req, 
   const steps = [...cert.steps, ...transport.steps];
   if (!steps.length) return res.json({ applied: false, unchanged: true });
 
-  // The certificate first, because the configuration points at files that have
-  // to exist: Nimble refuses to start with an ssl_certificate that is not
-  // there, and this order is why the restart is the last step rather than a
-  // second outage.
+  // Started, then polled.
+  //
+  // This used to run inside the request. Installing certbot and issuing a
+  // certificate takes minutes, and whatever proxies the panel closed the
+  // connection at sixty seconds and answered 504 — while the work carried on
+  // underneath and, as far as the operator could tell, vanished.
+  //
+  // Fourth time in this project: work measured in minutes inside a held-open
+  // HTTP request. The gateway preparation had already solved it with exactly
+  // this job store, one file away, and this route did not use it.
   await logEvent(req, 'llhls.apply', {
-    server: server.name, domain, method, sslPort,
-    steps: steps.map(s => s.id),
+    server: server.name, domain, method, sslPort, steps: steps.map(s => s.id),
   });
 
-  let result;
-  try {
-    result = await runTask(server, 'POST /host/apply',
-      { body: { steps }, timeoutMs: 15 * 60_000, createdBy: req.user?.username || '' });
-  } catch (e) {
-    return res.status(502).json({ error: 'apply-failed', code: 'apply-failed', detail: String(e?.message || e).slice(0, 300) });
-  }
+  const jobId = createJob({ server: server.name, domain, kind: 'llhls' });
+  appendJob(jobId, `${server.name}: ${steps.length} step(s) for ${domain}\n`);
+  appendJob(jobId, `certificate: ${method}\n`);
+  for (const st of steps) appendJob(jobId, `  · ${st.id} — ${st.why || ''}\n`);
+  appendJob(jobId, '\n');
 
-  // Verified by handshake, not by exit codes. A step that returned zero and a
-  // port that answers HTTP/2 are different claims.
-  let tls = null;
-  const host = server.playbackEndpoints?.[0]?.host || server.host;
-  try { tls = await probeTls({ host, port: transport.sslPort }); } catch { tls = null; }
+  // Deliberately not awaited. The response goes out now; the browser follows
+  // the job.
+  (async () => {
+    let result = null;
+    try {
+      appendJob(jobId, 'sending the steps to the machine…\n');
+      result = await runTask(server, 'POST /host/apply',
+        { body: { steps }, timeoutMs: 15 * 60_000, createdBy: req.user?.username || '' });
+      for (const st of result?.steps || []) {
+        appendJob(jobId, `${st.ok ? 'ok  ' : st.skipped ? 'skip' : 'FAIL'} ${st.id}`
+          + `${st.skipped ? ' — already so' : ''}${st.error ? ' — ' + st.error : ''}\n`);
+      }
+    } catch (e) {
+      appendJob(jobId, `\nthe machine did not finish: ${String(e?.message || e)}\n`);
+      return finishJob(jobId, { status: 'failed', error: String(e?.message || e).slice(0, 300),
+                                code: e?.code || null });
+    }
 
-  res.json({
-    applied: true,
-    result,
-    tls,
-    // Said in the same breath as the success, because it is the difference
-    // between this working and this looking like it works.
-    next: tls?.http2
-      ? 'Transport is up. LL-HLS still needs the application half: alhls_enabled and hls_part_duration, and the input stream restarted afterwards.'
-      : 'The configuration was written but HTTP/2 did not answer. Check nimble.log — a certificate path Nimble cannot read stops it from starting the SSL listener.',
-    backups: result?.backups || [],
-  });
+    // Verified by handshake, not by exit codes. A step that returned zero and
+    // a port that answers HTTP/2 are different claims.
+    let tls = null;
+    appendJob(jobId, '\nchecking the wire — ALPN and the certificate a player would see…\n');
+    const host = server.playbackEndpoints?.[0]?.host || server.host;
+    try { tls = await probeTls({ host, port: transport.sslPort }); } catch { tls = null; }
+    appendJob(jobId, tls?.http2
+      ? `HTTP/2 negotiated on ${host}:${transport.sslPort}, certificate ${tls.certTrusted ? 'trusted' : 'NOT trusted by a default store'}\n`
+      : `no HTTP/2 on ${host}:${transport.sslPort} — the configuration was written and Nimble is not serving it\n`);
+
+    const ok = Boolean(result?.ok) && Boolean(tls?.http2);
+    appendJob(jobId, ok
+      ? '\ntransport is up. LL-HLS still needs the application half: alhls_enabled and\n'
+        + 'hls_part_duration, and the input stream restarted afterwards.\n'
+      : '\nnot finished. If the steps succeeded and HTTP/2 did not answer, look at\n'
+        + 'nimble.log — a certificate path Nimble cannot read stops it starting the\n'
+        + 'SSL listener, and it says so there and nowhere else.\n');
+
+    finishJob(jobId, {
+      status: ok ? 'done' : 'failed',
+      result: { applied: true, ...result, tls, backups: result?.backups || [] },
+    });
+  })();
+
+  res.json({ jobId, steps: steps.map(s => ({ id: s.id, why: s.why })) });
+});
+
+llhlsRouter.get('/edges/:id/jobs/:jobId', requirePerm('servers.manage'), (req, res) => {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job-not-found', code: 'job-not-found' });
+  res.json(job);
 });
 
 llhlsRouter.post('/edges/:id/rollback', requirePerm('servers.manage'), async (req, res) => {
