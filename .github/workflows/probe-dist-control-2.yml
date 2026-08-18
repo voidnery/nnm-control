@@ -1,0 +1,179 @@
+# .github/workflows/probe-dist-control-2.yml
+#
+# Probe #1 established that the CI -> host path is reachable (20/20) but slow
+# in the direction releases travel: under 0.31 MB/s single-stream, against
+# ~2 MB/s in the opposite direction, with ~0.96s for a 5-byte /ping.
+#
+# That leaves one question, and the whole ingest design turns on the answer:
+#
+#   (a) WINDOW-LIMITED. The path has bandwidth, but a single TCP connection
+#       cannot fill it at ~450ms RTT. Parallel streams then multiply
+#       throughput almost linearly, and `docker push` — which uploads layers
+#       concurrently — is viable as-is.
+#
+#   (b) BANDWIDTH-LIMITED. The path is shaped to roughly this rate no matter
+#       how many connections you open. Parallel streams add nothing, and
+#       pushing container images from GitHub is not a workable ingest path.
+#
+# The two look identical in probe #1 and demand opposite architectures, so
+# this measures them apart: the same 200MB, once as one stream and once as
+# eight concurrent streams, back to back.
+#
+# Prerequisite: the listener running on the host (it is already concurrent —
+# ThreadingTCPServer — so parallel POSTs are served in parallel), and secret
+# DC_PROBE_TOKEN matching its token.
+
+name: probe-dist-control-2
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: 'Host to probe (no scheme)'
+        required: true
+        default: 'updates.eterix.pro'
+      total_mb:
+        description: 'Total MB per test (split across streams in the parallel run)'
+        required: true
+        default: '200'
+      streams:
+        description: 'Concurrent streams for the parallel run'
+        required: true
+        default: '8'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HOST: ${{ inputs.host }}
+      TOKEN: ${{ secrets.DC_PROBE_TOKEN }}
+      TOTAL_MB: ${{ inputs.total_mb }}
+      STREAMS: ${{ inputs.streams }}
+    steps:
+      - name: Guard
+        run: |
+          [ -n "$TOKEN" ] || { echo "::error::secret DC_PROBE_TOKEN is not set"; exit 1; }
+
+      - name: Round-trip time, isolated from transfer
+        run: |
+          set +e
+          # time_connect is the TCP handshake alone = one RTT, with no payload,
+          # no TLS and no server-side work mixed in. Probe #1 measured
+          # time_total, which bundles several RTTs together and cannot
+          # distinguish latency from slowness.
+          echo "### RTT (TCP handshake only)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' | tee -a "$GITHUB_STEP_SUMMARY"
+          for i in $(seq 1 10); do
+            curl -sS -o /dev/null -m 15 \
+              -w 'connect=%{time_connect}s  first_byte=%{time_starttransfer}s  total=%{time_total}s\n' \
+              "http://$HOST/ping?t=$TOKEN" 2>/dev/null | tee -a "$GITHUB_STEP_SUMMARY"
+            sleep 1
+          done
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build payloads
+        run: |
+          # Random, not zeros: container layers are already compressed, so a
+          # compressible payload would report a number that does not survive
+          # contact with a real release.
+          per=$(( TOTAL_MB / STREAMS ))
+          echo "single: ${TOTAL_MB}MB   parallel: ${STREAMS} x ${per}MB"
+          head -c "$((TOTAL_MB * 1024 * 1024))" /dev/urandom > /tmp/single.bin
+          for n in $(seq 1 "$STREAMS"); do
+            head -c "$((per * 1024 * 1024))" /dev/urandom > "/tmp/part.$n.bin"
+          done
+          ls -l /tmp/single.bin /tmp/part.1.bin
+
+      - name: A — single stream (${{ inputs.total_mb }}MB)
+        run: |
+          set +e
+          t0=$(date +%s.%N)
+          out=$(curl -sS -o /tmp/resp_a.txt -m 1800 \
+                  -X POST --data-binary @/tmp/single.bin \
+                  -H 'Content-Type: application/octet-stream' \
+                  -w 'http=%{http_code} sent=%{size_upload} time=%{time_total} speed=%{speed_upload}' \
+                  "http://$HOST/upload?t=$TOKEN" 2>&1)
+          rc=$?
+          t1=$(date +%s.%N)
+          wall=$(echo "$t1 - $t0" | bc)
+          rate=$(echo "scale=3; $TOTAL_MB / $wall" | bc)
+          echo "SINGLE rc=$rc wall=${wall}s rate=${rate} MB/s"
+          echo "$out"
+          echo "server: $(cat /tmp/resp_a.txt 2>/dev/null)"
+          echo "SINGLE_RATE=$rate" >> "$GITHUB_ENV"
+          {
+            echo "### A — single stream"
+            echo '```'
+            echo "rc=$rc  wall=${wall}s  rate=${rate} MB/s"
+            echo "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: B — ${{ inputs.streams }} concurrent streams (${{ inputs.total_mb }}MB total)
+        run: |
+          set +e
+          t0=$(date +%s.%N)
+          pids=""
+          for n in $(seq 1 "$STREAMS"); do
+            ( curl -sS -o "/tmp/resp_b.$n.txt" -m 1800 \
+                -X POST --data-binary @"/tmp/part.$n.bin" \
+                -H 'Content-Type: application/octet-stream' \
+                -w "stream$n http=%{http_code} sent=%{size_upload} time=%{time_total} speed=%{speed_upload}\n" \
+                "http://$HOST/upload?t=$TOKEN" > "/tmp/out.$n.txt" 2>&1 ) &
+            pids="$pids $!"
+          done
+          # Wall clock across all streams is the number that matters. Per-stream
+          # rates will each look slow; the aggregate is the question.
+          fail=0
+          for p in $pids; do wait "$p" || fail=$((fail+1)); done
+          t1=$(date +%s.%N)
+          wall=$(echo "$t1 - $t0" | bc)
+          rate=$(echo "scale=3; $TOTAL_MB / $wall" | bc)
+          cat /tmp/out.*.txt
+          echo "PARALLEL streams=$STREAMS failed=$fail wall=${wall}s aggregate=${rate} MB/s"
+          {
+            echo "### B — $STREAMS concurrent streams"
+            echo '```'
+            cat /tmp/out.*.txt
+            echo "failed streams: $fail"
+            echo "wall=${wall}s  aggregate=${rate} MB/s"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The verdict, stated plainly rather than left to be eyeballed.
+          gain=$(echo "scale=2; $rate / $SINGLE_RATE" | bc)
+          {
+            echo "### Verdict"
+            echo ""
+            echo "single = ${SINGLE_RATE} MB/s, parallel = ${rate} MB/s, gain = ${gain}x"
+            echo ""
+            echo "gain near 1x  -> bandwidth-shaped: parallelism does not help,"
+            echo "                 pushing images from CI is not viable."
+            echo "gain > ~3x    -> window-limited: docker push (concurrent by"
+            echo "                 default) will be far faster than probe #1 suggested."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "GAIN=${gain}x"
+
+      - name: C — reverse direction, for comparison
+        run: |
+          set +e
+          # Download the same volume in parallel. If the asymmetry is the path
+          # itself, this stays fast; if both directions collapse under
+          # concurrency, the constraint is elsewhere.
+          per=$(( TOTAL_MB / STREAMS ))
+          t0=$(date +%s.%N)
+          for n in $(seq 1 "$STREAMS"); do
+            ( curl -sS -o /dev/null -m 1800 "http://$HOST/blob/$per?t=$TOKEN" ) &
+          done
+          wait
+          t1=$(date +%s.%N)
+          wall=$(echo "$t1 - $t0" | bc)
+          rate=$(echo "scale=3; $TOTAL_MB / $wall" | bc)
+          echo "DOWNLOAD parallel wall=${wall}s aggregate=${rate} MB/s"
+          {
+            echo "### C — parallel download (reverse direction)"
+            echo '```'
+            echo "wall=${wall}s  aggregate=${rate} MB/s"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
