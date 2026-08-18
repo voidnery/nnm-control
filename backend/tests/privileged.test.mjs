@@ -7,6 +7,7 @@
 //
 // So the privilege lives in a second unit, and every check here is about the
 // limits rather than the capability. The capability is easy.
+import { helperReported } from '../src/services/serverCapabilities.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { privilegedInstaller, privilegedEligibility, stepAllowed, ALLOWED_PATHS, ALLOWED_BINARIES }
@@ -442,9 +443,17 @@ check('whether the helper is present comes from its own polling', () => {
 check('never asked is not the same as absent', () => {
   // `null` for a machine nothing has reported from: an unanswered question,
   // not a missing helper.
-  const line = serversSrc.slice(serversSrc.indexOf('privileged: s.helper?.seen'),
-                                serversSrc.indexOf('privileged: s.helper?.seen') + 160);
-  assert.ok(/: null/.test(line), 'a machine nobody has heard from is reported as having no helper');
+  //
+  // The rule moved into `serverCapabilities.helperReported` in v1.20.0,
+  // because a second copy of it had appeared and disagreed. So this now checks
+  // the function rather than the line that used to spell it out — and it is
+  // the behaviour that matters, not where the characters are.
+  assert.equal(helperReported({}), null,
+    'a machine nobody has heard from is reported as having no helper');
+  assert.equal(helperReported({ agent: { lastContactAt: new Date() } }), false);
+  assert.equal(helperReported({ helper: { seen: true } }), true);
+  assert.match(serversSrc, /privileged: helperReported\(s\)/,
+    'the servers list has gone back to deriving it on its own');
   // And the UI only complains about `false`, never about `null`.
   assert.ok(/s\.privileged === false/.test(card), 'the card treats unknown as missing');
   assert.ok(/server\.privileged === false/.test(dlg), 'the dialog treats unknown as missing');

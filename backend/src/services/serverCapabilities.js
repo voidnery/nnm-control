@@ -106,17 +106,42 @@ export function capabilities(server) {
   };
 }
 
-// Three-valued, and the third value does not permit anything.
+// The helper is on this machine, is not, or has never said.
 //
-// `null` means the machine has never told us. That is honest in a report and
-// dangerous on a button: the LL-HLS screen offered "write it and restart
-// Nimble" on a machine whose helper state was unknown, and the operator got a
-// 422 after pressing. Unknown blocks exactly as absent does; only a positive
-// answer opens the gate.
+// **Read from `helper.seen`, which is where it lives.** The first version of
+// this read `server.agent.privileged` — a field the schema does not have, so
+// it was `undefined` on every machine in the fleet and every one of them
+// reported "never told us". A helper installed by hand made no difference,
+// because nothing was looking at the record it writes.
+//
+// That is the fourth time in this project: reading a field off an object that
+// does not carry it. `agent` from `/servers`, `gateway` from the networks
+// list, `host` from a network node, and now this. It fails silently every
+// time — `undefined` is a value, and code carries on with it.
+//
+// The rule itself is the one `routes/servers.js` had already worked out, moved
+// here so that it is worked out once:
+//
+//   seen                     → installed
+//   not seen, agent has been in touch → missing, because we would have heard
+//   nothing has been in touch at all  → unknown
+//
+// Three values, and the third does not permit anything: the LL-HLS screen
+// offered "write it and restart Nimble" on a machine in that state, and the
+// refusal arrived as a 422 after the press.
+export function helperReported(server) {
+  if (server?.helper?.seen) return true;
+  // The ordinary agent polls every ten seconds by default. If it has ever been
+  // in touch and no helper has, the helper is not there — this is a
+  // measurement, not an assumption.
+  if (server?.agent?.lastContactAt) return false;
+  return null;
+}
+
 export function helperState(server) {
   const caps = capabilities(server);
   if (!caps.helper.needed) return 'not-needed';
-  const v = server?.agent?.privileged;
+  const v = helperReported(server);
   if (v === true) return 'installed';
   if (v === false) return 'missing';
   return 'unknown';

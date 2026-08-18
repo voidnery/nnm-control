@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  PURPOSES, HELPER_PURPOSES, capabilities, helperState, canChangeSystem,
+  PURPOSES, HELPER_PURPOSES, capabilities, helperState, canChangeSystem, helperReported,
 } from '../src/services/serverCapabilities.js';
 import { privilegedEligibility, profileFor, PROFILES } from '../src/services/privilegedHelper.js';
 
@@ -123,12 +123,34 @@ check('the frontend agrees about which machines LL-HLS is for', () => {
 
 // --- three values, and the third permits nothing ----------------------------
 
+check('the helper is read from the record the helper writes', () => {
+  // `helper.seen` is the field. The first version of this read
+  // `server.agent.privileged`, which the schema does not have, so every
+  // machine in the fleet reported "never told us" and installing a helper by
+  // hand changed nothing the panel could see. Fourth instance in this project
+  // of reading a field off an object that does not carry it.
+  assert.equal(helperReported({ helper: { seen: true } }), true);
+  assert.equal(helperReported({ agent: { lastContactAt: new Date() } }), false);
+  assert.equal(helperReported({}), null);
+  // And the field that never existed must not resurrect a wrong answer.
+  assert.equal(helperReported({ agent: { privileged: true } }), null,
+    'a field nothing sets is being trusted again');
+});
+
 check('unknown is its own state and is not absence', () => {
   const s = { purpose: 'nimble-cdn', agent: { enabled: true } };
   assert.equal(helperState(s), 'unknown');
-  assert.equal(helperState({ ...s, agent: { enabled: true, privileged: false } }), 'missing');
-  assert.equal(helperState({ ...s, agent: { enabled: true, privileged: true } }), 'installed');
+  assert.equal(helperState({ ...s, agent: { enabled: true, lastContactAt: new Date() } }), 'missing');
+  assert.equal(helperState({ ...s, helper: { seen: true } }), 'installed');
   assert.equal(helperState({ purpose: 'nimble', agent: { enabled: true } }), 'not-needed');
+});
+
+check('the panel and the servers list agree, because it is one function', () => {
+  // routes/servers.js had this rule written out by hand and the new code had
+  // a second, different one. Now there is a function and the route calls it.
+  const routes = readFileSync(join(here, '..', 'src', 'routes', 'servers.js'), 'utf8');
+  assert.match(routes, /privileged: helperReported\(s\)/,
+    'the servers list derives the helper state independently again');
 });
 
 check('unknown blocks a change exactly as absence does', () => {
@@ -138,16 +160,16 @@ check('unknown blocks a change exactly as absence does', () => {
   const base = { purpose: 'nimble-cdn', agent: { enabled: true } };
   assert.equal(canChangeSystem(base).ok, false);
   assert.equal(canChangeSystem(base).code, 'helper-state-unknown');
-  assert.equal(canChangeSystem({ ...base, agent: { enabled: true, privileged: false } }).code,
+  assert.equal(canChangeSystem({ ...base, agent: { enabled: true, lastContactAt: new Date() } }).code,
     'helper-not-installed');
-  assert.equal(canChangeSystem({ ...base, agent: { enabled: true, privileged: true } }).ok, true);
+  assert.equal(canChangeSystem({ ...base, helper: { seen: true } }).ok, true);
 });
 
 check('a machine that needs no helper is refused for that reason, not for a missing one', () => {
   // Different problems have different fixes. "Install the helper" on a machine
   // that should never have one sends the operator to relabel it, which is how
   // this whole tangle started.
-  const r = canChangeSystem({ purpose: 'nimble', agent: { enabled: true, privileged: false } });
+  const r = canChangeSystem({ purpose: 'nimble', agent: { enabled: true, lastContactAt: new Date() } });
   assert.equal(r.code, 'helper-not-applicable');
 });
 

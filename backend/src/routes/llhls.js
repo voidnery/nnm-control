@@ -22,7 +22,7 @@ import { logEvent } from '../services/audit.js';
 import { privilegedEligibility } from '../services/privilegedHelper.js';
 import { buildPlan, maskConf, describeChange, CONF_PATH, DEFAULT_SSL_PORT } from '../services/llhlsPlan.js';
 import { edgeState, channelPlan } from '../services/llhlsState.js';
-import { capabilities, canChangeSystem } from '../services/serverCapabilities.js';
+import { capabilities, canChangeSystem, helperReported } from '../services/serverCapabilities.js';
 import { buildSteps as certSteps, METHODS, inspectUploaded } from '../services/certPlan.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { Settings } from '../models/Settings.js';
@@ -172,7 +172,7 @@ llhlsRouter.post('/edges/:id/plan', requirePerm('servers.manage'), async (req, r
   await logEvent(req, 'llhls.plan', { server: server.name, domain, method, sslPort });
 
   res.json({
-    helper: { installed: server.agent?.privileged ?? null, eligible: eligible.ok, profile: eligible.profile },
+    helper: { installed: helperReported(server), eligible: eligible.ok, profile: eligible.profile },
     agent: { version: server.agent?.version ?? null, need: AGENT_NEED },
     certificate: { method, ...cert, uploaded, renewalNote: cert.renewalNote },
     transport: {

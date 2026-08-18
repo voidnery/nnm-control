@@ -162,6 +162,17 @@ function Detail({ id, onProblem, onChanged }) {
           {t(helper === 'missing' ? 'llhls.needHelper' : 'llhls.helperUnknown')}
         </div>
       )}
+      {/* When it is there, when it last said so. `helper.seen` is never unset,
+          so a helper that was removed still reads as installed and this date
+          is the only thing that says otherwise. */}
+      {helper === 'installed' && detail.helper.lastContactAt && (
+        <div className="hint">
+          {t('llhls.helperSeen', {
+            when: new Date(detail.helper.lastContactAt).toLocaleString(),
+            version: detail.helper.version || '?',
+          })}
+        </div>
+      )}
 
       <h4>{t('llhls.setup')}</h4>
 

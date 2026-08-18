@@ -31,26 +31,31 @@ ssl_certificate = /etc/letsencrypt/live/e/fullchain.pem
 ssl_certificate_key = /etc/letsencrypt/live/e/privkey.pem
 ssl_http2_enabled = true
 `;
-const edge = { name: 'RU-2', purpose: 'nimble', agent: { privileged: true } };
+// `nimble-cdn`, because that is what a delivery edge is since v1.17.0, and
+// `helper.seen`, because that is where the helper's own record lives — the
+// field this used to set, `agent.privileged`, exists in no schema.
+const edge = { name: 'RU-2', purpose: 'nimble-cdn', agent: { enabled: true, lastContactAt: new Date() },
+               helper: { seen: true, lastContactAt: new Date() } };
 
 // --- not asked is its own answer --------------------------------------------
 
 check('an edge nobody has probed is unknown, not incapable', () => {
-  const s = edgeState({ server: edge });
+  const s = edgeState({ server: { name: 'x', purpose: 'nimble-cdn' } });
   assert.equal(s.ready, null, 'an unprobed edge was reported as not ready');
   assert.deepEqual(s.blockers, [], 'an unprobed edge was given blockers it has not been shown to have');
-  assert.deepEqual(s.unknown.sort(), ['certificate', 'nimble-conf', 'playlist', 'tls']);
+  assert.deepEqual(s.unknown.sort(), ['certificate', 'helper', 'nimble-conf', 'playlist', 'tls']);
 });
 
 check('a machine whose agent has never answered does not claim the helper is missing', () => {
-  const s = edgeState({ server: { name: 'x', purpose: 'nimble', agent: {} } });
+  const s = edgeState({ server: { name: 'x', purpose: 'nimble-cdn', agent: {} } });
   assert.equal(s.helper.installed, null);
   assert.ok(!s.blockers.includes('helper-not-installed'));
   assert.ok(s.unknown.includes('helper'));
 });
 
 check('a machine that answered and has no helper is a blocker, not an unknown', () => {
-  const s = edgeState({ server: { name: 'x', purpose: 'nimble', agent: { privileged: false } } });
+  const s = edgeState({ server: { name: 'x', purpose: 'nimble-cdn',
+                                  agent: { lastContactAt: new Date() } } });
   assert.ok(s.blockers.includes('helper-not-installed'));
   assert.ok(!s.unknown.includes('helper'));
 });

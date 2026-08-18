@@ -1,3 +1,4 @@
+import { helperReported } from '../services/serverCapabilities.js';
 import { Router } from 'express';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
@@ -56,7 +57,7 @@ const pub = (s) => ({
   // From the helper's own record rather than from whichever instance polled
   // last. Null when nothing has been heard at all — an unanswered question,
   // not a missing helper.
-  privileged: s.helper?.seen ? true : (s.agent?.lastContactAt ? false : null),
+  privileged: helperReported(s),
   helper: s.helper?.seen ? {
     version: s.helper.version, lastContactAt: s.helper.lastContactAt,
   } : null,

@@ -146,9 +146,29 @@ check('expiry is read against a clock that can be moved, and both ends are check
 });
 
 check('an expiry inside a month is flagged before it becomes an outage', () => {
+  // The clock is moved to ten days before this certificate's own expiry,
+  // rather than relying on a fixture issued for one day.
+  //
+  // The first version used `short.pem` with the real clock and passed for
+  // exactly twenty-four hours after the fixtures were generated, then failed
+  // for the rest of time. A check whose answer depends on what day it is
+  // measures the calendar.
+  const validTo = new Date(inspectUploaded({
+    certificatePem: short, privateKeyPem: leafKey, domain: 'edge.example.ru',
+    now: new Date('2000-01-01'),
+  }).validTo);
+  const tenDaysBefore = new Date(validTo.getTime() - 10 * 86400000);
   const r = inspectUploaded({ certificatePem: short, privateKeyPem: leafKey,
-                              domain: 'edge.example.ru' });
-  assert.ok(r.notes.includes('expires-soon'));
+                              domain: 'edge.example.ru', now: tenDaysBefore });
+  assert.ok(r.notes.includes('expires-soon'), JSON.stringify(r.notes));
+  assert.ok(!r.problems.includes('expired'));
+
+  // And well before it, no note — otherwise "expires soon" would be on every
+  // certificate and mean nothing.
+  const early = new Date(validTo.getTime() - 60 * 86400000);
+  const far = inspectUploaded({ certificatePem: fixture('bundle.pem'), privateKeyPem: leafKey,
+                                domain: 'edge.example.ru', now: early });
+  assert.ok(!far.notes.includes('expires-soon'));
 });
 
 check('rubbish in either field is refused rather than half-read', () => {

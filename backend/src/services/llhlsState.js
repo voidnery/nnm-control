@@ -19,6 +19,7 @@
 
 import { verdict } from './llhlsPlan.js';
 import { profileFor } from './privilegedHelper.js';
+import { helperReported } from './serverCapabilities.js';
 import { PART_MIN_MS, partCeilingMs, partRangeMs, containerAdvice, expectedLatency,
          RESTART_REQUIRED_AFTER_ENABLE } from './llhls.js';
 
@@ -34,9 +35,15 @@ export function edgeState({ server, conf = null, tls = null, playlist = null,
 
   // 1. Can anything be written here at all.
   const helper = {
-    // `enabled` is what the machine reported, not what the panel hopes. An
-    // agent that has never answered leaves this null.
-    installed: server?.agent?.privileged ?? null,
+    // What the machine reported, not what the panel hopes — and read from the
+    // record the helper actually writes, `helper.seen`, rather than from a
+    // field nothing sets.
+    installed: helperReported(server),
+    // Shown beside it, because `seen` is never unset: a helper that was
+    // removed still reads as installed, and the date is the only thing that
+    // says otherwise.
+    lastContactAt: server?.helper?.lastContactAt ?? null,
+    version: server?.helper?.version || null,
     profile,
     // The edge profile is what a media server gets; a gateway asked about
     // LL-HLS is a question nobody meant to ask.

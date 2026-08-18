@@ -1,5 +1,44 @@
 # Changelog
 
+### v1.19.1 — reading a field the object does not have, again
+NimbleRU-6 reported "this machine has never said whether it has a helper" with
+a helper installed on it by hand. The cause was one identifier:
+
+```js
+server.agent.privileged      // nothing sets this
+server.helper.seen           // this is where it lives
+```
+
+`undefined` is a value, so nothing failed. Every machine in the fleet read as
+unknown, and installing a helper changed nothing the panel could see.
+
+**Fourth instance of this exact shape** in the project's own list — `agent`
+from `/servers`, `gateway` from the networks list, `host` from a network node,
+and now this. It is the failure that never announces itself.
+
+Worse, the correct rule was already written, one file away, in
+`routes/servers.js`:
+
+```js
+privileged: s.helper?.seen ? true : (s.agent?.lastContactAt ? false : null),
+```
+
+Three-valued and right. The new code did not use it; it invented a second one
+from a field name that sounded plausible. So the rule is now
+`serverCapabilities.helperReported()` and the route calls it, with a check that
+fails if either side goes back to working it out alone.
+
+The screen also shows the helper's version and when it last reported.
+`helper.seen` is never unset, so a helper that was removed still reads as
+installed and the date is the only thing that says otherwise.
+
+**And a test that measured the calendar.** `cert-plan`'s "expires soon" case
+used a certificate issued for one day and the real clock: it passed for
+twenty-four hours after the fixtures were generated and failed every day
+after. Now the clock is moved to ten days before that certificate's own expiry,
+with the far-from-expiry case checked too — otherwise "expires soon" would be
+on everything and mean nothing.
+
 ### v1.19.0 — a message is not a code
 The screenshot said it exactly:
 

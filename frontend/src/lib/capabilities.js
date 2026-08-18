@@ -28,9 +28,13 @@ export const llhlsApplies = (server) => LLHLS_PURPOSES.includes(purposeOf(server
 // dangerous on a button: the LL-HLS screen offered "write it and restart
 // Nimble" on a machine whose helper state was unknown, and the refusal arrived
 // after the press.
+// `privileged` is what the API sends: three-valued, derived on the server from
+// `helper.seen` and whether the agent has ever been in touch. The browser does
+// not re-derive it — the second `?? server?.agent?.privileged` that used to be
+// here was reading a field nothing sets, on either side.
 export function helperState(server) {
   if (!needsHelper(server)) return 'not-needed';
-  const v = server?.privileged ?? server?.agent?.privileged;
+  const v = server?.privileged;
   if (v === true) return 'installed';
   if (v === false) return 'missing';
   return 'unknown';
