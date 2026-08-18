@@ -6,6 +6,8 @@ import SearchInput from '../components/SearchInput.jsx';
 import AgentInstallModal from '../components/AgentInstallModal.jsx';
 import AgentCentreModal from '../components/AgentCentreModal.jsx';
 import GatewaySetupModal from '../components/GatewaySetupModal.jsx';
+import HelperInstallModal from '../components/HelperInstallModal.jsx';
+import { HELPER_PURPOSES } from '../lib/capabilities.js';
 import AgentUninstallModal from '../components/AgentUninstallModal.jsx';
 
 // Server agents used to live in a modal behind a button on the Playlists page,
@@ -27,6 +29,7 @@ export default function ServerAgentsPage() {
   const [filter, setFilter] = useState('');
   const [purposeFilter, setPurposeFilter] = useState('all');
   const [gwSetup, setGwSetup] = useState(null);
+  const [helperFor, setHelperFor] = useState(null);
   const [uninstall, setUninstall] = useState(null);
   const [install, setInstall] = useState(null);
   const [centre, setCentre] = useState(false);
@@ -106,6 +109,9 @@ export default function ServerAgentsPage() {
       {gwSetup && (
         <GatewaySetupModal server={gwSetup} onClose={() => setGwSetup(null)} onDone={load} />
       )}
+      {helperFor && (
+        <HelperInstallModal server={helperFor} onClose={() => setHelperFor(null)} onDone={load} />
+      )}
       {uninstall && (
         <AgentUninstallModal server={uninstall} onClose={() => setUninstall(null)} onDone={load} />
       )}
@@ -156,7 +162,15 @@ export default function ServerAgentsPage() {
               <div className="row" style={{ gap: 12, flexShrink: 0 }}>
                 {/* Only on the machines it is for. Preparing a gateway on a
                     media server would install nginx onto a box already serving
-                    on the ports it wants. */}
+                    on the ports it wants.
+
+                    The helper itself is a different question and is offered
+                    below, because a delivery media server needs one too — for
+                    /etc/nimble rather than for nginx. Asking `purpose ===
+                    'gateway'` for both is why the backend accepted a media
+                    server for two versions while this page had no button, and
+                    the only route to one was relabelling the machine as an
+                    edge-proxy, which is false. */}
                 {(s.purpose || 'nimble') === 'gateway' && (
                   <>
                     {/* On the card, not only inside the dialog that did it:
@@ -188,6 +202,24 @@ export default function ServerAgentsPage() {
                     )}
                     <button onClick={() => setGwSetup(s)}>
                       {t(s.gateway?.state === 'applied' ? 'agent.gw.redo' : 'agent.prepareGateway')}
+                    </button>
+                  </>
+                )}
+                {/* The helper on a delivery media server. Same component, same
+                    act; what differs is the profile it installs, and that is
+                    decided from the purpose rather than asked. */}
+                {HELPER_PURPOSES.includes(s.purpose || 'nimble')
+                  && (s.purpose || 'nimble') !== 'gateway' && (
+                  <>
+                    {s.privileged === true && <span className="gw-state applied">{t('agent.helperOn')}</span>}
+                    {s.privileged === false && <span className="gw-state failed">{t('agent.gw.noHelper')}</span>}
+                    {/* Three-valued here as everywhere: nobody has asked is not
+                        the same as it is not there. */}
+                    {s.privileged !== true && s.privileged !== false && (
+                      <span className="hint">{t('agent.helperUnknown')}</span>
+                    )}
+                    <button disabled={!r.enabled} onClick={() => setHelperFor(s)}>
+                      {t(s.privileged === true ? 'agent.helperRedo' : 'agent.helperInstall')}
                     </button>
                   </>
                 )}

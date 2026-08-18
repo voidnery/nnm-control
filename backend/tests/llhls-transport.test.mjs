@@ -101,17 +101,24 @@ check('the agent carries the same two profiles as the panel, path for path', () 
   assert.ok(!edgeBlock.includes("'kill'"), "the agent's edge profile can kill");
 });
 
-check('purpose decides the profile, and a media server is an edge', () => {
+check('purpose decides the profile, and a delivery media server is an edge', () => {
   assert.equal(profileFor('gateway'), 'gateway');
-  assert.equal(profileFor('nimble'), 'edge');
   assert.equal(profileFor('nimble-cdn'), 'edge');
+  // A purpose that needs no helper still answers, and answers with the smaller
+  // profile — the question "which profile" must never resolve upwards.
+  assert.equal(profileFor('nimble'), 'edge');
   assert.equal(profileFor(undefined), 'edge');
 });
 
-check('a media server may now be offered the helper, and still needs an agent first', () => {
-  const withAgent = { purpose: 'nimble', agent: { enabled: true } };
-  assert.deepEqual(privilegedEligibility(withAgent), { ok: true, profile: 'edge', purpose: 'nimble' });
-  assert.equal(privilegedEligibility({ purpose: 'nimble' }).code, 'no-agent');
+check('a delivery media server may be offered the helper, and still needs an agent first', () => {
+  // Narrowed in v1.17.0 from "any non-gateway" to "whatever needs it". A
+  // `nimble` machine processes video and serves nobody, so it has nothing the
+  // helper would do.
+  const withAgent = { purpose: 'nimble-cdn', agent: { enabled: true } };
+  assert.deepEqual(privilegedEligibility(withAgent), { ok: true, profile: 'edge', purpose: 'nimble-cdn' });
+  assert.equal(privilegedEligibility({ purpose: 'nimble-cdn' }).code, 'no-agent');
+  assert.equal(privilegedEligibility({ purpose: 'nimble', agent: { enabled: true } }).code,
+    'helper-not-applicable');
 });
 
 check('the installer writes the profile into the unit environment, not into a request', () => {

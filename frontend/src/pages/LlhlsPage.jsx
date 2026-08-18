@@ -5,6 +5,9 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import ErrorDialog from '../components/ErrorDialog.jsx';
 import { explainError } from '../lib/errors.js';
+import { helperState } from '../lib/capabilities.js';
+import CertificateSetup from '../components/CertificateSetup.jsx';
+import ConfError from '../lib/confErrors.jsx';
 
 // Low-Latency HLS, in one place.
 //
@@ -22,9 +25,6 @@ import { explainError } from '../lib/errors.js';
 // The list is deliberately cheap. Reading nimble.conf and shaking hands with
 // fourteen machines inside one request is a pattern this project has been
 // caught by three times; the detail is fetched for one edge, when it is opened.
-
-const CERT_METHODS = ['acme-http', 'acme-dns', 'upload'];
-const DNS_PROVIDERS = ['cloudflare', 'route53', 'digitalocean'];
 
 // Three-valued on purpose. `null` renders as a question mark and reads as a
 // question, not as a failure.
@@ -134,13 +134,17 @@ function Detail({ id, onProblem, onChanged }) {
   if (loading) return <div className="hint">{t('llhls.loading')}</div>;
   if (!detail) return null;
 
+  // One decision for the warning and the button, so they cannot disagree.
+  const helper = helperState({ purpose: detail.purpose, privileged: detail.helper.installed });
+
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   return (
     <div className="llhls-detail">
-      {detail.confError && (
-        <div className="error-box">{t(`llhls.confError.${detail.confError}`)}</div>
-      )}
+      {/* A code, a fix, and the machine's own words last. This used to be
+          `t('llhls.confError.' + detail.confError)` where confError was an
+          exception's message, so the interface printed the key. */}
+      <ConfError code={detail.confError} detail={detail.confDetail} />
 
       {/* What is unknown, said before what is wrong. An operator looking at a
           row of question marks needs to know nobody asked, not to go hunting
@@ -149,67 +153,29 @@ function Detail({ id, onProblem, onChanged }) {
         <div className="hint">{t('llhls.unknown', { list: detail.unknown.join(', ') })}</div>
       )}
 
-      {detail.helper.installed === false && (
+      {/* Three-valued, and the third value permits nothing. This used to show
+          only when the helper was known absent, so a machine that had never
+          reported got no warning and a working Apply button — and the refusal
+          arrived after the press, as an HTTP 422 with a code in it. */}
+      {helper !== 'installed' && (
         <div className="error-box">
-          {t('llhls.needHelper')}
+          {t(helper === 'missing' ? 'llhls.needHelper' : 'llhls.helperUnknown')}
         </div>
       )}
 
       <h4>{t('llhls.setup')}</h4>
-      <div className="form-grid">
-        <label>{t('llhls.f.domain')}
-          <input value={form.domain} onChange={set('domain')} placeholder="edge-2.example.ru" />
-        </label>
-        <label>{t('llhls.f.sslPort')}
-          <input type="number" value={form.sslPort} onChange={set('sslPort')} />
-          {/* 8443 rather than 443, and the reason, because the 443 in
-              nimble.conf is Nimble's outbound connection to WMSPanel and binds
-              no local port — a coincidence that has been mistaken for a
-              requirement before. */}
-          <span className="hint">{t('llhls.f.sslPortHint')}</span>
-        </label>
 
-        <label>{t('llhls.f.method')}
-          <select value={form.certMethod} onChange={set('certMethod')}>
-            {CERT_METHODS.map(m => <option key={m} value={m}>{t(`llhls.method.${m}`)}</option>)}
-          </select>
-          <span className="hint">{t(`llhls.method.${form.certMethod}.cost`)}</span>
-        </label>
+      {/* The same component the gateway wizard uses. There were two of these
+          once, asking the same question with different answers depending on
+          which page you had opened. */}
+      <CertificateSetup value={form} onChange={setForm} target="nimble-conf" disabled={busy} />
 
-        {form.certMethod !== 'upload' && (
-          <label>{t('llhls.f.email')}
-            <input value={form.email} onChange={set('email')} placeholder="ops@example.ru" />
-          </label>
-        )}
-
-        {form.certMethod === 'acme-dns' && (
-          <>
-            <label>{t('llhls.f.dnsProvider')}
-              <select value={form.dnsProvider} onChange={set('dnsProvider')}>
-                {DNS_PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
-            <label>{t('llhls.f.dnsToken')}
-              <input type="password" value={form.dnsToken} onChange={set('dnsToken')} />
-              <span className="hint">{t('llhls.f.dnsTokenHint')}</span>
-            </label>
-          </>
-        )}
-
-        {form.certMethod === 'upload' && (
-          <>
-            <label className="wide">{t('llhls.f.cert')}
-              <textarea rows={5} value={form.certificatePem} onChange={set('certificatePem')}
-                        placeholder="-----BEGIN CERTIFICATE-----" />
-              <span className="hint">{t('llhls.f.certHint')}</span>
-            </label>
-            <label className="wide">{t('llhls.f.key')}
-              <textarea rows={5} value={form.privateKeyPem} onChange={set('privateKeyPem')}
-                        placeholder="-----BEGIN PRIVATE KEY-----" />
-            </label>
-          </>
-        )}
-      </div>
+      <label>{t('llhls.f.sslPort')}</label>
+      <input type="number" className="mono" value={form.sslPort} onChange={set('sslPort')} />
+      {/* 8443 rather than 443, and the reason, because the 443 in nimble.conf
+          is Nimble's outbound connection to WMSPanel and binds no local port —
+          a coincidence that has been mistaken for a requirement before. */}
+      <div className="hint">{t('llhls.f.sslPortHint')}</div>
 
       <div className="row">
         <button disabled={!canManage || busy || !form.domain} onClick={preview}>
@@ -257,9 +223,13 @@ function Detail({ id, onProblem, onChanged }) {
 
           {plan.transport.ok && !plan.transport.unchanged && (
             <div className="row">
-              <button className="danger" disabled={!canManage || busy} onClick={apply}>
+              <button className="danger" disabled={!canManage || busy || helper !== 'installed'}
+                      onClick={apply}>
                 {t('llhls.apply')}
               </button>
+              {helper !== 'installed' && (
+                <span className="hint">{t('llhls.applyBlocked')}</span>
+              )}
             </div>
           )}
         </div>

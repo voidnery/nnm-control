@@ -100,7 +100,13 @@ export function busStats() {
  */
 export async function enqueueTask(server, route, { query = null, body = null, timeoutMs = 30 * 60_000, createdBy = '' } = {}) {
   if (!server?.agent?.enabled) {
-    throw Object.assign(new Error('agent is not enabled for this server'), { status: 409 });
+    // A code, not only a message. Callers used to have nothing else to hand
+    // on, so a raw English sentence reached a Russian interface as the name of
+    // a translation key: `llhls.confError.agent is not enabled for this
+    // server`. A message is for a human reading a log; a code is for the
+    // program deciding what to say.
+    throw Object.assign(new Error('agent is not enabled for this server'),
+      { status: 409, code: 'agent-disabled' });
   }
   // A task nothing on that machine can claim would sit in the queue until it
   // timed out, thirty seconds later, and report as a timeout — which reads as
@@ -150,7 +156,13 @@ const PRIVILEGED_ROUTES = new RegExp(`^(${PRIVILEGED_ROUTES_LIST
 
 export async function runTask(server, route, { query = null, body = null, timeoutMs = DEFAULT_TIMEOUT_MS, createdBy = '' } = {}) {
   if (!server?.agent?.enabled) {
-    throw Object.assign(new Error('agent is not enabled for this server'), { status: 409 });
+    // A code, not only a message. Callers used to have nothing else to hand
+    // on, so a raw English sentence reached a Russian interface as the name of
+    // a translation key: `llhls.confError.agent is not enabled for this
+    // server`. A message is for a human reading a log; a code is for the
+    // program deciding what to say.
+    throw Object.assign(new Error('agent is not enabled for this server'),
+      { status: 409, code: 'agent-disabled' });
   }
   // A task nothing on that machine can claim would sit in the queue until it
   // timed out, thirty seconds later, and report as a timeout — which reads as
@@ -193,7 +205,8 @@ export async function runTask(server, route, { query = null, body = null, timeou
       new Error(neverClaimed
         ? 'the agent did not pick up the task — see Agents for whether it is polling at all'
         : 'the agent picked up the task but did not answer in time'),
-      { status: 504, reason: neverClaimed ? 'not-claimed' : 'no-answer' },
+      { status: 504, reason: neverClaimed ? 'not-claimed' : 'no-answer',
+        code: neverClaimed ? 'agent-offline' : 'agent-timeout' },
     );
   }
   if (outcome.error) throw Object.assign(new Error(outcome.error), { status: outcome.status || 502 });

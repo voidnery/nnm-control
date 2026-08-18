@@ -171,7 +171,7 @@ check('an agent cannot promote itself', () => {
 
 console.log('\nIT IS INSTALLED ON PURPOSE, AND ONLY WHERE IT IS NEEDED:');
 
-check('a media server is offered the smaller profile, not the gateway one', () => {
+check('a delivery media server is offered the smaller profile; a processing one is not offered it at all', () => {
   // Until v1.14.0 this was a refusal, on the grounds that a gateway needs
   // system changes and a media server does not. LL-HLS made that false: half
   // of it is ssl_port and ssl_http2_enabled in /etc/nimble/nimble.conf, and
@@ -180,8 +180,13 @@ check('a media server is offered the smaller profile, not the gateway one', () =
   // So the answer is now yes, with a profile that trades nginx, the ACME
   // webroot and `kill` for one directory. The offer is still per machine and
   // still an operator's action.
-  assert.equal(privilegedEligibility({ purpose: 'nimble', agent: { enabled: true } }).profile, 'edge');
-  assert.equal(privilegedEligibility({ purpose: 'nimble-cdn', agent: { enabled: true } }).ok, true);
+  // Narrowed again in v1.17.0, and this is the shape that lasts: the helper
+  // is offered where something needs it. A machine that only processes video
+  // has no nginx to configure and no reason to hold a certificate, so an
+  // installer there would be system access bought for nothing.
+  assert.equal(privilegedEligibility({ purpose: 'nimble', agent: { enabled: true } }).code,
+    'helper-not-applicable');
+  assert.equal(privilegedEligibility({ purpose: 'nimble-cdn', agent: { enabled: true } }).profile, 'edge');
   assert.equal(privilegedEligibility({ purpose: 'gateway', agent: { enabled: true } }).profile, 'gateway');
 });
 

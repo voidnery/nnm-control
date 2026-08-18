@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { useI18n } from '../i18n.jsx';
 import Modal from './Modal.jsx';
 import { copyText } from '../lib/clipboard.js';
+import CertificateSetup from './CertificateSetup.jsx';
 
 // Turning a machine into a gateway.
 //
@@ -17,9 +18,16 @@ import { copyText } from '../lib/clipboard.js';
 // the thing is how consent becomes a formality.
 export default function GatewaySetupModal({ server, onClose, onDone }) {
   const { t } = useI18n();
-  const [domain, setDomain] = useState('');
-  const [email, setEmail] = useState('');
-  const [mode, setMode] = useState('redirect');
+  // One object for the whole certificate question, so it can be handed to the
+  // shared component and posted without being taken apart and put back
+  // together differently in two places.
+  const [cert, setCert] = useState({ certMethod: 'acme-http', domain: '', email: '',
+                                     dnsProvider: 'cloudflare', dnsToken: '',
+                                     certificatePem: '', privateKeyPem: '' });
+  const domain = cert.domain;
+  // Kept out of the body of both requests: the server reads it from the
+  // network now, and sending a second opinion would be the same bug wearing a
+  // different hat.
   const [plan, setPlan] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +70,7 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
   const preview = async () => {
     setBusy(true); setError(''); setResult(null);
     try {
-      const p = await api(`/servers/${server.id}/gateway/plan`, { method: 'POST', body: { domain, mode, email } });
+      const p = await api(`/servers/${server.id}/gateway/plan`, { method: 'POST', body: { ...cert } });
       setPlan(p);
       setShowPlan(!p.blocking?.length);
     }
@@ -77,7 +85,7 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
     setBusy(true); setError(''); setProgress('');
     try {
       const started = await api(`/servers/${server.id}/gateway/apply`, {
-        method: 'POST', body: { domain, mode, email },
+        method: 'POST', body: { ...cert },
       });
       if (!started.jobId) { setResult(started); if (started.ok) onDone?.(); return; }
 
@@ -171,26 +179,24 @@ export default function GatewaySetupModal({ server, onClose, onDone }) {
         </div>
       )}
 
-      {/* Asked, never guessed: the certificate is issued for this name and an
-          invented one burns a rate-limited issuance to produce something
-          nobody can use. */}
-      <label>{t('gw.setup.domain')}</label>
-      <input className="mono" placeholder="cdn.example.com" value={domain}
-             onChange={e => { setDomain(e.target.value); setPlan(null); }} />
-      <div className="hint">{t('gw.setup.domainHint')}</div>
+      {/* The same component the LL-HLS screen uses. This dialog used to know
+          exactly one way to get a certificate while that screen knew three;
+          the question is the same and only the destination differs, and the
+          destination follows from what the machine is. */}
+      <CertificateSetup value={cert} onChange={setCert} target="nginx" disabled={busy} />
 
-      <label>{t('gw.setup.email')}</label>
-      <input className="mono" placeholder="ops@example.com" value={email} onChange={e => setEmail(e.target.value)} />
-      <div className="hint">{t('gw.setup.emailHint')}</div>
-
+      {/* Redirect or proxy is a property of the delivery network, chosen when
+          the gateway node is added to it. Asking again here gave the same
+          question two answers: the server sent whatever this dialog had
+          selected, defaulting to `redirect`, so preparing a proxy gateway
+          quietly rewrote it as a redirect one and nothing reported it.
+          The mode is now read from the network; this shows it. */}
       <label>{t('gw.setup.mode')}</label>
-      <div className="row" style={{ gap: 6 }}>
-        {['redirect', 'proxy'].map(m => (
-          <button key={m} className={'tagchip' + (mode === m ? ' on' : '')}
-                  onClick={() => { setMode(m); setPlan(null); }}>{t('gw.mode.' + m)}</button>
-        ))}
+      <div className="hint">
+        {server.gateway?.mode
+          ? <>{t('gw.mode.' + server.gateway.mode)} — {t('gw.setup.mode.' + server.gateway.mode)}</>
+          : t('gw.setup.modeFromNetwork')}
       </div>
-      <div className="hint">{t('gw.setup.mode.' + mode)}</div>
 
       <div className="row" style={{ gap: 8, marginTop: 12 }}>
         <button onClick={preview} disabled={busy || !domain.trim()}>{t('gw.setup.preview')}</button>

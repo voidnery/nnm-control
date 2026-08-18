@@ -64,11 +64,20 @@ if same:
     for k in sorted(same)[:12]:
         print(f"   {k} = {env[k][:50]}")
 
+# Comments stripped first. A file that *explains* the rule — "the audit reads
+# static t('literal') calls" — was reported as using a key called `literal`,
+# and the fix for that must not be to reword the comment. Fifth time in this
+# project that a check read prose as code; every one narrowed rather than
+# worked around.
+def code(src):
+    src = re.sub(r'/\*[\s\S]*?\*/', '', src)
+    return re.sub(r'(^|[^:])//[^\n]*', r'\1', src)
+
 used = set()
 for f in glob.glob('src/**/*.jsx', recursive=True):
-    for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.-]+)'", open(f).read()):
+    for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.-]+)'", code(open(f).read())):
         used.add(m.group(1))
-    for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.]+)'\s*\+", open(f).read()):
+    for m in re.finditer(r"\bt\(\s*'([a-zA-Z0-9_.]+)'\s*\+", code(open(f).read())):
         used.discard(m.group(1))  # dynamic key building, can't check statically
 
 # Dynamic keys built from a literal list in the same file. `t('cdn.tab.' + v)`
@@ -76,7 +85,7 @@ for f in glob.glob('src/**/*.jsx', recursive=True):
 # key, and skipping it is how `cdn.tab.setup` reached a screenshot as its own
 # name: the tab bar rendered "cdn.tab.setup" to an operator for a whole release.
 for f in glob.glob('src/**/*.jsx', recursive=True):
-    src = open(f).read()
+    src = code(open(f).read())
     for m in re.finditer(r"\{\s*\[((?:\s*'[a-zA-Z0-9_-]+'\s*,?)+)\]\s*\.map\(\s*(\w+)\s*=>", src):
         items = re.findall(r"'([a-zA-Z0-9_-]+)'", m.group(1))
         var = m.group(2)

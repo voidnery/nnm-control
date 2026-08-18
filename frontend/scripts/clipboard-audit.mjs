@@ -19,7 +19,14 @@ const files = [];
 let bad = 0;
 for (const f of files) {
   if (f.endsWith(path.join('lib', 'clipboard.js'))) continue;   // the helper itself
-  const src = readFileSync(f, 'utf8');
+  // Comments stripped first. The rule is about what the code calls, and this
+  // fired on a comment explaining *why* the helper is used instead — a check
+  // complaining about correct code, which in this project gets narrowed rather
+  // than worked around by rewording the comment. Third time: the same shape as
+  // the recon-script flag name and the inventory's literal `250`.
+  const src = readFileSync(f, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   if (src.includes('navigator.clipboard')) {
     console.log(`  ✗ ${path.relative(SRC, f)}: uses navigator.clipboard directly — use copyText() from lib/clipboard.js`);
     bad++;

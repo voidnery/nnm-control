@@ -22,6 +22,7 @@ import { logEvent } from '../services/audit.js';
 import { privilegedEligibility } from '../services/privilegedHelper.js';
 import { buildPlan, maskConf, describeChange, CONF_PATH, DEFAULT_SSL_PORT } from '../services/llhlsPlan.js';
 import { edgeState, channelPlan } from '../services/llhlsState.js';
+import { capabilities, canChangeSystem } from '../services/serverCapabilities.js';
 import { buildSteps as certSteps, METHODS, inspectUploaded } from '../services/certPlan.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { Settings } from '../models/Settings.js';
@@ -30,6 +31,27 @@ export const llhlsRouter = Router();
 llhlsRouter.use(requireAuth);
 
 const AGENT_NEED = 30;   // the version that answers GET /nimble/conf
+
+// Every way reading nimble.conf can fail, as codes.
+//
+// This list is the contract. `frontend/src/lib/confErrors.js` must handle all
+// of it, and `backend/tests/error-codes.test.mjs` fails when the two disagree
+// — because the alternative is what shipped: an exception's message used as a
+// translation key, so a Russian interface displayed
+// `llhls.confError.agent is not enabled for this server`.
+//
+// A message is for a human reading a log. A code is for the program deciding
+// what to say. They are different things and the raw one now travels as
+// `detail`, beside the code, never instead of it.
+export const CONF_ERROR_CODES = [
+  'agent-disabled',            // the agent is switched off for this server
+  'agent-offline',             // it never picked the task up
+  'agent-timeout',             // it picked it up and did not answer
+  'agent-too-old',             // it answered, without knowing this route
+  'nimble-conf-missing',       // no such file on the machine
+  'nimble-conf-unreadable',    // there, and the agent may not read it
+  'unknown',                   // anything else, with the message in `detail`
+];
 
 // Reading nimble.conf, with the one thing that must not be forgotten written
 // where it happens: the raw text carries the WMSPanel credentials, so it is
@@ -46,7 +68,11 @@ async function readConf(server, user) {
     }
     return { content: r.content, sha256: r.sha256, secrets: r.secrets || [] };
   } catch (e) {
-    return { error: String(e?.message || e).slice(0, 200) };
+    // The bus attaches a code to the failures it knows. Anything else is
+    // `unknown` — which is a code the interface has a sentence for, rather
+    // than a sentence the interface will try to translate.
+    const code = CONF_ERROR_CODES.includes(e?.code) ? e.code : 'unknown';
+    return { error: code, detail: String(e?.message || e).slice(0, 200) };
   }
 }
 
@@ -56,7 +82,11 @@ llhlsRouter.get('/edges', requirePerm('servers.view'), async (req, res) => {
   const servers = await NimbleServer.find();
   const out = [];
   for (const s of servers) {
-    if ((s.purpose || 'nimble') === 'gateway') continue;
+    // By purpose, decided in one place. A gateway has no Nimble to configure
+    // and a processing media server has no viewers, so neither belongs here —
+    // and the old filter, "not a gateway", listed all fourteen machines
+    // including the ones that only transcode.
+    if (!capabilities(s).llhls.applicable) continue;
     // Cheap fields only. Reading nimble.conf and probing TLS on fourteen
     // machines inside one held-open request is the pattern this project has
     // been caught by three times; the detail route does that for one machine.
@@ -83,6 +113,9 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
   res.json({
     ...state,
     confError: conf.error || null,
+    // The raw message travels beside the code, never as one. It is useful and
+    // it is not a translation key.
+    confDetail: conf.detail || null,
     // Masked. The raw text exists in this process for exactly as long as it
     // takes to compute a plan from it, and never reaches a response.
     conf: conf.content ? maskConf(conf.content) : null,
@@ -106,7 +139,8 @@ llhlsRouter.post('/edges/:id/plan', requirePerm('servers.manage'), async (req, r
 
   const conf = await readConf(server, req.user?.username);
   if (conf.error) {
-    return res.status(422).json({ error: conf.error, code: conf.error, need: conf.need, have: conf.have });
+    return res.status(422).json({ error: conf.error, code: conf.error, detail: conf.detail,
+                                  need: conf.need, have: conf.have });
   }
 
   // An uploaded certificate is read before anything is planned around it —
@@ -163,14 +197,15 @@ llhlsRouter.post('/edges/:id/apply', requirePerm('servers.manage'), async (req, 
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
 
-  const eligible = privilegedEligibility(server);
-  if (!eligible.ok) return res.status(422).json({ error: eligible.code, code: eligible.code });
-  if (!server.agent?.privileged) {
-    return res.status(422).json({ error: 'helper-not-installed', code: 'helper-not-installed' });
-  }
+  // One function decides this for the button, the route and the message, so
+  // they cannot disagree. Unknown blocks exactly as absent does: the screen
+  // offered "write it and restart Nimble" on a machine whose helper state had
+  // never been reported, and the refusal arrived after the press.
+  const allowed = canChangeSystem(server);
+  if (!allowed.ok) return res.status(422).json({ error: allowed.code, code: allowed.code, purpose: allowed.purpose });
 
   const conf = await readConf(server, req.user?.username);
-  if (conf.error) return res.status(422).json({ error: conf.error, code: conf.error });
+  if (conf.error) return res.status(422).json({ error: conf.error, code: conf.error, detail: conf.detail });
   if (req.body?.confSha && req.body.confSha !== conf.sha256) {
     return res.status(409).json({
       error: 'configuration-changed', code: 'configuration-changed',
@@ -186,7 +221,7 @@ llhlsRouter.post('/edges/:id/apply', requirePerm('servers.manage'), async (req, 
     method, domain, email: String(req.body?.email || ''),
     dnsProvider: req.body?.dnsProvider, dnsToken: req.body?.dnsToken,
     certificatePem: req.body?.certificatePem, privateKeyPem: req.body?.privateKeyPem,
-    role: eligible.profile === 'gateway' ? 'gateway' : 'edge',
+    role: allowed.profile === 'gateway' ? 'gateway' : 'edge',
   });
   if (!cert.ok) return res.status(422).json({ error: 'missing-inputs', code: 'missing-inputs', missing: cert.missing });
 

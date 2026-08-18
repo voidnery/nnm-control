@@ -98,6 +98,8 @@
 // So the edge helper is strictly smaller than the gateway one, and that is on
 // purpose: full control of a compromised panel buys certbot and a Nimble
 // configuration there, and not nginx, not a webroot, not a signal.
+import { capabilities } from './serverCapabilities.js';
+
 export const PROFILES = {
   gateway: {
     id: 'gateway',
@@ -152,11 +154,17 @@ export const PROFILE_IDS = Object.keys(PROFILES);
 export const ALLOWED_PATHS = PROFILES.gateway.paths;
 export const ALLOWED_BINARIES = PROFILES.gateway.binaries;
 
-// Which profile a machine gets, from what it is for. Derived rather than
-// stored: a purpose that changes should change what the machine may do, and a
-// second field to keep in step is a second field to forget.
+// Which profile a machine gets, from what it is for.
+//
+// Delegated to serverCapabilities so that "what is this machine for" has one
+// answer. This used to be its own rule here, and the page that offers the
+// installer had a third one — which is how the helper became reachable in the
+// API and invisible in the interface for two versions.
 export function profileFor(purpose) {
-  return purpose === 'gateway' ? 'gateway' : 'edge';
+  return capabilities({ purpose }).helper.profile
+    // A purpose that needs no helper still has a profile if one is forced on
+    // it, and the smaller one is the right answer to that question.
+    || 'edge';
 }
 
 export const PRIVILEGED_PORT = 8091;
@@ -408,6 +416,13 @@ fi
 // not, and an installer offered everywhere would end up everywhere.
 export function privilegedEligibility(server) {
   const purpose = server?.purpose || 'nimble';
+  const caps = capabilities(server);
+  // Offered where something needs it, and nowhere else. A processing media
+  // server has no nginx to configure and no nimble.conf worth TLS, so an
+  // installer there would be system access bought for nothing.
+  if (!caps.helper.needed) {
+    return { ok: false, code: 'helper-not-applicable', purpose };
+  }
   // Opened to media servers in v1.14.0, with a smaller profile. Until then the
   // answer here was "not a gateway" and LL-HLS could not be configured at all:
   // the ordinary agent runs under ProtectSystem=strict and cannot write

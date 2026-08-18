@@ -225,6 +225,33 @@ serversRouter.post('/:id/readiness', requirePerm('servers.manage'), async (req, 
 });
 
 
+// The gateway mode belongs to the delivery network, not to whoever opened a
+// wizard.
+//
+// It used to be read from the request body with a silent default of
+// `redirect`, so the setup dialog could hand a machine a configuration that
+// contradicted the network it is a node of, and nothing would say so. The
+// dialog no longer asks; this reads.
+//
+// A machine that is not a node of any network has no mode, and guessing one is
+// how a proxy gateway gets rewritten as a redirect gateway during an unrelated
+// change. The caller is told to put it in a network first.
+async function gatewayModeOf(server) {
+  const nets = await DeliveryNetwork.find({ 'gateway.node': server._id });
+  const modes = [...new Set(nets.map(n => n.gateway?.mode).filter(Boolean))];
+  if (modes.length === 0) return { ok: false, code: 'gateway-not-in-a-network' };
+  if (modes.length > 1) {
+    // Two networks disagreeing about one machine is a real configuration
+    // fault, and picking one of them would hide it.
+    return { ok: false, code: 'gateway-mode-conflict', modes };
+  }
+  if (!['redirect', 'proxy'].includes(modes[0])) {
+    return { ok: false, code: 'gateway-mode-not-set', mode: modes[0] };
+  }
+  return { ok: true, mode: modes[0] };
+}
+
+
 // What would be done to turn this machine into a gateway.
 //
 // A preview and nothing else: no package manager runs, no file is written.
@@ -240,7 +267,11 @@ serversRouter.post('/:id/gateway/plan', requirePerm('servers.manage'), async (re
   // else, and a name the panel invented would produce a certificate nobody can
   // use — after burning one of a rate-limited number of issuances.
   const domain = String(req.body?.domain || '').trim().toLowerCase();
-  const mode = req.body?.mode === 'proxy' ? 'proxy' : 'redirect';
+  const resolved = await gatewayModeOf(server);
+  if (!resolved.ok) {
+    return res.status(422).json({ error: resolved.code, code: resolved.code, modes: resolved.modes });
+  }
+  const mode = resolved.mode;
 
   // Who holds 80 and 443, from the machine itself. Asked every time rather
   // than remembered: something can start listening between a plan and an
@@ -269,7 +300,17 @@ serversRouter.post('/:id/gateway/plan', requirePerm('servers.manage'), async (re
     .filter(Boolean)
     .map(x => ({ host: x.playbackEndpoints?.[0]?.host || x.host, httpPort: x.httpPort || 8081 })));
 
-  const plan = gatewayPlan({ server, domain, mode, edges, ports, email: String(req.body?.email || '') });
+  // The whole certificate question, forwarded as asked. It used to be an
+  // email and nothing else, because this route knew one method.
+  const certInput = {
+    certMethod: String(req.body?.certMethod || 'acme-http'),
+    email: String(req.body?.email || ''),
+    dnsProvider: String(req.body?.dnsProvider || ''),
+    dnsToken: String(req.body?.dnsToken || ''),
+    certificatePem: String(req.body?.certificatePem || ''),
+    privateKeyPem: String(req.body?.privateKeyPem || ''),
+  };
+  const plan = gatewayPlan({ server, domain, mode, edges, ports, ...certInput });
   const held = plan.blocking.find(b => b.code === 'ports-held')?.held || [];
 
   await logEvent(req, 'server.gateway.plan', { server: server.name, domain, mode, blocked: plan.blocking.length });
@@ -303,7 +344,11 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
   }
 
   const domain = String(req.body?.domain || '').trim().toLowerCase();
-  const mode = req.body?.mode === 'proxy' ? 'proxy' : 'redirect';
+  const resolved = await gatewayModeOf(server);
+  if (!resolved.ok) {
+    return res.status(422).json({ error: resolved.code, code: resolved.code, modes: resolved.modes });
+  }
+  const mode = resolved.mode;
 
   // Ports are re-read, not remembered. Something can start listening between a
   // plan and a press, and this is precisely the check whose staleness breaks
@@ -320,7 +365,17 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
     .map(x => byId.get(String(x.server))).filter(Boolean)
     .map(x => ({ host: x.playbackEndpoints?.[0]?.host || x.host, httpPort: x.httpPort || 8081 })));
 
-  const plan = gatewayPlan({ server, domain, mode, edges, ports, email: String(req.body?.email || '') });
+  // The whole certificate question, forwarded as asked. It used to be an
+  // email and nothing else, because this route knew one method.
+  const certInput = {
+    certMethod: String(req.body?.certMethod || 'acme-http'),
+    email: String(req.body?.email || ''),
+    dnsProvider: String(req.body?.dnsProvider || ''),
+    dnsToken: String(req.body?.dnsToken || ''),
+    certificatePem: String(req.body?.certificatePem || ''),
+    privateKeyPem: String(req.body?.privateKeyPem || ''),
+  };
+  const plan = gatewayPlan({ server, domain, mode, edges, ports, ...certInput });
   if (plan.blocking.length) {
     return res.status(422).json({ error: 'gateway-blocked', code: 'gateway-blocked', ...plan });
   }
@@ -358,7 +413,7 @@ serversRouter.post('/:id/gateway/apply', requirePerm('servers.manage'), async (r
         // that nothing was serving yet and got "connection refused" — a
         // correct answer to a question asked too early. It only ever passed on
         // machines where a previous attempt had left nginx behind.
-        const certAt = steps.findIndex(x => x.id === 'issue-cert');
+        const certAt = steps.findIndex(x => x.id === 'issue-certificate');
         const before = certAt >= 0 ? steps.slice(0, certAt) : steps;
         const after = certAt >= 0 ? steps.slice(certAt) : [];
 

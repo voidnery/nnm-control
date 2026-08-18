@@ -92,7 +92,7 @@ check('every step that changes something says how to undo it', () => {
       // The exceptions, named rather than left implicit: a certificate that
       // exists harms nothing and is rate-limited to replace, and testing a
       // configuration changes nothing at all.
-      assert.ok(['issue-cert', 'test-conf', 'test-acme-conf'].includes(s.id),
+      assert.ok(['issue-certificate', 'test-conf', 'test-acme-conf'].includes(s.id),
         `${s.id} changes something and cannot undo it`);
     }
   }
@@ -481,7 +481,7 @@ check('certbot uses the running nginx rather than binding 80 itself', () => {
   // there — which this plan made sure of three steps earlier by installing
   // nginx. Stopping nginx to issue and starting it again would take the
   // machine down twice per renewal.
-  const cert = plan().steps.find(s2 => s2.id === 'issue-cert');
+  const cert = plan().steps.find(s2 => s2.id === 'issue-certificate');
   assert.ok(!cert.command.includes('--standalone'), 'certbot competes with the nginx it just installed');
   assert.ok(cert.command.includes('--webroot'), 'certbot has no way to answer the challenge');
 });
@@ -494,7 +494,7 @@ check('something answers the challenge before it is asked for', () => {
   for (const needed of ['write-acme-conf', 'enable-acme', 'reload-for-acme']) {
     assert.ok(ids.includes(needed), `${needed} is missing`);
   }
-  assert.ok(ids.indexOf('reload-for-acme') < ids.indexOf('issue-cert'),
+  assert.ok(ids.indexOf('reload-for-acme') < ids.indexOf('issue-certificate'),
     'nginx is not serving the challenge when certbot asks for it');
 });
 
@@ -503,7 +503,7 @@ check('the real config comes after the certificate exists', () => {
   // pointing at a file that is not there — so writing it first would fail the
   // test step and halt the plan.
   const ids = plan().steps.map(s2 => s2.id);
-  assert.ok(ids.indexOf('issue-cert') < ids.indexOf('write-conf'),
+  assert.ok(ids.indexOf('issue-certificate') < ids.indexOf('write-conf'),
     'the real config is written before the certificate it references');
 });
 
@@ -556,7 +556,7 @@ check('the precheck runs after nginx is up and before the certificate', () => {
   // nothing was serving yet and got "connection refused" — a correct answer to
   // a question asked too early. It only ever passed where a previous attempt
   // had left nginx behind, which is why it looked fine for days.
-  assert.ok(/const certAt = steps\.findIndex\(x => x\.id === 'issue-cert'\)/.test(routes),
+  assert.ok(/const certAt = steps\.findIndex\(x => x\.id === 'issue-certificate'\)/.test(routes),
     'the steps are not split at the certificate');
   const job = routes.slice(routes.indexOf('const certAt'), routes.indexOf('finishJob(jobId, { status: r?.ok'));
   assert.ok(job.indexOf('steps: before') < job.indexOf("'POST /host/acme-precheck'"),

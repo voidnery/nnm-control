@@ -12,6 +12,8 @@
 // not refused. So every step here declares what it touches, what it will look
 // like afterwards, and how to put it back.
 
+import { buildSteps as certSteps, METHODS, missingInputs } from './certPlan.js';
+
 const isDomain = (d) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(String(d || ''));
 
 // A gateway's nginx: TLS in front, and a resolver so edge names are looked up
@@ -151,10 +153,26 @@ ${upstreamBlock}
 // a configuration written and a service reloaded.
 export function gatewayPlan({
   server, domain, mode = 'redirect', edges = [], ports = null, email = '',
+  // How the certificate arrives. This plan used to know exactly one answer —
+  // Let's Encrypt through the nginx it had just started — while the LL-HLS
+  // screen offered three. The same question with two different sets of answers
+  // depending on which page you opened it from.
+  //
+  // The three now live in certPlan.js and both callers use them. What differs
+  // between a gateway and an edge is not the question but where the result
+  // goes, and that follows from the machine rather than from the operator.
+  certMethod = 'acme-http', dnsProvider = '', dnsToken = '',
+  certificatePem = '', privateKeyPem = '',
 }) {
   const problems = [];
   if (!isDomain(domain)) problems.push({ code: 'bad-domain', severity: 'block' });
   if (!['redirect', 'proxy'].includes(mode)) problems.push({ code: 'bad-mode', severity: 'block' });
+  if (!METHODS[certMethod]) problems.push({ code: 'bad-cert-method', severity: 'block' });
+  for (const m of missingInputs(certMethod, { domain, dnsProvider, dnsToken, certificatePem, privateKeyPem })) {
+    // `domain` already has its own blocker above, and reporting it twice under
+    // two names sends an operator looking for a second problem.
+    if (m !== 'domain') problems.push({ code: `cert-${m}`, severity: 'block' });
+  }
   // Proxy mode with no edges yet is the normal order of work, not a fault: a
   // machine is prepared and *then* joined to a network. Refusing it here told
   // an operator preparing a fresh VM that their brand-new machine was
@@ -211,6 +229,10 @@ export function gatewayPlan({
       undo: ['apt-get', 'remove', '-y', 'nginx'],
       skipIf: 'nginx-installed',
     },
+    // Not for an uploaded certificate: nothing about placing a file the
+    // operator already has needs an ACME client, and installing one would be
+    // a package added to a machine to do nothing.
+    ...(certMethod === 'upload' ? [] : [
     {
       id: 'install-certbot',
       kind: 'package',
@@ -219,6 +241,7 @@ export function gatewayPlan({
       undo: ['apt-get', 'remove', '-y', 'certbot'],
       skipIf: 'certbot-installed',
     },
+    ]),
     {
       id: 'drop-stale-site',
       kind: 'command',
@@ -235,6 +258,12 @@ export function gatewayPlan({
       undo: ['ln', '-sf', `/etc/nginx/sites-available/nnm-${domain}.conf`,
              `/etc/nginx/sites-enabled/nnm-${domain}.conf`],
     },
+    // Only Let's Encrypt over port 80 needs nginx to answer a challenge. A DNS
+    // challenge proves the domain elsewhere, and an uploaded certificate
+    // proves nothing at all — for either, these three steps would start a
+    // temporary site, reload nginx and take it down again to accomplish
+    // nothing.
+    ...(certMethod === 'acme-http' ? [
     {
       id: 'write-acme-conf',
       kind: 'file',
@@ -255,11 +284,7 @@ export function gatewayPlan({
     {
       id: 'test-acme-conf',
       kind: 'command',
-      why: 'a bad configuration must not reach a reload — either reload',
-      // There was a test before the final reload and none before this one, so
-      // the first reload failed with "Job for nginx.service failed" and the
-      // reason lived in the journal. Same rule, both times: nginx tells you
-      // what is wrong when you ask it, and not when you reload it.
+      why: 'a broken file must not reach a reload',
       command: ['nginx', '-t'],
       undo: null,
       halting: true,
@@ -275,23 +300,16 @@ export function gatewayPlan({
       // the shape the gate was written to catch, and it caught this.
       undo: ['systemctl', 'reload-or-restart', 'nginx'],
     },
-    {
-      id: 'issue-cert',
-      kind: 'command',
-      why: `a certificate for ${domain}`,
-      // Through the nginx this plan just started, not against it. Standalone
-      // binds port 80 itself and fails the moment anything is already there —
-      // which, three steps earlier, this made sure of.
-      command: ['certbot', 'certonly', '--webroot', '-w', '/var/www/html',
-                '--non-interactive', '--agree-tos',
-                ...(email ? ['--email', email] : ['--register-unsafely-without-email']),
-                '-d', String(domain)],
-      // Nothing to undo: a certificate that exists harms nothing, and deleting
-      // it would throw away something rate-limited and slow to replace.
-      undo: null,
-      needsPort: 80,
-      skipIf: 'cert-present',
-    },
+    ] : []),
+
+    // Obtaining it, whichever way was chosen. `install-certbot` above already
+    // covers the client itself; a DNS method adds its plugin, and an upload
+    // adds nothing and contacts nobody.
+    ...certSteps({
+      method: certMethod, domain, email, dnsProvider, dnsToken,
+      certificatePem, privateKeyPem, role: 'gateway',
+    }).steps.filter(st => st.id !== 'install-certbot'),
+
     {
       id: 'write-conf',
       kind: 'file',
@@ -302,14 +320,14 @@ export function gatewayPlan({
       backup: true,
       undo: 'restore',
     },
-    {
+    ...(certMethod === 'acme-http' ? [{
       id: 'drop-acme-conf',
       kind: 'command',
       why: 'the real configuration answers the challenge too',
       command: ['rm', '-f', `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
       undo: ['ln', '-sf', `/etc/nginx/sites-available/nnm-acme-${domain}.conf`,
              `/etc/nginx/sites-enabled/nnm-acme-${domain}.conf`],
-    },
+    }] : []),
     {
       id: 'enable-site',
       kind: 'command',

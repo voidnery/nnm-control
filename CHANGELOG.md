@@ -1,5 +1,167 @@
 # Changelog
 
+### v1.19.0 — a message is not a code
+The screenshot said it exactly:
+
+```
+llhls.confError.agent is not enabled for this server
+```
+
+Three faults in one line. `readConf` caught an exception and put its **message**
+where a code belonged. The page built a translation key by concatenation, and a
+computed key renders as itself when nothing matches. And the i18n audit reads
+static `t('literal')` calls, so it could not see the key at all — nothing
+failed until an operator sent a picture of it.
+
+All three are gone, and the same shape addresses all three.
+
+`agentBus` now labels the failures it knows — `agent-disabled`,
+`agent-offline`, `agent-timeout` — so callers have something to hand on besides
+an English sentence. `CONF_ERROR_CODES` in `routes/llhls.js` is the declared
+contract; anything unrecognised becomes `unknown`, which is a code the
+interface has a sentence for rather than a sentence it will try to translate.
+The raw message still travels, as `detail`, beside the code and never instead
+of it.
+
+`frontend/src/lib/confErrors.jsx` answers each code with a **literal** `t()` in
+a switch. Verbose on purpose: every string is then visible to the i18n audit
+and checked in both dictionaries on every run, so a missing one fails a build
+instead of reaching a screenshot. The verbosity is the check.
+
+Each code gets two sentences — what happened, and what to do about it. They are
+different for a reason: an agent that never picked the task up is a machine
+problem, one that answered late is usually load, and a file the agent may not
+read is a permission. Four different fixes that used to be one raw string.
+
+`backend/tests/error-codes.test.mjs` holds the two sides equal in both
+directions — no code without a sentence, no sentence for a code nothing
+produces — and catches a branch returning its neighbour's key, which is
+invisible until the wrong sentence appears on screen. Four contradictions
+proven.
+
+The i18n audit itself had to be narrowed too: it collected `t('literal')` out
+of a comment *explaining what the audit reads*, and reported a missing key
+called `literal`. Fifth instance, and the same fix rather than rewording the
+comment — proven by contradiction that it still catches a key present in
+neither dictionary.
+
+Two of its own checks failed on their first run, on the **comments** in the
+files they inspect: both explain in prose exactly the pattern that must not be
+called. Fourth instance of this shape after the clipboard audit, and the same
+fix — strip comments, because the check is about what the code calls.
+
+### v1.18.0 — one certificate dialog, three ways, two destinations
+There were two of these. The gateway wizard knew one method — Let's Encrypt
+through the nginx it was about to start — and the LL-HLS screen knew three.
+The same question with two different sets of answers, and which you got
+depended on which page you had opened.
+
+`frontend/src/components/CertificateSetup.jsx` asks it once and both pages use
+it. **The destination is told, not asked**: nginx on a gateway, `nimble.conf`
+on a delivery media server, derived from what the machine is for. An operator
+answers that once, on the server card, and never again.
+
+`gatewayPlan.js` takes its certificate steps from `certPlan.js` instead of
+carrying its own, so a gateway can now be prepared with a DNS challenge or with
+a certificate the operator already holds — which matters for exactly the reason
+the third method exists.
+
+And the steps that only make sense for an HTTP challenge no longer run without
+one. A DNS challenge proves the domain elsewhere and an upload proves nothing,
+so `write-acme-conf`, `enable-acme`, `reload-for-acme` and `drop-acme-conf`
+would have started a temporary nginx site, reloaded, and taken it down again to
+accomplish nothing. An upload also installs no ACME client: a package added to
+a machine to do nothing is still a package added.
+
+A missing domain is reported once. `bad-domain` and `cert-domain` are the same
+problem under two names, and two names send an operator looking for a second
+fault.
+
+Thirteen checks, and the ones that matter are about agreement: the form offers
+exactly the methods the API accepts, neither page keeps a list of its own, and
+the certificate exists before the configuration pointing at it in all three
+plans. Three contradictions proven — and the first attempt at one of them
+produced a syntax error rather than a behaviour change, which proves nothing,
+so it was redone as a condition that stays valid.
+
+### v1.17.0 — what a machine is for, decided once
+Six places were deriving that separately and disagreeing, and the live run made
+it visible: the privileged helper was opened to media servers in v1.14.0 **in
+the backend**, while the page that offers it still asked
+`purpose === 'gateway'`. So the button was simply absent, and the operator's
+only route to a helper on a delivery media server was to relabel it as an
+edge-proxy — telling the panel something false about the machine, in order to
+work around the panel.
+
+`backend/src/services/serverCapabilities.js` answers it once:
+
+| purpose | serves viewers | TLS lives in | helper | LL-HLS |
+|---|---|---|---|---|
+| `nimble` | no, it processes | — | **not offered** | no |
+| `nimble-cdn` | yes, Nimble | `nimble.conf` | edge profile | **yes** |
+| `gateway` | yes, nginx | nginx | gateway profile | no |
+
+**By purpose, as instructed**, and with the consequence stated rather than
+discovered: a machine that really serves viewers while labelled `nimble` will
+not be offered LL-HLS until its purpose is corrected. `selectel(24/7)` is
+exactly such a machine today. That is the filter working.
+
+The helper is now offered **because something needs it** — never as a switch of
+its own. A machine that only transcodes has no nginx to configure and no
+certificate to hold, so an installer there is system access bought for nothing.
+
+`frontend/src/components/HelperInstallModal.jsx` is new: installing the helper
+stops being a step inside the gateway wizard and becomes its own act, available
+on every purpose that needs one, with the profile derived rather than asked.
+The frontend carries a copy of the purpose rule because a button decides before
+any request is made, and `backend/tests/capabilities.test.mjs` fails when the
+copy drifts — which is the exact fault this milestone is fixing.
+
+**Unknown blocks exactly as absence does.** `helperState` is three-valued and
+only `installed` opens the gate. The LL-HLS screen offered "write it and
+restart Nimble" on a machine that had never reported, and the refusal arrived
+as an HTTP 422 after the press. `canChangeSystem` now decides for the button,
+the route and the message together, and they name four different problems with
+four different fixes instead of one.
+
+**The gateway mode has one home.** It was read from the request body with a
+silent default of `redirect` while `DeliveryNetwork.gateway.mode` held the real
+answer, so preparing a proxy gateway could quietly rewrite it as a redirect
+one. The dialog no longer asks; the routes read the network, refuse a machine
+that is in none, and refuse two networks that disagree rather than picking one.
+
+The clipboard audit was narrowed: it fired on a comment explaining why the
+shared helper is used. Third instance of a check right in intent and wrong in
+letter, after the recon-script flag name and the inventory's literal `250` —
+and, as with those, narrowed rather than worked around. Proven by contradiction
+that it still catches the real call.
+
+Three more contradictions proven on the model itself: drifting the frontend
+copy, rounding unknown up to installed, and dropping the normalisation that
+sends an unrecognised purpose to the most limited kind.
+
+### v1.16.0 (documentation, no version change) — a CI failure mode, written down
+The v1.16.0 release failed on the first attempt in `Set up job`: codeload
+returned 429 while fetching `docker/setup-buildx-action`'s tarball, before any
+of this repository ran. It took **several** re-runs, not one.
+
+Recorded in `docs/STATE.md` with how to recognise it in ten seconds — the other
+matrix leg succeeds, `meta` is green, `apt-repo` is skipped rather than failed —
+and with what it leaves behind: no tag, because the tag is created last on
+purpose, so the retry is an ordinary release rather than a
+tag-without-a-package.
+
+Two corrections to what was said while diagnosing it. Pinning actions by SHA
+would not have helped: the log shows `@v3` already resolved to a SHA and the
+429 came back on that address. And the first guess — that the limit lives
+minutes and one retry would clear it — was wrong, so the note says sustained
+rather than transient.
+
+**No version bump.** This is documentation, and spending a release on it would
+cost a CI run for nothing. Pushing it to main is a no-op release: `meta` finds
+the `v1.16.0` tag already exists and reports "nothing to do", which is the
+behaviour that check was written for.
+
 ### v1.16.0 — the screen
 `frontend/src/pages/LlhlsPage.jsx`, under Broadcast rather than
 Infrastructure: LL-HLS is a delivery property of channels, and the operator who

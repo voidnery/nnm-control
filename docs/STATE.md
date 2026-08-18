@@ -588,6 +588,76 @@ outcomes, and the third is not rounded up to the convenient one.
 
 ---
 
+## A release can fail before any of our code runs
+
+**Observed 2026-08-17, release of v1.16.0.** The `images (api, ./backend)` job
+failed in the **`Set up job`** phase — before `actions/checkout`, before one
+line of this repository executed:
+
+```
+Download action repository 'docker/setup-buildx-action@v3' (SHA:8d2750c6…)
+Warning: Failed to download action '…codeload.github.com/docker/setup-buildx-action/tar.gz/8d2750c6…'
+         429 (Too Many Requests)          back off 26.71s
+Warning: … 429 …                          back off 27.389s
+Error:   Failed to download archive … after 3 attempts
+```
+
+**Three different rate limits can produce a 429 in this pipeline, and the
+workflow only guards two of them:**
+
+| limit | guard | involved here |
+|---|---|---|
+| anonymous Docker Hub pulls of the BuildKit image | `DOCKERHUB_USERNAME` login, two buildx attempts | no |
+| GHCR secondary limits on push | `max-parallel: 1`, push retry | no |
+| **codeload.github.com serving an action's tarball** | **none, and none is possible** | **yes** |
+
+`continue-on-error` on the buildx step does nothing for this: the runner never
+reaches the step. It fails while *preparing* the actions.
+
+### How to tell it apart in ten seconds
+
+- The phase is `Set up job`, not a named step.
+- **The other matrix leg succeeds.** `images (web, ./frontend)` passed on the
+  same commit with the same actions. A fault in the workflow or in this code
+  fails both legs identically; this failed one.
+- `meta` is green, so version agreement and the release decision are fine.
+- `apt-repo` is skipped, not failed — `needs: [meta, images]`.
+
+### What state it leaves
+
+**No tag.** The tag is created last, in `apt-repo`, and that job never ran —
+which is why it is created there. So `meta` on the next attempt still computes
+`release=true` and the retry is an ordinary release. There is no
+tag-without-package trap in this failure.
+
+What *does* survive is a half-published image set: the leg that succeeded
+pushed `nnm-control-web:<version>` while the api image does not exist. Harmless
+while there is no tag and no `.deb` pointing at that version, and overwritten
+by the retry.
+
+### Pinning by SHA would not have helped
+
+The reflex answer, and wrong here: the log shows `@v3` already resolved to
+`8d2750c6…`, and the 429 came back on that exact address.
+
+### What actually worked
+
+Re-running the failed job — **several times.** The first prediction written
+here was that the limit lives minutes and one retry would do; it took more than
+one. So the honest description is a sustained limit on the runner's shared
+egress address, not a blip, and the response is patience rather than a change
+to the pipeline. Dropping `setup-buildx-action` would cost the GHA layer cache
+and turn every release into a full `npm install`; a job-level retry action
+would itself have to be downloaded from codeload.
+
+### Not the dead-tag mystery
+
+Tempting to attach this to `v1.0.0` and `v1.8.7`, and it does not fit. Those
+runs finished **in seconds and skipped**; this one failed in 1m27s with a loud
+error. Different shape, and that question stays open.
+
+---
+
 ## LL-HLS is reachable by an operator
 
 `/llhls`. One row per edge, four marks that are never rolled into one, and a
