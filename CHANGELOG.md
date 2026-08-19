@@ -1,5 +1,50 @@
 # Changelog
 
+### v1.20.1 — an install that leaves the panel down must not say "installed"
+The 1.20.0 upgrade took production off the air for hours, and the logs say
+exactly how. From `/var/log/apt/term.log`:
+
+```
+07:02:13  Setting up nnm-control (1:1.20.0)
+          WARNING: image pull failed (offline?). Will retry on service start.
+          Job for nnm-control.service failed because a timeout was exceeded.
+          WARNING: service failed to start
+          ========== NNM Control installed. ==========
+07:57:46  Log ended
+```
+
+Fifty-five minutes, two warnings on stderr, a friendly box with the setup
+token, and **exit 0**. The pull in `postinst` did not finish; the unit pulled
+again inside its own start; systemd killed it at `TimeoutStartSec=300` with one
+image on disk and one half-fetched. A timeout meant to catch a hang produced a
+certain outage, and apt reported success.
+
+Three changes, and the first is the one that matters:
+
+- **`postinst` exits non-zero and prints no banner when the panel is not
+  running.** No URL, no setup token, no reassuring box — those are what made an
+  outage read as an install.
+- **A failed pull no longer leads to a restart.** Restarting after one is what
+  moved the fault from "the upgrade did not happen" to "the previous version is
+  down as well". The old stack keeps running and the message says what to do.
+- **The pull is retried three times with its output visible**, instead of
+  `--quiet 2>/dev/null` and a one-line warning, and `TimeoutStartSec` is 1800
+  rather than 300 as a backstop.
+
+`backend/tests/packaging.test.mjs` gates all of it, including `bash -n` on the
+script — a syntax error there bricks every machine at once and nothing else in
+this suite would notice — and that both `Exec` lines still pass the environment
+file. Running compose without it pulls `latest` and starts a stack with blank
+secrets; that is not hypothetical, it happened during the incident, from
+instructions of mine that omitted it.
+
+Also fixed on the LL-HLS screen: **opening a row asked the machine and the
+answer never reached the row.** The line went on showing `?` while the panel
+below it knew the configuration was already in place — a promise the text makes
+("open it to ask") and the interface broke. And the certificate column showed
+an em dash for "nobody has looked", which reads as "there is none"; it now
+distinguishes not-asked from none-configured from a path that is set.
+
 ### v1.20.0 — the 504 was ours, and a run you can watch
 `HTTP 504` with no code in it does not come from a route; it comes from
 whatever proxies the panel. The LL-HLS apply ran inside the browser's request,

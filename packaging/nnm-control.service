@@ -10,7 +10,17 @@ RemainAfterExit=yes
 WorkingDirectory=/opt/nnm-control
 ExecStart=/usr/bin/docker compose -f /opt/nnm-control/docker-compose.yml --env-file /etc/nnm-control/nnm-control.env up -d --remove-orphans
 ExecStop=/usr/bin/docker compose -f /opt/nnm-control/docker-compose.yml --env-file /etc/nnm-control/nnm-control.env down
-TimeoutStartSec=300
+# Half an hour, not five minutes.
+#
+# On 2026-08-19 a cold pull of two images (~370 MB) over a slow link did not
+# finish inside 300 s, and systemd killed `docker compose up` mid-download. The
+# stack was left stopped with one image on disk and one half-fetched — a worse
+# state than before the upgrade, produced by a timeout meant to prevent a hang.
+#
+# A start that hangs forever is a real hazard; a start that is killed halfway
+# through fetching is a certain outage. The package now pulls before starting,
+# so this bound is a backstop rather than the usual path.
+TimeoutStartSec=1800
 
 [Install]
 WantedBy=multi-user.target

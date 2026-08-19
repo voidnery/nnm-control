@@ -63,11 +63,17 @@ function EdgeRow({ edge, open, onToggle }) {
         <Mark value={w ? !w.missing.includes('parts') : null} title={t('llhls.col.parts')} />
       </td>
       <td className="hint">
+        {/* Three states here too. An em dash read as "there is none"; it meant
+            "nobody has looked", and those are different problems. A path in
+            nimble.conf is a fact about configuration and not about the
+            certificate's own health, so it says so. */}
         {edge.certificate
           ? (edge.certificate.expired
               ? t('llhls.cert.expired')
               : t('llhls.cert.days', { n: edge.certificate.daysLeft }))
-          : '—'}
+          : edge.transport?.certPath ? t('llhls.cert.configured')
+          : edge.transport ? t('llhls.cert.none')
+          : '?'}
       </td>
       <td className="hint">
         {/* What to do next, in one phrase, rather than a status word the
@@ -81,7 +87,7 @@ function EdgeRow({ edge, open, onToggle }) {
   );
 }
 
-function Detail({ id, onProblem, onChanged }) {
+function Detail({ id, onProblem, onChanged, onLearned }) {
   const { t } = useI18n();
   const { can } = useAuth();
   const { push } = useToast();
@@ -107,7 +113,15 @@ function Detail({ id, onProblem, onChanged }) {
     let alive = true;
     setLoading(true);
     api(`/llhls/edges/${id}`)
-      .then(d => { if (alive) { setDetail(d); setLoading(false); } })
+      .then(d => {
+        if (!alive) return;
+        setDetail(d);
+        setLoading(false);
+        // The row said `?` and promised that opening it would ask. It asked —
+        // and the answer stopped here, so the row went on saying `?` while the
+        // panel below it knew better. A promise the interface made and broke.
+        onLearned?.(d);
+      })
       .catch(e => { if (alive) { onProblem(explainError(e, t)); setLoading(false); } });
     return () => { alive = false; };
   }, [id]);
@@ -396,7 +410,9 @@ export default function LlhlsPage() {
                            onToggle={() => setOpen(open === id ? null : id)} />
                   {open === id && (
                     <tr><td colSpan={7}>
-                      <Detail id={e.id} onProblem={setProblem} onChanged={load} />
+                      <Detail id={e.id} onProblem={setProblem} onChanged={load}
+                              onLearned={(d) => setEdges(list => list.map(
+                                x => (x.id === e.id ? { ...x, ...d } : x)))} />
                     </td></tr>
                   )}
                 </Fragment>

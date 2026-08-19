@@ -57,13 +57,55 @@ if [ -d /run/systemd/system ]; then
         mkdir -p /var/lib/nnm-control/backups && chmod 700 /var/lib/nnm-control/backups
         systemctl enable nnm-control-backup.timer >/dev/null 2>&1 || true
         systemctl start nnm-control-backup.timer >/dev/null 2>&1 || true
-    # Pull images before (re)start so a broken pull doesn't leave old stack down.
-    if docker compose -f /opt/nnm-control/docker-compose.yml \
-        --env-file "$ENV_FILE" pull --quiet 2>/dev/null; then :; else
-        echo "nnm-control: WARNING: image pull failed (offline?). Will retry on service start." >&2
+    # Pull images before (re)start so a broken pull doesn't leave the old stack
+    # down.
+    #
+    # This used to swallow the failure — `2>/dev/null` and a one-line warning —
+    # and it is what 1.20.0 died of on 2026-08-19. The pull did not finish, the
+    # unit then pulled again inside its own start, and systemd killed it at
+    # TimeoutStartSec while an image was half-downloaded. Package installed,
+    # stack down, apt satisfied.
+    #
+    # So: retried, with its output visible, and the outcome remembered.
+    PULL_OK=0
+    for attempt in 1 2 3; do
+        if docker compose -f /opt/nnm-control/docker-compose.yml \
+            --env-file "$ENV_FILE" pull; then
+            PULL_OK=1; break
+        fi
+        echo "nnm-control: image pull attempt ${attempt} failed" >&2
+        [ "$attempt" -lt 3 ] && sleep 10
+    done
+
+    START_OK=0
+    if [ "$PULL_OK" = 1 ]; then
+        if systemctl restart nnm-control.service; then START_OK=1; fi
+    else
+        # Starting the service now would repeat the pull inside a unit with a
+        # start timeout, which is exactly how the stack was left down. Better to
+        # stop here and say so than to make it worse while looking busy.
+        echo "nnm-control: images could not be pulled; NOT restarting the service." >&2
+        echo "nnm-control: the previous version keeps running. Fix connectivity, then:" >&2
+        echo "nnm-control:   systemctl restart nnm-control" >&2
     fi
-    systemctl restart nnm-control.service || \
-        echo "nnm-control: WARNING: service failed to start; check: journalctl -u nnm-control" >&2
+
+    if [ "$START_OK" != 1 ]; then
+        # No banner, no setup token, no reassuring box. An install that left the
+        # panel down must not read as an install that worked — that is how an
+        # operator finds out from a browser instead of from apt.
+        echo "" >&2
+        echo "==============================================================" >&2
+        echo " NNM Control ${NCV}: PACKAGE UNPACKED, PANEL NOT RUNNING." >&2
+        echo "" >&2
+        echo "   docker compose images pulled: $([ "$PULL_OK" = 1 ] && echo yes || echo no)" >&2
+        echo "   service started:              no" >&2
+        echo "" >&2
+        echo "   systemctl status nnm-control --no-pager" >&2
+        echo "   journalctl -u nnm-control -n 60 --no-pager" >&2
+        echo "==============================================================" >&2
+        db_stop || true
+        exit 1
+    fi
 fi
 
 SETUP_TOKEN_VALUE=$(grep '^SETUP_TOKEN=' "$ENV_FILE" | cut -d= -f2)
