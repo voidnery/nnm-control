@@ -935,3 +935,14 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
   .llhls-bar.running .llhls-bar-fill { animation: none; }
   .llhls-bar-fill { transition: none; }
 }
+
+
+/* The details button, which shouts when it has something to say. Colour plus a
+   word plus a border: three signals, because one of them is invisible to eight
+   per cent of men and all of them are invisible in a screenshot printed grey. */
+.det-btn { font-size: 12px; padding: 2px 10px; }
+.det-btn.alarm { border: 1px solid var(--bad, #c62828); color: var(--bad, #c62828); font-weight: 600; }
+.det-section { margin: 14px 0; }
+.det-section h4 { margin: 0 0 6px; }
+.det-fact { display: flex; gap: 10px; padding: 2px 0; align-items: baseline; }
+.det-fact-label { min-width: 220px; color: var(--muted, #888); font-size: 12px; }

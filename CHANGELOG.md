@@ -1,5 +1,44 @@
 # Changelog
 
+### v1.22.0 — we were slandering the certificate
+"Рукопожатие прошло, но плеер этот сертификат отвергнет", beside 89 days of
+validity. Both from the same probe, and the verdict was ours, not the
+certificate's.
+
+The probe went to `186.246.8.56`. `probeTls` sends no SNI for an address, so
+the certificate was compared against an IP, `authorized` came back false, and
+the panel reported that a player would refuse a certificate a player would
+accept. **A viewer reaches this edge by name; now so does the check** — the
+name is taken from where certbot puts it, `/etc/letsencrypt/live/<domain>/`,
+which is the one fact about the certificate that nimble.conf does carry.
+
+Three things follow from having that name:
+
+- **The form fills itself in.** An edge already set up shows the domain it is
+  set up with, and the TLS port it is listening on, instead of a placeholder to
+  retype. The email is *not* prefilled: certbot keeps it on the ACME account,
+  not on the certificate, so there is nothing to read — and a plausible address
+  that was never used is worse than an empty field.
+- **Every edge is asked automatically**, one at a time, on opening the page.
+  The list was cheap and answered nothing; making the operator click each row
+  to find out whether an edge works is the same fault as a row promising "open
+  it to ask" and then not asking. Sequential on purpose — an edge answering
+  slowly should delay one row, not all fourteen.
+- **A "Details" button on every row**, with everything the panel knows about
+  that edge in one sorted window: problems first with their fixes and the
+  machine's own words last, then what is not yet asked, then the flat facts —
+  addresses, ports, paths, expiry, helper version and when it last reported.
+  When something is wrong the button is outlined in red and the word
+  **Ошибка!** sits beside it, so a fault is visible without opening anything.
+
+Colour plus a word plus a border, deliberately: one signal is invisible to
+eight per cent of men and all of them are invisible in a grey screenshot.
+
+The unreachable-state audit caught the details button — `setDetails` handed to
+a child as a prop is invisible to a check that reads call sites. Written out
+explicitly rather than narrowing the audit; explicit is what a reader wants
+there anyway.
+
 ### v1.21.1 — the HTTP/2 probe never once reached the network
 The screen finally showed the reason, in the machine's own words:
 

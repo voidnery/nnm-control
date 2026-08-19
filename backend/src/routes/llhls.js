@@ -102,7 +102,25 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
 
   const conf = await readConf(server, req.user?.username);
-  const host = server.playbackEndpoints?.[0]?.host || server.host;
+
+  // The name the certificate was issued for, taken from where certbot puts it:
+  // `/etc/letsencrypt/live/<domain>/fullchain.pem`. It is the one fact about
+  // the certificate that nimble.conf does carry.
+  const certPathInConf = conf.content
+    ? (conf.content.match(/^\s*ssl_certificate\s*=\s*(\S+)/m) || [])[1] || null
+    : null;
+  const certDomain = certPathInConf
+    ? (certPathInConf.match(/\/live\/([^/]+)\//) || [])[1] || null
+    : null;
+
+  // Probe the **name**, not the address.
+  //
+  // Probing `186.246.8.56` sends no SNI and compares the certificate against
+  // an IP, so `authorized` comes back false and the panel reported "a player
+  // will refuse this certificate" about a certificate a player would accept.
+  // We slandered it. A viewer reaches this edge by name; so does this check.
+  const address = server.playbackEndpoints?.[0]?.host || server.host;
+  const host = certDomain || address;
 
   // A probe that ran and failed is not a probe nobody made.
   //
@@ -196,6 +214,12 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
     playlistError,
     watched: watch || null,
     sslPort: sslPort || null,
+    // Handed to the form so an edge that is already set up shows what it is
+    // set up with, instead of a placeholder the operator has to retype.
+    certDomain,
+    certPath: certPathInConf,
+    probedHost: host,
+    address,
   });
 });
 

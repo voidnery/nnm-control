@@ -8,6 +8,7 @@ import { explainError } from '../lib/errors.js';
 import { helperState } from '../lib/capabilities.js';
 import CertificateSetup from '../components/CertificateSetup.jsx';
 import ConfError from '../lib/confErrors.jsx';
+import EdgeDetails, { problemsOf } from '../components/EdgeDetails.jsx';
 
 // Low-Latency HLS, in one place.
 //
@@ -48,9 +49,13 @@ function Mark({ value, title }) {
   </span>;
 }
 
-function EdgeRow({ edge, open, onToggle }) {
+function EdgeRow({ edge, open, onToggle, onDetails }) {
   const { t } = useI18n();
   const w = edge.wire;
+  // Counted here so the button can shout before anything is opened. A page
+  // where the operator has to click each row to discover a fault is a page
+  // that hides faults.
+  const problems = problemsOf(edge, t);
   return (
     <tr className={open ? 'open' : ''} onClick={onToggle} style={{ cursor: 'pointer' }}>
       <td>{edge.server}</td>
@@ -82,6 +87,13 @@ function EdgeRow({ edge, open, onToggle }) {
           : edge.blockers.length ? t(`llhls.blocker.${edge.blockers[0]}`)
           : edge.unknown.length ? t('llhls.state.notChecked')
           : t('llhls.state.off')}
+      </td>
+      <td onClick={e => e.stopPropagation()}>
+        {problems.length > 0 && <span className="llhls-bad">{t('llhls.det.alert')}</span>}{' '}
+        <button className={problems.length > 0 ? 'det-btn alarm' : 'det-btn'}
+                onClick={() => onDetails(edge)}>
+          {t('llhls.det.button')}
+        </button>
       </td>
     </tr>
   );
@@ -117,7 +129,26 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
   const load = (stream) => {
     setLoading(true);
     return api(`/llhls/edges/${id}${stream ? `?stream=${encodeURIComponent(stream)}` : ''}`)
-      .then(d => { setDetail(d); setLoading(false); onLearned?.(d); return d; })
+      .then(d => {
+        setDetail(d);
+        setLoading(false);
+        onLearned?.(d);
+        // An edge that is already set up should show what it is set up with.
+        // The domain comes from the certificate's own path in nimble.conf, so
+        // it is the name the certificate was actually issued for — not a guess
+        // and not a placeholder the operator has to retype.
+        //
+        // The email is not prefilled: certbot keeps it on the ACME account,
+        // not on the certificate, so there is nothing here to read. Saying
+        // nothing is better than showing a plausible address that was never
+        // used.
+        setForm(f => ({
+          ...f,
+          domain: f.domain || d.certDomain || '',
+          sslPort: d.sslPort || f.sslPort,
+        }));
+        return d;
+      })
       .catch(e => { onProblem(explainError(e, t)); setLoading(false); });
   };
 
@@ -129,6 +160,8 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
         if (!alive) return;
         setDetail(d);
         setLoading(false);
+        setForm(f => ({ ...f, domain: f.domain || d.certDomain || '',
+                        sslPort: d.sslPort || f.sslPort }));
         // The row said `?` and promised that opening it would ask. It asked —
         // and the answer stopped here, so the row went on saying `?` while the
         // panel below it knew better. A promise the interface made and broke.
@@ -398,13 +431,41 @@ export default function LlhlsPage() {
   const [problem, setProblem] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  const [asking, setAsking] = useState(null);
+  const [details, setDetails] = useState(null);
+
+  // Ask about every edge, without being asked to.
+  //
+  // The list is cheap and answers nothing; the detail asks the machine. Making
+  // the operator click each row to find out whether an edge works is the same
+  // fault as a row that promises "open it to ask" and then keeps saying `?`.
+  //
+  // One at a time on purpose: fourteen machines probed in parallel inside one
+  // page load is the pattern this project has been caught by three times, and
+  // an edge answering slowly should delay one row rather than all of them.
+  const load = async () => {
     setLoading(true);
-    api('/llhls/edges')
-      .then(d => { setEdges(d.edges || []); setLoading(false); })
-      .catch(e => { setProblem(explainError(e, t)); setLoading(false); });
+    let list = [];
+    try {
+      list = (await api('/llhls/edges')).edges || [];
+      setEdges(list);
+    } catch (e) { setProblem(explainError(e, t)); setLoading(false); return; }
+    setLoading(false);
+
+    for (const e of list) {
+      setAsking(e.id);
+      try {
+        const d = await api(`/llhls/edges/${e.id}`);
+        setEdges(cur => cur.map(x => (x.id === e.id ? { ...x, ...d } : x)));
+      } catch {
+        // A machine that cannot be asked leaves its row as it was: unknown,
+        // which is what it is. Failing the whole sweep over one edge would
+        // hide the thirteen that answered.
+      }
+    }
+    setAsking(null);
   };
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   return (
     <div className="panel">
@@ -426,6 +487,7 @@ export default function LlhlsPage() {
               <th>{t('llhls.col.parts')}</th>
               <th>{t('llhls.col.cert')}</th>
               <th>{t('llhls.col.next')}</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -434,9 +496,14 @@ export default function LlhlsPage() {
               return (
                 <Fragment key={id}>
                   <EdgeRow edge={e} open={open === id}
-                           onToggle={() => setOpen(open === id ? null : id)} />
+                           onToggle={() => setOpen(open === id ? null : id)}
+                           // Written out rather than passing the setter: the
+                           // unreachable-state audit reads call sites, and a
+                           // setter handed off as a prop is invisible to it.
+                           // Explicit is also what a reader wants here.
+                           onDetails={(row) => setDetails(row)} />
                   {open === id && (
-                    <tr><td colSpan={7}>
+                    <tr><td colSpan={8}>
                       <Detail id={e.id} onProblem={setProblem} onChanged={load}
                               onLearned={(d) => setEdges(list => list.map(
                                 x => (x.id === e.id ? { ...x, ...d } : x)))} />
@@ -449,6 +516,8 @@ export default function LlhlsPage() {
         </table>
       )}
 
+      {asking && <div className="hint">{t('llhls.asking')}</div>}
+      {details && <EdgeDetails detail={details} onClose={() => setDetails(null)} />}
       <ErrorDialog problem={problem} onClose={() => setProblem(null)} />
     </div>
   );
