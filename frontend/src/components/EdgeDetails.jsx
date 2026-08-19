@@ -46,7 +46,17 @@ export function problemsOf(d, t) {
   }
   if (d.tlsError) out.push({ key: 'tls', title: t('llhls.det.tlsFailed'), detail: d.tlsError });
   if (d.playlistError) out.push({ key: 'playlist', title: t('llhls.det.playlistFailed'), detail: d.playlistError });
-  if (d.wire?.silentFallback) out.push({ key: 'fallback', title: d.wire.silentFallback });
+  // The code, translated here. The server used to compose this sentence in
+  // English and it was rendered verbatim into a Russian interface.
+  if (d.wire?.silentFallback) {
+    out.push({
+      key: 'fallback',
+      title: t(`llhls.fallback.${d.wire.silentFallback}`),
+      // When the application could be read, the cause is known and there is no
+      // point offering two.
+      fix: d.parts ? t(`llhls.parts.${d.parts.state}`) : t('llhls.parts.unknown'),
+    });
+  }
   if (d.certificate?.expiring) {
     out.push({ key: 'cert-soon', title: t('llhls.det.certSoon', { n: d.certificate.daysLeft }) });
   }
@@ -98,6 +108,12 @@ export default function EdgeDetails({ detail, onClose }) {
       </Section>
 
       <Section title={t('llhls.det.certificate')}>
+        {d.certVerdict && (
+          <div className={d.certVerdict.action === 'keep' ? 'hint' : 'error-box'}>
+            <b>{t(`llhls.cert.state.${d.certVerdict.state}`)}</b>
+            <div>{t(`llhls.cert.action.${d.certVerdict.action || 'none'}`)}</div>
+          </div>
+        )}
         <Fact label={t('llhls.det.certDomain')} value={d.certDomain} mono />
         <Fact label={t('llhls.det.certValidTo')} value={d.certificate?.validTo} mono />
         <Fact label={t('llhls.det.certDays')} value={d.certificate?.daysLeft} />
@@ -117,6 +133,12 @@ export default function EdgeDetails({ detail, onClose }) {
         <Section title={t('llhls.det.wire')}>
           <Fact label={t('llhls.det.watched')} value={d.watched} mono />
           <Fact label={t('llhls.det.parts')} value={d.wire?.missing?.includes('parts') ? t('common.no') : t('common.yes')} />
+          <Fact label={t('llhls.det.appAlhls')}
+                value={d.application ? (d.application.alhls === true ? t('common.yes')
+                  : d.application.alhls === false ? t('common.no') : null) : null} />
+          <Fact label={t('llhls.det.appPart')} value={d.application?.part} mono />
+          <Fact label={t('llhls.det.appChunk')} value={d.application?.chunk} mono />
+          <Fact label={t('llhls.det.appProtocols')} value={d.application?.protocols?.join(', ')} mono />
         </Section>
       )}
 

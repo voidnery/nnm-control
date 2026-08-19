@@ -22,6 +22,7 @@ import { logEvent } from '../services/audit.js';
 import { privilegedEligibility } from '../services/privilegedHelper.js';
 import { buildPlan, maskConf, describeChange, CONF_PATH, DEFAULT_SSL_PORT } from '../services/llhlsPlan.js';
 import { parsePlaylist } from '../services/playlistProbe.js';
+import { certificateVerdict, partsDiagnosis } from '../services/certState.js';
 import { edgeState, channelPlan } from '../services/llhlsState.js';
 import { capabilities, canChangeSystem, helperReported } from '../services/serverCapabilities.js';
 import { buildSteps as certSteps, METHODS, inspectUploaded } from '../services/certPlan.js';
@@ -198,6 +199,31 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
     error: tls.certError || null,
   } : null;
 
+  // Which of the two causes it is, rather than both.
+  //
+  // The panel named "the WMSPanel half is off, or the input stream was not
+  // restarted" and left the operator to find out which. It can find out:
+  // `alhls_enabled` is readable on the application through the same API the
+  // panel writes it with.
+  let application = null;
+  if (watch && server.wmspanelServerId) {
+    const appName = watch.split('/')[0];
+    try {
+      const cfg = (await Settings.load()).wmspanel;
+      const list = await wmspanel.liveAppList(cfg, server.wmspanelServerId);
+      application = (list?.applications || []).find(a => a.application === appName) || null;
+    } catch {
+      // Unreachable WMSPanel leaves this null, and `partsDiagnosis` then says
+      // it could not read it rather than guessing which cause applies.
+      application = null;
+    }
+  }
+
+  const certVerdict = certificateVerdict({
+    tls, certDomain, configuredPath: certPathInConf,
+  });
+  const parts = watch ? partsDiagnosis({ application, playlist }) : null;
+
   const state = edgeState({ server, conf: conf.content ? conf : null, tls, playlist, certificate });
   res.json({
     ...state,
@@ -216,6 +242,13 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
     sslPort: sslPort || null,
     // Handed to the form so an edge that is already set up shows what it is
     // set up with, instead of a placeholder the operator has to retype.
+    certVerdict,
+    parts,
+    application: application ? {
+      name: application.application, alhls: application.alhls_enabled ?? null,
+      part: application.hls_part_duration ?? null, chunk: application.chunk_duration ?? null,
+      protocols: application.protocols || [],
+    } : null,
     certDomain,
     certPath: certPathInConf,
     probedHost: host,

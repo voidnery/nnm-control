@@ -308,7 +308,8 @@ check('TLS without parts is called out as the silent fallback, by name', () => {
                       playlist: { lowLatency: { confirmed: false } } });
   assert.equal(v.ok, false);
   assert.deepEqual(v.missing, ['parts']);
-  assert.match(v.silentFallback, /the WMSPanel half is off/);
+  assert.equal(v.silentFallback, 'parts-only',
+    'the verdict composes a sentence again instead of naming a case');
 });
 
 check('HTTP/2 missing is not reported as a working setup', () => {

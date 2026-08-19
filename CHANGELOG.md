@@ -1,5 +1,37 @@
 # Changelog
 
+### v1.23.0 — a certificate has more than two states, and the panel stops guessing
+**`certState.js`** replaces "a path is configured / it is not" with a verdict
+and one recommended action: **keep**, **issue**, **reissue**, or **change the
+domain**. Everything is read from the handshake, never from the filesystem — a
+file at the configured path proves nothing about what a viewer is offered.
+
+The case that matters most is the one that looks least like itself: a
+certificate that does not cover the name this edge is reached by. It is
+untrusted, so the obvious suggestion is to reissue — and reissuing produces an
+identical certificate, however many times it is done. That now says so and asks
+for the name viewers actually use.
+
+`ok` carries its reasoning too, because "nothing to do here" is the verdict an
+operator is least likely to believe on a page that exists because something is
+broken.
+
+**And "either the checkbox is off, or the stream was not restarted" is no
+longer offered as a pair.** The panel writes `alhls_enabled` through the
+WMSPanel API; it can read it through the same one. When the application is
+readable the answer is definite — off in WMSPanel, or on and needing a restart
+— and when it is not readable, that is said rather than a cause being picked.
+The application's `alhls_enabled`, `hls_part_duration`, `chunk_duration` and
+protocols are shown in the details window beside it.
+
+Also fixed: **`silentFallback` was an English sentence composed on the server**
+and rendered verbatim into a Russian interface. The same fault as the error
+keys, one layer down — the server chose the wording and the dictionary never
+saw it. It is a code now.
+
+Two contradictions proven: telling a name mismatch to reissue, and ignoring the
+checkbox state.
+
 ### v1.22.0 — we were slandering the certificate
 "Рукопожатие прошло, но плеер этот сертификат отвергнет", beside 89 days of
 validity. Both from the same probe, and the verdict was ours, not the

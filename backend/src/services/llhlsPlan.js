@@ -254,8 +254,10 @@ export function verdict({ tls, playlist }) {
     missing,
     // The distinction that matters to an operator staring at a green tick:
     // everything applied and the viewer still gets ordinary HLS.
-    silentFallback: missing.length > 0 && missing.includes('parts') && missing.length === 1
-      ? 'TLS and HTTP/2 are up but the playlist has no parts: the WMSPanel half is off, or the input stream has not been restarted since it was turned on.'
-      : null,
+    // A code, not a sentence. This was composed here in English and rendered
+    // verbatim into a Russian interface — the same fault as the error keys,
+    // one layer down: the server decided the wording and the dictionary never
+    // saw it.
+    silentFallback: missing.length === 1 && missing[0] === 'parts' ? 'parts-only' : null,
   };
 }

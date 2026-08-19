@@ -96,7 +96,7 @@ check('everything configured and no parts on the wire is not ready', () => {
   });
   assert.equal(s.ready, false, 'three of four was reported as working');
   assert.deepEqual(s.wire.missing, ['parts']);
-  assert.match(s.wire.silentFallback, /WMSPanel half is off/);
+  assert.equal(s.wire.silentFallback, 'parts-only');
 });
 
 check('all four together is the only pass', () => {
