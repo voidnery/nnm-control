@@ -1,5 +1,29 @@
 # Changelog
 
+### v1.21.1 — the HTTP/2 probe never once reached the network
+The screen finally showed the reason, in the machine's own words:
+
+```
+TLS: The "options.host" property must be of type string. Received an instance of Object
+```
+
+`probeTls(host, port)` is positional. It was being called `probeTls({ host,
+port })`, so the whole object went into `options.host`, node refused it, and
+**every HTTP/2 probe this feature ever made threw before opening a socket** —
+on every machine, for four versions. First the failure was swallowed and drawn
+as `?`; v1.21.0 made failures visible, so it became `✗`. Neither mark ever
+meant what it said, and nothing about the edge was ever measured.
+
+Every other caller in the codebase gets this right. This one was written from
+the shape of the call rather than from the function — fifth instance of the
+project's oldest class: a value used against a shape it does not have.
+
+Also corrected: **the certificate column reported a path, not a certificate.**
+"путь задан" came from reading `ssl_certificate` out of nimble.conf, which says
+where one should be — not whether it is there, covers the name, or has time
+left. It now comes from the handshake: expiry, and whether a player's own TLS
+stack would accept it, which is the question that decides delivery.
+
 ### v1.21.0 — asking the wire, and three question marks that meant three things
 Помощник ✓, nimble.conf ✓, HTTP/2 `?`, parts `?`. The first two were answered
 because something asked. The other two were `?` for different reasons, and the

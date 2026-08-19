@@ -115,7 +115,13 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
   const sslPort = conf.content ? Number((conf.content.match(/^\s*ssl_port\s*=\s*(\d+)/m) || [])[1]) : null;
   if (sslPort) {
     try {
-      tls = await probeTls({ host, port: sslPort });
+      // Positional, as the function is declared. Passing an object put the
+      // whole object into `options.host`, node refused it, and every probe
+      // this feature ever made threw before touching the network — so HTTP/2
+      // was never checked once, on any machine. Every other caller in the
+      // codebase gets this right; this one was written from the shape of the
+      // call rather than from the function.
+      tls = await probeTls(host, sslPort);
     } catch (e) {
       tlsError = String(e?.message || e).slice(0, 200);
       // Reached nothing, and say so as a reading rather than as silence.
@@ -159,7 +165,22 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
     }
   }
 
-  const state = edgeState({ server, conf: conf.content ? conf : null, tls, playlist });
+  // The certificate the wire presents, not the path in the file.
+  //
+  // "путь задан" was all the panel could say, because it only ever read
+  // `ssl_certificate` out of nimble.conf — which says where one should be, not
+  // whether one is there, covers this name, or has time left. The handshake
+  // carries the real one; when the handshake fails there is nothing to read
+  // and the answer stays unknown rather than becoming "none".
+  const certificate = tls?.tls ? {
+    validTo: tls.certExpiresAt || null,
+    // `authorized` is what a player's own TLS stack decides, so this is the
+    // question that matters and not whether a file exists.
+    trusted: tls.certTrusted === true,
+    error: tls.certError || null,
+  } : null;
+
+  const state = edgeState({ server, conf: conf.content ? conf : null, tls, playlist, certificate });
   res.json({
     ...state,
     confError: conf.error || null,
@@ -331,7 +352,7 @@ llhlsRouter.post('/edges/:id/apply', requirePerm('servers.manage'), async (req, 
     let tls = null;
     appendJob(jobId, '\nchecking the wire — ALPN and the certificate a player would see…\n');
     const host = server.playbackEndpoints?.[0]?.host || server.host;
-    try { tls = await probeTls({ host, port: transport.sslPort }); } catch { tls = null; }
+    try { tls = await probeTls(host, transport.sslPort); } catch { tls = null; }
     appendJob(jobId, tls?.http2
       ? `HTTP/2 negotiated on ${host}:${transport.sslPort}, certificate ${tls.certTrusted ? 'trusted' : 'NOT trusted by a default store'}\n`
       : `no HTTP/2 on ${host}:${transport.sslPort} — the configuration was written and Nimble is not serving it\n`);

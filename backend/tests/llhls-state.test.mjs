@@ -279,5 +279,28 @@ check('the detail route asks for a playlist when told what to watch', () => {
     'a failed TLS probe is still handed in as silence');
 });
 
+check('probeTls is called the way it is declared', () => {
+  // `probeTls(host, port)`, positional. Called as `probeTls({ host, port })`
+  // the whole object landed in `options.host`, node threw before opening a
+  // socket, and **every HTTP/2 probe this feature ever made failed without
+  // touching the network** — on every machine, for four versions. The screen
+  // showed `?`, then `✗`, and neither ever meant what it said.
+  //
+  // Fifth instance of the project's oldest failure class: a value used against
+  // a shape it does not have.
+  assert.ok(!/probeTls\(\s*\{/.test(routesSrc),
+    'probeTls is being handed an object again; it takes (host, port)');
+  assert.match(routesSrc, /probeTls\(host, sslPort\)/);
+});
+
+check('the certificate is read from the handshake, not from a path in a file', () => {
+  // "путь задан" was all the panel could say: it read `ssl_certificate` out of
+  // nimble.conf, which says where one should be — not whether it is there,
+  // covers the name, or has time left.
+  assert.match(routesSrc, /const certificate = tls\?\.tls \?/);
+  assert.match(routesSrc, /certExpiresAt/);
+  assert.match(routesSrc, /trusted: tls\.certTrusted === true/);
+});
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nall LL-HLS state checks passed');
 process.exit(failures ? 1 : 0);
