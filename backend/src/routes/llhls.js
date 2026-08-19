@@ -21,6 +21,7 @@ import { probeTls } from '../services/tlsProbe.js';
 import { logEvent } from '../services/audit.js';
 import { privilegedEligibility } from '../services/privilegedHelper.js';
 import { buildPlan, maskConf, describeChange, CONF_PATH, DEFAULT_SSL_PORT } from '../services/llhlsPlan.js';
+import { parsePlaylist } from '../services/playlistProbe.js';
 import { edgeState, channelPlan } from '../services/llhlsState.js';
 import { capabilities, canChangeSystem, helperReported } from '../services/serverCapabilities.js';
 import { buildSteps as certSteps, METHODS, inspectUploaded } from '../services/certPlan.js';
@@ -103,14 +104,62 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
   const conf = await readConf(server, req.user?.username);
   const host = server.playbackEndpoints?.[0]?.host || server.host;
 
+  // A probe that ran and failed is not a probe nobody made.
+  //
+  // This used to swallow the throw and leave `tls = null`, which the row draws
+  // as `?` — the same mark it draws for "not asked". So a machine whose TLS
+  // port refuses connections looked exactly like one nobody had looked at, and
+  // the two are fixed differently.
   let tls = null;
+  let tlsError = null;
   const sslPort = conf.content ? Number((conf.content.match(/^\s*ssl_port\s*=\s*(\d+)/m) || [])[1]) : null;
   if (sslPort) {
-    try { tls = await probeTls({ host, port: sslPort }); }
-    catch { tls = null; }
+    try {
+      tls = await probeTls({ host, port: sslPort });
+    } catch (e) {
+      tlsError = String(e?.message || e).slice(0, 200);
+      // Reached nothing, and say so as a reading rather than as silence.
+      tls = { tls: false, http2: false, certTrusted: false, reached: false };
+    }
   }
 
-  const state = edgeState({ server, conf: conf.content ? conf : null, tls });
+  // Being the viewer, when there is something to watch.
+  //
+  // Parts in the playlist is the only one of the four that says LL-HLS is
+  // actually reaching anybody, and nothing was asking for it: the column was
+  // permanently `?` because no code path ever fetched a playlist. It needs an
+  // application and a stream, which only the operator knows, so it is asked
+  // for rather than guessed.
+  let playlist = null;
+  let playlistError = null;
+  const watch = String(req.query.stream || '').replace(/^\/+|\/+$/g, '');
+  if (watch && sslPort) {
+    const url = `https://${host}:${sslPort}/${watch}/playlist.m3u8`;
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (r.status !== 200) {
+        playlistError = `HTTP ${r.status}`;
+      } else {
+        const master = parsePlaylist(await r.text());
+        // Follow the master to its variant: the parts live there, not in the
+        // list of variants, and a master with no parts says nothing either way.
+        const first = master.valid && master.uris[0];
+        if (first) {
+          const child = await fetch(new URL(first, url).toString(),
+            { signal: AbortSignal.timeout(10_000) });
+          playlist = child.status === 200 ? parsePlaylist(await child.text()) : null;
+          if (!playlist) playlistError = `variant HTTP ${child.status}`;
+        } else {
+          playlist = master.valid ? master : null;
+          if (!playlist) playlistError = 'not a playlist';
+        }
+      }
+    } catch (e) {
+      playlistError = String(e?.message || e).slice(0, 200);
+    }
+  }
+
+  const state = edgeState({ server, conf: conf.content ? conf : null, tls, playlist });
   res.json({
     ...state,
     confError: conf.error || null,
@@ -122,6 +171,10 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
     conf: conf.content ? maskConf(conf.content) : null,
     confSha: conf.sha256 || null,
     secretsPresent: conf.secrets || [],
+    tlsError,
+    playlistError,
+    watched: watch || null,
+    sslPort: sslPort || null,
   });
 });
 

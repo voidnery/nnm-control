@@ -106,8 +106,20 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
   // The steps the plan will run, and where the machine has got to. Held apart
   // from the transcript: a bar answers "how far", a log answers "what
   // happened", and one pane doing both answers neither well.
+  // What to watch, so the parts column can be answered at all. Only the
+  // operator knows which application and stream is live on this edge, so it is
+  // asked for rather than guessed — a wrong guess would fetch a 404 and report
+  // it as "no parts".
+  const [watch, setWatch] = useState('');
   const [job, setJob] = useState(null);
   const [showLog, setShowLog] = useState(false);
+
+  const load = (stream) => {
+    setLoading(true);
+    return api(`/llhls/edges/${id}${stream ? `?stream=${encodeURIComponent(stream)}` : ''}`)
+      .then(d => { setDetail(d); setLoading(false); onLearned?.(d); return d; })
+      .catch(e => { onProblem(explainError(e, t)); setLoading(false); });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -226,6 +238,21 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
           })}
         </div>
       )}
+
+      {/* Asking the wire. The four marks in the row are four different
+          questions, and two of them can only be answered by fetching
+          something. */}
+      <div className="row">
+        <input className="mono" placeholder="app/stream" value={watch}
+               onChange={e => setWatch(e.target.value)} style={{ minWidth: 220 }} />
+        <button disabled={loading} onClick={() => load(watch.trim())}>
+          {t('llhls.check')}
+        </button>
+      </div>
+      <div className="hint">{t('llhls.checkHint')}</div>
+      {detail.tlsError && <div className="hint mono">TLS: {detail.tlsError}</div>}
+      {detail.playlistError && <div className="hint mono">{t('llhls.playlistError')}: {detail.playlistError}</div>}
+      {detail.wire?.silentFallback && <div className="error-box">{detail.wire.silentFallback}</div>}
 
       <h4>{t('llhls.setup')}</h4>
 

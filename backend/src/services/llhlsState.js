@@ -111,6 +111,10 @@ export function edgeState({ server, conf = null, tls = null, playlist = null,
   if (cert === null) unknown.push('certificate');
   if (tls === null) unknown.push('tls');
   if (playlist === null) unknown.push('playlist');
+  // A probe that ran and found nothing is an answer. It used to be handed in
+  // as `null` on failure, which put it here — beside the things nobody had
+  // asked about — and the two are fixed differently.
+  if (tls && tls.reached === false && !blockers.includes('tls-down')) blockers.push('tls-down');
 
   return {
     // The id travels with the row. A list keyed on a name looks fine until two

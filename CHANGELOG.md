@@ -1,5 +1,27 @@
 # Changelog
 
+### v1.21.0 — asking the wire, and three question marks that meant three things
+Помощник ✓, nimble.conf ✓, HTTP/2 `?`, parts `?`. The first two were answered
+because something asked. The other two were `?` for different reasons, and the
+same mark for both is what made them look like one problem.
+
+**HTTP/2 was probed, and the failure was swallowed.** The route caught the
+throw and set `tls = null`, which draws the same `?` as "nobody looked". A port
+that refuses connections and a question nobody asked have different fixes. A
+failed probe now comes back as a reading — `reached: false` — and lands in the
+blockers, where `tls-down` already had a sentence waiting for it.
+
+**Parts were never asked about at all.** No code path fetched a playlist, so
+that column could only ever be `?` no matter what the edge was doing. It needs
+an application and a stream, which only the operator knows — a guess would
+fetch a 404 and report it as "no parts" — so the detail route takes
+`?stream=app/stream`, fetches the master, follows it to the variant, and reads
+the parts from there. The screen has a field and an "ask the wire" button, and
+shows what the fetch said when it failed.
+
+Both errors are shown as the machine's own words in small type, beside the
+verdict and not instead of it.
+
 ### v1.20.1 — an install that leaves the panel down must not say "installed"
 The 1.20.0 upgrade took production off the air for hours, and the logs say
 exactly how. From `/var/log/apt/term.log`:

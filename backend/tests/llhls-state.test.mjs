@@ -252,5 +252,32 @@ check('the bar counts answered steps, not elapsed time', () => {
     'the bar reaches 100% while still running, which is worse than no bar');
 });
 
+check('a TLS port that refused a connection is a blocker, not an unknown', () => {
+  // The probe threw, the route caught it, and `tls = null` drew the same `?`
+  // as "nobody looked". A refused port and an unasked question have different
+  // fixes.
+  const s = edgeState({
+    server: edge, conf: { content: CONF_ON },
+    tls: { tls: false, http2: false, certTrusted: false, reached: false },
+  });
+  assert.ok(s.blockers.includes('tls-down'));
+  assert.ok(!s.unknown.includes('tls'), 'a failed probe was filed as an unasked question');
+  assert.equal(s.ready, false);
+});
+
+check('a port nobody probed is still unknown', () => {
+  const s = edgeState({ server: edge, conf: { content: CONF_ON } });
+  assert.ok(s.unknown.includes('tls'));
+  assert.ok(!s.blockers.includes('tls-down'), 'not looking was reported as not working');
+});
+
+check('the detail route asks for a playlist when told what to watch', () => {
+  assert.match(routesSrc, /req\.query\.stream/,
+    'nothing ever fetches a playlist, so the parts column can only ever be `?`');
+  assert.match(routesSrc, /playlist\.m3u8/);
+  assert.match(routesSrc, /reached: false/,
+    'a failed TLS probe is still handed in as silence');
+});
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nall LL-HLS state checks passed');
 process.exit(failures ? 1 : 0);
