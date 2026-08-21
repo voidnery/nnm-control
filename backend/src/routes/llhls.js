@@ -23,6 +23,8 @@ import { privilegedEligibility } from '../services/privilegedHelper.js';
 import { buildPlan, maskConf, describeChange, CONF_PATH, DEFAULT_SSL_PORT } from '../services/llhlsPlan.js';
 import { parsePlaylist } from '../services/playlistProbe.js';
 import { certificateVerdict, partsDiagnosis } from '../services/certState.js';
+import { PART_MIN_MS, partRangeMs, containerAdvice, protocolsAfterWrite,
+         expectedLatency, RESTART_REQUIRED_AFTER_ENABLE } from '../services/llhls.js';
 import { edgeState, channelPlan } from '../services/llhlsState.js';
 import { capabilities, canChangeSystem, helperReported } from '../services/serverCapabilities.js';
 import { buildSteps as certSteps, METHODS, inspectUploaded } from '../services/certPlan.js';
@@ -287,6 +289,128 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // What would be written. Nothing is.
+// ---------------------------------------------------------------------------
+// The other half: the applications on this edge.
+//
+// Kept on the edge rather than on a channel, because the machine that needs
+// this first — `nnm-probe` on RU-6 — belongs to no channel, and because the
+// question "does this edge serve parts" is answered per application whether a
+// channel points at it or not.
+llhlsRouter.get('/edges/:id/applications', requirePerm('servers.view'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+  if (!server.wmspanelServerId) {
+    return res.status(422).json({ error: 'no-wmspanel-server', code: 'no-wmspanel-server' });
+  }
+  try {
+    const cfg = (await Settings.load()).wmspanel;
+    const list = await wmspanel.liveAppList(cfg, server.wmspanelServerId);
+    const apps = (list?.applications || []).map(a => {
+      const range = partRangeMs(a.chunk_duration);
+      const container = containerAdvice(a.protocols || []);
+      return {
+        id: a.id,
+        name: a.application,
+        chunk: a.chunk_duration ?? null,
+        protocols: a.protocols || [],
+        alhls: 'alhls_enabled' in a ? a.alhls_enabled : null,
+        part: a.hls_part_duration ?? null,
+        // The bounds travel with the application, so the form cannot offer a
+        // value the server will refuse. Measured, not from the reference:
+        // the floor is 500 and the reference says 250.
+        range,
+        // `null` where the field is absent, which on this API means the
+        // application carries no HLS container and the checkbox does not
+        // apply — a different thing from being switched off.
+        applicable: 'alhls_enabled' in a,
+        containerNote: container.reason,
+        latency: range && a.hls_part_duration ? expectedLatency(a.hls_part_duration) : null,
+      };
+    });
+    res.json({ applications: apps, partMin: PART_MIN_MS });
+  } catch (e) {
+    res.status(502).json({ error: 'wmspanel-failed', code: 'wmspanel-failed',
+                           detail: String(e?.message || e).slice(0, 200) });
+  }
+});
+
+llhlsRouter.post('/edges/:id/applications/:appId', requirePerm('servers.manage'), async (req, res) => {
+  const server = await NimbleServer.findById(req.params.id);
+  if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });
+  if (!server.wmspanelServerId) {
+    return res.status(422).json({ error: 'no-wmspanel-server', code: 'no-wmspanel-server' });
+  }
+
+  const cfg = (await Settings.load()).wmspanel;
+  let app = null;
+  try {
+    const list = await wmspanel.liveAppList(cfg, server.wmspanelServerId);
+    app = (list?.applications || []).find(a => String(a.id) === String(req.params.appId)) || null;
+  } catch (e) {
+    return res.status(502).json({ error: 'wmspanel-failed', code: 'wmspanel-failed',
+                                  detail: String(e?.message || e).slice(0, 200) });
+  }
+  if (!app) return res.status(404).json({ error: 'application-not-found', code: 'application-not-found' });
+
+  const enable = req.body?.enable !== false;
+  const body = { alhls_enabled: enable };
+
+  if (enable) {
+    // Refused, never clamped. Clamping applies a value nobody asked for and
+    // reports success, which is the shape this project keeps finding.
+    const range = partRangeMs(app.chunk_duration);
+    if (!range) return res.status(422).json({ error: 'chunk-too-short', code: 'chunk-too-short',
+                                              chunk: app.chunk_duration });
+    const part = Number(req.body?.partMs);
+    if (!Number.isFinite(part) || part < range.min || part > range.max) {
+      return res.status(422).json({ error: 'part-outside-range', code: 'part-outside-range', range });
+    }
+    body.hls_part_duration = part;
+
+    if (!containerAdvice(app.protocols || []).ok) {
+      return res.status(422).json({ error: 'container-cannot-carry-llhls',
+                                    code: 'container-cannot-carry-llhls',
+                                    protocols: app.protocols || [] });
+    }
+    // Switching container is a separate consent: measured, HLS_FMP4 removes
+    // plain HLS rather than joining it, and every current viewer changes
+    // container. It is not something to slip into a request about a checkbox.
+    if (req.body?.switchToFmp4 === true) {
+      body.protocols = protocolsAfterWrite([...(app.protocols || []), 'HLS_FMP4']);
+    }
+  }
+
+  await logEvent(req, 'llhls.application', {
+    server: server.name, application: app.application, enable,
+    partMs: body.hls_part_duration ?? null, switched: req.body?.switchToFmp4 === true,
+  });
+
+  try {
+    await wmspanel.liveAppUpdate(cfg, server.wmspanelServerId, app.id, body);
+    // Accepted is not applied. This API has been seen to store three of four
+    // fields sent and report success.
+    const back = await wmspanel.liveAppList(cfg, server.wmspanelServerId);
+    const after = (back?.applications || []).find(a => String(a.id) === String(app.id)) || null;
+    const stored = after?.alhls_enabled === enable
+      && (!enable || Number(after?.hls_part_duration) === body.hls_part_duration);
+    const dropped = Array.isArray(body.protocols)
+      ? body.protocols.filter(p => !(after?.protocols || []).includes(p)) : [];
+
+    res.json({
+      applied: stored,
+      after: after ? { alhls: after.alhls_enabled, part: after.hls_part_duration,
+                       protocols: after.protocols } : null,
+      dropped,
+      // Said every time rather than once in a manual, because it is the step
+      // that decides whether any of this reaches a viewer.
+      restartRequired: enable && RESTART_REQUIRED_AFTER_ENABLE,
+    });
+  } catch (e) {
+    res.status(502).json({ error: 'wmspanel-failed', code: 'wmspanel-failed',
+                           detail: String(e?.message || e).slice(0, 200) });
+  }
+});
+
 llhlsRouter.post('/edges/:id/plan', requirePerm('servers.manage'), async (req, res) => {
   const server = await NimbleServer.findById(req.params.id);
   if (!server) return res.status(404).json({ error: 'server-not-found', code: 'server-not-found' });

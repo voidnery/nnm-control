@@ -8,6 +8,7 @@ import { explainError } from '../lib/errors.js';
 import { helperState } from '../lib/capabilities.js';
 import CertificateSetup from '../components/CertificateSetup.jsx';
 import EdgeDetails, { problemsOf } from '../components/EdgeDetails.jsx';
+import EdgeApplications from '../components/EdgeApplications.jsx';
 
 // Low-Latency HLS, in one place.
 //
@@ -291,6 +292,11 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
           invented its own way of showing it. It all lives in Details now, in
           one sorted window, and the row shouts when there is something in
           it. */}
+
+      {/* The application half, below the transport it depends on and above
+          nothing, so the order on screen is the order of the work. */}
+      <EdgeApplications edgeId={id} transportReady={detail.wire ? !detail.wire.missing.includes('http2') : null}
+                        onProblem={onProblem} onChanged={() => load(watch.trim())} />
 
       <h4>{t('llhls.setup')}</h4>
 

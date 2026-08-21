@@ -335,5 +335,37 @@ check('the panel finds a live stream instead of asking for one', () => {
     'an explicit choice must still win over the automatic one');
 });
 
+// --- the application half, which now has somewhere to be pressed -----------
+
+check('the part is refused outside the range, never clamped', () => {
+  // Clamping applies a value nobody asked for and reports success. The bounds
+  // are measured: the floor is 500 and the published reference says 250.
+  assert.match(routesSrc, /part < range\.min \|\| part > range\.max/);
+  assert.match(routesSrc, /'part-outside-range'/);
+  assert.ok(!/Math\.max\(range\.min|Math\.min\(range\.max/.test(routesSrc),
+    'the part is being clamped into range instead of refused');
+});
+
+check('a chunk too short is refused as itself, not blamed on the part', () => {
+  assert.match(routesSrc, /'chunk-too-short'/);
+});
+
+check('switching container needs its own consent', () => {
+  // Measured: HLS_FMP4 removes plain HLS. It is not something to slip into a
+  // request about a checkbox.
+  assert.match(routesSrc, /req\.body\?\.switchToFmp4 === true/);
+  assert.match(routesSrc, /protocolsAfterWrite/);
+});
+
+check('the write is read back before anything is reported', () => {
+  // This API has been seen to store three of four fields sent and answer Ok.
+  assert.match(routesSrc, /const stored = after\?\.alhls_enabled === enable/);
+  assert.match(routesSrc, /applied: stored/);
+});
+
+check('the restart nothing can do for us travels with every enable', () => {
+  assert.match(routesSrc, /restartRequired: enable && RESTART_REQUIRED_AFTER_ENABLE/);
+});
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nall LL-HLS state checks passed');
 process.exit(failures ? 1 : 0);

@@ -1,5 +1,40 @@
 # Changelog
 
+### v1.25.0 — the application half, where an operator can reach it
+The last piece of LL-HLS that existed only as an API. `GET` and `POST`
+`/api/llhls/edges/:id/applications`, and a section on the edge's row listing
+what WMSPanel has on that server with the checkbox, the part duration and its
+legal range.
+
+**On the edge, not on a channel.** The machine that needs this first —
+`nnm-probe` on RU-6 — belongs to no channel, and "does this edge serve parts"
+is answered per application whether a channel points at it or not.
+
+Three measured facts are built in rather than documented:
+
+- **The part is refused outside 500 ms … half the chunk, never clamped.** A
+  clamp applies a value nobody asked for and reports success. The floor is the
+  measured 500, not the 250 the published reference still claims, and the range
+  travels with each application so the form cannot offer what the server will
+  refuse.
+- **Switching container is its own consent.** Adding `HLS_FMP4` *removes* plain
+  HLS — measured, not documented — so it is a separate checkbox with the
+  consequence written next to it, not something slipped into a request about
+  LL-HLS.
+- **The restart travels with every enable.** Nimble keeps packaging a running
+  stream the way it was configured when it started, and the panel cannot
+  restart a stream somebody publishes into it. So it says so every time instead
+  of reporting the write as a working feature.
+
+The write is read back before anything is reported: this API has been seen to
+store three of four fields sent and answer `Ok`. And an application with no HLS
+container reads as **not applicable** rather than as switched off — the field
+is absent there, and absent is not false.
+
+Turning it on while HTTP/2 is down is warned about before the button, not
+after: that combination is a setting that applies and a viewer who still gets
+ordinary HLS, which is the failure the whole feature exists to prevent.
+
 ### v1.24.0 — one place for faults, and the panel finds the stream itself
 `parts-only` was printed on the page as those seven characters. The code was
 right; the page rendered it raw, because it had its own way of showing a fault
