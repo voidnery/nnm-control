@@ -157,7 +157,35 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
   // for rather than guessed.
   let playlist = null;
   let playlistError = null;
-  const watch = String(req.query.stream || '').replace(/^\/+|\/+$/g, '');
+  let watch = String(req.query.stream || '').replace(/^\/+|\/+$/g, '');
+
+  // Find a live stream rather than asking for one.
+  //
+  // The operator was typing `app/stream` into a box to answer a question the
+  // panel could answer itself: WMSPanel lists what is live on a server, and
+  // this machine is one of them. Typing it by hand also invites a typo, and a
+  // typo fetches a 404 that reads as "no parts".
+  //
+  // Only when nothing was passed, so an explicit choice still wins.
+  let watchAuto = false;
+  if (!watch && server.wmspanelServerId) {
+    try {
+      const cfg = (await Settings.load()).wmspanel;
+      const live = await wmspanel.liveStreams(cfg, server.wmspanelServerId);
+      const list = live?.streams || live?.data || [];
+      // The first one that names both halves. Any live stream answers the
+      // question — whether this edge serves parts is a property of the edge,
+      // not of which stream is looked at.
+      const pick = list.find(x => (x.application || x.app) && (x.name || x.stream));
+      if (pick) {
+        watch = `${pick.application || pick.app}/${pick.name || pick.stream}`;
+        watchAuto = true;
+      }
+    } catch {
+      // WMSPanel unreachable leaves `watch` empty and the parts column
+      // unknown, which is what it is.
+    }
+  }
   if (watch && sslPort) {
     const url = `https://${host}:${sslPort}/${watch}/playlist.m3u8`;
     try {
@@ -239,6 +267,7 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
     tlsError,
     playlistError,
     watched: watch || null,
+    watchAuto,
     sslPort: sslPort || null,
     // Handed to the form so an edge that is already set up shows what it is
     // set up with, instead of a placeholder the operator has to retype.

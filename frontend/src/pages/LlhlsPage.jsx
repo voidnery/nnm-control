@@ -7,7 +7,6 @@ import ErrorDialog from '../components/ErrorDialog.jsx';
 import { explainError } from '../lib/errors.js';
 import { helperState } from '../lib/capabilities.js';
 import CertificateSetup from '../components/CertificateSetup.jsx';
-import ConfError from '../lib/confErrors.jsx';
 import EdgeDetails, { problemsOf } from '../components/EdgeDetails.jsx';
 
 // Low-Latency HLS, in one place.
@@ -239,10 +238,7 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
 
   return (
     <div className="llhls-detail">
-      {/* A code, a fix, and the machine's own words last. This used to be
-          `t('llhls.confError.' + detail.confError)` where confError was an
-          exception's message, so the interface printed the key. */}
-      <ConfError code={detail.confError} detail={detail.confDetail} />
+
 
       {/* What is unknown, said before what is wrong. An operator looking at a
           row of question marks needs to know nobody asked, not to go hunting
@@ -255,6 +251,8 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
           only when the helper was known absent, so a machine that had never
           reported got no warning and a working Apply button — and the refusal
           arrived after the press, as an HTTP 422 with a code in it. */}
+      {/* The one exception, because it is not a diagnosis but a precondition
+          for the button directly below it. */}
       {helper !== 'installed' && (
         <div className="error-box">
           {t(helper === 'missing' ? 'llhls.needHelper' : 'llhls.helperUnknown')}
@@ -276,16 +274,23 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
           questions, and two of them can only be answered by fetching
           something. */}
       <div className="row">
-        <input className="mono" placeholder="app/stream" value={watch}
+        <input className="mono" placeholder={detail.watched || 'app/stream'} value={watch}
                onChange={e => setWatch(e.target.value)} style={{ minWidth: 220 }} />
         <button disabled={loading} onClick={() => load(watch.trim())}>
           {t('llhls.check')}
         </button>
       </div>
-      <div className="hint">{t('llhls.checkHint')}</div>
-      {detail.tlsError && <div className="hint mono">TLS: {detail.tlsError}</div>}
-      {detail.playlistError && <div className="hint mono">{t('llhls.playlistError')}: {detail.playlistError}</div>}
-      {detail.wire?.silentFallback && <div className="error-box">{detail.wire.silentFallback}</div>}
+      <div className="hint">
+        {detail.watched
+          ? t(detail.watchAuto ? 'llhls.watchAuto' : 'llhls.watchGiven', { stream: detail.watched })
+          : t('llhls.watchNone')}
+      </div>
+      {/* Nothing about faults is printed here any more. It was scattered —
+          a code below one field, a raw error below another, a sentence below
+          the plan — and half of it rendered untranslated because each place
+          invented its own way of showing it. It all lives in Details now, in
+          one sorted window, and the row shouts when there is something in
+          it. */}
 
       <h4>{t('llhls.setup')}</h4>
 

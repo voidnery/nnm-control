@@ -132,7 +132,9 @@ export default function EdgeDetails({ detail, onClose }) {
       {d.watched && (
         <Section title={t('llhls.det.wire')}>
           <Fact label={t('llhls.det.watched')} value={d.watched} mono />
-          <Fact label={t('llhls.det.parts')} value={d.wire?.missing?.includes('parts') ? t('common.no') : t('common.yes')} />
+          <Fact label={t('llhls.det.parts')}
+                value={d.wire?.partsUnknown ? null
+                  : d.wire?.missing?.includes('parts') ? t('common.no') : t('common.yes')} />
           <Fact label={t('llhls.det.appAlhls')}
                 value={d.application ? (d.application.alhls === true ? t('common.yes')
                   : d.application.alhls === false ? t('common.no') : null) : null} />

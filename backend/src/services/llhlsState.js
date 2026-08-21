@@ -91,7 +91,21 @@ export function edgeState({ server, conf = null, tls = null, playlist = null,
 
   // 4. The wire. `verdict` needs both the handshake and the playlist, and
   // treats a missing one as missing rather than as a pass.
+  // A playlist nobody fetched is not a playlist without parts.
+  //
+  // `verdict` counts a missing playlist as missing parts, which is right when
+  // one was fetched and wrong when none was. The row drew `✗` on every edge
+  // the sweep had touched, saying "no parts" about a question nobody had
+  // asked — the same conflation this file exists to prevent, one field over.
   const wire = (tls || playlist) ? verdict({ tls, playlist }) : null;
+  if (wire && playlist === null) {
+    wire.missing = wire.missing.filter(m => m !== 'parts');
+    wire.partsUnknown = true;
+    // Not ready either: three of four is not "nearly working", and an unasked
+    // fourth cannot be assumed good.
+    wire.ok = false;
+    wire.silentFallback = null;
+  }
 
   const blockers = [];
   if (helper.installed === false) blockers.push('helper-not-installed');

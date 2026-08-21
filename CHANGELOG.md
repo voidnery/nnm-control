@@ -1,5 +1,30 @@
 # Changelog
 
+### v1.24.0 — one place for faults, and the panel finds the stream itself
+`parts-only` was printed on the page as those seven characters. The code was
+right; the page rendered it raw, because it had its own way of showing a fault
+and the translation lived somewhere else.
+
+**Every explanation now lives in Details.** It was scattered — a code under one
+field, a raw error under another, a sentence under the plan — and each place
+had invented its own presentation, which is how half of it ended up
+untranslated. One sorted window, and the row shouts when there is something in
+it. The only line left in place is the missing helper, because that is a
+precondition for the button directly beneath it rather than a diagnosis.
+
+**The stream is found, not typed.** WMSPanel lists what is live on a server;
+the panel asks it and checks against the first live stream it names. Any of
+them answers the question — whether an edge serves parts is a property of the
+edge, not of which stream is looked at — and a hand-typed `app/stream` invites
+a typo that fetches a 404 and reads as "no parts". An explicit entry still
+wins, and when nothing live is found the box says so instead of staying blank.
+
+**And parts stopped being reported as absent when nobody had asked.** The sweep
+probes TLS and fetches no playlist unless a stream is known, but `verdict`
+counted a missing playlist as missing parts — so every edge the sweep touched
+drew `✗`, saying "no parts" about a question never put. Three-valued now, like
+everything else on that row, and an edge with three of four cannot be ready.
+
 ### v1.23.0 — a certificate has more than two states, and the panel stops guessing
 **`certState.js`** replaces "a path is configured / it is not" with a verdict
 and one recommended action: **keep**, **issue**, **reissue**, or **change the

@@ -302,5 +302,38 @@ check('the certificate is read from the handshake, not from a path in a file', (
   assert.match(routesSrc, /trusted: tls\.certTrusted === true/);
 });
 
+check('a playlist nobody fetched is not a playlist without parts', () => {
+  // The sweep probes TLS and does not fetch a playlist unless a stream is
+  // known. `verdict` counted the missing playlist as missing parts, so every
+  // edge the sweep touched drew `✗` — "no parts" about a question nobody had
+  // asked.
+  const s = edgeState({
+    server: edge, conf: { content: CONF_ON },
+    tls: { tls: true, http2: true, certTrusted: true },
+  });
+  assert.equal(s.wire.partsUnknown, true);
+  assert.ok(!s.wire.missing.includes('parts'), 'an unasked question was reported as a failure');
+  assert.equal(s.ready, false, 'three of four became ready');
+  assert.equal(s.wire.silentFallback, null,
+    'the silent-fallback case was declared without a playlist to declare it from');
+});
+
+check('a playlist that was fetched and has no parts still fails', () => {
+  const s = edgeState({
+    server: edge, conf: { content: CONF_ON },
+    tls: { tls: true, http2: true, certTrusted: true },
+    playlist: { lowLatency: { confirmed: false } },
+  });
+  assert.notEqual(s.wire.partsUnknown, true);
+  assert.ok(s.wire.missing.includes('parts'));
+  assert.equal(s.wire.silentFallback, 'parts-only');
+});
+
+check('the panel finds a live stream instead of asking for one', () => {
+  assert.match(routesSrc, /liveStreams\(cfg, server\.wmspanelServerId\)/);
+  assert.match(routesSrc, /if \(!watch && server\.wmspanelServerId\)/,
+    'an explicit choice must still win over the automatic one');
+});
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nall LL-HLS state checks passed');
 process.exit(failures ? 1 : 0);
