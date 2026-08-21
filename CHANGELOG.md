@@ -1,5 +1,46 @@
 # Changelog
 
+### v1.25.1 (documentation) — LL-HLS confirmed on the wire
+`nnm-probe/feed1` on NimbleRU-6, 2026-08-21, fetched by name over TLS:
+`PART-TARGET=2.002`, `CAN-BLOCK-RELOAD=YES`, `EXT-X-PART` lines, an
+`EXT-X-MAP`, a `PRELOAD-HINT`. The whole chain, from a helper on a media
+server to parts in a viewer's playlist, works.
+
+Two findings recorded in `docs/STATE.md`, both of which correct earlier
+positions:
+
+- ~~**Enabling LL-HLS switches the output to fMP4 on its own.**~~ **Withdrawn
+  the same day**: the operator had ticked the container switch in the same
+  action. The claim came from protocols read *before* the write and applied to
+  the state after it, and it drew a conclusion from a step that changed two
+  things at once — this project's own rule, broken by the one who wrote it.
+  Whether LL-HLS alone produces fMP4 is open, and separable by one test.
+- **The restart's effect is visible in the master playlist**: version 3 →
+  6, `chunks.m3u8` → `video.m3u8`, audio split out. The entry point did not
+  move, as measured on 2026-08-17.
+
+No version bump: documentation.
+
+### v1.25.1 — the panel checked the wrong application
+LL-HLS was turned on for `nnm-probe` and the row still said no parts, because
+the automatic pick had chosen `ewc_dota/kk_feed_1_a_backup` — the first live
+stream on the server, from an application with the checkbox off.
+
+The reasoning was written into the code a version ago and it was wrong:
+
+> Any live stream answers the question — whether this edge serves parts is a
+> property of the edge, not of which stream is looked at.
+
+**`alhls_enabled` is a property of the application.** A stream from an
+application with it off answers a different question, and the answer it gave
+was true about that application and useless about the one that had just been
+configured.
+
+The pick now prefers a stream whose application has LL-HLS on, falls back to
+any stream when none does — "no parts" is the true answer on an edge where
+nothing is enabled — and the screen says which of the two cases it is, so a
+disabled application is never presented as evidence about an enabled one.
+
 ### v1.25.0 — the application half, where an operator can reach it
 The last piece of LL-HLS that existed only as an API. `GET` and `POST`
 `/api/llhls/edges/:id/applications`, and a section on the edge's row listing

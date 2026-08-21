@@ -505,7 +505,91 @@ application that is every current viewer's container changing under them.
 `llhls.js` carries `protocolsAfterWrite()` so the panel can show what a write
 will actually store, rather than discovering it in a readback.
 
-### Switching container: the link holds, the stream restarts
+### LL-HLS works, proven on the wire
+
+**Measured 2026-08-21**, `nnm-probe/feed1` on NimbleRU-6, fetched by name over
+TLS with no `-k`:
+
+```
+#EXT-X-VERSION:7
+#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=6.006
+#EXT-X-PART-INF:PART-TARGET=2.002
+#EXT-X-MAP:URI="video_1.fmp4"
+#EXT-X-PART:DURATION=2.002,...,INDEPENDENT=YES
+#EXT-X-PRELOAD-HINT:TYPE=PART,...
+```
+
+All three marks this project insisted on, from the viewer's side. Nothing here
+is inferred from configuration.
+
+The whole chain, end to end: privileged helper on an edge → certificate by
+name → `ssl_port` and `ssl_http2_enabled` in `nimble.conf` → `alhls_enabled`
+and `hls_part_duration` in WMSPanel → input stream restarted → parts.
+
+### Two things this run taught that were not known
+
+**Settled the same day, and the answer is the opposite of the first claim.**
+With `HLS_FMP4` removed, plain `HLS` restored and `alhls_enabled` left on, the
+restarted stream serves **parts as `.ts` in `chunks.m3u8`**:
+
+```
+#EXT-X-VERSION:3
+#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=6.006
+#EXT-X-PART-INF:PART-TARGET=2.002
+#EXT-X-PART:DURATION=2.002,URI="l_31300_48115_8_0.ts"
+```
+
+So **LL-HLS and the container are independent**. Parts work on MPEG-TS; the
+move from `chunks.m3u8` to `video.m3u8` was the container switch doing it, not
+LL-HLS. The fleet's plain-`HLS` container is *not* a precondition for low
+latency — the vendor still recommends fMP4 for video, and that recommendation
+is about efficiency and HEVC, not about whether parts exist.
+
+**One thing worth measuring before trusting the TS path.** Nimble declares
+`#EXT-X-VERSION:3` while emitting `EXT-X-PART`; Apple's specification puts
+parts at version 9. A player that honours the declared version may ignore the
+parts and fall back to ordinary HLS without saying so — the exact failure this
+whole feature exists to prevent. The fMP4 variant declared 7, also below 9 but
+closer. **Not concluded**: only a real player answers it. Open Safari on an
+Apple device against both URLs and compare the delay to the live edge.
+
+### Superseded reasoning, kept because it cost something
+
+The first claim here — that enabling LL-HLS switches the container by itself —
+was wrong twice over. The operator had ticked the container switch in the same action, and the
+claim was built on `HLS, DASH, SLDP` read out of the details window **before**
+the write, and then used to describe the state after it — data about one moment
+applied to another. Sixth instance of this project's oldest failure family.
+
+Worse: **two things changed at once**, and a conclusion was drawn anyway. This
+project's own rule, stated to the operator in July and broken here by the one
+who stated it.
+
+That test was run, and it is the one above. The general lesson is cheaper than
+the specific one: **data on a screen describes the moment it was fetched.**
+After a write, read it back — which is what the panel does and what the
+analysis did not.
+
+**The restart is not optional and its effect is visible in the master.**
+Before: `#EXT-X-VERSION:3`, variant `chunks.m3u8`. After: version 6, variant
+`video.m3u8`, audio split out, `EXT-X-INDEPENDENT-SEGMENTS`. The entry point
+`playlist.m3u8` did not move — as measured on 2026-08-17 — so nothing the panel
+publishes had to change.
+
+### What the latency actually is
+
+`PART-HOLD-BACK` came back as **exactly three times** `PART-TARGET`, which is
+what Nimble's published playlists showed and what `llhls.js` derives. At a
+2000 ms part that is 6 s of hold-back — the vendor's own figure for this
+setting.
+
+Shorter is available and costs bandwidth: 1000 ms gives 4–5 s, and 500 ms —
+the floor — about 2 s. The panel offers the whole legal range and refuses
+outside it.
+
+---
+
+## Switching container: the link holds, the stream restarts
 
 **Measured 2026-08-17** with the input restarted inside the window — media
 sequence 333 → 10, so a genuine restart and not a guess:

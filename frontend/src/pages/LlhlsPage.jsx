@@ -283,7 +283,9 @@ function Detail({ id, onProblem, onChanged, onLearned }) {
       </div>
       <div className="hint">
         {detail.watched
-          ? t(detail.watchAuto ? 'llhls.watchAuto' : 'llhls.watchGiven', { stream: detail.watched })
+          ? t(!detail.watchAuto ? 'llhls.watchGiven'
+              : detail.watchEnabled === false ? 'llhls.watchAutoOff' : 'llhls.watchAuto',
+              { stream: detail.watched })
           : t('llhls.watchNone')}
       </div>
       {/* Nothing about faults is printed here any more. It was scattered —

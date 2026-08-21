@@ -170,18 +170,40 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
   //
   // Only when nothing was passed, so an explicit choice still wins.
   let watchAuto = false;
+  let watchEnabled = null;
   if (!watch && server.wmspanelServerId) {
     try {
       const cfg = (await Settings.load()).wmspanel;
       const live = await wmspanel.liveStreams(cfg, server.wmspanelServerId);
       const list = live?.streams || live?.data || [];
-      // The first one that names both halves. Any live stream answers the
-      // question — whether this edge serves parts is a property of the edge,
-      // not of which stream is looked at.
-      const pick = list.find(x => (x.application || x.app) && (x.name || x.stream));
+
+      // Prefer a stream whose application has LL-HLS switched on.
+      //
+      // The first version took whichever stream came first, on the reasoning
+      // that "any live stream answers it — serving parts is a property of the
+      // edge". **That reasoning was wrong.** `alhls_enabled` is a property of
+      // the *application*, so a stream from an application with the checkbox
+      // off answers a different question — and it did: LL-HLS was turned on
+      // for `nnm-probe` and the panel reported no parts, having checked
+      // `ewc_dota`.
+      let enabledApps = new Set();
+      try {
+        const apps = await wmspanel.liveAppList(cfg, server.wmspanelServerId);
+        enabledApps = new Set((apps?.applications || [])
+          .filter(a => a.alhls_enabled === true).map(a => a.application));
+      } catch { /* leave it empty; the fallback below still picks something */ }
+
+      const named = list.filter(x => (x.application || x.app) && (x.name || x.stream));
+      // Falling back to any stream rather than none: on an edge where nothing
+      // has LL-HLS on, "no parts" is the true answer and worth showing.
+      const pick = named.find(x => enabledApps.has(x.application || x.app)) || named[0];
       if (pick) {
         watch = `${pick.application || pick.app}/${pick.name || pick.stream}`;
         watchAuto = true;
+        // Which of the two it is, so the screen does not present a stream from
+        // an application with the checkbox off as evidence about one that has
+        // it on.
+        watchEnabled = enabledApps.has(pick.application || pick.app);
       }
     } catch {
       // WMSPanel unreachable leaves `watch` empty and the parts column
@@ -270,6 +292,7 @@ llhlsRouter.get('/edges/:id', requirePerm('servers.view'), async (req, res) => {
     playlistError,
     watched: watch || null,
     watchAuto,
+    watchEnabled,
     sslPort: sslPort || null,
     // Handed to the form so an edge that is already set up shows what it is
     // set up with, instead of a placeholder the operator has to retype.
