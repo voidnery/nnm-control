@@ -93,9 +93,22 @@ check('an unknown method does not quietly produce an empty plan', () => {
 
 // --- reading an uploaded certificate ----------------------------------------
 
+// The clock is given, not taken.
+//
+// This check read `daysLeft` off a fixture generated on 2026-08-17 against the
+// real clock, and asserted it was over 80. It therefore passed for eight days
+// and failed from 2026-08-27 onwards — found on 2026-09-03, when it stopped
+// the whole suite. Third instance of the same shape in this project: a test
+// whose answer depends on the day it is run.
+//
+// `inspectUploaded` already takes `now`; every neighbouring check passes one.
+// This one did not, and the certificate's own dates are what it is about.
+const FIXTURE_ISSUED = new Date('2026-08-17T13:25:00Z');
+const daysAfterIssue = (n) => new Date(FIXTURE_ISSUED.getTime() + n * 86400000);
+
 check('a good certificate and its key pass, and say what they cover', () => {
   const r = inspectUploaded({ certificatePem: bundle, privateKeyPem: leafKey,
-                              domain: 'edge.example.ru' });
+                              domain: 'edge.example.ru', now: daysAfterIssue(5) });
   assert.deepEqual(r.problems, [], JSON.stringify(r));
   assert.ok(r.ok);
   assert.deepEqual(r.names, ['edge.example.ru', '*.wild.example.ru']);

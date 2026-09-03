@@ -1,103 +1,114 @@
 # NNM Control — starting a new session
 
-Attach the project archive (`nnm-control-v1.24.0.tar.gz` or later) and this
+Attach the project archive (`nnm-control-v1.27.0.tar.gz` or later) and this
 file. Everything else is in the archive.
 
 ## Read these first, in this order
 
 | file | why |
 |---|---|
+| `docs/FAILURES.md` | the mistakes this project makes repeatedly — short, and the most expensive thing here |
 | `docs/STATE.md` | what is true about the fleet and the panel, with dates |
 | `docs/wmspanel-api.md` | what the WMSPanel API allows — **read it, do not recall it** |
+| `docs/wmspanel-api-application.md` | the published reference for live applications, copied by hand |
 | `docs/recon-scripts.md` | rules for any script run on somebody else's machine |
-| `CHANGELOG.md` | the last fifteen entries carry the reasoning behind recent code |
+| `CHANGELOG.md` | the last twenty entries carry the reasoning behind recent code |
+
+## The order of work
+
+**Analysis, then research, then code. Code is always last.**
+
+Agreed 2026-08-21, after a branch in which every expensive mistake came from
+inverting it.
+
+1. **Analysis.** What is being asked, what would count as an answer, what is
+   already known — from `docs/`, from the code, from a `grep`. Most of this
+   branch's failures were answerable here and were not asked here; twice a
+   question was settled by re-reading a dump already in hand.
+2. **Research.** A script, a probe, a measurement against the real thing.
+   Read-only where possible, guarded where not, proven by contradiction before
+   it is trusted.
+3. **Code.** Written to what was measured. Never as a way of finding out.
 
 ## Where LL-HLS stands
 
-**The transport half is done and proven on a live edge.** NimbleRU-6, 2026-08-21:
-privileged helper installed, `nimble.conf` written, HTTP/2 negotiated, a
-Let's Encrypt certificate for `cdn-test-edge-1.bbesport.com` with 87 days left
-that a player accepts. The `/llhls` screen sweeps every edge on load, probes by
-**name** rather than by address, finds a live stream through WMSPanel instead
-of asking for one, and puts every fault in one Details window with the fix and
-the machine's own words.
+**Working, measured on the wire.** `nnm-probe/feed1` on NimbleRU-6, 2026-08-22,
+fMP4: the server held a request for the part it had itself hinted at for
+1.59 s against a `PART-TARGET` of 2.002 s. That is blocking reload — the
+mechanism, not the decoration. Parts in a playlist prove nothing alone.
 
-**Both halves now have a screen** (v1.25.0): applications on an edge, with the
-checkbox, the part duration and its range, the container switch as its own
-consent, and the restart notice on every enable. **It has never been run
-against a live application.** `nnm-probe` on RU-6 is the first target — the
-panel already says `alhls_enabled` is off there and everything else on that
-edge is green.
+The chain works end to end: privileged helper on a media server → certificate
+by name → `ssl_port` and `ssl_http2_enabled` in `nimble.conf` →
+`alhls_enabled` and `hls_part_duration` in WMSPanel → input stream restarted →
+parts.
 
-Superseded, kept for the reasoning: The routes have
-existed since v1.15.0 (`POST /api/llhls/channels/:id/plan` and `/apply`), and
-`llhlsState.channelPlan` composes it with its warnings. What is missing is a
-place for an operator to press it. `nnm-probe` on RU-6 is the obvious first
-target: everything else about that edge is green and the panel already says
-`alhls_enabled` is off there.
+**What limits latency now is not the panel.** `PART-HOLD-BACK` is 6.006 s
+because the part is 2000 ms. The floor is 500 ms — measured; the published
+reference's 250 is wrong — and shorter parts cost bandwidth.
 
-Two things that must survive into that screen, both measured:
+### Open, in the order they were left
 
-- **`hls_part_duration` ≥ 500 ms and ≤ half the chunk.** The API reference says
-  250; the server refuses it. At the fleet's 6-second chunk the vendor's
-  recommendation is 2000 ms.
-- **The input stream must be restarted** after enabling, or Nimble keeps
-  producing the old output. The panel cannot do this for a published stream and
-  must say so rather than report a write as a working feature.
+1. **The MPEG-TS run.** Does blocking reload work on plain `HLS` as it does on
+   fMP4. Two earlier attempts are **withdrawn**, both mistargeted — see
+   `STATE.md`. Set the container back to plain `HLS` (**not** `HLS (MPEGTS)`,
+   which is a third, never-measured value), restart the input, run
+   `llhls-check --chunk=6`.
+2. **Keyframe interval on `feed1` reads as 4.004 s**, from `INDEPENDENT=YES`
+   spacing in one dump. A 6 s chunk cannot be cut evenly at 4.004, hence
+   segments of 4.004 and 8.008. **Derived from a short window** — run
+   `llhls-check --chunk=6` two or three times and see whether it reports
+   `steady`. The fix is a 2 s keyframe interval on the encoder or a 4 s chunk
+   in the panel; the tool names both with the side they belong to.
+3. **`ic_enabled` is never surfaced.** Softvelum recommends interleaving
+   compensation with zero minimum delay for video+audio at low latency;
+   `llhls.js` has carried it as `INTERLEAVING_FIX` since v1.11.3 and no screen
+   shows it. It is off on `nnm-probe` and nobody would know.
+4. **Rollout.** One edge of fourteen. `selectel(24/7)` is still labelled
+   `nimble` while it serves viewers, so it does not appear on `/llhls` at all —
+   the purpose filter working correctly on wrong data.
+5. **Certificate renewal is unwatched.** The panel counts days and warns at 20;
+   nothing checks on a schedule.
+6. **`docker manifest inspect` in `apt-repo`** before building the `.deb`, so a
+   partial image set cannot become a package.
+7. **WMSPanel writes to several servers at once.** Its application form has a
+   server list at the bottom; the panel writes one edge at a time. Worth
+   understanding before rollout.
 
-## Then
+## Tools, and what each answers
 
-- **Certificate renewal is unwatched.** The panel counts days and warns at 20;
-  nothing checks on a schedule.
-- **`docker manifest inspect` in `apt-repo`** before building the `.deb`, so a
-  partial image set cannot become a package. Not what caused the 2026-08-19
-  outage, but still possible.
+| tool | question |
+|---|---|
+| `backend/tools/llhls-check.mjs` | is this really LL-HLS, from a viewer's side |
+| `backend/tools/wms-playback-probe.mjs` | what does the edge serve, and does a change move it |
+| `backend/tools/wms-apps-recon.mjs` | what do the fleet's live applications look like |
+| `backend/tools/wms-app-write-probe.mjs` | what does WMSPanel do on a write (guarded to `nnm-probe`) |
+| `backend/tools/wms-dump.mjs` | which API routes exist |
+
+All standalone, no dependencies, reports written beside themselves. Read
+`docs/recon-scripts.md` before writing another.
 
 ## How this project works
 
-- **Find out first, then fix.** Established as a rule and earned repeatedly.
-- **Every milestone**: a cumulative archive, key files inline, and gates proven
-  by contradiction.
-- **Run the diversion. Always.** And when it changes nothing, suspect the
-  diversion before believing the check: in one session three were empty — one
-  was a syntax error, one did not match the string it meant to patch, and three
+- **Every milestone**: a cumulative archive, key files inline, gates proven by
+  contradiction, and explicit approval before proceeding.
+- **Run the diversion. Always.** When it changes nothing, suspect the diversion
+  before believing the check: in one session three were empty — one was a
+  syntax error, one did not match the string it meant to patch, and three
   checks sat after `process.exit` and never ran at all.
-- **A check that fires on correct code gets narrowed, not switched off.** Six
-  times now, and five of those were the same shape: a pattern matched against
-  a *comment* explaining the very rule. Strip comments before matching.
+- **A diversion that changes no test means the tests miss the wiring**, not
+  that the code is safe. Happened twice; both times a check was added.
+- **A check that fires on correct code gets narrowed, not switched off.** Seven
+  times, and five were the same shape: a pattern matched against a *comment*
+  explaining the very rule. Strip comments before matching.
 - Code and comments in English; conversation in Russian.
 
-## The failure that keeps coming back
+## Never do these
 
-**A value used against a shape it does not have.** Five instances, all silent:
-
-- `agent` read from `/servers`, `gateway` from the networks list, `host` from a
-  network node.
-- `server.agent.privileged` — a field no schema has. Every machine read as
-  "never reported"; installing a helper by hand changed nothing visible. The
-  correct rule was already written one file away.
-- `probeTls({ host, port })` on a function declared `probeTls(host, port)`. The
-  whole object went into `options.host`, so **every HTTP/2 probe threw before
-  opening a socket** — on every machine, for four versions, while the screen
-  showed first `?` and then `✗`.
-
-Every one of them was written from the shape of a neighbouring call rather than
-from the thing being called. **Open the signature, not the call site next to
-it.**
-
-## Other failures worth carrying forward
-
-- **Work measured in minutes inside a held-open HTTP request.** Four times. The
-  gateway preparation had already solved it with a job store, one file away,
-  and the LL-HLS apply did not use it — 504 from the proxy while the work
-  carried on underneath.
-- **Something succeeded and did nothing.** A `postinst` that printed two
-  warnings and then "NNM Control installed" with a setup token, exit 0, while
-  the panel was down. An install that leaves the panel down must fail.
-- **Concluding absence from the wrong probe.** "The image is not published"
-  from its absence on disk; the pull was killed mid-download by a start
-  timeout. Ask the thing you mean to ask.
-- **Never run `docker compose` by hand on production.** The unit passes
+- **`docker compose` by hand on production.** The unit passes
   `--env-file /etc/nnm-control/nnm-control.env`; without it compose pulls
-  `latest`, starts a stack with blank secrets, and takes the published port.
-  `systemctl restart nnm-control` is the way.
+  `latest`, starts a stack with blank secrets and takes the published port.
+  `systemctl restart nnm-control` is the way. Doing this during an incident
+  lengthened it.
+- **Conclude absence from a probe that asked something else.**
+- **Change two things at once and then reason about the result.** The container
+  question was unanswerable for a day because of it.

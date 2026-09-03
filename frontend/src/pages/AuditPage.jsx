@@ -107,8 +107,15 @@ export default function AuditPage() {
         <Modal onClose={() => !busy && setSweepOpen(false)} size="wide">
           <h3>{t('aud.sweepTitle')}</h3>
           <div className="hint">
-            {t(sweep.estimated ? 'aud.sweepWhatApprox' : 'aud.sweepWhat',
-               { machine: sweep.machine.toLocaleString('ru'), keeping: sweep.keeping.toLocaleString('ru') })}
+            {/* `keeping` is null when every sampled row was machine traffic:
+                the estimate is then a difference of two numbers meant to be
+                equal, and it read 11,773 against a true 1,170 on 2026-09-03.
+                A sentence that does not name a figure, rather than a figure
+                that is noise. */}
+            {sweep.keeping === null
+              ? t('aud.sweepWhatUnknown', { machine: sweep.machine.toLocaleString('ru') })
+              : t(sweep.estimated ? 'aud.sweepWhatApprox' : 'aud.sweepWhat',
+                  { machine: sweep.machine.toLocaleString('ru'), keeping: sweep.keeping.toLocaleString('ru') })}
             {sweep.storageMb != null && <> · {t('aud.sweepSize', { mb: sweep.storageMb.toLocaleString('ru') })}</>}
           </div>
           <div className="hint">{t('aud.sweepCompact')}</div>

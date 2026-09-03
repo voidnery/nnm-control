@@ -39,22 +39,24 @@ console.log('\nMACHINE TRAFFIC IS NOT AN AUDIT TRAIL:');
 
 const audit = read('backend/src/services/audit.js');
 
-check('agent polling is not written to the audit log', () => {
-  // 8.6 million rows, fourteen of them people. Audit answers "who did what",
-  // and a polling loop is not a who.
+// Whether agent polling is actually excluded is decided in
+// `tests/audit-wiring.test.mjs`, which mounts the middleware at `/api` and
+// sends real requests through it.
+//
+// It used to be decided here, by asserting that the source contained the text
+// `full.startsWith(prefix)`. It did, and the rule it described had never
+// fired once: the comparison used a URL carrying the mount prefix against a
+// list written without it. 29.4 million rows and 23.8 GB of a 96 GB disk,
+// with this check green throughout. The lesson is not that the pattern was
+// wrong — it is that a check which reads source cannot see wiring.
+check('the exclusion has an executable gate, not a source match', () => {
+  const wiring = read('backend/tests/audit-wiring.test.mjs');
+  assert.ok(/app\.use\('\/api', auditMutations\)/.test(wiring),
+    'nothing mounts the middleware the way the panel does');
+  assert.ok(/AuditLog\.create/.test(wiring),
+    'nothing observes what would have been written');
   assert.ok(/MACHINE_ROUTES/.test(audit), 'every mutating request is still audited');
   assert.ok(/agent-gw/.test(audit), 'the agent gateway is still audited');
-  assert.ok(/full\.startsWith\(prefix\)/.test(audit), 'the exclusion does not match by path');
-});
-
-check('the exclusion is a short list of machine routes, not an allow-list', () => {
-  // A new operator action must be audited by default rather than by somebody
-  // remembering to add it.
-  const m = /const MACHINE_ROUTES = \[([\s\S]*?)\]/.exec(audit);
-  assert.ok(m, 'the machine routes are not listed');
-  const entries = [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
-  assert.ok(entries.length <= 4, `${entries.length} routes excluded — this is becoming an allow-list`);
-  for (const e of entries) assert.ok(e.startsWith('/'), `${e} is not a path prefix`);
 });
 
 console.log('\nEVERY COLLECTION THAT GROWS HAS A CEILING:');

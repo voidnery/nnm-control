@@ -1,5 +1,173 @@
 # Changelog
 
+### v1.28.0 — the audit log was never closed, and a passing test said it was
+
+The panel filled its own disk a second time: **29.4 million rows, 23.8 GB of a
+96 GB machine**, all of it agent polling — the exact traffic a rule added in
+v0.99.20 was supposed to stop recording.
+
+**The rule had never fired once.** Mounted at `/api`, the middleware compared
+`` `${req.baseUrl}${req.path}` `` — which is `/api/agent-gw/logs` — against a
+list of paths written without the mount prefix. `action` was built from the
+same pieces with `/api/` stripped, so the *sweep filter*, which matches
+`action`, worked perfectly. One list, two consumers, two different strings, and
+neither side could see the other's.
+
+Found by measurement, not by reading: the middleware was mounted in a throwaway
+Express app the way `index.js` mounts it, and it wrote the row it was supposed
+to skip.
+
+The same fault a second time, given away by two counters agreeing exactly:
+`auth:login` 39 and `POST auth/login` 39. `req.path === '/auth/login'` is false
+at `finish`, where `req.path` is the whole original path again.
+
+`routeOf(req)` now derives one string from `req.originalUrl` — the one thing
+Express never rewrites — read once, and used both for the decision and for what
+is stored.
+
+**The gate that missed this asserted that the source contained the text
+`full.startsWith(prefix)`.** It did. `backend/tests/audit-wiring.test.mjs`
+replaces it: a real app, a real mount, real requests, and assertions about the
+rows that would have been written. Three diversions — the old comparison, the
+old spelling of the list, the old login check — each fails it. It also holds
+the skip and the sweep filter against the same string, in both directions, and
+against the action names read off the production collection.
+
+**The sweep now deletes in batches and reports each one.** One `deleteMany`
+over 29 million rows printed a line and went silent for as long as it took;
+from the screen that is indistinguishable from a hung job, and it was read as
+one — on a machine with 1.3 GB free, which led to the collection being emptied
+by hand while the sweep had in fact already finished. Batching also bounds the
+journal per commit, which matters exactly when the disk is nearly full.
+
+**The number of surviving rows is no longer invented.** `keeping` was
+`total - machine` where `machine` is a scaled sample; when every sampled row is
+machine traffic those two are the same number and the difference is noise. It
+showed 11,773 against a true 1,170. It is now `null` when the sample cannot
+support a figure, and the screen says so in a sentence instead of printing one.
+
+**Retention in the schema is now retention in the database.**
+`services/ttlReconcile.js`: `expireAfterSeconds` is fixed when an index is
+created, so changing the number in a schema does nothing to a machine that
+already has it — `AuditLog` went from 90 days to 30 in a comment. `collMod` at
+startup, drift computed apart from the doing so it can be tested, and an index
+with no expiry at all is reported rather than silently rebuilt.
+
+**A certificate check that depended on the day it ran.** `daysLeft > 80` read
+off a fixture issued 2026-08-17 against the real clock: it passed for ten days
+and had been failing since. Third instance of this shape here. It takes `now`
+now, like every check beside it.
+
+Backend 1854/1854.
+
+### v1.27.1 — documents for the next session
+`docs/FAILURES.md` is new and is the one to read first. Seven recurring
+mistakes, sorted by how often they came back rather than by how bad each was,
+each with what it cost: the field that no schema has and made every HTTP/2
+probe throw before opening a socket; the `postinst` that reported success over
+a dead panel for fifty-five minutes; the measurement that asked for a part
+which already existed and produced opposite verdicts about one server; seven
+checks found unable to fail, and how each was found.
+
+It ends with what actually worked, because that is the shorter and more useful
+list: tools that measure instead of arguing, gates proven by contradiction, and
+writing the source of every number beside it.
+
+`docs/ARCHITECTURE.md` is new: what the panel is for, the three kinds of
+machine and the one place that decides which is which, the three layers that
+reach a server and why the limits exist twice, the plan/apply envelope, and the
+three-valued discipline that runs through every screen.
+
+`HANDOVER.md` rewritten for the state at the end of this session: LL-HLS proven
+on the wire, seven things open in the order they were left, what each tool
+answers, and three things never to do — each of which was done once and cost
+something.
+
+No code changed.
+
+### v1.27.0 — the keyframe interval, read instead of asked about
+Analysis first, and it turned out one of the two open questions was already
+answered by data sent on 2026-08-21. In the fMP4 dump, `INDEPENDENT=YES` sat on
+every second part of 2.002 s — so keyframes arrive every **4.004 s**, and a
+6-second chunk cannot be cut evenly at 4.004. Segments of 4.004 and 8.008 s
+explained completely, from a measurement already in hand.
+
+`llhls-check.mjs` now does that reading itself: the gap between parts marked
+`INDEPENDENT` is the keyframe interval, in parts and in seconds, with whether
+it is steady. No flags at all reads as unknown rather than as none — some
+servers omit the flag, and an absent flag is not an absent keyframe.
+
+**The chunk is asked for, not guessed.** The first attempt took the longest
+segment as the chunk. On this fleet's own output that is 8.008 s — exactly two
+keyframe intervals — so it declared a perfect fit about a stream whose segments
+were visibly wandering. `--chunk=<seconds>`, from WMSPanel, or it reports the
+interval and stops rather than inventing the other half of the sum.
+
+When they do not divide evenly, both levers are named with the side they belong
+to: a keyframe interval is the encoder's, a chunk duration is the panel's.
+
+The diversion that re-pointed the fit at the longest segment changed no test
+until a check was written for the wiring — the unit tests documented the trap
+without guarding it. That is the diversion doing its job.
+
+### v1.26.1 — the tool asked for a part that already existed
+Two runs against the same server, minutes apart, gave opposite verdicts: TS
+held for 1.22 s, fMP4 held for 0. That is not a property of the container. It
+was the arithmetic.
+
+The next media sequence was computed as `MEDIA-SEQUENCE + segment count`, and
+part 0 of it was requested. **With parts, the last segment is already in
+progress** — its parts sit after the last `EXTINF` — so that number often names
+a part that already exists, and a correct server answers instantly. Which run
+caught a genuinely future part was down to timing.
+
+`PRELOAD-HINT` is the server naming the next part itself, and that is what gets
+asked for now; where there is no hint, the count of parts published after the
+last `EXTINF` gives the next index. The report says how many parts the segment
+in progress already has, so a reader can see what was asked for.
+
+Seventh instance in this branch of measuring something other than the thing in
+question — and the first where the tool built to stop that did it.
+
+**Both earlier verdicts are withdrawn**: neither run measured what it claimed.
+The TS result was probably right and was not established.
+
+### v1.26.0 — one run that answers whether this is really LL-HLS
+`backend/tools/llhls-check.mjs`. Written after three rounds of answering that
+question by reasoning and being wrong each time.
+
+**Players do not settle it.** VLC has no LL-HLS and plays the stream as
+ordinary HLS whether parts exist or not; OBS is not an HLS player. hls.js can
+settle it and usually is not asked correctly — the statistics dump everybody
+reaches for reports *request* latency, not distance from the live edge, and its
+low-latency mode has to be on.
+
+So the tool asks the server. The measurement that decides it is **blocking
+reload**: a client asks for a media sequence that does not exist yet, and a
+low-latency server holds the connection until it does. One that answers
+instantly is serving parts as decoration, and a viewer sits as far back as on
+ordinary HLS. Compared against a plain fetch in the same run, because "two
+seconds" means nothing without knowing what a normal request costs from where
+it is running.
+
+It also reports what the playlist claims (`PART-TARGET`, `PART-HOLD-BACK`,
+version, container), how far behind live its own timestamps put a viewer, and
+**the spread of segment lengths** — Softvelum's warning that a keyframe
+interval which does not divide the chunk produces segments of arbitrary length.
+That is encoder-side, invisible to the panel, and it moves every latency figure.
+
+The `#EXT-X-VERSION:3`-with-parts oddity is reported and **not** concluded: the
+blocking measurement is about the server, and whether a given player honours
+the declared version is a different question this cannot answer.
+
+Tested against a stub that blocks and a stub that does not, and the two produce
+opposite verdicts — the only reason to run it. Proven by contradiction:
+dropping the threshold makes an instant answer count as blocking, and three
+checks fail.
+
+The project's own recon-script gate caught it missing a control probe, which it
+now has: without one, a refused connection reads as a stream with no playlist.
+
 ### v1.25.1 (documentation) — LL-HLS confirmed on the wire
 `nnm-probe/feed1` on NimbleRU-6, 2026-08-21, fetched by name over TLS:
 `PART-TARGET=2.002`, `CAN-BLOCK-RELOAD=YES`, `EXT-X-PART` lines, an

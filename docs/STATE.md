@@ -322,6 +322,33 @@ path was worth more at the time. Until then:
 Neither `v1.0.0` nor `v1.8.7` corresponds to a published package. They are dead
 tags, and `apt-cache policy nnm-control` is the authority on what exists.
 
+## The audit log filled the disk a second time, 2026-09-03
+
+29.4 million rows, 23.8 GB, on a machine with 1.3 GB free. All of it agent
+polling — the traffic v0.99.20 stopped recording, except that it had not.
+
+| measured | |
+|---|---|
+| influx | **941 rows in 60 s** = 15.7/s = 1.36 M/day |
+| steady state under a 30-day TTL | ~41 M rows, **~33 GB** |
+| share that is machine traffic | 91% (`agent-gw/logs`, `/poll`, `/metrics`) |
+| operator rows actually present | **1170** — the panel estimated 11,773 |
+| nightly backup of that database | 8.8 GB, and retention holds up to 20 GB of them |
+
+**TTL is not a ceiling that fits this disk.** 33 GB of journal plus 20 GB of
+backups on 96 GB is the same outage again, which is why the influx had to be
+closed rather than swept.
+
+The sweep itself worked and was believed hung, because it printed one line and
+went quiet. `storageSize` read 4 MB before anything was done by hand — that
+number was the answer and was collected as a comparison figure.
+
+Recovery, in the order it worked: remove one nightly archive (8.2 GB), copy the
+1170 operator rows out with `$out`, `drop` the collection — which returns the
+file to the OS at once and needs no free space, unlike `compact` — rename the
+copy back, restart, verify the indexes. `ts_ttl` came back at 2592000.
+
+
 ## The audit log, swept
 
 The panel filled its own 96 GB disk with its own audit rows: every agent poll
@@ -505,7 +532,114 @@ application that is every current viewer's container changing under them.
 `llhls.js` carries `protocolsAfterWrite()` so the panel can show what a write
 will actually store, rather than discovering it in a readback.
 
-### LL-HLS works, proven on the wire
+### The order of work
+
+**Analysis, then research, then code. Code is always last.**
+
+Not a preference. Every expensive mistake in this branch came from inverting
+it: a claim about fMP4 made before anything was measured and withdrawn twice;
+a `probeTls` call written from a neighbouring call site rather than from the
+signature, so no HTTP/2 probe reached the network for four versions; a delivery
+check whose request targeted a part that already existed, giving two opposite
+verdicts about one server.
+
+In each case code came first and the analysis was fitted to it afterwards.
+
+The order in practice:
+
+1. **Analysis.** What is actually being asked, what would count as an answer,
+   and what is already known — from `docs/`, from the code, from a `grep`. Most
+   of this branch's failures were answerable at this step and were not asked
+   there.
+2. **Research.** A script, a probe, a measurement against the real thing.
+   Read-only where possible, guarded where not, and proven by contradiction
+   before it is trusted. This is where the answer comes from.
+3. **Code.** Written to what was measured. Last, and never as a way of finding
+   out.
+
+## LL-HLS on the wire: the first measurements were mistargeted
+
+**Both 2026-08-21 runs are withdrawn.** The tool asked for `_HLS_msn=N&_HLS_part=0`
+where N was `MEDIA-SEQUENCE + segment count` — a segment already in progress,
+whose part 0 usually exists. A correct server answers that instantly. TS
+appeared to block, fMP4 appeared not to, and both were accidents of timing
+rather than facts about either container.
+
+Corrected in v1.26.1: the request follows `PRELOAD-HINT`, which is the server
+naming the part that does not exist yet.
+
+### Re-run, correctly targeted, 2026-08-21 20:51 — fMP4
+
+```
+asking for the part the server hinted at, which does not exist yet…
+  (2 part(s) already published for the segment in progress)
+ordinary request: 0.07s
+blocking request: 2.02s        held 1.94s
+LL-HLS IS WORKING
+```
+
+**Held 1.94 s against a PART-TARGET of 2.002 s** — the server waited almost
+exactly one part, which is what holding until the next part is produced looks
+like. The number corroborates itself; a coincidence would not land there.
+
+So LL-HLS is established on **fMP4**. The MPEG-TS result is still withdrawn and
+unestablished: worth one run when the container goes back, and it settles
+whether the declared `#EXT-X-VERSION:3` matters to the server at all.
+
+## LL-HLS works mechanically, measured 2026-08-21 — SUPERSEDED, see above
+
+`nnm-probe/feed1` on NimbleRU-6, plain `HLS` (MPEG-TS), no fMP4:
+
+```
+ordinary request: 0.02s
+blocking request: 1.24s        held 1.22s
+LL-HLS IS WORKING
+```
+
+The server **held** a request for a media sequence that did not exist yet until
+it did. That is blocking reload — the mechanism, not the decoration. Parts in a
+playlist prove nothing on their own; this does.
+
+**And it is on MPEG-TS**, which settles the container question for good: fMP4
+is not a precondition for low latency. Three earlier answers from this side
+were wrong; the measurement is the answer.
+
+### The keyframe interval on `feed1` is 4.004 s, and that is the real limit
+
+Read off `INDEPENDENT=YES` in the fMP4 dump of 2026-08-21: marked parts every
+second part of 2.002 s. A 6-second chunk cannot be cut evenly at 4.004, so
+Nimble cuts at the nearest keyframe and produces 4.004 s and 8.008 s segments.
+
+Two ways out, on two different sides:
+
+- **keyframe interval to 2 s** on the encoder — three per chunk, segments
+  6.006 s exactly, the chunk stays at the vendor's recommendation;
+- **chunk to 4 s** in the panel — one keyframe per chunk, segments steady at
+  4.004 s, encoder untouched, but 4 is not a size the vendor recommends and the
+  part can then be no longer than 2000 ms.
+
+`llhls-check --chunk=<seconds>` says which applies and to whom.
+
+### The stream itself is badly configured, and that is the real limit
+
+Segments come out **4.004–8.008 s against a configured chunk of 6**. Both are
+multiples of 2.002, so keyframes arrive roughly every 2.002 s and Nimble cuts
+at two of them sometimes and four at others. With a steady 2.002 s interval a
+6-second chunk should produce 6.006 exactly.
+
+This is Softvelum's documented warning, seen for the first time on real output.
+It is set on the encoder — `feed1` is published from outside — and the panel
+cannot fix it, only report it.
+
+Consequence: `PART-HOLD-BACK` is 6.006 s, so a compliant player starts six
+seconds behind live. Three times better than ordinary HLS at these chunk sizes,
+and far from the ~2 s the vendor quotes for a 500 ms part.
+
+**One change at a time**: fix the keyframe interval first, then shorten the
+part. Changing both at once is what made the container question unanswerable
+for a day.
+
+## LL-HLS works, proven on the wire
 
 **Measured 2026-08-21**, `nnm-probe/feed1` on NimbleRU-6, fetched by name over
 TLS with no `-k`:

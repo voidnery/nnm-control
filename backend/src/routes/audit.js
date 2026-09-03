@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { machineTrafficFilter, logEvent } from '../services/audit.js';
+import { machineTrafficFilter, logEvent, deleteInBatches } from '../services/audit.js';
 import { createJob, appendJob, finishJob, getJob } from '../services/sshInstaller.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
@@ -85,7 +85,20 @@ auditRouter.get('/sweepable', requireAuth, requirePerm('audit.view'), async (req
     // millions of rows should not pretend to a precision it does not have.
     estimated: true,
     // What people did, which is what an audit log is for and what stays.
-    keeping: Math.max(0, total - machine),
+    //
+    // MEASURED 2026-09-03: this said 11,773 and the true figure was 1,170.
+    // The reason is in the arithmetic, not in the sampling: when every row in
+    // the sample is machine traffic, `machine` is the whole total and
+    // `total - machine` is the difference of two large numbers that are meant
+    // to be equal. It is noise, and it was displayed as a count.
+    //
+    // Three-valued, like everything else here: a number when the sample can
+    // support one, null when it cannot. Null is not zero — "we cannot tell how
+    // many of your own actions are in here" is a different statement from
+    // "there are none", and only one of them is true.
+    keeping: sample.length && inSample === sample.length
+      ? null
+      : Math.max(0, total - machine),
     // Bytes are what the operator is actually short of. Storage size rather
     // than data size, since that is the file on the disk.
     storageMb: stats,
@@ -128,7 +141,17 @@ auditRouter.post('/sweep', requireAuth, requirePerm('audit.manage'), async (req,
   appendJob(jobId, `removing machine traffic from the audit log (about ${expected} rows)\n`);
   (async () => {
     try {
-      const r = await AuditLog.deleteMany(filter);
+      // In batches, and each one reported. The loop itself lives in
+      // `services/audit.js` so it can be tested without a database; see the
+      // note there for what one silent `deleteMany` cost.
+      const out = await deleteInBatches({
+        find: async (n) => (await AuditLog.find(filter, { _id: 1 }).limit(n).lean()).map(d => d._id),
+        remove: async (ids) => (await AuditLog.deleteMany({ _id: { $in: ids } })).deletedCount,
+        onProgress: ({ removed, seconds }) =>
+          appendJob(jobId, `removed ${removed} of about ${expected} — ${seconds}s\n`),
+      });
+      if (out.stalled) appendJob(jobId, 'a batch matched rows and removed none — stopping\n');
+      const r = { deletedCount: out.removed };
       appendJob(jobId, `removed ${r.deletedCount} rows\n`);
 
       // Compaction, because deleting rows returns no disk. Attempted and

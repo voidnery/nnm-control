@@ -1,0 +1,29 @@
+LL-HLS delivery check
+Date: 2026-08-21T15:14:21.891Z
+Target: http://127.0.0.1:7777/app/s/playlist.m3u8
+
+Master: 1 variant(s)
+
+=== chunks.m3u8
+  version 3, 2 part tag(s), PART-TARGET 2.002s, PART-HOLD-BACK 6.006s, CAN-BLOCK-RELOAD, container mpegts
+  segments: 2, 4.3–8.008s (spread 3.708s)
+  ! Segment lengths differ by more than half a second. Softvelum: a
+    keyframe interval that does not divide the chunk produces segments
+    of arbitrary length, and some players misbehave. That is set on the
+    encoder, not here, and it changes every latency figure below.
+  the first segment in this playlist is dated 12.0s ago
+    (a floor on how far behind live a viewer starts, not the latency itself)
+  asking for media sequence 890, which does not exist yet…
+  ordinary request: 0.01s
+  blocking request: 0.00s
+  held for -0.01s (needs 1s to count)
+
+  LL-HLS IS NOT WORKING ON THE WIRE
+  the server answered a request for a part that does not exist yet as fast as it answers an ordinary one. The parts in the playlist are not backed by blocking reload, so a client cannot ride the live edge.
+
+  Note: the server declares #EXT-X-VERSION:3 while emitting parts.
+  Apple's specification puts parts at version 9. Whether a given player
+  honours the declared version and ignores the parts is not decided here —
+  the blocking measurement above is about the server, not about clients.
+
+Requests sent: 4.

@@ -5,6 +5,11 @@ import './asyncGuard.js';
 import express from 'express';
 import { config } from './config.js';
 import { connectDb } from './db.js';
+import { reconcileTtl } from './services/ttlReconcile.js';
+import { AuditLog } from './models/AuditLog.js';
+import { StatSample } from './models/StatSample.js';
+import { DeliveryCheck } from './models/DeliveryCheck.js';
+import { AgentTask } from './models/AgentTask.js';
 import { setupRouter } from './routes/setup.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
@@ -109,6 +114,12 @@ app.use((err, _req, res, _next) => {
 
 const start = async () => {
   await connectDb();
+  // Retention in the schema is not retention in the database until something
+  // makes it so: `expireAfterSeconds` is fixed when the index is created, and
+  // changing the schema afterwards changes nothing on a machine that already
+  // has it. Reconciled here, once, before anything starts writing.
+  await reconcileTtl([AuditLog, StatSample, DeliveryCheck, AgentTask])
+    .catch(e => console.error('[ttl]', e?.message || e));
   startPeriodicSync();
   await startStatsCollector();
   // Delivery monitoring. Per-network and off by default, so installing the
