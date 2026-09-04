@@ -322,6 +322,35 @@ path was worth more at the time. Until then:
 Neither `v1.0.0` nor `v1.8.7` corresponds to a published package. They are dead
 tags, and `apt-cache policy nnm-control` is the authority on what exists.
 
+## A network records what it carries, 2026-09-03
+
+The membership was missing. "Delivered by this network" was a side effect of a
+channel record existing, computed in two places from that side effect in two
+different ways.
+
+| | |
+|---|---|
+| the unit | **application**, not channel. A route is `/app/` → `origin:port/app/` |
+| consequence | a stream appearing in a carried application is delivered with no action at all |
+| the set | `services/carriedApplications.js`, and nothing else may compute it |
+| the rule | **union**: declared by the network **or** pointed at by a channel, and each entry says which |
+| switched off with channels still pointing | dropped from the plan, reported, not resolved — an apply never withdraws a route |
+
+Measured on the live database the same day: `channels` holds **2** documents,
+both `application: 'test2'`, both `protocol: 'hls'`, both `protection.mode:
+'open'`, both on the one network. One application, two streams — the case that
+makes a per-channel packaging choice inexpressible, present from the first day
+of use.
+
+**Protection stays per stream.** A WMSAuth rule addresses a path, so two
+streams in one application can be protected differently. Packaging is
+application-level and protection is stream-level; the data says so.
+
+**`channel.protocol` is therefore in the wrong place.** `live/app` carries one
+set of protocols, so two channels in one application cannot differ. It is not
+removed yet; the next step makes it derived from the application's output
+profile rather than a choice offered per channel.
+
 ## The audit log filled the disk a second time, 2026-09-03
 
 29.4 million rows, 23.8 GB, on a machine with 1.3 GB free. All of it agent

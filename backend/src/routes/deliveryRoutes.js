@@ -6,6 +6,8 @@ import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { DeliveryCheck, availability } from '../models/DeliveryCheck.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { planRoutes } from '../services/deliveryPlan.js';
+import { carriedApplications } from '../services/carriedApplications.js';
+import { Channel } from '../models/Channel.js';
 import { networkState, indexStreams, probeReason } from '../services/networkState.js';
 import { parsePlaylist, movedOn, classifyProbe } from '../services/playlistProbe.js';
 import { playbackPath } from '../services/protocols.js';
@@ -283,8 +285,7 @@ deliveryRoutesRouter.post('/networks/:id/watch', requirePerm('cdn.view'), async 
 deliveryRoutesRouter.post('/networks/:id/state', requirePerm('cdn.view'), async (req, res) => {
   const g = await gather(req.params.id);
   if (g.error) return res.status(404).json({ error: g.error });
-  const channels = (Array.isArray(req.body?.channels) ? req.body.channels : [])
-    .map(x => String(x).trim()).filter(Boolean);
+  const channels = g.carried.names;
 
   // Only the boxes this network actually uses, and each one asked once even
   // when it appears as the upstream of several edges.
@@ -322,11 +323,17 @@ async function gather(networkId) {
   if (!network) return { error: 'Network not found' };
   const servers = await NimbleServer.find();
   const c = await cfg();
-  const [originApps, routes] = await Promise.all([
+  const [originApps, routes, channelRecords] = await Promise.all([
     wmspanel.originAppList(c).then(r => r.settings || []).catch(() => []),
     wmspanel.routeList(c).then(r => r.routes || []).catch(() => []),
+    Channel.find({ network: networkId, enabled: true }).lean(),
   ]);
-  return { network, servers, originApps, existingRoutes: routes };
+  // The one place that answers "which applications does this network carry".
+  // It used to be answered by the browser and posted in the request body, and
+  // separately by `/channels/networks/:id/derived` reading the database — same
+  // question, two computations, nothing holding them equal.
+  const carried = carriedApplications({ network, channels: channelRecords });
+  return { network, servers, originApps, existingRoutes: routes, carried };
 }
 
 // The plan, computed and shown before anything is written. Deliberately a GET
@@ -335,16 +342,16 @@ async function gather(networkId) {
 deliveryRoutesRouter.post('/networks/:id/plan', requirePerm('cdn.view'), async (req, res) => {
   const g = await gather(req.params.id);
   if (g.error) return res.status(404).json({ error: g.error });
-  const channels = (Array.isArray(req.body?.channels) ? req.body.channels : [])
-    .map(x => String(x).trim()).filter(Boolean);
-  res.json({ ...planRoutes({ ...g, channels }), channels });
+  // Not from the body. The caller no longer says what the network carries —
+  // the network does.
+  const channels = g.carried.names;
+  res.json({ ...planRoutes({ ...g, channels }), channels, carried: g.carried });
 });
 
 deliveryRoutesRouter.post('/networks/:id/apply', requirePerm('cdn.manage'), async (req, res) => {
   const g = await gather(req.params.id);
   if (g.error) return res.status(404).json({ error: g.error });
-  const channels = (Array.isArray(req.body?.channels) ? req.body.channels : [])
-    .map(x => String(x).trim()).filter(Boolean);
+  const channels = g.carried.names;
 
   const plan = planRoutes({ ...g, channels });
   // Recomputed here rather than trusted from the client: the fleet may have

@@ -20,8 +20,18 @@ import { planRoutes } from './deliveryPlan.js';
 
 const trim = s => String(s || '').replace(/^\/+|\/+$/g, '');
 
-export function derivePlan({ network, servers, channels, originApps = [], existingRoutes = [] }) {
-  const apps = [...new Set(channels.map(c => trim(c.application)).filter(Boolean))];
+// `applications` is the set the network carries, computed once in
+// `carriedApplications.js`. It used to be reduced from the channel records
+// here, and separately posted in the request body by the delivery routes —
+// one question with two computations and nothing holding them equal.
+//
+// Passed in rather than defaulted, deliberately: a default would let a caller
+// forget and get a plausible answer from the wrong set.
+export function derivePlan({ network, servers, channels, applications, originApps = [], existingRoutes = [] }) {
+  if (!Array.isArray(applications)) {
+    throw new TypeError('derivePlan needs the carried applications; see services/carriedApplications.js');
+  }
+  const apps = [...new Set(applications.map(trim).filter(Boolean))];
 
   // Routes are the one primitive that already had a planner. Reused rather
   // than reimplemented: two answers to "which routes does this imply" would

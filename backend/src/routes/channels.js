@@ -7,7 +7,9 @@ import { Settings } from '../models/Settings.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { nimble, agentIsLive } from '../services/nimbleClient.js';
 import { indexStreams } from '../services/networkState.js';
+import { deliveredStreams } from '../services/deliveredStreams.js';
 import { channelLinks } from '../services/channelLinks.js';
+import { carriedApplications } from '../services/carriedApplications.js';
 import { derivePlan, channelReadiness } from '../services/derivePlan.js';
 import { deriveProtection, newTokenKey } from '../services/deriveProtection.js';
 import { signUrl } from '../services/wmsAuth.js';
@@ -18,10 +20,25 @@ import { logEvent } from '../services/audit.js';
 export const channelRouter = Router();
 channelRouter.use(requireAuth);
 
-const pub = (c) => ({
+// Exported so the rule below can be checked by running it.
+export const pub = (c) => ({
   id: c.id, application: c.application, stream: c.stream,
   label: c.label, notes: c.notes, kind: c.kind, enabled: c.enabled,
-  protocol: c.protocol || 'hls',
+  // `null`, not `'hls'`.
+  //
+  // A stored channel always carries one — the schema has a default — so this
+  // fallback only ever fired for a row the panel built itself. Since the
+  // overview walks delivered streams, that is a discovered stream whose
+  // application could not be read, and calling it HLS would put a packaging on
+  // a row that nobody established. The row says `packaging-unknown` and offers
+  // no link instead.
+  protocol: c.protocol ?? null,
+  // Present only on rows the overview synthesises; `null` on a stored record,
+  // which is a different statement from `false`.
+  discovered: c.discovered ?? null,
+  live: c.live ?? null,
+  bandwidth: c.bandwidth ?? null,
+  packaging: c.packaging ?? null,
   // The signing key is the whole secret: whoever holds it can mint links for
   // this channel. It is never returned — only whether one exists — so it
   // cannot leak through a response somebody is looking at over a shoulder.
@@ -517,7 +534,10 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
     wmspanel.originAppList(cfg).then(r => r.settings || []).catch(() => []),
     wmspanel.routeList(cfg).then(r => r.routes || []).catch(() => []),
   ]);
-  const plan = derivePlan({ network, servers, channels, originApps, existingRoutes: routes });
+  // The same set the delivery routes plan against, from the same function.
+  const carried = carriedApplications({ network, channels });
+  const plan = derivePlan({ network, servers, channels, applications: carried.names,
+                            originApps, existingRoutes: routes });
   const authGroups = await wmspanel.authGroupList(cfg).then(r => r.groups || []).catch(() => []);
   // The rules too, not only the groups. Without them every rule looked absent
   // and the plan said "create" forever: the operator pressed write, the object
@@ -532,6 +552,9 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
   const protPlan = deriveProtection({ network, servers, channels, originApps, existing });
   res.json({
     ...plan,
+    // What this network says it carries, and what it carries only because a
+    // channel points at it. The screen needs both to offer the declaration.
+    carried,
     channels: channels.map(c => ({ ...pub(c), readiness: channelReadiness({ channel: c, plan }) })),
     // The six steps, computed from the same data rather than inferred by the
     // page: a tick has to mean the thing is true, and two places working that
@@ -541,7 +564,7 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
     // derivable from configuration — it takes a probe — so the step is empty
     // until the operator runs one, and the page passes the result back in.
     steps: networkSteps({
-      network, servers, channels, derived: plan, protection: protPlan,
+      network, servers, carried, derived: plan, protection: protPlan,
       // The last time somebody actually asked an edge for a playlist. Step
       // five could never turn green because nothing remembered the answer:
       // the probe ran, the page showed it, and the next request forgot it.
@@ -557,9 +580,17 @@ channelRouter.get('/networks/:id/derived', requirePerm('cdn.view'), async (req, 
   });
 });
 
-// One row per channel: where it is delivered, whether anything is arriving,
-// and the links to hand out. The question the panel could not answer about its
-// own configuration.
+// One row per **stream a network delivers**, which is not the same list as the
+// channel records.
+//
+// A re-streaming route is per application, so every stream inside a carried
+// application is delivered whether or not somebody typed a record for it. This
+// walked the records, so a stream published on the origin after the record was
+// written did not appear at all — while it was being served.
+//
+// The record survives as an annotation: a name, a protection mode, and the
+// packaging it claims. Where that claim disagrees with what the application
+// actually offers, the row says so instead of building a link out of it.
 channelRouter.get('/channels/overview', requirePerm('cdn.view'), async (_req, res) => {
   const [channels, networks, servers] = await Promise.all([
     Channel.find().sort({ application: 1, stream: 1 }),
@@ -592,12 +623,95 @@ channelRouter.get('/channels/overview', requirePerm('cdn.view'), async (_req, re
   const edgeCache = new Map();
   const rows = [];
 
+  // What each network carries, and what is live inside it. Read once per
+  // network rather than per row.
+  //
+  // `live` is null for a network whose origins could not be reached, and null
+  // travels all the way to the row: "nothing is streaming" concluded from a
+  // probe that did not run is the mistake this project makes most.
+  const perNetwork = new Map();
+  for (const net of networks) {
+    const mine = channels.filter(c => String(c.network) === String(net._id));
+    const carried = carriedApplications({ network: net, channels: mine });
+    const origins = (net.nodes || [])
+      .filter(n => ['origin', 'mid', 'ingest'].includes(n.role) && n.enabled !== false)
+      .map(n => servers.find(s => String(s._id) === String(n.server)))
+      .filter(Boolean);
+
+    let live = null;
+    for (const srv of origins) {
+      try {
+        const idx = indexStreams(await nimble.liveStreams(srv));
+        if (!live) live = new Map();
+        for (const [app, entries] of idx) live.set(app, [...(live.get(app) || []), ...entries]);
+      } catch { /* another origin may answer; null survives only if none does */ }
+    }
+
+    // The packaging each carried application actually offers, from WMSPanel.
+    // Absent per application rather than defaulted: a discovered stream has no
+    // recorded protocol, and inventing one would build a link from a guess.
+    const apps = new Map();
+    for (const srv of origins) {
+      if (!srv.wmspanelServerId) continue;
+      try {
+        const list = await wmspanel.liveAppList(cfg, srv.wmspanelServerId);
+        for (const a of list?.applications || []) {
+          if (carried.names.includes(a.application)) apps.set(a.application, a);
+        }
+      } catch { /* leaves those applications unknown, which the row states */ }
+    }
+
+    perNetwork.set(String(net._id), {
+      net, carried, apps,
+      delivered: deliveredStreams({ carried, live, channels: mine, apps }),
+    });
+  }
+
+  // A record whose application no network carries still gets its row, because
+  // "nobody delivers this" is the thing worth seeing before an event.
+  const seen = new Set();
+  const work = [];
+  for (const [, d] of perNetwork) {
+    for (const r of d.delivered.list) {
+      seen.add(`${d.net._id}\u0000${r.application}\u0000${r.stream}`);
+      work.push({ row: r, net: d.net });
+    }
+  }
   for (const c of channels) {
-    const net = c.network ? byNetwork.get(String(c.network)) : null;
+    if (!c.network) work.push({ row: null, net: null, orphan: c });
+  }
+
+  for (const item of work) {
+    const c = item.orphan || {
+      id: item.row.channel?.id || null,
+      application: item.row.application,
+      stream: item.row.stream,
+      name: item.row.channel?.name || null,
+      network: item.net?._id || null,
+      protocol: item.row.channel?.protocol
+        // No record: the packaging comes from the application itself. The
+        // first of whatever it offers, and `null` when it was not readable —
+        // in which case no link is built rather than a guessed one.
+        || item.row.packaging.protocols[0] || null,
+      protection: { mode: item.row.channel?.protection || 'open' },
+      discovered: !item.row.channel,
+      live: item.row.live,
+      bandwidth: item.row.bandwidth,
+      packaging: item.row.packaging,
+      carriedByNetwork: item.row.carried,
+    };
+    const net = item.net;
     if (!net) {
       // A stream nobody delivers. Invisible before, and exactly the thing
       // worth seeing before an event rather than during one.
       rows.push({ channel: pub(c), network: null, edges: [], links: null, code: 'not-delivered' });
+      continue;
+    }
+    // A packaging nobody could read is not a packaging. No link beats a link
+    // built from a default.
+    if (!c.protocol) {
+      rows.push({ channel: pub(c), network: { id: net.id, name: net.name, audience: net.audience },
+                  edges: [], links: null, code: 'packaging-unknown' });
       continue;
     }
     if (!edgeCache.has(String(net._id))) edgeCache.set(String(net._id), await edgesOf(net, servers, routes));
@@ -618,5 +732,17 @@ channelRouter.get('/channels/overview', requirePerm('cdn.view'), async (_req, re
       protection: protectionStatus(c, { authRules, authGroups, originApps }),
     });
   }
-  res.json({ rows, routesRead: routes !== null });
+  res.json({
+    rows,
+    routesRead: routes !== null,
+    // Per network, so the page can say why a list is short.
+    delivery: [...perNetwork.values()].map(d => ({
+      network: d.net.id, name: d.net.name,
+      carried: d.carried.names,
+      asked: d.delivered.asked,
+      discovered: d.delivered.discovered,
+      notDelivered: d.delivered.notDelivered,
+      packagingDisagrees: d.delivered.packagingDisagrees,
+    })),
+  });
 });

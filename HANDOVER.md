@@ -82,6 +82,7 @@ reference's 250 is wrong — and shorter parts cost bandwidth.
 | `backend/tools/wms-playback-probe.mjs` | what does the edge serve, and does a change move it |
 | `backend/tools/wms-apps-recon.mjs` | what do the fleet's live applications look like |
 | `backend/tools/wms-app-write-probe.mjs` | what does WMSPanel do on a write (guarded to `nnm-probe`) |
+| `backend/tools/wms-app-write-probe-profile.mjs` | what does WMSPanel accept and **store** for an application's output profile — protocols, container, chunk, part, interleaving compensation. Read-only without `--write`, guarded to `nnm-probe`, restores from its own baseline. **Written and not yet run.** |
 | `backend/tools/wms-dump.mjs` | which API routes exist |
 
 All standalone, no dependencies, reports written beside themselves. Read

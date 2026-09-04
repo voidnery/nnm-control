@@ -145,6 +145,33 @@ that.**
 
 ---
 
+## 9. A route the panel declares and no button calls
+
+**Five instances before anything checked for it**, each a feature the operator
+could not reach:
+
+| route | what was missing |
+|---|---|
+| `/server/{s}/live/app` | full CRUD in `wmspanelClient.js`, with a comment naming the path, while an investigation concluded the API had no live-applications family |
+| `/llhls/channels/:id/plan` and `/apply` | the channel half of LL-HLS, written, never wired |
+| `/cdn/networks/:id/applications` | the declaration this milestone is about |
+| `/agent-fleet/recheck`, `/servers/:id/readiness`, `/auth/me/2fa/backup-codes`, the transfer list and retry, `PUT .../agent/config` | found by the check once it existed |
+
+Nothing caught these: unit tests import the service, the render smoke test
+mocks `fetch`, and a route with no caller is valid JavaScript that passes
+everything. The forward check — does a button reach a route — had been in
+`route-audit.mjs` for months; the reverse was never asked.
+
+**Both directions, or the wiring is only half checked.**
+
+And the check itself failed twice before it worked, both times found by a
+diversion that passed: it ignored the HTTP method, so a `GET` vouched for a
+`PUT` on the same path; and it reused the forward direction's loose matching,
+so a shallow call vouched for every deeper route beneath it.
+
+
+---
+
 ## What actually worked
 
 Worth recording too, because it is the only part that consistently did:

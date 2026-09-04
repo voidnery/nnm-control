@@ -25,7 +25,13 @@ export const STEP_IDS = ['topology', 'channels', 'nimble', 'links', 'verify'];
 //   action  — something is wrong or missing and the operator must decide
 //   empty   — nothing has been done here yet, which is not a fault
 //   unknown — the panel could not find out, which is not the same as empty
-export function networkSteps({ network, servers, channels = [], derived = null, protection = null, watched = null }) {
+// `channels` is gone from the signature on purpose.
+//
+// Every step that used it now reads `carried`, and leaving an unused argument
+// would invite the next reader to pass channel records and expect them to
+// count for something. A network's membership is a set of applications; a
+// channel record is an annotation on one stream inside one of them.
+export function networkSteps({ network, servers, carried = null, derived = null, protection = null, watched = null }) {
   const byId = new Map(servers.map(s => [String(s._id ?? s.id), s]));
   const nodes = (network?.nodes || []).filter(n => n.enabled !== false);
   const origins = nodes.filter(n => n.role === 'origin');
@@ -52,20 +58,41 @@ export function networkSteps({ network, servers, channels = [], derived = null, 
     });
   }
 
-  // 3 — what it is supposed to carry.
-  if (!channels.length) add('channels', 'empty', { count: 0 });
-  else add('channels', 'done', {
-    count: channels.length,
-    names: channels.map(c => c.label || `${c.application}/${c.stream}`),
-  });
+  // 3 — what it is supposed to carry, which is a set of **applications**.
+  //
+  // This counted channel records, and a channel record is one application and
+  // one stream. So a network delivering an application with forty streams in
+  // it read as "not set up" until somebody had typed forty channels, and a
+  // stream that appeared on the origin afterwards was delivered — routes are
+  // per application — while the step still called the network incomplete.
+  //
+  // A network that carries applications only because channels point at them is
+  // not finished either: nothing records the membership, so nothing can answer
+  // "should this network deliver that new stream". `action`, with the fix
+  // named, rather than a tick over an inference.
+  if (!carried) add('channels', 'unknown', {});
+  else if (!carried.list.length) add('channels', 'empty', { count: 0 });
+  else if (carried.conflicts.length) {
+    add('channels', 'action', { count: carried.names.length, conflicts: carried.conflicts.length,
+                                names: carried.conflicts }, { code: 'carried-conflict' });
+  } else if (carried.undeclared.length) {
+    add('channels', 'action', { count: carried.names.length, undeclared: carried.undeclared.length,
+                                names: carried.undeclared }, { code: 'carried-undeclared' });
+  } else add('channels', 'done', { count: carried.names.length, names: carried.names });
 
   // 4 — what Nimble needs written for that, which the panel works out itself.
   if (!derived) add('nimble', 'unknown', {});
   else if (derived.blocking?.length) {
     add('nimble', 'action', { blocking: derived.blocking.length }, { code: 'blocked' });
-  } else if (!channels.length || !edges.length) {
+  } else if (!(carried?.names?.length) || !edges.length) {
     // Nothing to derive is not "set up". Saying done here would put a tick on
     // a network that delivers nothing.
+    //
+    // Counted channel records until this was found: step three was moved onto
+    // applications and step four was left behind, so a network that declared
+    // an application and had no channel records read "nothing to configure"
+    // while routes were being planned for it. The same inconsistency step
+    // three exists to remove, one step further down.
     add('nimble', 'empty', { pending: 0 });
   } else if (protection?.blocking?.length) {
     // Protection blocked is a different fault from routes blocked, and it is

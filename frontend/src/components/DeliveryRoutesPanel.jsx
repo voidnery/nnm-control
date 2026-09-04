@@ -53,10 +53,42 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
   const [derived, setDerived] = useState(null);
   const [showWhy, setShowWhy] = useState(false);
   const [watch, setWatch] = useState({});        // "edge|app" -> probe result
+  // What the origins actually publish, so declaring an application is a click
+  // rather than a spelling test. Read-only, and offered as a starting point:
+  // an application may be declared before its feed ever arrives.
+  const [upstreamApps, setUpstreamApps] = useState(null);
 
   // Live mode, the same shape the transcoder graph uses: an operator during a
   // broadcast wants the tab open and answering, not a button to keep pressing.
   const [autoRefresh, setAutoRefresh] = useState(false);
+  // Declaring and undeclaring. `PUT` takes the whole list, so both are the
+  // same call with a different list — and the response is re-read rather than
+  // assumed, because this panel has been wrong before about what a write
+  // stored.
+  const writeCarried = async (applications) => {
+    setBusy(true);
+    try {
+      await api(`/cdn/networks/${network.id}/applications`, { method: 'PUT', body: { applications } });
+      await loadDerived();
+    } catch (e) { push(String(e?.message || e), 'err'); }
+    finally { setBusy(false); }
+  };
+
+  const declaredList = () => (derived?.carried?.list || [])
+    .filter(a => a.declared || a.disabled)
+    .map(a => ({ name: a.name, enabled: !a.disabled }));
+
+  const declare = (name) => writeCarried([...declaredList(), { name, enabled: true }]);
+
+  const toggleCarried = (a) => {
+    const rest = declaredList().filter(x => x.name !== a.name);
+    // Undeclared → declared. Declared → switched off rather than removed:
+    // removing it would leave no record that it was ever carried, and the
+    // route it implies is not withdrawn by either.
+    if (!a.declared && !a.disabled) return writeCarried([...rest, { name: a.name, enabled: true }]);
+    return writeCarried([...rest, { name: a.name, enabled: !a.declared }]);
+  };
+
   const applyProtection = async () => {
     setBusy(true); setError('');
     try {
@@ -87,7 +119,16 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
       setSel(cur => (mine.some(c => c.id === cur) ? cur : (mine[0]?.id || '')));
     } catch { setChans([]); }
   };
-  useEffect(() => { loadChannels(); loadDerived(); }, [network.id]);
+  // Which applications the origins publish. Read over the native Nimble API,
+  // so it costs no WMSPanel quota; a failure leaves `null`, which the section
+  // reads as "not asked" rather than as "there are none".
+  const loadUpstream = async () => {
+    try {
+      const r = await api(`/cdn/networks/${network.id}/applications`);
+      setUpstreamApps(r.applications || []);
+    } catch { setUpstreamApps(null); }
+  };
+  useEffect(() => { loadChannels(); loadDerived(); loadUpstream(); }, [network.id]);
 
 
 
@@ -190,6 +231,67 @@ export default function DeliveryRoutesPanel({ network, servers = [], dirty = fal
           bottom of the page. */}
       {shows('channels') && <>
       <div className="gsection">{t('cdn.step1')}</div>
+
+      {/* What this network carries, which is a set of APPLICATIONS.
+          A re-streaming route is per application — `/app/` → `origin:port/app/`
+          — so declaring one is the whole act: every stream that appears inside
+          it from then on is delivered, with nothing further to do. That is why
+          this is not a list of channels: the fleet's first real network
+          already carries one application with two streams in it, and counting
+          channel records made it read as half configured.
+
+          An application carried only because a channel points at it is shown
+          as such and offered for declaration. Nothing is migrated behind the
+          operator's back: until they declare it, delivery is exactly as it
+          was. */}
+      {derived?.carried && (
+        <div className="inset">
+          <div className="eyebrow">{t('cdn.carried')}</div>
+          <div className="ch-picker">
+            {derived.carried.list.map(a => (
+              <button key={a.name}
+                      className={'tagchip' + (a.planned ? ' on' : '')}
+                      disabled={!can('cdn.manage') || busy}
+                      title={t('cdn.carried.' + a.state)}
+                      onClick={() => toggleCarried(a)}>
+                <span className="mono">{a.name || t('cdn.carried.blank')}</span>
+                {a.channels > 0 && <> · {a.channels}</>}
+                {a.state === 'undeclared' && ' ?'}
+                {a.state === 'disabled-with-channels' && ' !'}
+              </button>
+            ))}
+            {!derived.carried.list.length && <span className="hint">{t('cdn.carried.none')}</span>}
+          </div>
+          {/* Both of these are computed and were invisible. A fact worked out
+              and never shown is the same as one never worked out. */}
+          {derived.carried.undeclared.length > 0 && (
+            <div className="hint">{t('cdn.carried.undeclaredHint',
+              { list: derived.carried.undeclared.join(', ') })}</div>
+          )}
+          {derived.carried.conflicts.length > 0 && (
+            <div className="error-box">{t('cdn.carried.conflictHint',
+              { list: derived.carried.conflicts.join(', ') })}</div>
+          )}
+          {/* Names the origins publish that this network does not carry yet.
+              The operator should not have to remember the spelling of
+              something the panel can read. */}
+          {(upstreamApps || []).filter(a => !derived.carried.list.some(c => c.name === a.application)).length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div className="hint">{t('cdn.carried.available')}</div>
+              <div className="ch-picker">
+                {upstreamApps.filter(a => !derived.carried.list.some(c => c.name === a.application)).map(a => (
+                  <button key={a.application} className="tagchip"
+                          disabled={!can('cdn.manage') || busy}
+                          onClick={() => declare(a.application)}>
+                    <span className="mono">{a.application}</span> · {a.streams}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Shown, not edited. Channels were being created here *and* on the
           Channels tab, so an application had two homes and the operator had to
           know which one counted. One place to add them, one place to see what

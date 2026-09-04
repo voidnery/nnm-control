@@ -72,7 +72,14 @@ function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signi
   const p2 = row.protection || { mode: c.protection?.mode || 'open', code: 'unknown' };
 
   // One word for the row, chosen for what it makes the operator do.
+  // A stream the panel found rather than one somebody typed. It is delivered
+  // for the same reason as every other stream in its application, and the row
+  // exists to say so — the list used to be the records, so this one would not
+  // have appeared at all while it was being served.
+  const found = c.discovered === true;
+
   const state = !row.network ? 'not-delivered'
+    : row.code === 'packaging-unknown' ? 'packaging-unknown'
     : row.edges.some(e => e.serving) ? 'serving'
     : row.edges.some(e => e.routed === false) ? 'partly-routed'
     : row.edges.length ? 'idle' : 'no-edges';
@@ -81,7 +88,11 @@ function Row({ row, expanded, onToggle, onEdit, canManage, onSign, signed, signi
     <>
       <tr className="ch-row" onClick={onToggle}>
         <td>
-          <div>{c.label || c.application}</div>
+          <div>
+            {c.label || c.application}
+            {found && <span className="badge" title={t('ch.foundHint')}>{t('ch.found')}</span>}
+            {c.live === true && <span className="badge live" title={t('ch.liveHint')}>·</span>}
+          </div>
           <div className="mono hint">{c.application}/{c.stream}</div>
         </td>
         <td>{row.network ? row.network.name : <span className="hint">{t('ch.none')}</span>}</td>
@@ -361,6 +372,28 @@ export default function ChannelsPanel() {
         </div>
       )}
 
+      {/* What the delivery answer rests on, said out loud.
+          These three were computed and shown nowhere, which is the same as
+          not computing them. `asked` matters most: a short list because the
+          origins were unreachable looks exactly like a short list because
+          nothing is streaming. */}
+      {(data.delivery || []).map(d => (
+        <div key={d.network} className="inset" style={{ marginTop: 8 }}>
+          <div className="eyebrow">{d.name}</div>
+          {!d.asked && <div className="hint">{t('ch.deliveryNotAsked')}</div>}
+          {d.asked && d.discovered > 0 && (
+            <div className="hint">{t('ch.deliverySummary', { n: d.discovered })}</div>
+          )}
+          {d.packagingDisagrees?.length > 0 && (
+            <div className="error-box">{t('ch.packagingDisagrees', {
+              list: d.packagingDisagrees
+                .map(x => `${x.application}/${x.stream}: ${x.recorded} → ${x.offers.join(', ') || '—'}`)
+                .join('; '),
+            })}</div>
+          )}
+        </div>
+      ))}
+
       <table style={{ marginTop: 12 }}>
         <thead><tr>
           <th>{t('ch.channel')}</th><th>{t('ch.network')}</th><th>{t('ch.edges')}</th>
@@ -368,14 +401,17 @@ export default function ChannelsPanel() {
         </tr></thead>
         <tbody>
           {data.rows.map(r => (
-            <Row key={r.channel.id} row={r} canManage={canManage}
-                 onSign={sign} signed={signed[r.channel.id] || null} signing={busy}
+            /* Keyed by the pair, not by a record id: a discovered stream has
+               no record, and several of them sharing `null` would collapse
+               into one row. */
+            <Row key={`${r.channel.application}/${r.channel.stream}`} row={r} canManage={canManage}
+                 onSign={sign} signed={r.channel.id ? (signed[r.channel.id] || null) : null} signing={busy}
                  signIp={signIp} setSignIp={setSignIp} busy={busy}
-                 onReplay={replayFor} replay={replays[r.channel.id] || null}
+                 onReplay={replayFor} replay={r.channel.id ? (replays[r.channel.id] || null) : null}
                  replayAt={replayAt} setReplayAt={setReplayAt}
                  replayPad={replayPad} setReplayPad={setReplayPad}
-                 expanded={open === r.channel.id}
-                 onToggle={() => setOpen(o => (o === r.channel.id ? '' : r.channel.id))}
+                 expanded={open === `${r.channel.application}/${r.channel.stream}`}
+                 onToggle={() => setOpen(o => (o === `${r.channel.application}/${r.channel.stream}` ? '' : `${r.channel.application}/${r.channel.stream}`))}
                  onEdit={(c) => setEdit({ ...c, network: c.network || '', protection: c.protection || { mode: 'open' } })} />
           ))}
           {!data.rows.length && <tr><td colSpan={7} className="hint">{t('ch.empty')}</td></tr>}

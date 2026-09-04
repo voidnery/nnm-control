@@ -89,6 +89,39 @@ const gatewaySchema = new mongoose.Schema({
   whenAllDown: { type: String, enum: ['fail', 'origin'], default: 'fail' },
 }, { _id: false });
 
+// What this network carries.
+//
+// A network is a set of machines *and* a set of applications delivered across
+// them. The second half was missing: "delivered by this network" existed only
+// as a side effect of somebody having created a channel record, and two
+// separate places computed the set from that side effect in two different
+// ways.
+//
+// Recorded here because a re-streaming route is per application — `/app/` →
+// `origin:port/app/` — so a stream that appears in a carried application is
+// delivered by this network with no further action. That is the behaviour the
+// operator expects and it needs the membership to be a fact, not an inference.
+//
+// The output profile — protocols, container, chunk, LL-HLS — is deliberately
+// **not** here yet. It belongs to the same object and it is a write path this
+// panel does not have; storing a profile nothing acts on is a value the screen
+// would show and the servers would not have.
+const carriedAppSchema = new mongoose.Schema({
+  // NOT `trim: true`. `NimbleGER-1` carries `\tblast_feed_cs` — an application
+  // whose name begins with a tab, recorded in docs/STATE.md. The name goes
+  // into a playback path, so Mongoose quietly stripping the tab would store a
+  // declaration for an application that does not exist. Normalising is done
+  // once, in `services/carriedApplications.js`, and it strips slashes only.
+  name: { type: String, required: true },
+  // Switching off is not removal: an application taken out of the plan while
+  // channels still point at it is a state the panel reports rather than
+  // resolves, because the routes already written are not withdrawn by it.
+  enabled: { type: Boolean, default: true },
+  notes: { type: String, default: '' },
+  addedBy: { type: String, default: '' },
+  addedAt: { type: Date, default: Date.now },
+}, { _id: true });
+
 const networkSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
@@ -98,6 +131,7 @@ const networkSchema = new mongoose.Schema({
   // was configured first.
   audience: { type: String, enum: ['internal', 'public'], default: 'internal' },
   nodes: { type: [nodeSchema], default: [] },
+  applications: { type: [carriedAppSchema], default: [] },
   gateway: { type: gatewaySchema, default: () => ({}) },
   // Whether the panel asks on its own, and how often.
   //

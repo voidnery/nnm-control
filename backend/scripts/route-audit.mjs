@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MACHINE_ROUTES } from '../src/services/audit.js';
 
 // Does the path the client calls exist on the server?
 //
@@ -100,11 +101,19 @@ const jsx = [];
 const calls = [];
 for (const file of jsx) {
   const src = readFileSync(file, 'utf8');
-  for (const m of src.matchAll(/\bapi\(\s*(['`])([^'`]+)\1/g)) {
+  // The method as well as the path.
+  //
+  // It used to be the path alone, and that made the reverse check below
+  // unable to fail: a `GET` on `/cdn/networks/:id/applications` counted as a
+  // caller for the `PUT` on the same path, so removing the only write call
+  // changed no answer. Proven by a diversion that passed.
+  for (const m of src.matchAll(/\bapi\(\s*(['`])([^'`]+)\1([^)]*)/g)) {
     const raw = m[2];
     if (!raw.startsWith('/')) continue;
+    const verb = (/method:\s*['"](\w+)['"]/.exec(m[3] || '') || [, 'GET'])[1].toUpperCase();
     calls.push({
       raw,
+      method: verb,
       // A template hole matches one segment; a query string is not part of the
       // path.
       // A hole glued to the end of a segment, with no slash before it, is a
@@ -164,6 +173,108 @@ if (dynamic.length) {
   for (const d of dynamic) console.log(`      ${d.file}: ${d.raw}`);
 }
 if (!bad) ok('every path the client calls is answered by a route');
+
+// ---- and the other direction ------------------------------------------------
+//
+// A route the panel declares and nothing in it calls. This has now happened
+// five times, and each one was a feature the operator could not reach:
+//
+//   `/server/{s}/live/app`     — full CRUD sitting in `wmspanelClient.js` with
+//                                a comment naming the path, while an entire
+//                                investigation concluded the WMSPanel API had
+//                                no live-applications family;
+//   `/llhls/channels/:id/plan` — and `/apply`, the channel-level half of
+//                                LL-HLS, written and never wired to a screen;
+//   `/cdn/networks/:id/applications` — the declaration this milestone is
+//                                about, found unreachable by a diversion;
+//   `/auth/me/2fa/backup-codes`      — regenerating backup codes, no button;
+//   `/servers/:id/readiness`         — the readiness report, no button.
+//
+// The first check in this file asks whether a button reaches a route. This one
+// asks whether a route reaches a button, and nothing asked it before: unit
+// tests import the service, the render smoke test mocks `fetch`, and a route
+// with no caller is valid JavaScript that passes everything.
+//
+// Reads only mutating verbs. A GET nobody calls is dead code; a POST nobody
+// calls is a feature that does not exist, and the second is what keeps
+// happening here.
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+// Routes a browser is not supposed to call.
+//
+// The agent polls this panel for work and posts its logs, metrics and results;
+// the install script enrols. Six of these, and the first version of this check
+// failed on every one of them — a gate that fires on correct code gets
+// narrowed, not switched off.
+//
+// The list is imported rather than retyped: `services/audit.js` already
+// carries it, because these are the same routes whose traffic is not an audit
+// trail. Two copies of it drifted once already and cost 23.8 GB of a disk.
+const MACHINE_PREFIXES = MACHINE_ROUTES.map(r => '/api/' + r.replace(/^\/+/, ''));
+const isMachineFacing = (full) => MACHINE_PREFIXES.some(p => full.startsWith(p));
+
+// Known, named, and deliberately not fixed in the milestone that found them.
+// Each entry says what is missing, because "allow-listed" without a reason is
+// how a finding becomes furniture.
+const UNREACHABLE_KNOWN = new Map([
+  ['POST /api/auth/me/2fa/backup-codes',
+   'no button: TwoFactorSection offers setup, enable and disable only. Codes are issued once at enable and cannot be regenerated from the panel.'],
+  ['PUT /api/servers/:id/agent/config',
+   'no button: the playlist server panel reads a config file and never writes one. The write path exists on the agent and nothing offers it.'],
+  ['DELETE /api/wmspanel/transcoders/:objId/pipeline/:kind(video|audio)/:pid',
+   'the editor writes through `apply-edits`, which batches. The granular element routes have had no caller since the editor was written — see docs/STATE.md on the unverified pipeline write path.'],
+  ['PUT /api/wmspanel/transcoders/:objId/pipeline/:kind(video|audio)/:pid/:io(input|filter|output)/:ioId',
+   'as above: batched through `apply-edits`.'],
+  ['DELETE /api/wmspanel/transcoders/:objId/pipeline/:kind(video|audio)/:pid/:io(input|filter|output)/:ioId',
+   'as above: batched through `apply-edits`.'],
+  ['POST /api/servers/:id/agent/transfers/:tid/retry',
+   'no screen: nothing in the frontend mentions transfers at all, the list route included. The media spool has a backend and no page.'],
+  ['POST /api/llhls/channels/:id/plan',
+   'superseded rather than missing: LL-HLS is a property of a network\'s output per application, not of a channel — two channels in one application cannot differ, and `live/app` has one set of protocols. Kept until that path exists, then removed.'],
+  ['POST /api/llhls/channels/:id/apply',
+   'superseded, see the plan route above.'],
+  ['POST /api/agent-fleet/recheck',
+   'no button: the agent centre offers per-server probe and update-outdated, and nothing asks for a fleet-wide recheck. Not called by the agent either.'],
+  ['POST /api/servers/:id/readiness',
+   'no button: the report is computed and there is no screen that asks for it.'],
+]);
+
+const unreachable = [];
+for (const d of declared) {
+  if (!MUTATING.has(d.method)) continue;
+  if (isMachineFacing(d.full)) continue;
+  const probe = d.full.replace(/:[^/]+/g, 'X');
+  const called = calls.some((c) => {
+    // Same verb, or it is not a caller for this route.
+    if (c.method !== d.method) return false;
+    // As written, hole for hole. NOT the loose form the forward check uses.
+    //
+    // The loose rule lets a trailing hole stand for a whole path fragment,
+    // which is right when asking "does some route answer this call". Asking
+    // the reverse, it is far too generous: `api(`/cdn/networks/${id}`, {PUT})`
+    // becomes `^/api/cdn/networks/.+$` and vouches for every deeper PUT under
+    // it — so renaming a network counted as a caller for declaring its
+    // applications, and a diversion that removed the real call still passed.
+    const asWritten = new RegExp('^' + c.path.replace(/:x/g, '[^/]+').replace(/\//g, '\\/') + '$');
+    return asWritten.test(probe);
+  });
+  if (called) continue;
+  const key = `${d.method} ${d.full}`;
+  if (UNREACHABLE_KNOWN.has(key)) { unreachable.push({ ...d, why: UNREACHABLE_KNOWN.get(key) }); continue; }
+  fail(`${d.file} declares ${d.method} ${d.full} and nothing in the frontend calls it — a feature with no button`);
+}
+if (unreachable.length) {
+  console.log(`  · ${unreachable.length} mutating route(s) known to have no caller:`);
+  for (const u of unreachable) console.log(`      ${u.method} ${u.full} — ${u.why}`);
+}
+// An entry that stops being true is a lie in a file whose whole job is telling
+// the truth about wiring.
+for (const key of UNREACHABLE_KNOWN.keys()) {
+  if (!unreachable.some(u => `${u.method} ${u.full}` === key)) {
+    fail(`the known-unreachable list still names ${key}, which is now called or gone — remove the entry`);
+  }
+}
+
 
 // A duplicated mount prefix is the specific shape that shipped, and it is
 // worth naming rather than leaving to the join above: a route declared with

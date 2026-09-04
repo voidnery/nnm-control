@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { resyncGateway } from '../services/gatewayResync.js';
 import { DeliveryNetwork, ROLES, ALLOWED_UPSTREAM } from '../models/DeliveryNetwork.js';
+import { appName, isName } from '../services/carriedApplications.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { ATTRIBUTION } from '../services/geoip.js';
 import { logEvent } from '../services/audit.js';
@@ -179,6 +180,62 @@ cdnNetworkRouter.put('/networks/:id', requirePerm('cdn.manage'), async (req, res
     resync: resync?.skipped || (resync?.ok ? 'written' : 'failed'),
   });
   res.json({ resync, ...pub(n), problems });
+});
+
+// What this network carries.
+//
+// Declared, not inferred. Until this existed the set was a side effect of
+// somebody having created a channel record, computed in two places from two
+// different inputs; a stream appearing on an origin had no way of being
+// answered for. Routes are per application, so declaring one is the whole act:
+// every stream inside it is delivered by this network from then on.
+//
+// The names come from the origins themselves — `GET /cdn/networks/:id/applications`
+// reads what they publish — so this takes a list and does not ask anyone to
+// remember spelling. An application that does not exist upstream yet is still
+// allowed: an operator may set the network up before the feed arrives, and
+// refusing that would make the panel useless for exactly the case it is for.
+cdnNetworkRouter.put('/networks/:id/applications', requirePerm('cdn.manage'), async (req, res) => {
+  const net = await DeliveryNetwork.findById(req.params.id);
+  if (!net) return res.status(404).json({ error: 'network-not-found', code: 'network-not-found' });
+
+  const incoming = Array.isArray(req.body?.applications) ? req.body.applications : null;
+  if (!incoming) return res.status(400).json({ error: 'applications-required', code: 'applications-required' });
+
+  const seen = new Set();
+  const kept = [];
+  for (const raw of incoming) {
+    // One normaliser, imported. Three copies of it appeared inside this one
+    // change, and one of them stripped whitespace — see `appName`.
+    const name = appName(raw?.name ?? raw);
+    if (!isName(name) || seen.has(name)) continue;
+    seen.add(name);
+    // An application already declared keeps who declared it and when. Rewriting
+    // that on every save would erase the only record of how it got here.
+    const was = (net.applications || []).find(a => a.name === name);
+    kept.push({
+      name,
+      enabled: raw?.enabled === false ? false : true,
+      notes: String(raw?.notes ?? was?.notes ?? '').slice(0, 300),
+      addedBy: was?.addedBy || req.user?.username || '',
+      addedAt: was?.addedAt || new Date(),
+    });
+  }
+
+  const before = (net.applications || []).map(a => a.name);
+  net.applications = kept;
+  await net.save();
+
+  await logEvent(req, 'cdn.network.applications', {
+    network: net.name,
+    before, after: kept.map(a => a.name),
+    // Removal does not withdraw a route: an apply never deletes, so an
+    // application taken out of the plan keeps being delivered until somebody
+    // removes the route. Said in the record as well as on the screen.
+    removed: before.filter(n => !seen.has(n)),
+  });
+
+  res.json({ applications: net.applications });
 });
 
 cdnNetworkRouter.delete('/networks/:id', requirePerm('cdn.manage'), async (req, res) => {

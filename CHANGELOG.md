@@ -1,5 +1,159 @@
 # Changelog
 
+### v1.31.0 — the probe that has to run before the panel writes a profile
+
+Step three writes an application's output profile — protocols, container,
+chunk duration, LL-HLS and its part duration, interleaving compensation. Every
+number that will appear in that form has to come from somewhere, and the last
+one taken from the vendor's reference instead of a measurement was wrong by
+half: the published minimum part duration is 250 ms and the server refuses
+anything under 500.
+
+So `tools/wms-app-write-probe-profile.mjs` asks the server first. Eight
+questions, each written down with what would count as either answer:
+
+- enabling interleaving compensation alone — what does the server store for the
+  other three fields, and are there defaults at all;
+- a minimum delay of zero, which is what Softvelum recommends for video and
+  audio at low latency — accepted, or clamped;
+- a minimum delay of −1, because a zero that is accepted proves nothing unless
+  the field is validated at all;
+- a part duration of 250 and one far above half the chunk, to hear the bounds
+  from the server rather than from the reference;
+- `HLS` with `HLS_MPEGTS`, the one pair the reference calls illegal;
+- `HLS_FMP4` alongside plain `HLS`, because "fMP4 displaces HLS" is a rule the
+  panel encodes from a single reading on one server;
+- a body naming one field, because the whole plan/apply envelope assumes the
+  others are left alone.
+
+**A 200 is not a yes.** The verdict compares what was stored against what was
+sent and names a silent clamp as its own outcome — the shape of the write that
+once stored three fields of four and reported success. An `Error` in the body
+under a 200 counts as a refusal, which this API does.
+
+Guarded to the application named `nnm-probe`, never sends DELETE, and restores
+from the baseline it read rather than from a constant — with any field the
+restore could not put back reported as residue instead of left quietly changed.
+
+Everything believable in it — the verdicts, the masking, the restore — is
+exported and checked by `tests/profile-probe.test.mjs` without a network, and
+proven by four diversions.
+
+**Written and not run.** It touches the one application the LL-HLS measurements
+stand on, so it waits until those are done.
+
+Backend 1897/1897.
+
+### v1.30.0 — the list is the streams a network delivers, not the records typed
+
+The overview walked channel records: one row per `{application, stream}`
+somebody had written down. A re-streaming route is per application — `/app/` →
+`origin:port/app/` — so **every stream inside a carried application is
+delivered whether a record exists or not**, and the page showed none of them.
+Publish a stream on the origin and it is served immediately, invisibly.
+
+`services/deliveredStreams.js` builds the list as a union: every live stream in
+a carried application, plus every record, plus the records whose application no
+network carries — the one case that is genuinely wrong and was already the
+`not-delivered` row. The record survives as an annotation: a name, a protection
+mode, and the packaging it claims.
+
+**Nothing invents a packaging.** A discovered stream has no record and so no
+`protocol`, and the panel reads the origin application through WMSPanel instead
+of defaulting: `HLS`/`HLS_MPEGTS`/`HLS_FMP4` with `alhls_enabled` gives what the
+application actually offers, and LL-HLS *replaces* the HLS entry rather than
+sitting beside it — it is the same playlist with parts, and two links to one
+file would imply a choice the server does not have. An application that could
+not be read offers an unknown set, the row says `packaging-unknown`, and no
+link is built. `pub()` was quietly doing the opposite: `c.protocol || 'hls'`,
+which only ever fired for rows the panel synthesises itself.
+
+**Three answers where there were two**, again: a stream is live, or was looked
+for and absent, or the origins could not be read. The third is `null` and it
+reaches the screen, because a short list from unreachable origins looks exactly
+like a short list from nothing streaming.
+
+**A record naming a packaging its application does not offer is reported.**
+`live/app` carries one set of protocols, so two records in one application
+cannot legitimately differ — the fleet's one network has two streams in `test2`
+— and this is where that surfaces instead of being averaged into a link that
+plays the wrong thing. It is the evidence for moving packaging off the channel
+in the next step.
+
+The per-network summary — how many streams are delivered without a record,
+which records nobody delivers, which packagings disagree — is on the screen.
+All three were computed and displayed nowhere, which is the same as not
+computing them.
+
+Backend 1885/1885.
+
+### v1.29.0 — a network records what it carries
+
+The delivery side had a hole at its centre: **a network did not record which
+applications it delivers.** "Carried by this network" existed only as a side
+effect of somebody having created a channel record, and two places computed the
+set from that side effect in two different ways — the browser posted it in a
+request body, `/channels/networks/:id/derived` read the database. Same
+question, two computations, nothing holding them equal. Third instance of the
+shape that cost 23.8 GB of a disk in v1.28.0.
+
+Underneath it, the wrong unit. A channel is one application and one stream; a
+re-streaming route is per application — `/app/` → `origin:port/app/`. The
+fleet's first real network already carries one application with **two** streams
+in it, so the panel counted the same route twice and called the network half
+configured. And a stream appearing on the origin afterwards was delivered,
+correctly, while the step said the network was incomplete.
+
+So the network declares its applications, `services/carriedApplications.js` is
+the only place that says what the set is, and declaring one is the whole act:
+every stream inside it is delivered from then on with nothing further to do.
+
+**A union, not a replacement.** An application counts as carried when the
+network declares it *or* a channel points at it, and every entry says which. A
+declaration mechanism that only counted declarations would have stopped
+planning routes for streams being delivered today, the moment it shipped.
+Switching one off drops it from the plan and is reported rather than resolved:
+an apply never withdraws a route, so it keeps being delivered until somebody
+removes one.
+
+`derivePlan` no longer reduces channel records to applications itself — it
+requires the set and throws without it. A default would let a caller forget and
+still get a plausible answer from the wrong set.
+
+**Three findings from reviewing this as foreign code**, which is how it was
+reviewed:
+
+- **Application names were being tidied up.** The new normaliser added
+  `.trim()`, in three copies. `NimbleGER-1` carries `\tblast_feed_cs` — a name
+  beginning with a tab, recorded in `docs/STATE.md`, which goes into a playback
+  path. Declaring it would have stored an application that does not exist while
+  the origin published another. One normaliser now, exported, slashes only.
+- **Step four still counted channel records** while step three had moved onto
+  applications, so a network that declared an application and had no channels
+  read "nothing to configure" while routes were planned for it. Found by a
+  diversion that changed no test — which meant the tests missed the wiring.
+- **The declaration was unreachable from the interface.** `PUT
+  /cdn/networks/:id/applications` existed and nothing called it.
+
+That last one is the fifth instance of a route the panel declares and never
+calls, so `scripts/route-audit.mjs` now asks the reverse question too — does a
+route reach a button — and it found five more: a fleet-wide recheck, the media
+transfer list and retry, regenerating 2FA backup codes, writing a config file
+through the agent, and the granular transcoder pipeline routes the editor
+batches past. Each is named with what is missing, and an entry that stops being
+true fails the gate.
+
+**Two defects in that check, both found by diversions that passed.** It
+compared paths and ignored the method, so a `GET` counted as a caller for the
+`PUT` on the same path. And it used the forward check's loose matching, where a
+trailing hole stands for a whole fragment — so `api(`/cdn/networks/${id}`,
+{PUT})` vouched for every deeper PUT beneath it, renaming a network standing in
+for declaring its applications. The reverse direction now matches hole for
+hole, and machine-facing routes are exempt from the same list
+`services/audit.js` keeps, because the agent is not a button.
+
+Backend 1868/1868.
+
 ### v1.28.0 — the audit log was never closed, and a passing test said it was
 
 The panel filled its own disk a second time: **29.4 million rows, 23.8 GB of a

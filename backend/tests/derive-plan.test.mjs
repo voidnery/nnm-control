@@ -8,6 +8,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { derivePlan, channelReadiness } from '../src/services/derivePlan.js';
+import { carriedApplications } from '../src/services/carriedApplications.js';
+
+// The carried set, from the one function that computes it.
+//
+// `derivePlan` no longer reduces channel records to applications itself: that
+// was the second copy of a rule the network is now supposed to own. These
+// checks are about routes, so the membership here comes from the channels, the
+// way an undeclared network's does — through the real function, never a
+// hand-built list, so a fixture cannot agree with a shape the panel cannot
+// produce.
+const appsOf = (channels) => carriedApplications({ network: {}, channels }).names;
 
 let failures = 0;
 const check = (name, fn) => {
@@ -34,7 +45,7 @@ console.log('\nINTENT IN, PRIMITIVES OUT:');
 check('one channel on two edges derives two routes', () => {
   // The operator said "deliver test2 here". They did not say "write a route
   // on RU-2 and another on RU-3", and they should not have to.
-  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')] });
+  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')], applications: appsOf([CH('test2', 'main')]) });
   assert.equal(p.summary.create, 2, JSON.stringify(p.items));
   assert.deepEqual(p.items.map(i => i.subject).sort(), ['RU-2', 'RU-3']);
 });
@@ -43,7 +54,7 @@ check('two channels on one application derive one route each edge, not two', () 
   // Routing is per application; two streams of the same application ride the
   // same route. Deriving two would try to create a duplicate and fail on the
   // second, which is a confusing way to say "already done".
-  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'a'), CH('test2', 'b')] });
+  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'a'), CH('test2', 'b')], applications: appsOf([CH('test2', 'a'), CH('test2', 'b')]) });
   assert.equal(p.summary.create, 2);
 });
 
@@ -52,7 +63,7 @@ console.log('\nEVERY PRIMITIVE SAYS WHY IT EXISTS:');
 check('each item carries a reason and its provenance', () => {
   // Not the fields — the reasoning. "A route on RU-2 so it can serve test2",
   // and where the port and address in it came from.
-  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')] });
+  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')], applications: appsOf([CH('test2', 'main')]) });
   for (const i of p.items) {
     assert.ok(i.why, 'an item with no reason');
     assert.ok(i.provenance?.origin, 'no origin recorded');
@@ -62,10 +73,10 @@ check('each item carries a reason and its provenance', () => {
 
 check('a guessed port is still labelled as guessed after deriving', () => {
   // The guess does not become a fact by passing through another layer.
-  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')] });
+  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')], applications: appsOf([CH('test2', 'main')]) });
   assert.equal(p.items[0].provenance.portSource, 'configured');
   const noPort = SERVERS.map(s => (s._id === 'o' ? { ...s, httpPort: 0 } : s));
-  const q = derivePlan({ network: NET, servers: noPort, channels: [CH('test2', 'main')] });
+  const q = derivePlan({ network: NET, servers: noPort, channels: [CH('test2', 'main')], applications: appsOf([CH('test2', 'main')]) });
   assert.equal(q.items[0].provenance.portSource, 'nimble-default');
 });
 
@@ -76,7 +87,7 @@ check('an account that already matches is in sync', () => {
     { id: 'r1', from: '/test2/', to: '79.98.187.66:8081/test2/', servers: ['W-E2'] },
     { id: 'r2', from: '/test2/', to: '79.98.187.66:8081/test2/', servers: ['W-E3'] },
   ];
-  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')], existingRoutes: existing });
+  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('test2', 'main')], applications: appsOf([CH('test2', 'main')]), existingRoutes: existing });
   assert.equal(p.inSync, true);
   assert.equal(p.summary.keep, 2);
 });
@@ -84,8 +95,7 @@ check('an account that already matches is in sync', () => {
 check('a blocked plan is not in sync even with nothing pending', () => {
   // Both produce zero pending items and they mean opposite things. An apply
   // button that counts items cannot tell them apart.
-  const p = derivePlan({
-    network: NET, servers: SERVERS, channels: [CH('blastdotakk', 'main')],
+  const p = derivePlan({ network: NET, servers: SERVERS, channels: [CH('blastdotakk', 'main')], applications: appsOf([CH('blastdotakk', 'main')]),
     originApps: [{ application: 'blastdotakk', server_ids: ['W-E2', 'W-E3'] }],
   });
   assert.ok(p.blocking.length);
@@ -98,7 +108,7 @@ check('it is named separately from a routing problem', () => {
   // There is nothing to route to, so the fix is a different one: give the
   // network an edge, not fix a route.
   const noEdges = { nodes: [{ id: 'n-o', role: 'origin', server: 'o', upstream: [], enabled: true }] };
-  const p = derivePlan({ network: noEdges, servers: SERVERS, channels: [CH('test2', 'main')] });
+  const p = derivePlan({ network: noEdges, servers: SERVERS, channels: [CH('test2', 'main')], applications: appsOf([CH('test2', 'main')]) });
   assert.equal(p.items.length, 0);
   assert.equal(p.unservable.length, 1);
   assert.equal(p.unservable[0].channel, 'test2/main');
@@ -112,13 +122,13 @@ check('ready when everything for it is already written', () => {
     { id: 'r2', from: '/test2/', to: '79.98.187.66:8081/test2/', servers: ['W-E3'] },
   ];
   const ch = CH('test2', 'main');
-  const plan = derivePlan({ network: NET, servers: SERVERS, channels: [ch], existingRoutes: existing });
+  const plan = derivePlan({ network: NET, servers: SERVERS, channels: [ch], applications: appsOf([ch]), existingRoutes: existing });
   assert.deepEqual(channelReadiness({ channel: ch, plan }), { code: 'ready', ready: true });
 });
 
 check('pending when something is still to be written', () => {
   const ch = CH('test2', 'main');
-  const plan = derivePlan({ network: NET, servers: SERVERS, channels: [ch] });
+  const plan = derivePlan({ network: NET, servers: SERVERS, channels: [ch], applications: appsOf([ch]) });
   const r = channelReadiness({ channel: ch, plan });
   assert.equal(r.code, 'pending');
   assert.equal(r.pending, 2);
@@ -129,14 +139,13 @@ check('a channel with no edge to serve it says so, not "nothing planned"', () =>
   // unservable, and genuinely nothing to do.
   const noEdges = { nodes: [{ id: 'n-o', role: 'origin', server: 'o', upstream: [], enabled: true }] };
   const ch = CH('test2', 'main');
-  const plan = derivePlan({ network: noEdges, servers: SERVERS, channels: [ch] });
+  const plan = derivePlan({ network: noEdges, servers: SERVERS, channels: [ch], applications: appsOf([ch]) });
   assert.equal(channelReadiness({ channel: ch, plan }).code, 'unservable');
 });
 
 check('blocked is its own answer, not "pending"', () => {
   const ch = CH('blastdotakk', 'main');
-  const plan = derivePlan({
-    network: NET, servers: SERVERS, channels: [ch],
+  const plan = derivePlan({ network: NET, servers: SERVERS, channels: [ch], applications: appsOf([ch]),
     originApps: [{ application: 'blastdotakk', server_ids: ['W-E2', 'W-E3'] }],
   });
   assert.equal(channelReadiness({ channel: ch, plan }).code, 'blocked');
