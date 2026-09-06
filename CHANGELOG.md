@@ -1,5 +1,38 @@
 # Changelog
 
+### v1.31.1 — four sentences the wizard did not have
+
+Reported from the screen: the second card of the setup wizard read
+`step.channels.carried-undec…` where a sentence belongs, and the fifth read
+`step.verify.empty`.
+
+`t()` returns the key when there is no string for it. Nothing throws, the page
+stays up, the layout is intact, and the only symptom is a line of code in front
+of the operator — the same shape as a caught exception rendering as absence.
+
+Two of the four are v1.31.0's: `carried-undeclared` and `carried-conflict` were
+added to `networkSteps` and never given words. `channels.unknown` was too.
+`verify.empty` had been printing itself for longer than that.
+
+**No check could have seen them.** The wizard builds its key at runtime —
+`t('step.' + id + '.' + code)` — so a scan of literal keys finds nothing to
+check; run across the whole frontend it reports sixty "missing" keys, every one
+of them a prefix like `step.` from exactly this pattern.
+
+So `tests/wizard-strings.test.mjs` reads the keys from the source of
+`networkSteps.js` instead, walking each `add(...)` with a balanced-paren
+reader, and asserts each exists in **both** dictionaries. Not a regular
+expression: the first attempt used one and reported four unreachable keys as
+missing, because it could not tell which calls carry a `code` — and a call that
+carries one never renders its state key. Four diversions: a string removed, a
+string present in English only, a new step code with no words, and the reader
+matching nothing at all.
+
+`step.channels.done` also said "channels" while counting applications, which is
+what v1.29.0 changed it to count.
+
+Backend 1902/1902.
+
 ### v1.31.0 — the probe that has to run before the panel writes a profile
 
 Step three writes an application's output profile — protocols, container,
