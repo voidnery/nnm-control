@@ -6,12 +6,12 @@
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { parse, container, durationSpread, blockingVerdict, keyframeInterval, keyframeFits } =
-  await import(join(here, '..', 'tools', 'llhls-check.mjs'));
+  await import(pathToFileURL(join(here, '..', 'tools', 'llhls-check.mjs')).href);
 
 let failures = 0;
 const check = (name, fn) => {

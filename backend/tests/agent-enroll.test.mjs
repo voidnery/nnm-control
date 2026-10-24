@@ -8,6 +8,7 @@ import express from 'express';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -46,10 +47,11 @@ const script = installScript({
   panelUrl: 'https://panel.example', ticket: 'a'.repeat(64),
   baseUrl: 'http://10.0.0.5:8090', logDir: '/var/log/nimble',
 });
-writeFileSync('/tmp/nnm-install-test.sh', script);
+const INSTALL_SH = path.join(os.tmpdir(), 'nnm-install-test.sh');
+writeFileSync(INSTALL_SH, script);
 
 check('it is valid POSIX sh', () => {
-  execFileSync('sh', ['-n', '/tmp/nnm-install-test.sh']);
+  execFileSync('sh', ['-n', INSTALL_SH]);
 });
 
 check('it carries no panel credential — only the one-time ticket', () => {
@@ -116,8 +118,9 @@ check('shell metacharacters in operator input cannot break out', () => {
     panelUrl: "https://x'; rm -rf /; echo '", ticket: 'b'.repeat(64),
     baseUrl: "http://y'&&curl evil'", logDir: "/var/log/n'ble",
   });
-  writeFileSync('/tmp/nnm-install-nasty.sh', nasty);
-  execFileSync('sh', ['-n', '/tmp/nnm-install-nasty.sh']);
+  const NASTY_SH = path.join(os.tmpdir(), 'nnm-install-nasty.sh');
+  writeFileSync(NASTY_SH, nasty);
+  execFileSync('sh', ['-n', NASTY_SH]);
   // Every interpolation sits inside single quotes with ' escaped as '\'' —
   // so a quote in the input closes and reopens the literal rather than
   // ending it.

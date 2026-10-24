@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 const TOKEN = 'test-token-that-is-long-enough-123456';
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nnm-agent-'));
@@ -12,7 +13,7 @@ const MEDIA = path.join(root, 'media');
 const LOGS = path.join(root, 'logs');
 const PORT = 18099;
 
-const proc = spawn(process.execPath, [new URL('../nnm-agent.mjs', import.meta.url).pathname], {
+const proc = spawn(process.execPath, [fileURLToPath(new URL('../nnm-agent.mjs', import.meta.url))], {
   env: { ...process.env, NNM_AGENT_PORT: String(PORT), NNM_AGENT_TOKEN: TOKEN,
          NNM_AGENT_CONF_DIR: CONF, NNM_AGENT_MEDIA_DIR: MEDIA, NNM_AGENT_MAX_UPLOAD_MB: '1',
          NNM_AGENT_LOG_DIR: LOGS, NNM_AGENT_LOG_CHUNK_KB: '1' },

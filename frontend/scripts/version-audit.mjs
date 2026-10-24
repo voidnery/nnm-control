@@ -5,8 +5,9 @@
 // the current number rather than a stale literal.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(new URL('..', import.meta.url).pathname, '..');
+const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)), '..');
 const FE = path.join(ROOT, 'frontend');
 const BE = path.join(ROOT, 'backend');
 

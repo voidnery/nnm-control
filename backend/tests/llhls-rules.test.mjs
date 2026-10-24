@@ -10,13 +10,13 @@
 // fixes one file and not the others, this fails.
 
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const rules = await import(join(here, '..', 'src', 'services', 'llhls.js'));
-const recon = await import(join(here, '..', 'tools', 'wms-apps-recon.mjs'));
-const probe = await import(join(here, '..', 'tools', 'wms-app-write-probe.mjs'));
+const rules = await import(pathToFileURL(join(here, '..', 'src', 'services', 'llhls.js')).href);
+const recon = await import(pathToFileURL(join(here, '..', 'tools', 'wms-apps-recon.mjs')).href);
+const probe = await import(pathToFileURL(join(here, '..', 'tools', 'wms-app-write-probe.mjs')).href);
 
 let failures = 0;
 const test = (name, fn) => {

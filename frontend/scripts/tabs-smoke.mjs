@@ -12,7 +12,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
+// Forward slashes: SRC is spliced into import specifiers below, where a Windows `\` is an escape.
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).split(path.sep).join('/');
 
 const TABS = [
   ['ChannelsPanel', "{ }"],

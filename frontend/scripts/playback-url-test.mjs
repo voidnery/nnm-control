@@ -1,13 +1,15 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import os from 'node:os';
 import { build } from 'esbuild';
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
+// Forward slashes: SRC is spliced into import specifiers below, where a Windows `\` is an escape.
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).split(path.sep).join('/');
 import { writeFileSync, rmSync } from 'fs';
-const out = '/tmp/.playback-bundle.mjs';
+const out = path.join(os.tmpdir(), '.playback-bundle.mjs');
 await build({ stdin:{contents:`
 export { playbackUrls, endpointLabel, embedSnippet, PROTOCOLS, PROTOCOL_LABEL } from '${SRC}/components/StreamPlayback.jsx';
 `, resolveDir:SRC, loader:'jsx'}, bundle:true, format:'esm', outfile:out, jsx:'automatic', logLevel:'silent' });
-const { playbackUrls, endpointLabel, embedSnippet, PROTOCOLS, PROTOCOL_LABEL } = await import(out);
+const { playbackUrls, endpointLabel, embedSnippet, PROTOCOLS, PROTOCOL_LABEL } = await import(pathToFileURL(out).href);
 rmSync(out, { force: true });
 let bad = 0;
 const check = (n, got, want) => { const ok = got === want; if (!ok) bad++; console.log(`  ${ok?'✓':'✗'} ${n}: ${got}${ok?'':' (want '+want+')'}`); };

@@ -17,7 +17,8 @@ import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
+// Forward slashes: SRC is spliced into import specifiers below, where a Windows `\` is an escape.
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).split(path.sep).join('/');
 
 // The shape captured from the fleet: one video pipeline with four decoders,
 // three scale filters, three overlays and a single encoder — the scenario in

@@ -1,14 +1,16 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import os from 'node:os';
 // Layout of a scenario graph, checked against the shape captured from a real
 // account dump (1 input, format/bwdif/split/fps/fps/picture, 2 encoders).
 import { build } from 'esbuild';
 import { rmSync } from 'fs';
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
-const out = '/tmp/.pl-layout.mjs';
+// Forward slashes: SRC is spliced into import specifiers below, where a Windows `\` is an escape.
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).split(path.sep).join('/');
+const out = path.join(os.tmpdir(), '.pl-layout.mjs');
 await build({ stdin: { contents: `export * from '${SRC}/lib/pipelineLayout.js';`, resolveDir: SRC, loader: 'js' },
   bundle: true, format: 'esm', outfile: out, logLevel: 'silent' });
-const { layoutPipeline, filterLabel, ioLabel, codecLabel, configuredBitrate } = await import(out);
+const { layoutPipeline, filterLabel, ioLabel, codecLabel, configuredBitrate } = await import(pathToFileURL(out).href);
 rmSync(out, { force: true });
 
 let bad = 0;

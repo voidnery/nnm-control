@@ -17,7 +17,9 @@ import assert from 'node:assert/strict';
 import https from 'node:https';
 import http2 from 'node:http2';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { probeTls, tlsSummary } from '../src/services/tlsProbe.js';
 
 let failures = 0;
@@ -26,9 +28,10 @@ const check = async (name, fn) => {
   catch (e) { console.log(`  ✗ ${name}: ${e.message}`); failures++; }
 };
 
-execSync('openssl req -x509 -newkey rsa:2048 -keyout /tmp/nnm-t-k.pem -out /tmp/nnm-t-c.pem '
-       + '-days 2 -nodes -subj "/CN=localhost" 2>/dev/null');
-const certs = { key: readFileSync('/tmp/nnm-t-k.pem'), cert: readFileSync('/tmp/nnm-t-c.pem') };
+const KEY = join(tmpdir(), 'nnm-t-k.pem'), CERT = join(tmpdir(), 'nnm-t-c.pem');
+execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-keyout', KEY, '-out', CERT,
+  '-days', '2', '-nodes', '-subj', '/CN=localhost'], { stdio: 'ignore' });
+const certs = { key: readFileSync(KEY), cert: readFileSync(CERT) };
 const listen = (srv) => new Promise(r => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
 
 console.log('\nTHE SERVER ANSWERS, THE PANEL DOES NOT GUESS:');

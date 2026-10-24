@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
+// Forward slashes: SRC is spliced into import specifiers below, where a Windows `\` is an escape.
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).split(path.sep).join('/');
 
 // Tags on this server span several tabs; the RTMP Pull tab must only ever
 // offer its own vocabulary.

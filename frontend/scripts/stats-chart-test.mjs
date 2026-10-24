@@ -1,15 +1,17 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import os from 'node:os';
 // The chart drew identifiers and raw cumulative totals on one axis, which made
 // every real series flatten to zero. These checks pin the classification and the
 // rate conversion that fixed it.
 import { build } from 'esbuild';
 import { rmSync } from 'fs';
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
-const out = '/tmp/.stats-bundle.mjs';
+// Forward slashes: SRC is spliced into import specifiers below, where a Windows `\` is an escape.
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).split(path.sep).join('/');
+const out = path.join(os.tmpdir(), '.stats-bundle.mjs');
 await build({ stdin: { contents: `export { classify, toRate } from '${SRC}/pages/StatsTab.jsx';`,
   resolveDir: SRC, loader: 'jsx' }, bundle: true, format: 'esm', outfile: out, jsx: 'automatic', logLevel: 'silent' });
-const { classify, toRate } = await import(out);
+const { classify, toRate } = await import(pathToFileURL(out).href);
 rmSync(out, { force: true });
 
 let bad = 0;

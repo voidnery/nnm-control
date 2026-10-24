@@ -15,12 +15,12 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { readdirSync, unlinkSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TOOL = join(here, '..', 'tools', 'wms-apps-recon.mjs');
-const { assess, sanitise } = await import(TOOL);
+const { assess, sanitise } = await import(pathToFileURL(TOOL).href);
 
 let failures = 0;
 const test = (name, fn) => {

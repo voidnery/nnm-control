@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 
-const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url)));
+// Forward slashes: SRC is spliced into import specifiers below, where a Windows `\` is an escape.
+const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).split(path.sep).join('/');
 const SAMPLE = {
   servers: [{ id: 'S1', name: 'Src', wmspanelServerId: 'w1' }, { id: 'S2', name: 'Dst', wmspanelServerId: 'w2' }],
   udp: { settings: [{ id: 'u1', name: 'out1', protocol: 'srt', ip: '1.2.3.4', port: 9000, paused: false, source_streams: [{ application: 'a', stream: 's' }] }] },
