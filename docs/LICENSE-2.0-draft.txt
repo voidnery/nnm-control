@@ -1,0 +1,57 @@
+=== ЧЕРНОВИК (HQ T-0012, D-0012 шаг 3). Не действует. ===
+Заменяет LICENSE (MIT) вместе с выпуском 2.0.0 и только по решению оператора; эти три строки при
+замене удаляются. Текст условий использования редакций (Free / Pro / Enterprise) — отдельный документ,
+на который ссылается второй абзац; юридическую формулировку проверяет оператор.
+
+Copyright (c) 2026 voidnery. All rights reserved.
+
+NNM-Control, version 2.0.0 and later, and everything in this repository are
+proprietary and confidential. No licence, express or implied, is granted to
+copy, modify, publish, distribute or sublicense any part of it without the
+prior written permission of the copyright holder.
+
+A copy of the product obtained from the copyright holder (an installation
+package of a released version) may be installed and used only under the
+licence terms the copyright holder publishes for the edition obtained
+(Free, Pro or Enterprise).
+
+Versions up to and including 1.31.x were published under the MIT License.
+Copies of those versions that anyone has already received remain under the
+MIT License; this notice does not apply to them.
+
+Third-party components keep their own licences: npm dependencies — under the
+licences in their packages, listed with their texts in THIRD-PARTY-NOTICES of
+the installation package (/usr/share/doc/nnm-control/THIRD-PARTY-NOTICES);
+country outlines from Natural Earth (public domain); the geolocation database
+DB-IP Lite, downloaded at run time, under CC BY 4.0.
+
+Nimble Streamer, WMSPanel and Softvelum are trademarks of their owners. They
+are named only to state compatibility; NNM-Control is not affiliated with or
+endorsed by them.
+
+Авторские права (c) 2026 voidnery. Все права защищены.
+
+NNM-Control версии 2.0.0 и новее и всё содержимое этого репозитория —
+собственность правообладателя и конфиденциальная информация. Никакая лицензия,
+явная или подразумеваемая, не предоставляется: копировать, изменять,
+публиковать, распространять или передавать любую часть без предварительного
+письменного разрешения правообладателя нельзя.
+
+Копию продукта, полученную от правообладателя (установочный пакет
+выпущенной версии), можно устанавливать и использовать только на условиях,
+которые правообладатель публикует для полученной редакции (Free, Pro или
+Enterprise).
+
+Версии до 1.31.x включительно опубликованы под лицензией MIT. Уже полученные
+кем-либо копии этих версий остаются под MIT; это уведомление к ним не
+применяется.
+
+Сторонние компоненты сохраняют свои лицензии: зависимости npm — лицензии их
+пакетов, с текстами в THIRD-PARTY-NOTICES установочного пакета
+(/usr/share/doc/nnm-control/THIRD-PARTY-NOTICES); контуры стран — Natural
+Earth (общественное достояние); база геолокации DB-IP Lite, загружаемая при
+работе, — CC BY 4.0.
+
+Nimble Streamer, WMSPanel и Softvelum — товарные знаки их владельцев. Они
+названы только для указания совместимости; NNM-Control с ними не связан и ими
+не одобрен.

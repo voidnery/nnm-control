@@ -6,7 +6,7 @@ Architecture: all
 Depends: debconf, docker.io | docker-ce, docker-compose-v2 | docker-compose-plugin
 Maintainer: voidnery <opensource@voidnery.pro>
 Homepage: https://github.com/__OWNER__/nnm-control
-Description: NNM Control (network-nimble-media-control) — web panel for Nimble Streamer
- Self-hosted management panel for Nimble Streamer instances using their
- native management API. Runs as a Docker Compose stack (MongoDB + Node.js
+Description: NNM-Control — self-hosted control panel for streaming media servers
+ Self-hosted panel for media servers, compatible with Nimble Streamer through
+ its native management API. Runs as a Docker Compose stack (MongoDB + Node.js
  API + React UI behind nginx) managed by a systemd unit.
