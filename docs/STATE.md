@@ -21,6 +21,34 @@ working.
 
 ---
 
+## How it is built, released and delivered — 2026-10-24 (HQ T-0012)
+
+The product is moving into the Eterix family (slug `nnm-control`) and closes
+from its next major version (HQ D-0012). What is true now:
+
+| | |
+|---|---|
+| Version | `VERSION` (X.Y.Z, no epoch) is the single source; both `package.json` files must equal it (`release-audit`, `version-audit`). |
+| Release | `release.yml` → eterix-ci `auto-release@v0.2.0`: a push to `main` with a new `VERSION` and a `## X.Y.Z` CHANGELOG section *is* the release; CI tests, builds, installs the package on Ubuntu 24.04, publishes into DIST-Control **beta** and sets the tag last. The tag `v1.31.1` exists, so pushes of 1.31.1 only test and build. **Needs the repository to be private**: a public repository cannot call the private eterix-ci workflows. |
+| Old path | `legacy-apt.yml` — GitHub Pages APT + GHCR images + package `1:X.Y.Z`, **by hand only**, no tag, no Release. Deleted once installed clients have moved (its header says what else goes with it). `packaging/tag-release.sh` is retired. |
+| Package | `build.sh` + `packaging/eterix/`: thin `.deb` without an epoch — stock mongo/node/nginx pinned by digest, the application in `/opt/nnm-control` mounted read-only, `updater.json` (health `127.0.0.1:8580/healthz`, four hooks), maintainer scripts by upd/0 P4–P19. The same compose project, volumes, environment file, debconf questions and file paths as the old package — a host can switch packages without losing data. |
+| Epoch | Installed clients have `1:X.Y.Z`; eterix-updater refuses epochs, and a version without one sorts below them. Options and the recommendation: `docs/EPOCH-MIGRATION.md`. Nothing is migrated yet. |
+| Health | `GET /healthz` → `{ok, version, build, ts}`; version baked into `backend/build-info.json` by `build.sh`. `/api/health` stays for the old stack. |
+| Edition | Free without a licence: **one server** (`backend/src/license/limits.js`, the only place). The second one is refused with «Редакция Free…»; servers already present stay. Other Free points of the matrix (LL-HLS, mass operations, 24 h statistics, one agent) are **not enforced**. |
+| Tests | `bash ci/test.sh` runs every `*.test.mjs`, every `*-audit.mjs` and the frontend `npm run audit` chain as TAP (≈2000 checks) and the licence gate; CI runs it on every push. Before this, nothing ran tests in CI, and `main` had three red files nobody had seen (two files the CHANGELOG had deleted were still in git). |
+| Licences | Lock files were empty in git since 1.22/1.28 and are restored; `docs/LICENSES-AUDIT.md`: no copyleft ships; the package carries `THIRD-PARTY-NOTICES`. |
+
+Limits of the thin package worth knowing:
+
+- `backend/tools/*.mjs` run inside the container can no longer write their
+  reports beside themselves (`/app` is read-only); the output on stdout is
+  unchanged.
+- MongoDB still runs without authentication, protected only by not being
+  published — turning it on for existing volumes is its own migration.
+- The panel port (`APP_PORT`) is still published on every interface over HTTP.
+
+---
+
 ## Facts about WMSPanel and Nimble, established against live systems
 
 These cost time to find and are wrong in the documentation or absent from it.

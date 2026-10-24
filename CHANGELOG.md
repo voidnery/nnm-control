@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — delivery through DIST-Control, Free edition, tests in CI (HQ T-0012)
+
+Not a release: `VERSION` stays 1.31.1 and its tag exists. The next release renames this heading to
+`## X.Y.Z — …` (the release check requires a section named after the version).
+
+- **VERSION** is the single source of the version; both `package.json` files are checked against it.
+- **Release by version** on eterix-ci `auto-release@v0.2.0` (`release.yml`): tests, thin package,
+  e2e on Ubuntu 24.04, DIST-Control beta, tag last. The old GitHub Pages APT + GHCR pipeline is
+  `legacy-apt.yml`, run by hand, no longer tagging; `packaging/tag-release.sh` is retired.
+- **Thin package** (`build.sh`, `packaging/eterix/`) for eterix-updater: no epoch, stock images by
+  digest, `updater.json`, snapshot/restore/stop/start hooks, `/healthz` with the baked-in version.
+  Data-compatible with the old package. The epoch question: `docs/EPOCH-MIGRATION.md`.
+- **Free edition: one server.** The second is refused with «Редакция Free…»; existing servers stay.
+- **Tests run in CI** (`ci/test.sh`, TAP, every test and audit). Three files were red on `main`:
+  `agentClient.js` and `PipelineEditor.jsx` had been deleted in the CHANGELOG and never in git — removed
+  now. Test scripts made path-portable.
+- **Lock files restored** (they were empty in git); licence audit and gate (`docs/LICENSES-AUDIT.md`):
+  nothing copyleft ships; the package carries THIRD-PARTY-NOTICES.
+- README: Nimble Streamer named as compatibility only; SECURITY.md; `.gitleaks.toml`; `.env.example`.
+
 ### v1.31.1 — four sentences the wizard did not have
 
 Reported from the screen: the second card of the setup wizard read
