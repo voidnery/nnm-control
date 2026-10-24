@@ -13,6 +13,7 @@ import { privilegedInstaller, privilegedEligibility } from '../services/privileg
 import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { logEvent } from '../services/audit.js';
 import { resolvePlaybackEndpoints, invalidatePlaybackCache } from '../services/playbackEndpoints.js';
+import { withinLicense } from '../license/limits.js';
 
 export const serversRouter = Router();
 
@@ -95,7 +96,9 @@ serversRouter.get('/', requirePerm('servers.view'), async (_req, res) => {
   res.json(servers.map(pub));
 });
 
-serversRouter.post('/', requirePerm('servers.manage'), async (req, res) => {
+// Free edition: one server (license/limits.js). Existing servers are never touched by the limit.
+const serverCount = () => NimbleServer.countDocuments();
+serversRouter.post('/', requirePerm('servers.manage'), withinLicense('servers', serverCount), async (req, res) => {
   const { name, host, port = 8082, token = '', useSsl = false, tags = [], notes = '', wmspanelServerId = '', playbackEndpoints = [], httpPort = 0, httpsPort = 0, purpose = 'nimble' } = req.body || {};
   if (!name || !host) return res.status(400).json({ error: 'name and host required' });
   const server = await NimbleServer.create({ name, host, port, token, useSsl, tags, notes, wmspanelServerId, httpPort: Number(httpPort) > 0 ? Number(httpPort) : 0, httpsPort: Number(httpsPort) > 0 ? Number(httpsPort) : 0,

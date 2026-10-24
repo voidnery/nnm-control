@@ -1,6 +1,7 @@
 import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { wmspanel } from './wmspanelClient.js';
+import { mayAdd } from '../license/limits.js';
 
 // Fleet auto-sync: in WMSPanel control plane mode the panel pulls the server
 // list from WMSPanel and materializes/updates local server entries.
@@ -26,7 +27,9 @@ export async function syncServersFromWmspanel({ force = false } = {}) {
   const data = await wmspanel.listServers(settings.wmspanel);
   const remote = (data.servers || []).filter(s => s.kind === 'Nimble');
 
-  let created = 0, updated = 0;
+  // Free edition (license/limits.js): servers beyond the limit are not imported. Ones already in the
+  // panel keep being refreshed below — the limit never removes or freezes what exists.
+  let created = 0, updated = 0, refused = 0, licenseMessage = '';
   for (const ws of remote) {
     const pickHost = () => {
       const custom = (ws.custom_ips || []).find(Boolean);
@@ -48,6 +51,8 @@ export async function syncServersFromWmspanel({ force = false } = {}) {
       await existing.save();
       updated++;
     } else {
+      const allowed = await mayAdd('servers', () => NimbleServer.countDocuments());
+      if (!allowed.ok) { refused++; licenseMessage = allowed.refusal.message; continue; }
       await NimbleServer.create({
         name: ws.name || ws.id,
         host: pickHost(),
@@ -64,7 +69,7 @@ export async function syncServersFromWmspanel({ force = false } = {}) {
       created++;
     }
   }
-  return { skipped: false, created, updated, remoteTotal: remote.length };
+  return { skipped: false, created, updated, remoteTotal: remote.length, licenseRefused: refused, licenseMessage };
 }
 
 const SYNC_INTERVAL_MS = 10 * 60 * 1000; // 144 calls/day — far below the 15k limit
@@ -73,7 +78,8 @@ export function startPeriodicSync() {
   const tick = async () => {
     try {
       const r = await syncServersFromWmspanel();
-      if (!r.skipped) console.log(`[wmspanel-sync] created=${r.created} updated=${r.updated} total=${r.remoteTotal}`);
+      if (!r.skipped) console.log(`[wmspanel-sync] created=${r.created} updated=${r.updated} total=${r.remoteTotal}`
+        + (r.licenseRefused ? ` not-imported=${r.licenseRefused} (${r.licenseMessage})` : ''));
     } catch (e) {
       console.error(`[wmspanel-sync] failed: ${e.message}`);
     }

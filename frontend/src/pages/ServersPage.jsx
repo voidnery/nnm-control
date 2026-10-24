@@ -234,7 +234,8 @@ export default function ServersPage() {
     try {
       const r = await api('/wmspanel/sync', { method: 'POST' });
       setSyncMsg(r.skipped ? { ok: false, text: `Sync skipped: ${r.reason}` }
-                           : { ok: true, text: `Synced from WMSPanel: +${r.created} new, ${r.updated} updated (${r.remoteTotal} total)` });
+                           : { ok: !r.licenseRefused, text: `Synced from WMSPanel: +${r.created} new, ${r.updated} updated (${r.remoteTotal} total)`
+                               + (r.licenseRefused ? ` — ${r.licenseRefused} not imported. ${r.licenseMessage}` : '') });
       load();
     } catch (e) { setSyncMsg({ ok: false, text: e.message }); }
     finally { setSyncBusy(false); }
