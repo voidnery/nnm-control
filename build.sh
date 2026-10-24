@@ -73,8 +73,11 @@ install -D -m 0755 packaging/nnm-control-cli "$STAGE/usr/bin/nnm-control"
 install -D -m 0644 packaging/eterix/updater.json "$STAGE/usr/share/eterix/$P/updater.json"
 install -d "$STAGE/usr/lib/eterix/$P/hooks"
 for h in snapshot restore stop start; do install -m 0755 "packaging/eterix/hooks/$h" "$STAGE/usr/lib/eterix/$P/hooks/$h"; done
-install -D -m 0644 packaging/eterix/nnm-control.service "$STAGE/usr/lib/systemd/system/$P.service"
-install -m 0644 packaging/nnm-control-backup.service packaging/nnm-control-backup.timer "$STAGE/usr/lib/systemd/system/"
+# Units under /lib, exactly where the package of the old APT path put them. On merged-/usr systems
+# /lib and /usr/lib are one directory, and dpkg moving a file between the two names inside one package
+# deletes it on upgrade (DEP17, problem P1) — the unit would vanish on the host that switches packages.
+install -D -m 0644 packaging/eterix/nnm-control.service "$STAGE/lib/systemd/system/$P.service"
+install -m 0644 packaging/nnm-control-backup.service packaging/nnm-control-backup.timer "$STAGE/lib/systemd/system/"
 install -d "$STAGE/usr/share/$P/tools"
 install -m 0755 tools/*.sh "$STAGE/usr/share/$P/tools/"
 

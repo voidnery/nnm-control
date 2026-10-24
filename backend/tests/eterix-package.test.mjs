@@ -133,6 +133,22 @@ check('secrets are generated only when absent, so JWT_SECRET (and the field key)
   assert.match(postinst, /ensure_secret\(\) \{\s*\n\s*\[ -n "\$\(kv_get "\$ENVF" "\$1"\)" \] \|\|/);
 });
 
+check('every path the old package installed, the new one installs at the same name', () => {
+  // merged-/usr: /lib and /usr/lib are one directory, and a file that moves between the two names
+  // inside one package is deleted by dpkg on upgrade (DEP17, problem P1). So the unit stays under
+  // /lib, as packaging/build-deb.sh put it.
+  const old = read('packaging/build-deb.sh');
+  for (const p of ['/lib/systemd/system/nnm-control.service', '/opt/nnm-control/docker-compose.yml', '/usr/bin/nnm-control']) {
+    const name = p.split('/').pop();
+    assert.ok(old.includes(p.replace(/\/[^/]+$/, '')) && old.includes(name), `the old package no longer installs ${p}`);
+  }
+  assert.match(build, /"\$STAGE\/lib\/systemd\/system\/\$P\.service"/, 'the unit moved away from /lib/systemd/system');
+  assert.match(build, /nnm-control-backup\.timer "\$STAGE\/lib\/systemd\/system\/"/);
+  assert.match(build, /"\$APP\/docker-compose\.yml"/);
+  assert.match(build, /"\$STAGE\/usr\/bin\/nnm-control"/);
+  assert.ok(!/usr\/lib\/systemd/.test(build), 'a unit is installed under /usr/lib/systemd');
+});
+
 check('purge keeps the data volumes, as the old package did', () => {
   // The hint printed for the operator names the command; only a line that RUNS it is a fault.
   const runs = code(read(`${E}/debian/postrm`)).split('\n').filter(l => !/^\s*echo\b/.test(l));
