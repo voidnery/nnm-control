@@ -5,3 +5,6 @@ dist/
 dist/
 # generated APT repo output (published to gh-pages); frontend/public/ is committed
 /public/
+# HQ HANDOFF/HANDOVER (ho-2.md): kept on disk, not in git while the repository is
+# public (HQ D-0034). Remove this line when the repository becomes private.
+docs/hq/
