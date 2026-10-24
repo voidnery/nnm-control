@@ -23,6 +23,9 @@ const bePkg = JSON.parse(readFileSync(path.join(BE, 'package.json'), 'utf8'));
 
 console.log('VERSION CONSISTENCY:');
 check('frontend and backend package versions agree', fePkg.version, bePkg.version);
+// ERS/1 §4: VERSION is the single source; the panel's own number (package.json) must equal it.
+const VERSION = readFileSync(path.join(ROOT, 'VERSION'), 'utf8').replace(/\r?\n$/, '');
+check('package.json carries VERSION', fePkg.version, VERSION);
 
 // The source must not contain a literal version. Anything matching x.y.z on
 // the APP_VERSION line is a hand-copied number by definition.
@@ -51,7 +54,9 @@ if (existsSync(dist)) {
   console.log('  – dist not built, skipping bundle check');
 }
 
-// Release mechanism (scheme A). The version drift that stranded apt upgrades
+// Legacy release mechanism (scheme A), now legacy-apt.yml — manual only since HQ T-0012; the
+// release itself is release.yml (eterix-ci auto-release, thin package without an epoch).
+// The version drift that stranded apt upgrades
 // came back once because the tag, not package.json, drove the build. These
 // checks assert the single-source-of-truth wiring stays in place: the release
 // derives the version from package.json and refuses a mismatched tag, the deb
@@ -59,22 +64,22 @@ if (existsSync(dist)) {
 // strips the epoch back off. All are readable from files, so this holds locally
 // and does not wait for a tag push to catch a regression.
 const read = (rel) => { try { return readFileSync(path.join(ROOT, rel), 'utf8'); } catch { return ''; } };
-const wf = read('.github/workflows/release.yml');
+const wf = read('.github/workflows/legacy-apt.yml');
 const postinst = read('packaging/debian/postinst');
 const buildDeb = read('packaging/build-deb.sh');
 
-console.log('\nRELEASE MECHANISM (scheme A):');
-check('release derives version from frontend/package.json',
-  /require\(['"]\.\/frontend\/package\.json['"]\)\.version/.test(wf) ? 'yes' : 'no', 'yes');
-check('release fails when the tag disagrees with package.json',
-  /!=\s*"\$pkgver"/.test(wf) && /exit 1/.test(wf) ? 'yes' : 'no', 'yes');
+console.log('\nLEGACY RELEASE MECHANISM (scheme A, legacy-apt.yml):');
+check('legacy release derives version from VERSION',
+  /ver="\$\(tr -d '\\r\\n' < VERSION\)"/.test(wf) ? 'yes' : 'no', 'yes');
+check('legacy release fails when a package.json disagrees with VERSION',
+  /!=\s*"\$ver"/.test(wf) && /exit 1/.test(wf) ? 'yes' : 'no', 'yes');
 check('deb version carries the Debian epoch',
-  /deb_version=1:\$pkgver/.test(wf) ? 'yes' : 'no', 'yes');
+  /deb_version=1:\$ver/.test(wf) ? 'yes' : 'no', 'yes');
 // Named by what it must be, not by which variable happens to carry it: the
 // output feeding the ghcr tag must be the bare version, and the tag expression
 // must not reach for the epoched one. Asserting the variable name instead is
 // how this check went red on a rename that changed nothing it cares about.
-const bareOut = /^\s*echo "(image_tag|version)=\$pkgver"/m.test(wf);
+const bareOut = /^\s*echo "(image_tag|version)=\$ver"/m.test(wf);
 const ghcrTag = /nnm-control-\$\{\{ matrix\.name \}\}:\$\{\{ [^}]*\.(image_tag|version) \}\}/.test(wf);
 check('docker image tag is epoch-free',
   bareOut && ghcrTag && !/nnm-control-[^\n]*deb_version/.test(wf) ? 'yes' : 'no', 'yes');
