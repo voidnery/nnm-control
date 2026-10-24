@@ -12,6 +12,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Retired by HQ T-0012 (release by version, D-0036). The release tag is now set by CI itself
+# (release.yml → eterix-ci auto-release), last, after the package reached DIST-Control. A tag pushed
+# by hand makes CI consider the version released, and it never reaches DIST-Control. To release:
+# bump VERSION (and both package.json files, and a «## X.Y.Z» section in CHANGELOG.md), push to main.
+echo "tag-release.sh: retired — the tag is set by CI (release.yml). Bump VERSION and push to main." >&2
+exit 1
+
 PUSH=0
 [ "${1:-}" = "--push" ] && PUSH=1
 

@@ -1,10 +1,27 @@
+# ERS/1
 node_modules/
 dist/
-.env
 *.log
-dist/
+
+# environment and secrets: only .env.example is committed
+.env
+.env.*
+!.env.example
+.secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+# test certificates are generated for tests and committed on purpose (.gitleaks.toml)
+!backend/tests/fixtures/certs/*
+
 # generated APT repo output (published to gh-pages); frontend/public/ is committed
 /public/
+# package tree of build.sh
+.stage/
+
 # HQ HANDOFF/HANDOVER (ho-2.md): kept on disk, not in git while the repository is
 # public (HQ D-0034). Remove this line when the repository becomes private.
 docs/hq/

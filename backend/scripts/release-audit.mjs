@@ -1,5 +1,10 @@
 // The release mechanism, checked from the repository rather than from a run.
 //
+// Since HQ T-0012 there are two: release.yml (eterix-ci auto-release — tests, thin package,
+// DIST-Control, the tag) and legacy-apt.yml (the old GitHub Pages APT + GHCR path, manual only,
+// kept until installed clients are moved off it). The rules below that guard the old path now
+// guard legacy-apt.yml; the version comes from VERSION.
+//
 // v0.59.0 made frontend/package.json the single source of the version and made
 // the workflow fail when the tag disagrees. That gate is right, and it is also
 // the thing that stopped delivery: the tag pushed was `v1.8.7`, package.json
@@ -11,7 +16,7 @@
 // cheap, instead of after a tag is pushed. Every rule below is one that has
 // already cost a release or would silently stop `apt upgrade` if broken:
 //
-//   - the two package.json files must agree, since only one is read by CI;
+//   - VERSION is the single source and both package.json files must agree with it;
 //   - the .deb version must keep the epoch, because 0.59.0 without `1:` sorts
 //     *below* the stray 1.x versions in the pool and apt offers nothing —
 //     silently, which is the worst kind;
@@ -31,18 +36,43 @@ const fail = why => { console.log(`  ✗ ${why}`); bad++; };
 const notes = [];
 
 // ---------------------------------------------------------------- versions
+const ver = read('VERSION').replace(/\r?\n$/, '');
 const beVer = JSON.parse(read('backend/package.json')).version;
 const feVer = JSON.parse(read('frontend/package.json')).version;
-if (beVer !== feVer) {
-  fail(`backend/package.json is ${beVer} but frontend/package.json is ${feVer}; `
-     + 'CI reads the frontend one, so a release would be labelled with a version '
-     + 'the backend does not report');
+if (!/^\d+\.\d+\.\d+$/.test(ver)) {
+  fail(`VERSION is "${ver}" — expected one line X.Y.Z (ERS/1 §4)`);
+} else if (beVer !== ver || feVer !== ver) {
+  fail(`VERSION is ${ver} but backend/package.json is ${beVer} and frontend/package.json is ${feVer}; `
+     + 'the panel reports the package.json number, so a release would be labelled with a version '
+     + 'the panel does not report');
 } else {
-  notes.push(`version ${feVer} agreed by both package.json files`);
+  notes.push(`version ${ver}: VERSION and both package.json files agree`);
 }
 
-// ---------------------------------------------------------------- workflow
-const wf = read('.github/workflows/release.yml');
+// ------------------------------------------------------- release.yml (new)
+const rel = read('.github/workflows/release.yml');
+const relOn = rel.slice(rel.indexOf('\non:'), rel.indexOf('\npermissions:'));
+if (!/uses:\s*voidnery\/eterix-ci\/\.github\/workflows\/auto-release\.yml@v\d+\.\d+\.\d+\b/.test(rel)) {
+  fail('release.yml does not call eterix-ci auto-release by a release tag — the release path is unpinned or gone');
+} else {
+  notes.push('release.yml calls eterix-ci auto-release by tag');
+}
+if (/tags:/.test(relOn)) {
+  fail('release.yml triggers on tags; with release-by-version the tag is set by CI, and auto-release refuses a tag run');
+}
+if (!/branches:\s*\[?'?main/.test(relOn)) {
+  fail('release.yml no longer triggers on a push to main; a VERSION bump would not release');
+}
+for (const [re, why] of [
+  [/test-command:\s*bash ci\/test\.sh/, 'the gate does not run ci/test.sh — the tests would not run in CI'],
+  [/package-name:\s*nnm-control\b/, 'the package name is not nnm-control (ERS/1 slug)'],
+  [/gates-command:\s*\S/, 'no product gates — the package would be released without its e2e (class B)'],
+  [/DC_TOKEN:\s*\$\{\{\s*secrets\.DC_TOKEN/, 'DC_TOKEN is not passed — ingest into DIST-Control cannot authenticate'],
+]) if (!re.test(rel)) fail(`release.yml: ${why}`);
+if (!bad) notes.push('release.yml: tests, nnm-control package, e2e gates, DC_TOKEN');
+
+// ------------------------------------------------------ legacy-apt.yml (old)
+const wf = read('.github/workflows/legacy-apt.yml');
 
 // The epoch. Without it 0.x never overtakes the 1.x already published.
 const debVerLines = [...wf.matchAll(/^\s*echo\s+"deb_version=(.+?)"/gm)].map(m => m[1]);
@@ -53,7 +83,7 @@ if (!debVerLines.length) {
      + '0.x sorts below the 1.x versions already in the pool and apt upgrade '
      + 'would offer nothing at all');
 } else {
-  notes.push(`deb_version carries an epoch (${debVerLines[0]})`);
+  notes.push(`legacy deb_version carries an epoch (${debVerLines[0]})`);
 }
 
 // The image tag must not, because a docker tag cannot contain a colon.
@@ -62,35 +92,30 @@ if (imgTagLines.some(v => v.includes(':'))) {
   fail(`image_tag contains a colon (${imgTagLines.join(', ')}); docker rejects it`);
 }
 
-// The tag-vs-package.json gate itself must still be there, for the tag path.
-if (!/does not match .*package\.json/.test(wf)) {
-  fail('the tag/package.json agreement check is gone from the workflow; '
-     + 'a release can be labelled with any version again');
+// The legacy path takes its version from VERSION and checks both package.json files against it.
+if (!/disagrees with VERSION/.test(wf)) {
+  fail('legacy-apt.yml no longer checks package.json against VERSION; '
+     + 'the old APT could publish a version the panel does not report');
 } else {
-  notes.push('tag/package.json agreement is still enforced for tag pushes');
+  notes.push('legacy-apt.yml checks both package.json files against VERSION');
 }
 
-// Releasing must not depend on a person typing a tag. Three consecutive
-// releases died on exactly that, and the third one died on the tag pushed to
-// fix the second. A push to main with a new version has to be enough.
+// Manual only. On a push it would race release.yml; on a tag it would be a second release path.
 const on = wf.slice(wf.indexOf('\non:'), wf.indexOf('\npermissions:'));
-if (!/branches:\s*\[?'?main/.test(on)) {
-  fail('the workflow no longer triggers on a push to main; releasing is back '
-     + 'to depending on a hand-typed tag matching package.json');
+if (/\bpush:|tags:|pull_request/.test(on) || !/workflow_dispatch/.test(on)) {
+  fail('legacy-apt.yml runs on something other than a manual dispatch; the old path must not '
+     + 'publish by itself any more (HQ T-0012)');
 } else {
-  notes.push('a version bump pushed to main is itself a release');
+  notes.push('legacy-apt.yml runs only by hand');
 }
-if (!/ls-remote[^\n]*refs\/tags\/v\$pkgver/.test(wf)) {
-  fail('there is no guard against re-releasing a version already tagged; '
-     + 'every unrelated commit to main would try to republish it');
+
+// The tag and the GitHub Release belong to release.yml. A tag set here makes auto-release treat the
+// version as released, and the version never reaches DIST-Control.
+if (/action-gh-release|git\s+tag\b|git\s+push\b[^\n]*refs\/tags|tag_name:/.test(wf)) {
+  fail('legacy-apt.yml creates a tag or a GitHub Release; both belong to release.yml (auto-release), '
+     + 'and a tag from here stops the version reaching DIST-Control');
 } else {
-  notes.push('an already-released version is skipped, not republished');
-}
-if (!/tag_name:\s*v\$\{\{\s*needs\.meta\.outputs\.version/.test(wf)) {
-  fail('the Release does not derive its tag from the resolved version; '
-     + 'the tag and the artifact can disagree again');
-} else {
-  notes.push('the release tag is derived from package.json, not typed');
+  notes.push('legacy-apt.yml creates no tag and no Release');
 }
 
 // Pushing to ghcr is refused, temporarily, by a secondary rate limit — and it
@@ -126,19 +151,6 @@ if (!/max-parallel:\s*1/.test(wf)) {
      + 'half of what earns the rate limit in the first place');
 } else {
   notes.push('images are pushed one at a time');
-}
-
-// One deb per Release. build-apt-repo pulls the published pool back in, so a
-// glob over dist/ attaches every historical version to every Release.
-const attach = wf.slice(wf.indexOf('action-gh-release'));
-const files = attach.match(/files:\s*(\S.*)/)?.[1]?.trim();
-if (!files) {
-  fail('the Release step attaches no files');
-} else if (files.includes('*')) {
-  fail(`the Release step globs (${files}), and dist/ by then holds the whole `
-     + 'preserved pool — name the single file being released');
-} else {
-  notes.push(`the Release attaches one file (${files})`);
 }
 
 // ---------------------------------------------------------------- postinst

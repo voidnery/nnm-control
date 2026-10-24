@@ -1,0 +1,8 @@
+# gitleaks для NNM-Control (гейт eterix-ci, ERS/1 п.7): правила gitleaks по умолчанию + allowlist
+# продукта. Настоящий секрет в истории лечится ротацией, а не строкой здесь.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Самоподписанные сертификаты и ключи для тестов проверки TLS (tests/cert-*.test.mjs): созданы для тестов, нигде не используются"
+paths = ['''^backend/tests/fixtures/certs/''']

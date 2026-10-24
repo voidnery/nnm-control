@@ -1,292 +1,66 @@
-# Release pipeline.
+# NNM-Control: выпуск по версии (D-0036; HQ T-0012) на общем workflow eterix-ci auto-release,
+# ревизия eterix-ci — тег v0.2.0. Тег vX.Y.Z руками не ставится: его ставит CI последним шагом выпуска.
+#   push в main, VERSION уже выпущена (тег на origin есть) → gate (ci/test.sh: все тесты и аудиты,
+#       TAP, ноль тестов — красный; гейт лицензий; gitleaks по истории) → package (build.sh →
+#       nnm-control_<VERSION>_all.deb, правила DIST-Control check-deb, SHA256SUMS, клиент публикации
+#       против макета). Так и с 1.31.1: тег v1.31.1 уже есть — первый push ничего не выпускает.
+#   push в main новой VERSION (тега нет) → выпуск: VERSION = раздел «## X.Y.Z» CHANGELOG → gate →
+#       package → e2e пакета на Ubuntu 24.04 (ci/e2e-deb.sh: установка, обновление со снимком,
+#       restore, лимит Free, remove/purge — P18) → ingest/1 в beta → GitHub Release (.deb, SHA256SUMS)
+#       и тег vX.Y.Z на этот коммит — последним. Упал — тега нет; следующий push или Re-run повторяет.
+#   pull request → gate → package
+#   вручную (Run workflow): из main — тега нет → выпуск, есть → e2e без выпуска; из defective/X.Y.Z —
+#       выпуск DEFECTIVE этого коммита (D-0032; файл DEFECT — README); из другой ветки — отказ.
+# stable — только оператор в панели DIST-Control после 72 ч в beta (D-0002); отсюда не продвигается.
+# Старый путь (GitHub Pages APT + GHCR, пакет с эпохой 1:) — legacy-apt.yml, только вручную.
 #
-# The version lives in package.json and nowhere else. Pushing to `main` with a
-# version that has not been released yet *is* the release: this job resolves
-# the version, checks nothing is already published under it, builds, publishes
-# and creates the tag itself.
-#
-# That is a deliberate reversal. Releases used to start from a hand-typed tag
-# that had to equal package.json, and three releases in a row died because it
-# did not — v1.8.7 against 0.59.0, v0.59.0 against 0.59.1, v0.59.1 against
-# 0.59.0. Every one of those was a person retyping a number a file already
-# knew. Nothing here asks for it now.
-#
-# A tag push still works, for a deliberate re-release, and is still checked
-# against package.json. Pushes to `main` that do not change the version are a
-# no-op: the jobs skip and the run is green.
-#
-#   1) meta      — resolve the version, decide whether there is a release,
-#   2) images    — build & push api/web images to ghcr.io (public),
-#   3) apt-repo  — build the .deb, build a signed APT repository, publish it to
-#                  the gh-pages branch (served by GitHub Pages at
-#                  https://<owner>.github.io/nnm-control/apt), create the
-#                  GitHub Release and attach that one .deb.
-#
-# Required repository setup (one-time):
-#   - Settings -> Pages: deploy from branch "gh-pages", folder "/ (root)".
-#   - Secret APT_GPG_PRIVATE_KEY: ASCII-armored private key
-#       (gpg --full-generate-key; gpg --armor --export-secret-keys <id>)
-#   - Secret APT_GPG_KEY_ID: the key id or email.
-#   - Secret APT_GPG_PASSPHRASE (optional): only if the key is passphrase-protected.
-#   - After first release: make both ghcr packages public
-#       (Packages -> nnm-control-api / -web -> Package settings -> Change visibility).
-#
-#       Each package also carries its own Actions access, separately from the
-#       repository's. A package created before this workflow existed, or linked
-#       to a different repository, refuses a push from here with
-#       "failed to fetch oauth token: denied" while the other image in the same
-#       matrix pushes fine — same token, same login. The fix is in
-#       Package settings -> Manage Actions access, not in this file.
+# ВНИМАНИЕ: reusable workflow приватного eterix-ci доступен только ПРИВАТНЫМ репозиториям. Пока
+# nnm-control публичный, этот workflow не запустится («workflow was not found» / нет доступа).
 name: release
 
 on:
   push:
-    branches: ['main']
-    tags: ['v*']
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
-# One release at a time, and no overlapping Pages deployments.
-#
-# Without this every re-run adds a deployment for the same branch commit, and
-# GitHub cancels the earlier one to make way — so a run re-tried to fix a
-# stuck deployment is a run that cancels the deployment it was waiting for.
-# `cancel-in-progress: false` because a release that is half-published is
-# worse than one that waits: the deb is already attached and the images are
-# already pushed by the time Pages runs.
+# Pull request — новый прогон отменяет устаревший. Push в main и ручные запуски — в одной очереди:
+# один выпуск за раз, идущий не отменяется (внутри eterix-ci публикация ещё и под своим concurrency).
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: release-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Resolved once and consumed by both jobs. It used to be computed twice, in
-  # two copies of the same shell block — which is the same drift this check
-  # exists to catch, one level up.
-  meta:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      release: ${{ steps.v.outputs.release }}
-      version: ${{ steps.v.outputs.version }}
-      deb_version: ${{ steps.v.outputs.deb_version }}
-      deb_file: ${{ steps.v.outputs.deb_file }}
-      owner: ${{ steps.v.outputs.owner }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: v
-        run: |
-          set -euo pipefail
-          # Single source of truth. Both package.json files must agree, since
-          # only one of them is read here and the other is what the panel
-          # reports about itself.
-          pkgver="$(node -p "require('./frontend/package.json').version")"
-          bever="$(node -p "require('./backend/package.json').version")"
-          if [ "$bever" != "$pkgver" ]; then
-            echo "::error::backend/package.json ($bever) disagrees with frontend/package.json ($pkgver); bump both"
-            exit 1
-          fi
-
-          release=true
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            # A tag push names the release explicitly, so it must be right.
-            raw="${GITHUB_REF_NAME}"
-            tag="${raw#v}"
-            tag="${tag#[.\-_]}"
-            if [ "$tag" != "$pkgver" ]; then
-              echo "::error::tag '$raw' -> '$tag' does not match package.json ($pkgver). You do not need to tag at all: push the version bump to main and the release tag is created for you."
-              exit 1
-            fi
-          else
-            # A branch push releases only if this version is not out already.
-            # Without this every unrelated commit to main would re-publish the
-            # same version, and the pool assertion downstream would fail the
-            # run — noisy, and eventually ignored.
-            if git ls-remote --exit-code origin "refs/tags/v$pkgver" >/dev/null 2>&1; then
-              echo "v$pkgver is already released — nothing to do." >> "$GITHUB_STEP_SUMMARY"
-              release=false
-            fi
-          fi
-
-          # Docker tags cannot contain a colon, so images carry the bare
-          # version. The .deb carries a Debian epoch (1:) so the 0.x scheme
-          # sorts above the stray 1.x versions already in the pool and
-          # `apt upgrade` offers it; postinst strips the epoch back off for
-          # the image tag it pulls.
-          {
-            echo "release=$release"
-            echo "version=$pkgver"
-            echo "deb_version=1:$pkgver"
-            echo "deb_file=nnm-control_${pkgver}_all.deb"
-            echo "owner=${GITHUB_REPOSITORY_OWNER,,}"
-          } >> "$GITHUB_OUTPUT"
-          [ "$release" = true ] && echo "releasing $pkgver (deb 1:$pkgver)" >> "$GITHUB_STEP_SUMMARY"
-          exit 0
-
-  images:
-    needs: meta
-    if: needs.meta.outputs.release == 'true'
-    runs-on: ubuntu-latest
-    # A hung network step should cost minutes, not the six hours a job is
-    # allowed by default.
-    timeout-minutes: 30
-    env:
-      # Optional. Anonymous pulls from Docker Hub are rate-limited per source
-      # IP, and GitHub's runners share theirs — which is one of the two ways
-      # "Booting builder" fails without anything being wrong with the code.
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-    strategy:
-      # One image at a time. Two jobs pushing to ghcr in the same second is
-      # half of what earns a secondary rate limit, and the images are small
-      # enough that the serial cost is a minute.
-      max-parallel: 1
-      matrix:
-        include:
-          - name: api
-            context: ./backend
-          - name: web
-            context: ./frontend
-    steps:
-      - uses: actions/checkout@v4
-      # Sign in to Docker Hub first when credentials exist, so pulling the
-      # BuildKit image is not an anonymous, rate-limited request. Skipped
-      # entirely when the secrets are absent.
-      - if: env.DOCKERHUB_USERNAME != ''
-        uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
-
-      # setup-buildx starts a BuildKit container, which it pulls from Docker
-      # Hub. That pull is the pipeline's only dependency on Docker Hub, and it
-      # is where release v0.21.3 failed: the runner could not reach
-      # registry-1.docker.io and no build step ever ran.
-      #
-      # It cannot simply be dropped — the `docker` driver cannot export the
-      # GitHub Actions layer cache this build relies on, and losing that turns
-      # every release into a full npm install. So: two attempts, which costs
-      # nothing and covers a blip. A Hub outage still fails, and should.
-      - id: buildx
-        uses: docker/setup-buildx-action@v3
-        continue-on-error: true
-      - if: steps.buildx.outcome == 'failure'
-        uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # Pushing to ghcr can be refused by a *secondary* rate limit, which
-      # arrives as `denied: permission_denied` with HTTP 403 — wording that
-      # reads like a credentials problem and is not one. It is temporary and
-      # earned by release frequency, so the answer is to wait and try once
-      # more rather than to fail a release that has nothing wrong with it.
-      #
-      # The layers are already built and cached by the first attempt, so the
-      # retry costs the push, not the build.
-      - id: push
-        uses: docker/build-push-action@v6
-        continue-on-error: true
-        with:
-          context: ${{ matrix.context }}
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ needs.meta.outputs.version }}
-            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:latest
-          cache-from: type=gha,scope=nc-${{ matrix.name }}
-          cache-to: type=gha,scope=nc-${{ matrix.name }},mode=max
-      - if: steps.push.outcome == 'failure'
-        name: Explain the refusal, then wait
-        run: |
-          # Two very different failures wear the same word, and the retry only
-          # helps one of them.
-          #
-          #   "exceeded a secondary rate limit"  -> transient, waiting fixes it
-          #   "failed to fetch oauth token: denied: denied"  -> permissions on
-          #       that one package; waiting changes nothing and the retry burns
-          #       two minutes before failing identically
-          #
-          # The tell is whether the *other* image in this matrix pushed. Same
-          # token, same login, same workflow: if one succeeded and one did not,
-          # the credentials are fine and the package is not.
-          {
-            echo "### Push refused for nnm-control-${{ matrix.name }}"
-            echo
-            echo "If the log says **exceeded a secondary rate limit**, this is temporary —"
-            echo "the retry below usually clears it."
-            echo
-            echo "If it says **failed to fetch oauth token: denied**, the credentials are"
-            echo "fine and this package's permissions are not. Check that the other image"
-            echo "in this run pushed: same token, same login. Then go to"
-            echo "Packages → nnm-control-${{ matrix.name }} → Package settings →"
-            echo "Manage Actions access, and give this repository the Write role."
-            echo "Waiting will not help and the retry below will fail the same way."
-          } >> "$GITHUB_STEP_SUMMARY"
-          sleep 120
-      - if: steps.push.outcome == 'failure'
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:${{ needs.meta.outputs.version }}
-            ghcr.io/${{ needs.meta.outputs.owner }}/nnm-control-${{ matrix.name }}:latest
-          cache-from: type=gha,scope=nc-${{ matrix.name }}
-          cache-to: type=gha,scope=nc-${{ matrix.name }},mode=max
-
-  apt-repo:
-    needs: [meta, images]
-    if: needs.meta.outputs.release == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      # The existing pool, taken from the branch rather than from the Pages
-      # URL. Pages is a CDN with its own deployment queue; reading the pool
-      # from there means a lagging cache silently drops older versions out of
-      # the index while their files are still on the branch — rollback breaks
-      # and nothing reports an error. On the first release the branch does not
-      # exist yet, which is not a failure.
-      - id: pool
-        uses: actions/checkout@v4
-        continue-on-error: true
-        with:
-          ref: gh-pages
-          path: gh-pages
-
-      - name: Install packaging tools
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev apt-utils gnupg
-      - name: Import GPG key
-        run: echo "${{ secrets.APT_GPG_PRIVATE_KEY }}" | gpg --batch --import
-      - name: Build deb
-        run: packaging/build-deb.sh "${{ needs.meta.outputs.deb_version }}" "${{ needs.meta.outputs.owner }}"
-      - name: Build APT repo
-        env:
-          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
-          APT_POOL_DIR: ${{ steps.pool.outcome == 'success' && format('{0}/gh-pages', github.workspace) || '' }}
-          # Fallback only: used when the branch checkout above did not happen.
-          APT_PUBLIC_BASE: https://${{ needs.meta.outputs.owner }}.github.io/nnm-control/apt
-        run: packaging/build-apt-repo.sh "${{ secrets.APT_GPG_KEY_ID }}"
-      - name: Publish repo to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-          keep_files: true
-      # The tag is created here, from the version, at the end — so a release
-      # that failed halfway leaves no tag and the next push to main retries it.
-      # One file: `dist/` also holds the preserved pool by this point, so a
-      # glob would attach every historical version to every Release.
-      - name: Tag and publish the GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.meta.outputs.version }}
-          name: v${{ needs.meta.outputs.version }}
-          files: dist/${{ needs.meta.outputs.deb_file }}
+  release:
+    permissions:
+      contents: write                          # GitHub Release и тег — GITHUB_TOKEN
+    uses: voidnery/eterix-ci/.github/workflows/auto-release.yml@v0.2.0
+    with:
+      # gate: ci/test.sh — npm ci по lock-файлам, все тесты и аудиты (TAP), гейт лицензий; gitleaks
+      test-command: bash ci/test.sh
+      test-format: tap
+      test-files: '*.test.mjs'
+      node-version: '22'
+      # package: build.sh — vite, production node_modules без нативного кода, .deb, SHA256SUMS
+      build-command: bash ./build.sh
+      deb: dist/nnm-control_*_all.deb
+      package-name: nnm-control
+      require-debconf: true                    # вопросы debconf — домен и порт панели
+      # e2e пакета (класс B, P18) — в пути выпуска и при ручной проверке; раннер — одноразовая VM с
+      # systemd и Docker; на ВМ — та же команда
+      gates-command: sudo bash ci/e2e-deb.sh dist
+      gates-runs-on: '["ubuntu-24.04"]'
+      # выпуск
+      files: nnm-control_*_all.deb SHA256SUMS
+      release-name: nnm-control
+      notes: Тесты, гейт лицензий, правила DIST-Control и e2e пакета на Ubuntu 24.04 (установка, обновление со снимком, restore, лимит Free, remove/purge) — зелёные. Канал входа — beta (D-0003).
+      # ingest/1: переменные репозитория DC_URL, DC_PRODUCT (= nnm-control) и секрет DC_TOKEN (GitHub Free —
+      # уровень репозитория, передаются явно). Не заданы — publish ПАДАЕТ с причиной, тега нет.
+      dc-url: ${{ vars.DC_URL }}
+      dc-product: ${{ vars.DC_PRODUCT }}
+    secrets:
+      DC_TOKEN: ${{ secrets.DC_TOKEN }}
