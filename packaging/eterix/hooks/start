@@ -1,0 +1,15 @@
+#!/bin/sh
+# start (upd-desc/0, upd/0 §8) — bring the NNM-Control stack up. Idempotent. Called by postinst.
+# P17: the stack is handed to external supervisors — the systemd unit (oneshot, RemainAfterExit) and
+# dockerd, which owns the containers — so nothing of it lives in this process group (the engine's
+# oneshot service would kill it on exit).
+set -eu
+C=/usr/lib/nnm-control/compose
+command -v docker >/dev/null 2>&1 || { echo "start: docker не установлен" >&2; exit 1; }
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  systemctl restart nnm-control.service \
+    || { echo "start: systemctl restart nnm-control не удался — journalctl -u nnm-control -n 50" >&2; exit 1; }
+else
+  "$C" up -d --remove-orphans || { echo "start: docker compose up не удался" >&2; exit 1; }
+fi

@@ -1,0 +1,84 @@
+# NNM-Control — the stack the Eterix package installs at /opt/nnm-control/docker-compose.yml.
+# Thin package (upd/0 P1–P2): nothing is built on the host and nothing comes from a registry of ours.
+# Stock images are pinned by the digest of their multi-arch index; the application itself (backend
+# source + production node_modules, built web interface, nginx template) comes in the package and is
+# bind-mounted read-only. The version is baked into backend/build-info.json at CI build time (P3)
+# and reported by /healthz (P6).
+#
+# Upgrade-compatible with the package of the old GitHub Pages APT (legacy-apt.yml): the same project
+# name, the same volumes, the same environment file — whatever the epoch decision
+# (docs/EPOCH-MIGRATION.md), a host that switches packages keeps its database, media and GeoIP data.
+# Project name is fixed (P13): hooks, the unit and the CLI address the stack by it.
+name: nnm-control
+
+services:
+  mongo:
+    # A container log with no ceiling is a disk with a deadline: four
+    # gigabytes accumulated here before anybody looked, on the same
+    # machine that later stopped for want of space.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+    # 7.0 — the series installed clients run (`mongo:7`); a data directory moves within it.
+    image: mongo:7.0.45@sha256:c53852c00c23ca9f23fc39690350ffa9a80e3642fe8f96879726d8da0abe80a7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # Intentionally NOT published to host — internal docker network only.
+
+  backend:
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+    image: node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "src/index.js"]
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/nnm_control}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_TTL=${JWT_TTL:-12h}
+      - SETUP_TOKEN=${SETUP_TOKEN}
+      - ZABBIX_TOKEN=${ZABBIX_TOKEN}
+      - TRUST_PROXY=${TRUST_PROXY:-1}
+      - MEDIA_SPOOL_DIR=/var/lib/nnm-control/media-spool
+      - GEOIP_DIR=/var/lib/nnm-control/geoip
+      - HOST_FS=/host
+    volumes:
+      - /opt/nnm-control/backend:/app:ro
+      - /:/host:ro
+      # Media waiting for an agent to collect it, on its own volume: a 2 GB upload landing on the
+      # same filesystem as the database is how a panel takes its own Mongo down.
+      - media_spool:/var/lib/nnm-control/media-spool
+      # The offline geolocation database, on its own volume so a 124 MB City edition cannot crowd
+      # out queued media.
+      - geoip_db:/var/lib/nnm-control/geoip
+    depends_on:
+      - mongo
+
+  web:
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+    image: nginx:1.28.3-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+    restart: unless-stopped
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:-_}
+    volumes:
+      - /opt/nnm-control/www:/usr/share/nginx/html:ro
+      # The nginx image renders /etc/nginx/templates/*.template into conf.d at start (envsubst).
+      - /opt/nnm-control/nginx:/etc/nginx/templates:ro
+    ports:
+      # The panel, where the installer was told to put it (debconf nnm-control/port).
+      - "${APP_PORT:-8090}:80"
+      # Fixed loopback port for the update engine's health check (updater.json): APP_PORT is the
+      # operator's choice, the descriptor is a file in the package.
+      - "127.0.0.1:8580:80"
+    depends_on:
+      - backend
+
+volumes:
+  geoip_db:
+  mongo_data:
+  media_spool:

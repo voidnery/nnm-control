@@ -1,0 +1,36 @@
+#!/bin/sh
+# nnm-control preinst — upd/0 P4 + R1 + R3/Н4 + P12 (one snapshot hook, two triggers).
+# On upgrade: snapshot the database BEFORE the new files are unpacked, with the hook of the version
+# being replaced (still on disk). The old stack keeps running until the new postinst (P4).
+set -eu
+SELF=@VERSION@
+P=nnm-control
+HOOK=/usr/lib/eterix/$P/hooks/snapshot
+MARK=/run/eterix-updater/$P/snapshot.marker
+
+case "$1" in
+  upgrade)
+    old="$2"
+    # R1: never snapshot a downgrade (rollback) — that would dump the already-broken database.
+    # A version of the old GitHub Pages APT carries the epoch «1:» and so sorts ABOVE every version
+    # of this package: replacing it is a downgrade to dpkg and lands here too (docs/EPOCH-MIGRATION.md).
+    if dpkg --compare-versions "$old" gt "$SELF"; then
+      echo "preinst: понижение $old -> $SELF, снимок не снимается (R1)"
+      exit 0
+    fi
+    # Н4: the engine already took the snapshot for EXACTLY this transition (marker v0= / target=).
+    if [ -f "$MARK" ] && grep -qx "v0=$old" "$MARK" && grep -qx "target=$SELF" "$MARK"; then
+      echo "preinst: снимок для $old -> $SELF уже снят движком"
+      exit 0
+    fi
+    # Manual apt path: the same hook. Failure stops the upgrade — no upgrade without a snapshot.
+    [ -x "$HOOK" ] || { echo "preinst: нет хука snapshot — обновление без снимка запрещено" >&2; exit 1; }
+    id=$("$HOOK") || { echo "preinst: снимок не удался — обновление остановлено" >&2; exit 1; }
+    id=$(printf '%s\n' "$id" | tail -n 1)
+    echo "preinst: снимок $id (V0=$old)"
+    # P12: the engine needs V0 + snapshot so that «eterix-update rollback» works on this path too.
+    eterix-update record-preinstall $P --from "$old" --snapshot "$id" \
+      || { echo "preinst: движок не записал V0/снимок — обновление остановлено" >&2; exit 1; }
+    ;;
+esac
+exit 0

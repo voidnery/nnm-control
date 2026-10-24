@@ -49,6 +49,17 @@ server {
         client_body_timeout 12h;
     }
 
+    # Health for the Eterix update engine (upd/0 P6). The thin package publishes this server on
+    # 127.0.0.1:8580 as well, and the engine asks there: the answer travels the same path a browser
+    # does — nginx, then the API, then its database — so a web container that did not start fails
+    # the check too. Without this location the SPA fallback below would answer 200 with index.html.
+    location = /healthz {
+        proxy_pass http://backend:4000/healthz;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_read_timeout 10s;
+    }
+
     # SPA fallback
     location / {
         try_files $uri /index.html;

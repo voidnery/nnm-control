@@ -1,0 +1,22 @@
+{
+  "schema_version": "upd-desc/0",
+  "product": "nnm-control",
+  "package": "nnm-control",
+  "health": {
+    "url": "http://127.0.0.1:8580/healthz",
+    "timeout_sec": 180
+  },
+  "hooks": {
+    "snapshot": "/usr/lib/eterix/nnm-control/hooks/snapshot",
+    "restore": "/usr/lib/eterix/nnm-control/hooks/restore",
+    "stop": "/usr/lib/eterix/nnm-control/hooks/stop",
+    "start": "/usr/lib/eterix/nnm-control/hooks/start"
+  },
+  "compose": "/opt/nnm-control/docker-compose.yml",
+  "docker_config": "/etc/eterix/nnm-control/docker",
+  "min_engine": "0.5.4",
+  "apt": {
+    "sources_file": "/etc/apt/sources.list.d/eterix-nnm-control.sources",
+    "components": ["main", "core"]
+  }
+}

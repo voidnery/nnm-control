@@ -1,0 +1,41 @@
+#!/bin/sh
+# snapshot (upd-desc/0, upd/0 §8) — dump the NNM-Control database; print ONLY the snapshot id on
+# stdout. Called by eterix-update before an install and by preinst on the manual apt path (P4, R3).
+# Idempotent, non-interactive. Reasons for a failure go to stderr (rev.17 §8.3 п.1); no secrets in
+# any output (п.3).
+set -eu
+P=nnm-control
+C=/usr/lib/$P/compose
+BASE=/var/backups/eterix/$P
+fail() { echo "snapshot: $*" >&2; exit 1; }
+
+[ -x "$C" ] || fail "нет $C — пакет установлен не полностью"
+[ -s /etc/$P/$P.env ] || fail "нет /etc/$P/$P.env — пакет не сконфигурирован"
+umask 077
+mkdir -p "$BASE"; chmod 0700 "$BASE"
+
+# The database must be live for mongodump. If the stack is stopped, bring up ONLY mongo for the
+# dump and put it back as found.
+started=0
+if ! "$C" ps --status running --services 2>/dev/null | grep -qx mongo; then
+  "$C" up -d mongo >/dev/null 2>&1 || fail "контейнер базы не запускается"
+  started=1
+fi
+restore_state() { if [ "$started" = 1 ]; then "$C" stop mongo >/dev/null 2>&1 || true; fi; }
+trap restore_state EXIT
+i=0
+until "$C" exec -T mongo mongosh --quiet --eval "db.adminCommand('ping').ok" 2>/dev/null | grep -q 1; do
+  i=$((i + 1)); [ "$i" -lt 60 ] || fail "база не ответила за 120 с"
+  sleep 2
+done
+
+id="db-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+dir="$BASE/$id"
+mkdir "$dir" || fail "не создать каталог снимка $dir"
+if ! "$C" exec -T mongo mongodump --quiet --archive --gzip --db nnm_control > "$dir/dump.gz"; then
+  rm -rf "$dir"
+  fail "mongodump не удался"
+fi
+[ -s "$dir/dump.gz" ] || { rm -rf "$dir"; fail "пустой дамп"; }
+sync
+echo "$id"

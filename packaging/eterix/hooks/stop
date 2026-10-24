@@ -1,0 +1,12 @@
+#!/bin/sh
+# stop (upd-desc/0, upd/0 §8) — stop the NNM-Control stack. Idempotent: a stopped or absent stack
+# is success. Called by the engine (rollback_unpacked) and by the maintainer scripts.
+# `docker compose stop` runs unconditionally: the systemd unit may be inactive while dockerd's
+# restart policy keeps containers up, and restore must never run against a live application.
+set -eu
+C=/usr/lib/nnm-control/compose
+if [ -d /run/systemd/system ]; then systemctl stop nnm-control.service 2>/dev/null || true; fi
+command -v docker >/dev/null 2>&1 || exit 0
+[ -x "$C" ] || exit 0
+[ -s /etc/nnm-control/nnm-control.env ] || exit 0
+"$C" stop || { echo "stop: docker compose stop не удался" >&2; exit 1; }

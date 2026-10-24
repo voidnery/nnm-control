@@ -1,0 +1,25 @@
+[Unit]
+Description=NNM-Control panel (Docker Compose stack)
+Documentation=file:///usr/share/doc/nnm-control/README.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/nnm-control
+# upd/0 R4: registry credentials for pulls, the same directory the engine passes to the hooks.
+Environment=DOCKER_CONFIG=/etc/eterix/nnm-control/docker
+# Refuse to start without the generated configuration (postinst writes it; 0600, root): compose with
+# an empty environment would start a stack with blank secrets on the published port.
+ExecStartPre=/bin/sh -c 'test -s /etc/nnm-control/nnm-control.env || { echo "нет /etc/nnm-control/nnm-control.env — переустановите пакет: sudo apt install --reinstall nnm-control" >&2; exit 1; }'
+# The wrapper passes --env-file /etc/nnm-control/nnm-control.env and the fixed project name.
+ExecStart=/usr/lib/nnm-control/compose up -d --remove-orphans
+ExecStop=/usr/lib/nnm-control/compose stop
+# Bounded, never 0, and long: on 2026-08-19 a cold pull over a slow link did not finish in 300 s and
+# systemd killed `up` mid-download. postinst pulls first, so this is a backstop.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,7 @@ import './asyncGuard.js';
 import express from 'express';
 import { config } from './config.js';
 import { connectDb } from './db.js';
+import { healthz } from './healthz.js';
 import { reconcileTtl } from './services/ttlReconcile.js';
 import { AuditLog } from './models/AuditLog.js';
 import { StatSample } from './models/StatSample.js';
@@ -68,6 +69,8 @@ const isMediaUpload = (req) => req.method === 'PUT' && /^\/api\/servers\/[^/]+\/
 app.use((req, res, next) => (isMediaUpload(req) ? next() : express.json({ limit: '1mb' })(req, res, next)));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+// upd/0 P6 — what the update engine checks on loopback after an install (src/healthz.js).
+app.get('/healthz', healthz());
 app.use('/api/setup', setupRouter);
 app.use('/api', auditMutations);
 app.use('/api/auth', authRouter);

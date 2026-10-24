@@ -1,0 +1,27 @@
+#!/bin/sh
+# config — debconf questions: the panel's domain and port. The same questions (and so the same
+# remembered answers) as the package of the old APT path. Bounded re-ask so a non-interactive
+# frontend cannot loop.
+set -e
+. /usr/share/debconf/confmodule
+
+db_input high nnm-control/domain || true
+db_go || true
+
+valid_port() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -ge 1 ] && [ "$1" -le 65535 ] && [ "$1" -ne 8580 ]
+}
+tries=0
+while [ "$tries" -lt 5 ]; do
+  tries=$((tries + 1))
+  db_input high nnm-control/port || true
+  db_go || true
+  db_get nnm-control/port
+  valid_port "$RET" && break
+  db_fset nnm-control/port_bad seen false || true
+  db_input critical nnm-control/port_bad || true
+  db_go || true
+  db_fset nnm-control/port seen false || true
+done
+exit 0

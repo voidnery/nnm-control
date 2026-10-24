@@ -1,0 +1,19 @@
+#!/bin/sh
+# nnm-control postrm. remove: configuration and data stay. purge: configuration and engine state are
+# deleted; the database, media and GeoIP volumes are KEPT, as the package of the old APT path always
+# did — destroying an operator's data takes an explicit `docker volume rm`. Snapshots in
+# /var/backups/eterix/nnm-control and backups in /var/lib/nnm-control/backups stay too.
+set -eu
+P=nnm-control
+if [ "$1" = purge ]; then
+  rm -rf /etc/nnm-control /var/lib/eterix/$P /etc/eterix/$P
+  echo "postrm: конфигурация удалена. Данные оставлены — удалить вручную:"
+  echo "  docker volume rm ${P}_mongo_data ${P}_media_spool ${P}_geoip_db"
+  echo "  rm -rf /var/backups/eterix/$P /var/lib/nnm-control"
+  if [ -e /usr/share/debconf/confmodule ]; then
+    . /usr/share/debconf/confmodule
+    db_purge || true
+  fi
+fi
+if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi
+exit 0

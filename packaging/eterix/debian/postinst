@@ -1,0 +1,168 @@
+#!/bin/sh
+# nnm-control postinst — upd/0 P5, P7, P11, P14, P15, P19, Н3, R4 and rev.17 §8.3:
+#   configure → engine directories → configuration and secrets (generated once, kept on upgrade) →
+#   restart the stack on the new files → wait for /healthz with THIS version → subscribe to updates.
+# The environment file is the one the package of the old APT path wrote: same path, same keys, so a
+# host that switches packages keeps JWT_SECRET (it also keys the encrypted fields in the database).
+# No secret is ever printed (the engine keeps postinst output in log_tail): the setup token stays in
+# the 0600 file and only the command that shows it is printed.
+set -eu
+SELF=@VERSION@
+P=nnm-control
+H=/usr/lib/eterix/$P/hooks
+C=/usr/lib/$P/compose
+CONF=/etc/nnm-control
+ENVF=$CONF/nnm-control.env
+HEALTH=http://127.0.0.1:8580/healthz
+
+. /usr/share/debconf/confmodule
+
+kv_get() { grep -E "^$2=" "$1" 2>/dev/null | head -n 1 | cut -d= -f2- || true; }
+kv_set() { # atomic rewrite of one key, file stays 0600
+  _t=$(mktemp "$1.XXXXXX")
+  grep -vE "^$2=" "$1" > "$_t" || true
+  printf '%s=%s\n' "$2" "$3" >> "$_t"
+  chmod 0600 "$_t"; mv "$_t" "$1"
+}
+# Generated only if absent: survives upgrades and reconfigure (the same rule as the old package).
+ensure_secret() {
+  [ -n "$(kv_get "$ENVF" "$1")" ] || kv_set "$ENVF" "$1" "$(head -c "$2" /dev/urandom | od -An -tx1 | tr -d ' \n')"
+}
+valid_port() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -ge 1 ] && [ "$1" -le 65535 ] && [ "$1" -ne 8580 ]
+}
+valid_domain() {
+  case "$1" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
+}
+
+case "$1" in
+  configure)
+    # Н3: an interrupted rollback must be finished by the engine first; its own configure step
+    # passes the matching token.
+    PEND=/var/lib/eterix-updater/$P/rollback.pending
+    if [ -f "$PEND" ] && ! grep -qx "token=${ETERIX_ROLLBACK_TOKEN:-none}" "$PEND"; then
+      echo "postinst: на хосте недоведённый откат $P — конфигурация остановлена." >&2
+      echo "Довести откат: sudo eterix-update resume $P" >&2
+      exit 1
+    fi
+
+    # Engine directories. P15: the request queue is not world-accessible (the panel does not submit
+    # update requests yet, so the group is root). R4: registry credentials directory.
+    install -d -m 0755 /var/lib/eterix/$P
+    install -d -m 0770 -o root -g root /var/lib/eterix/$P/requests
+    install -d -m 0755 /etc/eterix/$P
+    install -d -m 0700 /etc/eterix/$P/docker
+    # P19: channel file only if absent, from Suites of the installer's .sources (installer owns it).
+    CH=/etc/eterix/$P/channel
+    SRC=/etc/apt/sources.list.d/eterix-$P.sources
+    if [ ! -f "$CH" ] && [ -f "$SRC" ]; then
+      suite=$(awk 'tolower($1)=="suites:" {print $2; exit}' "$SRC")
+      case "$suite" in stable|beta) printf '%s\n' "$suite" > "$CH" ;; esac
+    fi
+
+    # Answers of the installer; then debconf is done and stdout is ours again.
+    db_get nnm-control/domain || RET=""
+    DOMAIN="$RET"
+    db_get nnm-control/port || RET=""
+    PORT="$RET"
+    db_stop
+
+    # Configuration and secrets — the file is created once and never rewritten wholesale.
+    umask 077
+    install -d -m 0700 "$CONF"
+    first=0
+    [ -s "$ENVF" ] || first=1
+    touch "$ENVF"; chmod 0600 "$ENVF"
+    if valid_domain "$DOMAIN"; then kv_set "$ENVF" APP_DOMAIN "$DOMAIN"
+    elif [ -z "$(kv_get "$ENVF" APP_DOMAIN)" ]; then kv_set "$ENVF" APP_DOMAIN "_"; fi
+    if valid_port "$PORT"; then kv_set "$ENVF" APP_PORT "$PORT"
+    else
+      echo "postinst: порт панели «$PORT» отклонён (1–65535, не 8580); оставлен $(kv_get "$ENVF" APP_PORT)" >&2
+      [ -n "$(kv_get "$ENVF" APP_PORT)" ] || kv_set "$ENVF" APP_PORT 8090
+    fi
+    [ -n "$(kv_get "$ENVF" MONGO_URI)" ] || kv_set "$ENVF" MONGO_URI "mongodb://mongo:27017/nnm_control"
+    ensure_secret JWT_SECRET 32
+    ensure_secret ZABBIX_TOKEN 24
+    ensure_secret SETUP_TOKEN 16
+
+    # P18: check the observable result, not just exit codes — every key is present.
+    for k in APP_DOMAIN APP_PORT MONGO_URI JWT_SECRET ZABBIX_TOKEN SETUP_TOKEN; do
+      [ -n "$(kv_get "$ENVF" "$k")" ] || { echo "postinst: в $ENVF нет $k — установка остановлена" >&2; exit 1; }
+    done
+    chmod 0600 "$ENVF"
+    install -d -m 0700 /var/lib/nnm-control/backups
+
+    # Restart the stack on the files of this version (bind mounts) and wait for its health.
+    command -v docker >/dev/null 2>&1 || { echo "postinst: docker не установлен" >&2; exit 1; }
+    docker info >/dev/null 2>&1 || { echo "postinst: служба docker не отвечает — sudo systemctl start docker, затем sudo dpkg --configure -a" >&2; exit 1; }
+    export DOCKER_CONFIG=/etc/eterix/$P/docker
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload
+      systemctl enable nnm-control.service >/dev/null 2>&1 || true
+      systemctl enable --now nnm-control-backup.timer >/dev/null 2>&1 || true
+    fi
+    # Pull first, so the health window below is not spent downloading images and a failed pull does
+    # not take the running stack down (2026-08-19: a pull inside the unit's start left it stopped).
+    pulled=0
+    for attempt in 1 2 3; do
+      if "$C" pull --quiet; then pulled=1; break; fi
+      echo "postinst: загрузка образов, попытка $attempt не удалась" >&2
+      [ "$attempt" -lt 3 ] && sleep 10
+    done
+    if [ "$pulled" != 1 ]; then
+      echo "postinst: образы не загружены — стек НЕ перезапускается, работает прежний." >&2
+      echo "Проверьте сеть до Docker Hub и повторите: sudo dpkg --configure -a" >&2
+      if [ -n "${2:-}" ]; then echo "Откат: sudo eterix-update rollback $P" >&2; fi
+      exit 1
+    fi
+    "$H/stop"
+    "$H/start"
+
+    # P5: health on loopback with THIS version; P7: on failure name the rollback command.
+    limit=${NNM_HEALTH_TIMEOUT:-300}
+    waited=0
+    healthy=0
+    body=""
+    # SKIP_PROBE=yes only in a DEFECTIVE build (build.sh, file DEFECT): P5 is broken on purpose so
+    # that the rollback must be caught by the engine's own health check, not by this script.
+    if [ "@SKIP_PROBE@" = yes ]; then
+      echo "postinst: ДЕФЕКТНАЯ сборка — версия /healthz не сверяется (стенд автоотката)" >&2
+      healthy=1; limit=0
+    fi
+    while [ "$waited" -lt "$limit" ]; do
+      body=$(curl -fsS -m 5 "$HEALTH" 2>/dev/null || true)
+      case "$body" in
+        *'"ok":true'*"\"version\":\"$SELF\""*) healthy=1; break ;;
+      esac
+      sleep 3; waited=$((waited + 3))
+    done
+    if [ "$healthy" != 1 ]; then
+      echo "postinst: NNM-Control $SELF не подтвердил здоровье на $HEALTH за ${limit} с." >&2
+      echo "Последний ответ: ${body:-нет ответа}" >&2
+      echo "Диагностика: sudo journalctl -u nnm-control -n 50; sudo $C logs --tail 50" >&2
+      if [ -n "${2:-}" ]; then echo "Откат: sudo eterix-update rollback $P" >&2; fi
+      exit 1
+    fi
+
+    # P14: subscribe to updates — the product's decision. Failure is loud, not fatal.
+    if [ -d /run/systemd/system ]; then
+      systemctl enable --now "eterix-update@$P.path" "eterix-update-check@$P.timer" \
+        || echo "postinst: ВНИМАНИЕ: не удалось включить eterix-update@$P.path / eterix-update-check@$P.timer — обновления не будут проверяться" >&2
+    fi
+
+    echo "-----------------------------------------------------------------------"
+    echo " NNM-Control $SELF работает: http://$(kv_get "$ENVF" APP_DOMAIN):$(kv_get "$ENVF" APP_PORT)"
+    echo " (DNS A-запись домена должна указывать на эту машину)"
+    if [ "$first" = 1 ]; then
+      echo " Первый вход: создайте суперадминистратора в браузере; токен настройки —"
+      echo "   sudo nnm-control setup-token"
+    fi
+    echo " Управление: nnm-control status|logs|restart|configure|backup"
+    echo "-----------------------------------------------------------------------"
+    ;;
+
+  abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+esac
+exit 0

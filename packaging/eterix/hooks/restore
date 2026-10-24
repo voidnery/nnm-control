@@ -1,0 +1,43 @@
+#!/bin/sh
+# restore <snapshot-id> (upd-desc/0, upd/0 §8) — restore the database from a snapshot.
+# The engine calls it in the rollback_stopped phase: the stack is STOPPED (rev.17 §8.3 п.2). A
+# logical restore needs a live database, so this hook brings up ONLY mongo for the duration and
+# stops it again; the old version's stack is started later by its own configure (postinst).
+# Idempotent, non-interactive; every failure names its precondition on stderr; no secrets in output.
+set -u
+P=nnm-control
+C=/usr/lib/$P/compose
+fail() { echo "restore: $*" >&2; exit "${2:-1}"; }
+
+id="${1:-}"
+case "$id" in
+  '' ) fail "нужен идентификатор снимка" 2 ;;
+  */*|.*) fail "недопустимый идентификатор снимка «$id»" 2 ;;
+esac
+SNAP="/var/backups/eterix/$P/$id/dump.gz"
+[ -s "$SNAP" ] || fail "снимок $id не найден: $SNAP" 2
+[ -x "$C" ] || fail "нет $C — пакет установлен не полностью"
+
+started=0
+if ! "$C" ps --status running --services 2>/dev/null | grep -qx mongo; then
+  "$C" up -d mongo >/dev/null 2>&1 || fail "контейнер базы не запускается"
+  started=1
+fi
+i=0
+until "$C" exec -T mongo mongosh --quiet --eval "db.adminCommand('ping').ok" 2>/dev/null | grep -q 1; do
+  i=$((i + 1))
+  if [ "$i" -ge 60 ]; then
+    [ "$started" = 1 ] && "$C" stop mongo >/dev/null 2>&1
+    fail "база не ответила за 120 с"
+  fi
+  sleep 2
+done
+
+rc=0
+# The archive holds only the panel database (snapshot: --db nnm_control); --drop replaces it.
+"$C" exec -T mongo mongorestore --quiet --archive --gzip --drop < "$SNAP" || rc=$?
+
+# Put mongo back as found — the rollback recipe expects the stack stopped.
+[ "$started" = 1 ] && "$C" stop mongo >/dev/null 2>&1
+[ "$rc" -eq 0 ] || fail "mongorestore завершился с кодом $rc" "$rc"
+exit 0

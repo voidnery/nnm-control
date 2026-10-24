@@ -1,0 +1,20 @@
+Package: nnm-control
+Version: @VERSION@
+Architecture: all
+Maintainer: Eterix <dev@eterix.pro>
+Installed-Size: @INSTALLED_SIZE@
+Depends: debconf (>= 0.5) | debconf-2.0, curl, docker.io | docker-ce, docker-compose-v2 | docker-compose-plugin, eterix-updater (>= 0.5.4), eterix-keyring
+Eterix-Security: no
+Section: net
+Priority: optional
+Homepage: https://eterix.pro
+Description: NNM-Control — self-hosted control panel for streaming media servers
+ Channels, delivery networks, certificates, LL-HLS, transcoders, playlists,
+ logs and statistics of a fleet of media servers in one panel, with an agent
+ on each server. Works with Nimble Streamer servers through their native API
+ and the WMSPanel API.
+ .
+ The package installs a Docker Compose stack (stock images pinned by digest,
+ the application itself comes prebuilt in the package) under /opt/nnm-control,
+ generates its secrets into /etc/nnm-control (0600), publishes the panel on
+ the port chosen at install time, and subscribes the product to eterix-updater.

@@ -1,0 +1,20 @@
+#!/bin/sh
+# nnm-control prerm. P4: on upgrade the old stack keeps running until postinst of the new version.
+# On removal: unsubscribe from updates (P14) and remove the containers; the data volumes stay.
+set -eu
+P=nnm-control
+case "$1" in
+  remove|deconfigure)
+    if [ -d /run/systemd/system ]; then
+      systemctl disable --now "eterix-update@$P.path" "eterix-update-check@$P.timer" 2>/dev/null || true
+      systemctl disable --now nnm-control-backup.timer 2>/dev/null || true
+      systemctl disable nnm-control.service 2>/dev/null || true
+    fi
+    /usr/lib/eterix/$P/hooks/stop || true
+    if command -v docker >/dev/null 2>&1 && [ -s /etc/nnm-control/nnm-control.env ]; then
+      /usr/lib/$P/compose down --remove-orphans || true
+    fi
+    ;;
+  upgrade|failed-upgrade) : ;;
+esac
+exit 0
