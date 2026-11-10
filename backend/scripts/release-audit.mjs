@@ -60,7 +60,16 @@ if (!/uses:\s*voidnery\/eterix-ci\/\.github\/workflows\/auto-release\.yml@v\d+\.
 if (/tags:/.test(relOn)) {
   fail('release.yml triggers on tags; with release-by-version the tag is set by CI, and auto-release refuses a tag run');
 }
-if (!/branches:\s*\[?'?main/.test(relOn)) {
+// A pause is allowed only when the file says so, and only while tests.yml keeps testing main.
+if (/^# PAUSED \(/m.test(rel)) {
+  let tests = '';
+  try { tests = read('.github/workflows/tests.yml'); } catch { /* absent */ }
+  if (!/branches:\s*\[?'?main/.test(tests) || !/run:\s*bash ci\/test\.sh/.test(tests)) {
+    fail('release.yml is paused and tests.yml does not run ci/test.sh on push — nothing tests main');
+  } else {
+    notes.push('release.yml is PAUSED; tests.yml runs ci/test.sh on every push');
+  }
+} else if (!/branches:\s*\[?'?main/.test(relOn)) {
   fail('release.yml no longer triggers on a push to main; a VERSION bump would not release');
 }
 for (const [re, why] of [

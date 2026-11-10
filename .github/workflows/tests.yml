@@ -1,0 +1,31 @@
+# Tests on every push and pull request, without eterix-ci (HQ T-0049): while the repository is public
+# it cannot call the private eterix-ci workflows, and release.yml — which runs the same ci/test.sh as
+# its gate — is paused. Delete this file when release.yml runs on push again.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # npm ci by the lock files, every test and audit as TAP, the licence gate; zero tests or a
+      # single failure is red.
+      - run: bash ci/test.sh

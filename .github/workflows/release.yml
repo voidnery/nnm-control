@@ -18,11 +18,11 @@
 # nnm-control публичный, этот workflow не запустится («workflow was not found» / нет доступа).
 name: release
 
+# PAUSED (HQ T-0049): the repository stays public, so the private eterix-ci cannot be called, and
+# DIST-Control does not yet take a version without an epoch (N-0031). Releases go through
+# legacy-apt.yml; tests run in tests.yml. To resume, restore the triggers:
+#   push: {branches: [main]}  pull_request: {branches: [main]}  workflow_dispatch
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
