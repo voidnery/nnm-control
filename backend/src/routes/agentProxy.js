@@ -4,6 +4,7 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { Playlist } from '../models/Playlist.js';
 import { parsePlaylistFile, comparePlaylists } from '../services/playlistFile.js';
 import { PlaylistDeploy } from '../models/PlaylistDeploy.js';
+import { buildFromModel, isEditorModel, prepareForNimble } from '../services/playlistBuild.js';
 import { captureCurrent, inspect, history, sha256, withoutTask, withTask, findTaskInVersions } from '../services/playlistDeploy.js';
 import { resumeTask } from '../services/playlistResume.js';
 import { detectDrift, checkJoins, timings, endingSoon } from '../services/playlistAdvice.js';
@@ -256,9 +257,28 @@ async function deployHandler(req) {
   if (req.body?.playlistId) {
     playlist = await Playlist.findById(req.body.playlistId);
     if (!playlist) throw Object.assign(new Error('Playlist not found'), { status: 404 });
-    if (content == null) content = JSON.stringify(playlist.model, null, 2);
+    // The clean build, never the editor model itself: that carried _id, _kind and every unset field
+    // as null into the file Nimble reads (services/playlistBuild.js).
+    if (content == null) content = JSON.stringify(buildFromModel(playlist.model), null, 2);
   }
   if (content == null) throw Object.assign(new Error('nothing to deploy'), { status: 400 });
+
+  // What is on the server now: kept for rollback below, and the reference for block identity —
+  // Nimble ignores a changed block that keeps its Id.
+  let before = null;
+  try {
+    before = await runTask(req.srv, 'GET /config', { query: { name: filename }, createdBy: req.user?.username });
+  } catch { /* no previous file is the normal first case */ }
+
+  let prepared = null;
+  try {
+    let doc = JSON.parse(content);
+    if (isEditorModel(doc)) doc = buildFromModel(doc);
+    let current = null;
+    try { current = before?.content ? JSON.parse(before.content) : null; } catch { /* unreadable: nothing to keep */ }
+    prepared = prepareForNimble(doc, current);
+    content = JSON.stringify(prepared.doc, null, 2);
+  } catch { /* not JSON — inspect() names the fault below */ }
 
   // What the server holds, so a path that is not there can be named before it
   // becomes silence rather than after.
@@ -287,6 +307,14 @@ async function deployHandler(req) {
         'the media list could not be read from this server, so the sources could not be checked. '
         + 'Repeat with force to deploy without checking.'), { status: 409 });
     }
+    if (prepared?.unsupported.length) {
+      // «Only MP4 and MP3 containers are supported» (softvelum.com/nimble/playout).
+      throw Object.assign(new Error(
+        `${prepared.unsupported.length} source(s) are not MP4 or MP3, which Nimble cannot play: `
+        + `${prepared.unsupported.slice(0, 3).join(', ')}. Repackage without re-encoding — `
+        + 'ffmpeg -i file.mov -c copy -movflags +faststart file.mp4 — or repeat with force.'),
+      { status: 409, unsupported: prepared.unsupported });
+    }
     if (check.empty) {
       // Legal JSON that stops every stream on the server, and a plausible
       // accident: deleting the last task.
@@ -298,7 +326,6 @@ async function deployHandler(req) {
 
   // Record what is being replaced, before replacing it.
   try {
-    const before = await runTask(req.srv, 'GET /config', { query: { name: filename }, createdBy: req.user?.username });
     await captureCurrent({ serverId: req.srv._id, filename, content: before?.content || '' });
   } catch { /* no previous file is the normal first case */ }
 
@@ -319,7 +346,12 @@ async function deployHandler(req) {
     target: `${playlist?.name || filename} → ${req.srv.name}${force ? ' (forced)' : ''}`,
     outcome: 'ok', status: 200,
   });
-  return { ...r, entries: check.entries, missing: check.missing, forced: force };
+  return {
+    ...r, entries: check.entries, missing: check.missing, forced: force,
+    // What was done to the file and what the operator should know about it.
+    renewedIds: prepared?.renewed || [], playsOnce: prepared?.playsOnce || [],
+    unsupported: prepared?.unsupported || [],
+  };
 }
 
 agentRouter.post('/:id/agent/deploy-playlist', requirePerm('playlist.manage'), loadServer,

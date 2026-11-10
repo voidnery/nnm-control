@@ -51,6 +51,8 @@ export function DeployPlaylistModal({ playlist, servers, onClose }) {
           <b className="mono picked-val">{result.name} · {result.size} B</b>
         </div>
       )}
+      {result?.renewedIds?.length > 0 && <div className="hint">{t('agent.renewedIds', { n: result.renewedIds.length })}</div>}
+      {result?.playsOnce?.length > 0 && <div className="hint">{t('agent.playsOnce', { n: result.playsOnce.length })}</div>}
       <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
         <button onClick={onClose}>{t('action.close')}</button>
         <button className="primary" disabled={busy || !serverId || !filename.trim()} onClick={deploy}>

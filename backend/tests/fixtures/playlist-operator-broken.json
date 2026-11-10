@@ -1,0 +1,267 @@
+{
+  "Tasks": [
+    {
+      "Stream": "247/stream1",
+      "InactivityTimeout": 0,
+      "Blocks": [
+        {
+          "Id": "00ebdda7",
+          "Streams": [
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/video1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/video2.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/video3.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/video4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/video5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/video6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/video7.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama1.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama2.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama3.mov"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama4.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama5.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama6.mp4"
+            },
+            {
+              "Type": "vod",
+              "Source": "/srv/nimble/media/gallery/reklama7.mp4"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

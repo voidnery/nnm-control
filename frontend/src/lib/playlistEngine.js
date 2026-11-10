@@ -61,10 +61,12 @@ export function makeStream(type = 'vod', source = '') {
     Subtitles: [], Scte35Markers: [], Source_AWS: null,
   };
 }
+// A new block repeats until told otherwise: without MaxIterations Nimble plays it ONCE, and with
+// InactivityTimeout 0 the stream then stays on air, empty — the fault behind HQ T-0049.
 export function makeBlock(name = '') {
   return {
     _id: newUid(), _kind: 'block', Id: newBlockId(), Name: name, Start: null,
-    Duration: null, TotalDuration: null, MaxIterations: null, DefaultStream: null, Streams: [],
+    Duration: null, TotalDuration: null, MaxIterations: 0, DefaultStream: null, Streams: [],
   };
 }
 export function makeTask(stream = 'live/playlist') {
@@ -136,6 +138,10 @@ export function buildJson(model, indent = 2) {
   return JSON.stringify(buildPlaylist(model), null, indent);
 }
 
+// «Only MP4 and MP3 containers are supported» — softvelum.com/nimble/playout. The server refuses the
+// same sources at deploy (backend/src/services/playlistBuild.js).
+export const unplayable = (source) => !/.(mp4|m4v|m4a|mp3)$/i.test(String(source).split(/[?#]/)[0]);
+
 // ---- validation (human-readable notes; keyed for i18n at call site) ----
 export function validate(model) {
   const errs = [];
@@ -159,10 +165,15 @@ export function validate(model) {
       if (b.Start && !validDatetime(b.Start)) errs.push({ k: 'pl.err.blockStart', v: { name: bname } });
       const streams = b.Streams || [];
       if (!streams.length && !b.DefaultStream) errs.push({ k: 'pl.err.blockNoStreams', v: { name: bname } });
+      const unset = (v) => v === null || v === undefined || v === '';
+      if (unset(b.MaxIterations) && unset(b.TotalDuration)) errs.push({ k: 'pl.err.blockPlaysOnce', v: { name: bname } });
       streams.forEach((s, si0) => {
         const si = si0 + 1;
         if (!(s.Source || '').trim()) errs.push({ k: 'pl.err.streamNoSource', v: { name: bname, i: si } });
         if (!['vod', 'live'].includes(s.Type)) errs.push({ k: 'pl.err.streamType', v: { name: bname, i: si } });
+        if (s.Type === 'vod' && (s.Source || '').trim() && unplayable(s.Source)) {
+          errs.push({ k: 'pl.err.sourceContainer', v: { name: bname, i: si, src: s.Source } });
+        }
         for (const mk of s.Scte35Markers || []) {
           const st = String(mk.Start || '').trim();
           if (st && !(validDatetime(st) || /^\d+$/.test(st))) errs.push({ k: 'pl.err.scte', v: { name: bname } });

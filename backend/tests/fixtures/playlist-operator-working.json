@@ -1,0 +1,20 @@
+{
+    "Tasks": [
+        {
+            "Stream": "live/zagl_ewc_dynamic",
+            "Blocks": [
+                {
+                    "Id": "17b11fcd",
+                    "MaxIterations": 0,
+                    "Streams": [
+                        {
+                            "Type": "vod",
+                            "Source": "/srv/nimble/video/zagl_ewc_dynamic.mp4",
+                            "MaxIterations": 0
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
