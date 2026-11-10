@@ -81,6 +81,25 @@ POST   /api/v1/servers/{serverId}/playlist/streams/{app}/{stream}/actions/{stop|
 GET    /api/v1/events                                    журнал событий (то же, что уходит в webhooks)
 ```
 
+Сделано в этапе 3 (1.32.0) сверх списка выше:
+
+```
+GET    /api/v1/openapi.json                              описание OpenAPI 3.1 (без токена: данных в нём нет)
+GET    /api/v1/playlists                                 плейлисты, хранимые в панели (без модели)
+POST   /api/v1/playlists
+GET    /api/v1/playlists/{playlistId}                    с моделью редактора и ETag
+PATCH  /api/v1/playlists/{playlistId}                    If-Match → 412
+PUT    /api/v1/playlists/{playlistId}
+DELETE /api/v1/playlists/{playlistId}
+GET    /api/v1/playlists/{playlistId}/nimble             чистый файл для Nimble
+GET    /api/v1/servers/{serverId}/playlist/history       версии, записанные на сервер
+```
+
+Развёртывание (`POST …/playlist`) принимает ровно одно из `playlistId`, `document` (JSON плейлиста
+Nimble) или `content` (текст файла) и идёт через тот же `deployHandler`, что и экран панели:
+те же проверки, та же история версий, те же события. Отказы — `409` с кодом `media_missing`,
+`unsupported_source`, `refused`, `agent_disabled`; агент не ответил — `504 agent_timeout`.
+
 `kind`: `udp`, `mpegts-in`, `mpegts-out`, `republish`, `livepull`, `hotswap`, `apps`, `interfaces`.
 Транскодеры, ABR, алиасы, origin-приложения, каналы и сети доставки — вторая волна в том же виде.
 
