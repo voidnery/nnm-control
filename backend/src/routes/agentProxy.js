@@ -150,7 +150,8 @@ agentRouter.put('/:id/agent/config', requirePerm('playlist.manage'), loadServer,
 agentRouter.get('/:id/agent/config-list', requirePerm('playlist.view'), loadServer,
   wrap(req => runTask(req.srv, 'GET /config/list', { createdBy: req.user?.username })));
 
-agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadServer, wrap(async (req) => {
+// GET /:id/agent/playlist-state — exported for /api/v1 (api/v1.js), which answers the same question.
+export async function playlistState(req) {
   const name = String(req.query.name || 'server-playlist.json');
 
   let file = null;
@@ -238,7 +239,8 @@ agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadS
     media,
     compare: stored ? { playlist: stored.name, ...comparePlaylists(file?.content, stored.model) } : null,
   };
-}));
+}
+agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadServer, wrap(playlistState));
 
 // iter19 m4 — put a playlist on a server, and be able to take it back.
 //
@@ -249,9 +251,14 @@ agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadS
 // The body of a deploy, named so that rolling back can call it rather than
 // reimplement it. A second implementation would be one that drifts from the
 // first, and the drift would show up as a rollback that skipped a check.
-async function deployHandler(req) {
+export async function deployHandler(req) {
   const filename = String(req.body?.filename || 'server-playlist.json');
   const force = req.body?.force === true;
+  // Said first: every read below swallows its failure, so an agent that is off reached the operator as
+  // «the media list could not be read» — true, and no help.
+  if (!req.srv?.agent?.enabled) {
+    throw Object.assign(new Error('agent is not enabled for this server'), { status: 409, code: 'agent-disabled' });
+  }
 
   let content = typeof req.body?.content === 'string' ? req.body.content : null;
   let playlist = null;
@@ -371,7 +378,8 @@ agentRouter.post('/:id/agent/deploy-playlist', requirePerm('playlist.manage'), l
 // Both are deploys. A second way to change a live config would be a second way
 // that skips the checks, and this is the path most likely to be taken in a
 // hurry.
-agentRouter.post('/:id/agent/playlist-stop', requirePerm('playlist.manage'), loadServer, wrap(async (req) => {
+// POST /:id/agent/playlist-stop — exported for /api/v1.
+export async function playlistStop(req) {
   const filename = String(req.body?.filename || 'server-playlist.json');
   const stream = String(req.body?.stream || '');
   if (!stream) throw Object.assign(new Error('which stream to stop?'), { status: 400 });
@@ -390,9 +398,11 @@ agentRouter.post('/:id/agent/playlist-stop', requirePerm('playlist.manage'), loa
   logEvent({ req, action: 'playlist:stop', target: `${stream} on ${req.srv.name}`, outcome: 'ok', status: 200 });
   emit({ type: 'playlist.stream_stopped', actor: actorOf(req), subject: { kind: 'playlist_stream', id: stream, server_id: String(req.srv._id), name: stream }, data: { filename } });
   return { ...r, stopped: stream };
-}));
+}
+agentRouter.post('/:id/agent/playlist-stop', requirePerm('playlist.manage'), loadServer, wrap(playlistStop));
 
-agentRouter.post('/:id/agent/playlist-start', requirePerm('playlist.manage'), loadServer, wrap(async (req) => {
+// POST /:id/agent/playlist-start — exported for /api/v1.
+export async function playlistStart(req) {
   const filename = String(req.body?.filename || 'server-playlist.json');
   const stream = String(req.body?.stream || '');
   if (!stream) throw Object.assign(new Error('which stream to start?'), { status: 400 });
@@ -463,7 +473,8 @@ agentRouter.post('/:id/agent/playlist-start', requirePerm('playlist.manage'), lo
     resumesFromStart: !resume || Boolean(resume.failed),
     resume,
   };
-}));
+}
+agentRouter.post('/:id/agent/playlist-start', requirePerm('playlist.manage'), loadServer, wrap(playlistStart));
 
 // iter19 m7 — everything the panel can say about a playlist without watching
 // the stream. Read-only, and one request, because these questions are asked
