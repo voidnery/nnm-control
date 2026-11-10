@@ -16,6 +16,7 @@
 //
 // Other Free points of the matrix (LL-HLS and mass operations — Pro; statistics 24 h; one agent)
 // are not enforced here yet.
+import { readFileSync } from 'node:fs';
 
 export const FREE = Object.freeze({
   edition: 'free',
@@ -27,8 +28,23 @@ const RESOURCES = {
   servers: { label: 'серверов', what: 'сервер', hint: 'удалите лишний' },
 };
 
-export function getLicenseLimits() {
-  return FREE;
+// Before 2.0 nothing is limited (operator's decision, HQ agreed): 1.x is the open MIT line installed
+// clients already run, and a fleet of fourteen must keep adding servers. The limit switches on with
+// the major version that closes the product — from the version the panel itself reports, so no
+// second switch can drift from it.
+export const UNLIMITED = Object.freeze({
+  edition: 'free',
+  max: Object.freeze({ servers: null }),
+});
+export const ENFORCED_FROM_MAJOR = 2;
+
+const ownVersion = () => {
+  try { return JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version; }
+  catch { return '0.0.0'; }
+};
+
+export function getLicenseLimits(version = ownVersion()) {
+  return Number(String(version).split('.')[0]) >= ENFORCED_FROM_MAJOR ? FREE : UNLIMITED;
 }
 
 /** Whether `wanted` items of `resource` fit (null or absent limit — unlimited). */

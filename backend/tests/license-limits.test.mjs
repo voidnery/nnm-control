@@ -9,7 +9,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FREE, getLicenseLimits, fits, refusal, mayAdd, withinLicense } from '../src/license/limits.js';
+import { FREE, UNLIMITED, ENFORCED_FROM_MAJOR, getLicenseLimits, fits, refusal, mayAdd, withinLicense } from '../src/license/limits.js';
+
+// The guards below are exercised as 2.0 will run them; the 1.x switch has its own checks.
+const free = () => FREE;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(HERE, '..', 'src');
@@ -37,8 +40,14 @@ const runGuard = async (guard) => {
 
 console.log('\nTHE LIMIT:');
 
-await check('without a licence the panel is Free with one server', () => {
-  assert.equal(getLicenseLimits(), FREE);
+await check('1.x limits nothing; from 2.0 the panel is Free with one server', () => {
+  assert.equal(ENFORCED_FROM_MAJOR, 2);
+  assert.equal(getLicenseLimits('1.31.1'), UNLIMITED);
+  assert.equal(getLicenseLimits('1.99.9'), UNLIMITED);
+  assert.equal(getLicenseLimits('2.0.0'), FREE);
+  assert.equal(getLicenseLimits('10.0.0'), FREE);
+  const own = JSON.parse(readFileSync(path.join(HERE, '..', 'package.json'), 'utf8')).version;
+  assert.equal(getLicenseLimits(), getLicenseLimits(own), 'the default is not the version the panel reports');
   assert.equal(FREE.edition, 'free');
   assert.equal(FREE.max.servers, 1);
   assert.ok(Object.isFrozen(FREE) && Object.isFrozen(FREE.max), 'the limits can be changed at runtime');
@@ -71,13 +80,13 @@ await check('the sentence is in `error`, which is what the panel shows of a fail
 console.log('\nTHE GUARD:');
 
 await check('the first server is let through', async () => {
-  const { res, nexted } = await runGuard(withinLicense('servers', async () => 0));
+  const { res, nexted } = await runGuard(withinLicense('servers', async () => 0, free));
   assert.equal(nexted, true);
   assert.equal(res.body, null);
 });
 
 await check('the second server is refused with 403 and the Free sentence', async () => {
-  const { res, nexted } = await runGuard(withinLicense('servers', async () => 1));
+  const { res, nexted } = await runGuard(withinLicense('servers', async () => 1, free));
   assert.equal(nexted, null, 'the request reached the handler');
   assert.equal(res.code, 403);
   assert.match(res.body.error, /^Редакция Free/);
@@ -86,14 +95,14 @@ await check('the second server is refused with 403 and the Free sentence', async
 await check('a panel already over the limit is refused more, and only counted — nothing removed', async () => {
   // Fourteen edges, as the operator's own fleet: the guard asks how many there are and says no.
   const calls = [];
-  const { res } = await runGuard(withinLicense('servers', async () => { calls.push('count'); return 14; }));
+  const { res } = await runGuard(withinLicense('servers', async () => { calls.push('count'); return 14; }, free));
   assert.equal(res.code, 403);
   assert.deepEqual(calls, ['count']);
 });
 
 await check('a failing count is an error, not a free pass', async () => {
   const boom = new Error('db down');
-  const { res, nexted } = await runGuard(withinLicense('servers', async () => { throw boom; }));
+  const { res, nexted } = await runGuard(withinLicense('servers', async () => { throw boom; }, free));
   assert.equal(nexted, boom);
   assert.equal(res.code, 200);
 });
@@ -106,9 +115,15 @@ await check('an edition without a limit lets everything through without counting
   assert.equal(counted, false);
 });
 
+await check('a 1.x panel adds a second server and a fifteenth', async () => {
+  const one = () => getLicenseLimits('1.32.0');
+  assert.deepEqual(await mayAdd('servers', async () => 1, one), { ok: true });
+  assert.deepEqual(await mayAdd('servers', async () => 14, one), { ok: true });
+});
+
 await check('mayAdd answers the import the same way', async () => {
-  assert.deepEqual(await mayAdd('servers', async () => 0), { ok: true });
-  const no = await mayAdd('servers', async () => 1);
+  assert.deepEqual(await mayAdd('servers', async () => 0, free), { ok: true });
+  const no = await mayAdd('servers', async () => 1, free);
   assert.equal(no.ok, false);
   assert.match(no.refusal.message, /^Редакция Free/);
 });

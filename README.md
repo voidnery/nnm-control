@@ -23,7 +23,8 @@ says what *is*.
 
 ## Editions
 
-Without a licence the panel runs as **Free: one server**. Adding a second one
+Versions 1.x limit nothing. From 2.0, without a licence the panel runs as
+**Free: one server**. Adding a second one
 — by hand or by the WMSPanel import — is refused with «Редакция Free: серверов
 — не больше 1…». A panel that already manages more servers keeps all of them;
 nothing is removed. More servers come with the Pro edition (licence — later,

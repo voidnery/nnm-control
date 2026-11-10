@@ -124,11 +124,18 @@ TOKEN=$(login)
 api POST /servers '{"name":"e2e-keep","host":"192.0.2.10"}' "$TOKEN" >/dev/null
 [ "$(cat "$W/code")" = 201 ] || fail "первый сервер не создан ($(cat "$W/code"))"
 api POST /servers '{"name":"e2e-second","host":"192.0.2.11"}' "$TOKEN" > "$W/refusal.json"
-[ "$(cat "$W/code")" = 403 ] || fail "второй сервер в редакции Free не отклонён (код $(cat "$W/code"))"
-json error < "$W/refusal.json" | grep -q '^Редакция Free: серверов — не больше 1' || fail "отказ без текста «Редакция Free…»: $(cat "$W/refusal.json")"
-[ "$(json code < "$W/refusal.json")" = license_limit ] || fail "в отказе нет code=license_limit"
-[ "$(api GET /servers '' "$TOKEN" | json 0.name)" = e2e-keep ] || fail "после отказа первый сервер не читается"
-[ "$(api GET /servers '' "$TOKEN" | json 1.name)" = "" ] || fail "отклонённый сервер всё-таки создан"
+if [ "${VER%%.*}" -ge 2 ]; then
+  [ "$(cat "$W/code")" = 403 ] || fail "второй сервер в редакции Free не отклонён (код $(cat "$W/code"))"
+  json error < "$W/refusal.json" | grep -q '^Редакция Free: серверов — не больше 1' || fail "отказ без текста «Редакция Free…»: $(cat "$W/refusal.json")"
+  [ "$(json code < "$W/refusal.json")" = license_limit ] || fail "в отказе нет code=license_limit"
+  [ "$(api GET /servers '' "$TOKEN" | json 1.name)" = "" ] || fail "отклонённый сервер всё-таки создан"
+else
+  # До 2.0 лимит выключен (license/limits.js ENFORCED_FROM_MAJOR): второй сервер создаётся.
+  [ "$(cat "$W/code")" = 201 ] || fail "в $VER лимита быть не должно, а второй сервер не создан (код $(cat "$W/code"))"
+  api DELETE "/servers/$(json id < "$W/refusal.json")" '' "$TOKEN" >/dev/null
+fi
+[ "$(api GET /servers '' "$TOKEN" | json 0.name)" = e2e-keep ] || fail "первый сервер не читается"
+[ "$(api GET /servers '' "$TOKEN" | json 1.name)" = "" ] || fail "лишний сервер остался"
 log "чистая установка, первый вход и лимит Free: наблюдаемый результат верен"
 
 # --- 2. Обновление на ту же сборку с версией выше (ручной путь apt: preinst снимает снимок) -----
