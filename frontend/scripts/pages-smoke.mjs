@@ -11,7 +11,7 @@ const SRC = path.resolve(fileURLToPath(new URL('../src', import.meta.url))).spli
 
 const PAGES = [
   ['DashboardPage','/'], ['ServersPage','/servers'], ['ServerDetailPage','/servers/S1'],
-  ['UsersPage','/users'], ['RolesPage','/roles'], ['AuditPage','/audit'],
+  ['UsersPage','/users'], ['RolesPage','/roles'], ['AuditPage','/audit'], ['ApiTokensPage','/api-tokens'],
   ['SettingsPage','/settings'], ['FunctionsPage','/functions'], ['TranscodersPage','/transcoders'],
   ['DistributionPage','/distribution'], ['AccountObjectsPage','/account-objects'], ['PlaylistsPage','/playlists'], ['ZabbixPage','/zabbix'], ['CategoriesPage','/categories'],
   ['ProfilePage','/profile'], ['ServerAgentsPage','/agents'], ['LogsPage','/logs'], ['LogCategoriesPage','/logs/categories'], ['LogDashboardsPage','/logs/dashboards'],

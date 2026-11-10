@@ -39,5 +39,9 @@ export const PERMISSIONS = [
   // being allowed to change credentials of the machines in it.
   { key: 'cdn.view',          label: 'Delivery: view networks, node roles and geography' },
   { key: 'cdn.manage',        label: 'Delivery: create / edit networks and node roles' },
+  // 1.32.0 — the external API (docs/api/). Issuing a token hands a program part of the issuer's
+  // rights without a password, so it is its own permission, and a token can never carry it.
+  { key: 'apitokens.manage',  label: 'API: issue and revoke API tokens' },
+  { key: 'webhooks.manage',   label: 'API: manage webhook subscriptions' },
 ];
 export const PERMISSION_KEYS = PERMISSIONS.map(p => p.key);

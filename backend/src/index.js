@@ -50,6 +50,8 @@ import { probeRouter } from './routes/probes.js';
 import { arbiterRouter } from './routes/arbiter.js';
 import { channelRouter } from './routes/channels.js';
 import { auditRouter } from './routes/audit.js';
+import { apiTokensRouter } from './routes/apiTokens.js';
+import { v1Router } from './api/v1.js';
 import { auditMutations } from './services/audit.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
 
@@ -109,6 +111,9 @@ app.use('/api/cdn', probeRouter);
 app.use('/api/cdn', arbiterRouter);
 app.use('/api/cdn', channelRouter);
 app.use('/api/audit', auditRouter);
+app.use('/api/api-tokens', apiTokensRouter);
+// The external API (nnm-api/1, docs/api/). After auditMutations above, so its mutations are logged.
+app.use('/api/v1', v1Router);
 
 app.use((err, _req, res, _next) => {
   console.error('[unhandled]', err);
