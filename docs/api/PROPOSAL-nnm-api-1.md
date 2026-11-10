@@ -128,9 +128,12 @@ NNM-Control.
 
 ### 3.4. События первой волны (`type`, конверт — `evt/1`)
 
+Сделано в этапе 2 (1.32.0): `stream_object.*`, `playlist.*`, `channel.*`, `agent.*`, `webhook.test`.
+Следующий шаг — `server.*`, `stream.*`, `certificate.*`: для них нужны новые опросы.
+
 | type | Когда | Источник в коде |
 |---|---|---|
-| `stream_object.created` / `.changed` / `.deleted` | изменение настроек потока — из API или интерфейса; `data.before`/`data.after` | маршруты `wmspanelProxy.js` (+ журнал аудита) |
+| `stream_object.created` / `.changed` / `.deleted` / `.action` | изменение настроек потока или действие (restart/pause/resume). Из API — `data.before`/`data.after`/`data.changed`; из экранов панели — `data.request` (эти маршруты не читают объект до записи) | `api/v1.js`, `routes/wmspanelProxy.js` |
 | `playlist.deployed` / `.stream_stopped` / `.stream_started` | запись плейлиста; `data.renewed_ids`, `data.plays_once`, `data.unsupported` | `deployHandler` |
 | `channel.unhealthy` / `.healthy` | проверка доставки канала сменила состояние | `services/deliveryMonitor.js` |
 | `agent.offline` / `.online` | агент на сервере перестал/начал отвечать | `services/agentWatchdog.js` |

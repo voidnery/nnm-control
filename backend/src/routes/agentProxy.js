@@ -5,6 +5,7 @@ import { Playlist } from '../models/Playlist.js';
 import { parsePlaylistFile, comparePlaylists } from '../services/playlistFile.js';
 import { PlaylistDeploy } from '../models/PlaylistDeploy.js';
 import { buildFromModel, isEditorModel, prepareForNimble } from '../services/playlistBuild.js';
+import { emit, actorOf } from '../services/events.js';
 import { captureCurrent, inspect, history, sha256, withoutTask, withTask, findTaskInVersions } from '../services/playlistDeploy.js';
 import { resumeTask } from '../services/playlistResume.js';
 import { detectDrift, checkJoins, timings, endingSoon } from '../services/playlistAdvice.js';
@@ -341,6 +342,14 @@ async function deployHandler(req) {
     note: String(req.body?.note || '').slice(0, 200),
   });
 
+  emit({
+    type: 'playlist.deployed', actor: actorOf(req),
+    subject: { kind: 'playlist', id: filename, server_id: String(req.srv._id), name: playlist?.name || filename },
+    data: {
+      filename, entries: check.entries, forced: force, missing: check.missing,
+      renewed_ids: prepared?.renewed || [], plays_once: prepared?.playsOnce || [], unsupported: prepared?.unsupported || [],
+    },
+  });
   logEvent({
     req, action: 'playlist:deploy',
     target: `${playlist?.name || filename} → ${req.srv.name}${force ? ' (forced)' : ''}`,
@@ -379,6 +388,7 @@ agentRouter.post('/:id/agent/playlist-stop', requirePerm('playlist.manage'), loa
   req.body = { content: next, filename, force: true, note: `stopped ${stream}` };
   const r = await deployHandler(req);
   logEvent({ req, action: 'playlist:stop', target: `${stream} on ${req.srv.name}`, outcome: 'ok', status: 200 });
+  emit({ type: 'playlist.stream_stopped', actor: actorOf(req), subject: { kind: 'playlist_stream', id: stream, server_id: String(req.srv._id), name: stream }, data: { filename } });
   return { ...r, stopped: stream };
 }));
 
@@ -442,6 +452,7 @@ agentRouter.post('/:id/agent/playlist-start', requirePerm('playlist.manage'), lo
   req.body = { content: next, filename, force: req.body?.force === true, note: `started ${stream}` };
   const r = await deployHandler(req);
   logEvent({ req, action: 'playlist:start', target: `${stream} on ${req.srv.name}`, outcome: 'ok', status: 200 });
+  emit({ type: 'playlist.stream_started', actor: actorOf(req), subject: { kind: 'playlist_stream', id: stream, server_id: String(req.srv._id), name: stream }, data: { filename } });
   // Said in the response, not only in the UI: a restored task begins at the
   // top of its block. The format carries no playback position, so there is
   // nothing to resume from.

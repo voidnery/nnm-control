@@ -15,6 +15,8 @@ import { requireAuth, hasPerm } from '../middleware/auth.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { authenticate, rateLimiter } from '../services/apiTokens.js';
 import { KINDS, itemsOf, etagOf, ifMatchOk } from './streamKinds.js';
+import { Event } from '../models/Webhook.js';
+import { emit, actorOf, changedFields } from '../services/events.js';
 
 export const v1Router = Router();
 
@@ -112,7 +114,30 @@ async function findObject(req, res) {
   return { up, obj, etag: etagOf(obj) };
 }
 
+// evt/1: every change of stream settings through the API is an event (secrets masked in emit()).
+const objectEvent = (req, type, objId, data) => emit({
+  type, actor: actorOf(req), data,
+  subject: { kind: req.params.kind, id: String(objId ?? ''), server_id: String(req.srv._id), name: data?.after?.name || data?.before?.name || '' },
+});
+
 v1Router.use(v1Auth());
+
+// ---- events (the same envelopes webhooks deliver) ----
+v1Router.get('/events', perm('audit.view'), async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+  const q = {};
+  if (req.query.type) q.type = String(req.query.type);
+  if (req.query.since) {
+    const d = new Date(String(req.query.since));
+    if (Number.isNaN(d.getTime())) return fail(res, 400, 'bad_since', 'since is an RFC 3339 time');
+    q.occurredAt = { $gte: d };
+  }
+  // Cursor — the id of the last event of the previous page; ULIDs sort by time.
+  if (req.query.cursor) q.eventId = { $lt: String(req.query.cursor) };
+  const list = await Event.find(q).sort({ eventId: -1 }).limit(limit + 1).lean();
+  const page = list.slice(0, limit);
+  res.json({ items: page.map(e => e.envelope), next: list.length > limit ? page.at(-1).eventId : null });
+});
 
 // ---- servers ----
 v1Router.get('/servers', perm('servers.view'), async (_req, res) => {
@@ -141,6 +166,7 @@ v1Router.post(base, loadKind, kindPerm('manage'), loadServer, viaUpstream(async 
   const up = await upstream(req, res);
   if (!up) return;
   const out = await wmspanel[req.kind.create](up.cfg, up.sid, req.body || {});
+  objectEvent(req, 'stream_object.created', out?.id ?? out?.setting?.id ?? '', { after: req.body || {} });
   res.status(201).json(out);
 }));
 
@@ -156,6 +182,8 @@ for (const method of ['patch', 'put']) {
     await wmspanel[req.kind.update](f.up.cfg, f.up.sid, req.params.objId, req.body || {});
     const after = await findObject(req, res);
     if (!after) return;
+    objectEvent(req, 'stream_object.changed', req.params.objId,
+      { before: f.obj, after: after.obj, changed: changedFields(f.obj, after.obj), via: 'api' });
     res.set('ETag', after.etag).json(after.obj);
   }));
 }
@@ -167,6 +195,7 @@ v1Router.delete(`${base}/:objId`, loadKind, kindPerm('manage'), loadServer, viaU
     return fail(res, 412, 'precondition_failed', 'the object changed since it was read', { etag: f.etag, current: f.obj });
   }
   await wmspanel[req.kind.remove](f.up.cfg, f.up.sid, req.params.objId);
+  objectEvent(req, 'stream_object.deleted', req.params.objId, { before: f.obj, via: 'api' });
   res.status(204).end();
 }));
 
@@ -178,7 +207,9 @@ v1Router.post(`${base}/:objId/actions/:action`, loadKind, kindPerm('manage'), lo
   }
   const up = await upstream(req, res);
   if (!up) return;
-  res.json(await act(wmspanel, up.cfg, up.sid, req.params.objId) ?? { ok: true });
+  const out = await act(wmspanel, up.cfg, up.sid, req.params.objId);
+  objectEvent(req, 'stream_object.action', req.params.objId, { action: req.params.action, via: 'api' });
+  res.json(out ?? { ok: true });
 }));
 
 v1Router.use((_req, res) => fail(res, 404, 'not_found', 'no such endpoint in /api/v1'));

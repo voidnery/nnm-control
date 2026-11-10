@@ -1,3 +1,4 @@
+import { emit } from './events.js';
 import { DeliveryNetwork } from '../models/DeliveryNetwork.js';
 import { Channel } from '../models/Channel.js';
 import { DeliveryCheck } from '../models/DeliveryCheck.js';
@@ -35,6 +36,15 @@ export function dueChannels(channels, { now = new Date(), intervalMin = DEFAULT_
 
 // One pass. Returns what it did rather than logging it, so the caller decides
 // what is worth saying and the tests can read it.
+// A check is healthy when it looked at something and everything it looked at answered.
+export const healthyCheck = (r) => r.total > 0 && r.ok === r.total;
+/** The event a change of health is, or null: no event for «still the same» or a first healthy check. */
+export function channelEventType(before, now) {
+  if (before === now) return null;
+  if (before === undefined) return now ? null : 'channel.unhealthy';
+  return now ? 'channel.healthy' : 'channel.unhealthy';
+}
+
 export async function runOnce({ probe, now = new Date(), intervalMin = DEFAULT_INTERVAL_MIN, by = 'schedule' }) {
   const networks = await DeliveryNetwork.find({ 'monitor.enabled': true });
   const out = { networks: 0, checked: 0, skipped: 0, failed: 0 };
@@ -50,9 +60,10 @@ export async function runOnce({ probe, now = new Date(), intervalMin = DEFAULT_I
     const recent = await DeliveryCheck.find({ network: net._id })
       .sort({ at: -1 }).limit(channels.length * 3);
     const lastByChannel = new Map();
+    const lastHealthy = new Map();
     for (const r of recent) {
       const k = String(r.channel);
-      if (!lastByChannel.has(k)) lastByChannel.set(k, r.at);
+      if (!lastByChannel.has(k)) { lastByChannel.set(k, r.at); lastHealthy.set(k, healthyCheck(r)); }
     }
 
     const due = dueChannels(channels, { now, intervalMin: net.monitor?.intervalMin || intervalMin, lastByChannel });
@@ -79,6 +90,18 @@ export async function runOnce({ probe, now = new Date(), intervalMin = DEFAULT_I
         worstMs: results.reduce((m, r) => (r.ms != null && (m == null || r.ms > m) ? r.ms : m), null),
         by,
       });
+      // evt/1: only a CHANGE is an event. A channel first seen unhealthy is one; first seen healthy is not.
+      const nowHealthy = healthyCheck({ ok: results.filter(r => r.verdict?.ok).length, total: results.length });
+      const before = lastHealthy.get(String(c._id));
+      const type = channelEventType(before, nowHealthy);
+      if (type) {
+        emit({
+          type, actor: { kind: 'system', name: 'delivery-monitor' },
+          subject: { kind: 'channel', id: String(c._id), name: `${c.application}/${c.stream}`, network_id: String(net._id) },
+          data: { network: net.name, ok: results.filter(r => r.verdict?.ok).length, total: results.length,
+            codes: [...new Set(results.map(r => r.verdict?.code).filter(Boolean))] },
+        });
+      }
       out.checked++;
     }
   }

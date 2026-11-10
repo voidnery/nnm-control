@@ -14,6 +14,7 @@
 //     the panel would be reaching into thirteen live broadcast servers on the
 //     strength of a missed heartbeat. Recovery is a button an operator presses,
 //     with the evidence in front of them.
+import { emit } from './events.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { AgentTask } from '../models/AgentTask.js';
 import { AgentEvent } from '../models/AgentEvent.js';
@@ -88,6 +89,12 @@ export async function evaluateOnce({ now = new Date() } = {}) {
           detail: { sinceContactMs: d.sinceContactMs, task: d.task || null, restarts: d.restarts || 0 },
         });
         out.events.push(ev);
+        emit({
+          type: healthy ? 'agent.online' : 'agent.offline',
+          actor: { kind: 'system', name: 'agent-watchdog' },
+          subject: { kind: 'agent', id: String(server._id), server_id: String(server._id), name: server.name },
+          data: { code: d.code, severity: ev.severity, evidence: d.evidence || '', since_contact_ms: d.sinceContactMs ?? null },
+        });
         stats.events++;
       }
       next.announced = d.code;

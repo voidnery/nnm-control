@@ -48,6 +48,7 @@ const NAV_GROUPS = [
     { to: '/roles', key: 'nav.roles', show: ({ can }) => can('roles.manage') },
     { to: '/audit', key: 'nav.audit', show: ({ can }) => can('audit.view') },
     { to: '/api-tokens', key: 'nav.tokens', show: ({ can }) => can('apitokens.manage') },
+    { to: '/webhooks', key: 'nav.webhooks', show: ({ can }) => can('webhooks.manage') },
   ] },
   { key: 'system', items: [
     { to: '/settings', key: 'nav.settings', show: ({ can }) => can('settings.manage') },
@@ -69,6 +70,7 @@ import SettingsPage from './pages/SettingsPage.jsx';
 import FunctionsPage from './pages/FunctionsPage.jsx';
 import AuditPage from './pages/AuditPage.jsx';
 import ApiTokensPage from './pages/ApiTokensPage.jsx';
+import WebhooksPage from './pages/WebhooksPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import PlaylistsPage from './pages/PlaylistsPage.jsx';
 import ServerAgentsPage from './pages/ServerAgentsPage.jsx';
@@ -166,6 +168,7 @@ export default function App() {
         <Route path="/functions" element={<FunctionsPage />} />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/api-tokens" element={<ApiTokensPage />} />
+        <Route path="/webhooks" element={<WebhooksPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/playlists" element={<PlaylistsPage />} />
         <Route path="/agents" element={<ServerAgentsPage />} />

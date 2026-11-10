@@ -4,10 +4,36 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { wmspanel } from '../services/wmspanelClient.js';
 import { syncServersFromWmspanel } from '../services/wmspanelSync.js';
+import { emit, actorOf } from '../services/events.js';
 
 // Permission-gated proxy to WMSPanel Control API (persistent settings).
 export const wmspanelRouter = Router();
 wmspanelRouter.use(requireAuth);
+
+// evt/1: a change of stream settings made from the panel's screens is the same event as one made
+// through /api/v1 (api/v1.js). These routes do not read the object before writing it, so the event
+// carries what was sent (`data.request`, secrets masked) rather than before/after.
+const KIND_OF = { udp: 'udp', incoming: 'mpegts-in', outgoing: 'mpegts-out', republish: 'republish',
+  livepull: 'livepull', hotswap: 'hotswap', apps: 'apps', interfaces: 'interfaces' };
+const OBJECT_ROUTE = /^\/server\/([^/]+)\/(udp|incoming|outgoing|republish|livepull|hotswap|apps|interfaces)(?:\/([^/]+))?(?:\/(pause|resume|restart))?\/?$/;
+export function objectEventOf(method, path, body) {
+  const m = OBJECT_ROUTE.exec(path);
+  if (!m || method === 'GET') return null;
+  const [, serverId, route, objId, action] = m;
+  const type = action ? 'stream_object.action'
+    : method === 'POST' ? 'stream_object.created'
+    : method === 'DELETE' ? 'stream_object.deleted' : 'stream_object.changed';
+  return {
+    type,
+    subject: { kind: KIND_OF[route], id: objId || '', server_id: serverId, name: body?.name || '' },
+    data: action ? { action, via: 'panel' } : { request: body || {}, via: 'panel' },
+  };
+}
+wmspanelRouter.use((req, res, next) => {
+  const ev = objectEventOf(req.method, req.path, req.body);
+  if (ev) res.on('finish', () => { if (res.statusCode < 400) emit({ ...ev, actor: actorOf(req) }); });
+  next();
+});
 
 async function cfg() {
   const s = await Settings.load();

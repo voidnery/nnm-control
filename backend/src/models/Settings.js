@@ -60,6 +60,12 @@ const settingsSchema = new mongoose.Schema({
     // .log/.txt, so the panel follows the live file and reports any gap.
     files: { type: [String], default: ['nimble.log'] },
   },
+  // evt/1 `instance` (docs/api/PROPOSAL-nnm-api-1.md §3.2): which panel an event came from. The id is
+  // a ULID created once, on the first start (services/events.js ensureInstance), and lives in the
+  // database volume — so it survives package upgrades and restarts, and travels with a restored
+  // backup, which is the same installation. Not a hostname and not an address.
+  instanceId: { type: String, default: '' },
+  instanceName: { type: String, default: '' },
 }, { timestamps: true });
 
 settingsSchema.statics.load = async function () {

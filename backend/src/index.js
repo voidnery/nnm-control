@@ -51,6 +51,11 @@ import { arbiterRouter } from './routes/arbiter.js';
 import { channelRouter } from './routes/channels.js';
 import { auditRouter } from './routes/audit.js';
 import { apiTokensRouter } from './routes/apiTokens.js';
+import { webhooksRouter } from './routes/webhooks.js';
+import { Event, WebhookSubscription, WebhookDelivery } from './models/Webhook.js';
+import { Settings } from './models/Settings.js';
+import { configureEvents, ensureInstance } from './services/events.js';
+import { startWebhookDispatcher } from './services/webhooks.js';
 import { v1Router } from './api/v1.js';
 import { auditMutations } from './services/audit.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
@@ -112,6 +117,7 @@ app.use('/api/cdn', arbiterRouter);
 app.use('/api/cdn', channelRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/api-tokens', apiTokensRouter);
+app.use('/api/webhooks', webhooksRouter);
 // The external API (nnm-api/1, docs/api/). After auditMutations above, so its mutations are logged.
 app.use('/api/v1', v1Router);
 
@@ -126,8 +132,12 @@ const start = async () => {
   // makes it so: `expireAfterSeconds` is fixed when the index is created, and
   // changing the schema afterwards changes nothing on a machine that already
   // has it. Reconciled here, once, before anything starts writing.
-  await reconcileTtl([AuditLog, StatSample, DeliveryCheck, AgentTask])
+  await reconcileTtl([AuditLog, StatSample, DeliveryCheck, AgentTask, Event, WebhookDelivery])
     .catch(e => console.error('[ttl]', e?.message || e));
+  // evt/1: the installation's identity first, then events can be written and delivered.
+  await ensureInstance(Settings).catch(e => console.error('[events] instance id:', e?.message || e));
+  configureEvents({ Settings, Event, WebhookSubscription, WebhookDelivery });
+  startWebhookDispatcher({ Event, WebhookSubscription, WebhookDelivery });
   startPeriodicSync();
   await startStatsCollector();
   // Delivery monitoring. Per-network and off by default, so installing the
