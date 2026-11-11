@@ -2,34 +2,24 @@
   "schema": 1,
   "product": "nnm-control",
   "title": "NNM-Control: выпуск по старому пути (APT 1:X.Y.Z + образы ghcr.io) до публикации",
-  "env": {},
   "scenarios": [
     {
       "id": "fresh",
-      "title": "Чистая установка",
-      "env": {
-        "LAB_SCENARIO": "fresh"
-      }
+      "title": "Чистая установка"
     },
     {
       "id": "upgrade",
-      "title": "Обновление с 1:1.31.1 из публичного APT, данные сохраняются",
-      "env": {
-        "LAB_SCENARIO": "upgrade"
-      }
+      "title": "Обновление с 1:1.31.1 из публичного APT, данные сохраняются"
     },
     {
       "id": "pull-fails",
-      "title": "Диверсия: образ не скачался — старая версия работает, dpkg --configure -a доводит",
-      "env": {
-        "LAB_SCENARIO": "pull-fails"
-      }
+      "title": "Диверсия: образ не скачался — старая версия работает, dpkg --configure -a доводит"
     }
   ],
   "steps": [
     {
       "id": "lab",
-      "run": "LAB_OUT=$PWD/lab-logs bash ci/lab-legacy.sh 2>&1 | tee lab-run.log",
+      "run": "bash ci/lab-legacy.sh 2>&1 | tee lab-run.log",
       "timeoutMinutes": 50
     },
     {
