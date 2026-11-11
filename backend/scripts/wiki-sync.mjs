@@ -128,7 +128,8 @@ export function expectedCopy() {
   for (const lang of LANGS) {
     titles[lang] = {};
     for (const slug of order) {
-      const md = slug === 'API-reference' ? apiReference(lang) : readFileSync(join(SRC, lang, `${slug}.md`), 'utf8');
+      // As LF whatever the checkout did, so the copy is the same on every machine.
+      const md = slug === 'API-reference' ? apiReference(lang) : readFileSync(join(SRC, lang, `${slug}.md`), 'utf8').replace(/\r\n/g, '\n');
       files[`${lang}/${slug}.js`] = `// Generated from docs/wiki/${lang}/${slug}.md by backend/scripts/wiki-sync.mjs — do not edit.\n`
         + `export default ${JSON.stringify(md)};\n`;
       titles[lang][slug] = titleOf(md);

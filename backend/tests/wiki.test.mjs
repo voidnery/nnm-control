@@ -18,7 +18,9 @@ const check = async (name, fn) => {
 };
 const SYNC = 'run: node backend/scripts/wiki-sync.mjs';
 const order = JSON.parse(readFileSync(join(SRC, 'pages.json'), 'utf8')).order;
-const page = (lang, slug) => readFileSync(join(SRC, lang, `${slug}.md`), 'utf8');
+// A Windows checkout may hold the files with CRLF; the wiki is compared as LF.
+const lf = (s) => s.replace(/\r\n/g, '\n');
+const page = (lang, slug) => lf(readFileSync(join(SRC, lang, `${slug}.md`), 'utf8'));
 const all = (lang) => order.map(s => page(lang, s)).join('\n');
 
 // Links and heading ids, through the parser the Help page renders with.
@@ -119,7 +121,7 @@ await check('the Help page carries exactly the wiki (frontend/src/wiki)', () => 
   const want = expectedCopy();
   for (const [rel, content] of Object.entries(want)) {
     assert.ok(existsSync(join(DEST, rel)), `${rel} missing — ${SYNC}`);
-    assert.equal(readFileSync(join(DEST, rel), 'utf8'), content, `${rel} differs — ${SYNC}`);
+    assert.equal(lf(readFileSync(join(DEST, rel), 'utf8')), content, `${rel} differs — ${SYNC}`);
   }
   for (const lang of LANGS) {
     const extra = readdirSync(join(DEST, lang)).filter(f => !want[`${lang}/${f}`]);
