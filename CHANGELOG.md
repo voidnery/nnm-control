@@ -1,24 +1,38 @@
 # Changelog
 
-## Unreleased — delivery through DIST-Control, Free edition, tests in CI (HQ T-0012)
+## 1.32.0 — external API, events and webhooks, wiki, Nimble playlists fixed (HQ T-0049)
 
-Not a release: `VERSION` stays 1.31.1 and its tag exists. The next release renames this heading to
-`## X.Y.Z — …` (the release check requires a section named after the version).
+Released through the old path (GitHub Pages APT, `1:1.32.0`, images on ghcr.io): installed panels update
+with `sudo apt update && sudo apt upgrade`. Checked before publication in eterix-lab (`.eterix-lab/lab.json`:
+fresh install, upgrade from 1:1.31.1, a failed image pull).
 
-- **VERSION** is the single source of the version; both `package.json` files are checked against it.
-- **Release by version** on eterix-ci `auto-release@v0.2.0` (`release.yml`): tests, thin package,
-  e2e on Ubuntu 24.04, DIST-Control beta, tag last. The old GitHub Pages APT + GHCR pipeline is
-  `legacy-apt.yml`, run by hand, no longer tagging; `packaging/tag-release.sh` is retired.
-- **Thin package** (`build.sh`, `packaging/eterix/`) for eterix-updater: no epoch, stock images by
-  digest, `updater.json`, snapshot/restore/stop/start hooks, `/healthz` with the baked-in version.
-  Data-compatible with the old package. The epoch question: `docs/EPOCH-MIGRATION.md`.
-- **Free edition: one server.** The second is refused with «Редакция Free…»; existing servers stay.
-- **Tests run in CI** (`ci/test.sh`, TAP, every test and audit). Three files were red on `main`:
-  `agentClient.js` and `PipelineEditor.jsx` had been deleted in the CHANGELOG and never in git — removed
-  now. Test scripts made path-portable.
-- **Lock files restored** (they were empty in git); licence audit and gate (`docs/LICENSES-AUDIT.md`):
-  nothing copyleft ships; the package carries THIRD-PARTY-NOTICES.
-- README: Nimble Streamer named as compatibility only; SECURITY.md; `.gitleaks.toml`; `.env.example`.
+- **Nimble playlists play again.** The panel wrote the editor's own model into the file Nimble reads
+  (`_id`, `_kind`, every unset field as `null`); it now writes a clean build. A changed block gets a new
+  `Id` — Nimble ignores a changed block that keeps its `Id`; unchanged blocks keep theirs. New blocks loop
+  (`MaxIterations: 0`; Nimble's default plays once). Sources that are not MP4/MP3 are refused with the
+  ffmpeg command that repackages them.
+- **The playlist file is `server_playlist.json` everywhere** — the Deploy dialog offered `playlist.json`
+  and the rest of the panel `server-playlist.json`, so a deploy could land in a file Nimble never reads.
+  The check that stops deleting media a playlist still names read the same wrong name and checked
+  nothing; it now reads every playlist in the config directory.
+- **External API `/api/v1`** (nnm-api/1) for any program: API tokens with their own rights, allowed
+  addresses and expiry (Access → API tokens); stream settings of every kind (UDP/SRT, MPEG-TS in and out,
+  republish, live pull, hot swap, applications, interfaces) — read, create, change, delete, restart,
+  pause, resume — with `ETag`/`If-Match` so two writers cannot silently overwrite each other; live streams;
+  playlists kept in the panel and on the servers (deploy, stop/start a stream, history) through the same
+  checks as the panel; the event log. OpenAPI 3.1 at `/api/v1/openapi.json`.
+- **Events and webhooks** (`evt/1`, Access → Webhooks): stream settings changed, playlist deployed or a
+  playlist stream stopped/started, server unreachable/back, live stream up/down, certificate expiring,
+  agent offline/online, delivery channel unhealthy/healthy. Signed (`X-Eterix-Signature`), retried for
+  about a day, secrets masked; never sent to loopback, link-local or the panel itself.
+- **Wiki** in Russian and English: `docs/wiki` in the repository and **Help** in the panel — how to work
+  with the panel, what it does on its own and what it reports, the API.
+- An agent that is off is now said to be off when deploying, instead of «the media list could not be read».
+- **Editions:** the Free limit (one server) applies from 2.0 only; 1.x limits nothing.
+- **Delivery through DIST-Control prepared, not used yet** (HQ T-0012): `VERSION` as the single source,
+  thin package for eterix-updater (`build.sh`, `packaging/eterix/`, `/healthz`), `release.yml` on
+  eterix-ci auto-release — paused while the repository is public (runs only by hand); tests run on every
+  push (`tests.yml`, `ci/test.sh`). Lock files restored; licence audit; SECURITY.md.
 
 ### v1.31.1 — four sentences the wizard did not have
 
