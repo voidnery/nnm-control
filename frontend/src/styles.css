@@ -946,3 +946,18 @@ input[type="radio"]:disabled { opacity: .45; cursor: not-allowed; }
 .det-section h4 { margin: 0 0 6px; }
 .det-fact { display: flex; gap: 10px; padding: 2px 0; align-items: baseline; }
 .det-fact-label { min-width: 220px; color: var(--muted, #888); font-size: 12px; }
+
+/* Help (wiki) — pages/HelpPage.jsx */
+.wiki-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+.wiki-toc { display: flex; flex-direction: column; gap: 2px; position: sticky; top: var(--sp-4); }
+.wiki-toc a { color: var(--text-dim); padding: 4px 8px; border-radius: 6px; text-decoration: none; }
+.wiki-toc a.active, .wiki-toc a:hover { color: var(--text); background: var(--bg); }
+.wiki-body { max-width: 900px; line-height: 1.55; }
+.wiki-body h1 { margin-top: 0; }
+.wiki-body h2 { margin-top: var(--sp-5); }
+.wiki-body code { background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+.wiki-code { background: var(--bg); padding: var(--sp-3); border-radius: 6px; overflow-x: auto; }
+.wiki-code code { background: none; padding: 0; }
+.wiki-note { border-left: 3px solid var(--accent-dim); margin: var(--sp-3) 0; padding: 2px var(--sp-3); color: var(--text-dim); }
+.wiki-table { overflow-x: auto; }
+@media (max-width: 800px) { .wiki-layout { grid-template-columns: 1fr; } .wiki-toc { position: static; } }

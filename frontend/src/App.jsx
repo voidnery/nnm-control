@@ -53,6 +53,7 @@ const NAV_GROUPS = [
   { key: 'system', items: [
     { to: '/settings', key: 'nav.settings', show: ({ can }) => can('settings.manage') },
     { to: '/profile', key: 'nav.profile' },
+    { to: '/help', key: 'nav.help' },
   ] },
 ];
 
@@ -71,6 +72,7 @@ import FunctionsPage from './pages/FunctionsPage.jsx';
 import AuditPage from './pages/AuditPage.jsx';
 import ApiTokensPage from './pages/ApiTokensPage.jsx';
 import WebhooksPage from './pages/WebhooksPage.jsx';
+import HelpPage from './pages/HelpPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import PlaylistsPage from './pages/PlaylistsPage.jsx';
 import ServerAgentsPage from './pages/ServerAgentsPage.jsx';
@@ -169,6 +171,8 @@ export default function App() {
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/api-tokens" element={<ApiTokensPage />} />
         <Route path="/webhooks" element={<WebhooksPage />} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/help/:lang/:page" element={<HelpPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/playlists" element={<PlaylistsPage />} />
         <Route path="/agents" element={<ServerAgentsPage />} />

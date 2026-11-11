@@ -1,0 +1,17 @@
+{
+  "order": [
+    "Home",
+    "Getting-started",
+    "Servers-and-agents",
+    "Stream-settings",
+    "Playlists",
+    "Distribution-and-LL-HLS",
+    "Dashboard-and-logs",
+    "Access",
+    "Events-and-reactions",
+    "API",
+    "Webhooks",
+    "API-reference",
+    "Troubleshooting"
+  ]
+}

@@ -10,6 +10,8 @@ native management API and the WMSPanel API. Nimble Streamer, WMSPanel and
 Softvelum are trademarks of their owners; NNM-Control is not affiliated with
 them.
 
+**Documentation:** [docs/wiki](docs/wiki/README.md) — how to work with the panel, events, the API (Русский / English). The same pages are in the panel under **Help**.
+
 License: MIT (`LICENSE`). Third-party licences: `docs/LICENSES-AUDIT.md`.
 
 ## Before changing anything

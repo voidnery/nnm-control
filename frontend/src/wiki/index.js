@@ -1,0 +1,78 @@
+// Generated from docs/wiki by backend/scripts/wiki-sync.mjs — do not edit.
+export const PAGES = {
+  "order": [
+    "Home",
+    "Getting-started",
+    "Servers-and-agents",
+    "Stream-settings",
+    "Playlists",
+    "Distribution-and-LL-HLS",
+    "Dashboard-and-logs",
+    "Access",
+    "Events-and-reactions",
+    "API",
+    "Webhooks",
+    "API-reference",
+    "Troubleshooting"
+  ],
+  "titles": {
+    "ru": {
+      "Home": "NNM-Control",
+      "Getting-started": "Начало работы",
+      "Servers-and-agents": "Серверы и агенты",
+      "Stream-settings": "Потоки: настройки, транскодеры, категории, функции",
+      "Playlists": "Плейлисты",
+      "Distribution-and-LL-HLS": "Раздача и LL-HLS",
+      "Dashboard-and-logs": "Дашборд и логи",
+      "Access": "Доступ: пользователи, роли, аудит",
+      "Events-and-reactions": "События и реакции",
+      "API": "API",
+      "Webhooks": "Webhooks",
+      "API-reference": "Справочник API",
+      "Troubleshooting": "Если что-то не так"
+    },
+    "en": {
+      "Home": "NNM-Control",
+      "Getting-started": "Getting started",
+      "Servers-and-agents": "Servers and agents",
+      "Stream-settings": "Streams: settings, transcoders, categories, functions",
+      "Playlists": "Playlists",
+      "Distribution-and-LL-HLS": "Distribution and LL-HLS",
+      "Dashboard-and-logs": "Dashboard and logs",
+      "Access": "Access: users, roles, audit",
+      "Events-and-reactions": "Events and reactions",
+      "API": "API",
+      "Webhooks": "Webhooks",
+      "API-reference": "API reference",
+      "Troubleshooting": "Troubleshooting"
+    }
+  }
+};
+export const LOADERS = {
+  'ru/Home': () => import('./ru/Home.js'),
+  'ru/Getting-started': () => import('./ru/Getting-started.js'),
+  'ru/Servers-and-agents': () => import('./ru/Servers-and-agents.js'),
+  'ru/Stream-settings': () => import('./ru/Stream-settings.js'),
+  'ru/Playlists': () => import('./ru/Playlists.js'),
+  'ru/Distribution-and-LL-HLS': () => import('./ru/Distribution-and-LL-HLS.js'),
+  'ru/Dashboard-and-logs': () => import('./ru/Dashboard-and-logs.js'),
+  'ru/Access': () => import('./ru/Access.js'),
+  'ru/Events-and-reactions': () => import('./ru/Events-and-reactions.js'),
+  'ru/API': () => import('./ru/API.js'),
+  'ru/Webhooks': () => import('./ru/Webhooks.js'),
+  'ru/API-reference': () => import('./ru/API-reference.js'),
+  'ru/Troubleshooting': () => import('./ru/Troubleshooting.js'),
+  'en/Home': () => import('./en/Home.js'),
+  'en/Getting-started': () => import('./en/Getting-started.js'),
+  'en/Servers-and-agents': () => import('./en/Servers-and-agents.js'),
+  'en/Stream-settings': () => import('./en/Stream-settings.js'),
+  'en/Playlists': () => import('./en/Playlists.js'),
+  'en/Distribution-and-LL-HLS': () => import('./en/Distribution-and-LL-HLS.js'),
+  'en/Dashboard-and-logs': () => import('./en/Dashboard-and-logs.js'),
+  'en/Access': () => import('./en/Access.js'),
+  'en/Events-and-reactions': () => import('./en/Events-and-reactions.js'),
+  'en/API': () => import('./en/API.js'),
+  'en/Webhooks': () => import('./en/Webhooks.js'),
+  'en/API-reference': () => import('./en/API-reference.js'),
+  'en/Troubleshooting': () => import('./en/Troubleshooting.js'),
+};
