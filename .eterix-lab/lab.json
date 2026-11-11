@@ -24,20 +24,21 @@
     },
     {
       "id": "collect",
-      "run": "mkdir -p lab-logs && (sudo journalctl -u nnm-control --no-pager > lab-logs/journal.log; sudo docker ps -a > lab-logs/docker-ps.txt; for c in $(sudo docker ps -aq); do sudo docker logs --tail 300 $c > lab-logs/docker-$c.log 2>&1; done) || true",
+      "run": "sudo mkdir -p lab-logs && sudo sh -c 'journalctl -u nnm-control --no-pager > lab-logs/journal.log; docker ps -a > lab-logs/docker-ps.txt; for c in $(docker ps -aq); do docker logs --tail 300 $c > lab-logs/docker-$c.log 2>&1; done; chmod -R a+rX lab-logs' || true",
       "always": true,
       "timeoutMinutes": 10
     },
     {
       "id": "tests",
-      "run": "bash ci/test.sh 2>&1 | tail -n 40",
+      "run": "git init -q && git add -A -f && git -c user.email=lab@eterix.test -c user.name=lab commit -qm lab && bash ci/test.sh > test-run.log 2>&1; rc=$?; grep -E '^not ok' -A4 test-run.log || true; tail -n 4 test-run.log; exit $rc",
       "timeoutMinutes": 30,
       "always": true
     }
   ],
   "artifacts": [
     "lab-logs",
-    "lab-run.log"
+    "lab-run.log",
+    "test-run.log"
   ],
   "resources": {
     "cpu": 4,

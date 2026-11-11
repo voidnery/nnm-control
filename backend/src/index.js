@@ -81,6 +81,12 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/healthz', healthz());
 app.use('/api/setup', setupRouter);
 app.use('/api', auditMutations);
+// The external API (nnm-api/1, docs/api/) — here, right after auditMutations (so its mutations are
+// logged) and BEFORE anything mounted on the whole of /api. Further down, routers mounted on '/api'
+// (geoip) run requireAuth on every request that reaches them: mounted at the end, every /api/v1 call met
+// a JWT check first — the open /api/v1/openapi.json answered 401 and no `nnm_` token worked at all.
+// Found by the eterix-lab run of 1.32.0; tests/api-v1.test.mjs now holds the order.
+app.use('/api/v1', v1Router);
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/roles', rolesRouter);
@@ -119,8 +125,6 @@ app.use('/api/cdn', channelRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/api-tokens', apiTokensRouter);
 app.use('/api/webhooks', webhooksRouter);
-// The external API (nnm-api/1, docs/api/). After auditMutations above, so its mutations are logged.
-app.use('/api/v1', v1Router);
 
 app.use((err, _req, res, _next) => {
   console.error('[unhandled]', err);

@@ -134,7 +134,8 @@ if [ "$SCEN" != fresh ]; then
 fi
 
 # OpenAPI — без токена; всё остальное в /api/v1 — с токеном.
-[ "$(api GET /api/v1/openapi.json | json openapi)" = 3.1.0 ] || fail "/api/v1/openapi.json"
+V=$(api GET /api/v1/openapi.json | json openapi)
+[ "$V" = 3.1.0 ] || fail "/api/v1/openapi.json без токена: HTTP $(code), $(head -c 300 "$W/body")"
 api GET /api/v1/servers >/dev/null; [ "$(code)" = 401 ] || fail "/api/v1/servers без токена: $(code)"
 
 TOK=$(api POST /api/api-tokens '{"name":"lab","permissions":["servers.view","playlist.view","audit.view"]}' "$T" | json token)

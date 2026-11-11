@@ -264,6 +264,17 @@ await check('the API is mounted, after the audit middleware, and the token route
   assert.match(index, /app\.use\('\/api\/api-tokens', apiTokensRouter\)/);
 });
 
+await check('and before every router mounted on the whole of /api', () => {
+  // geoipRouter is mounted on '/api' and runs requireAuth on whatever reaches it. With /api/v1 mounted
+  // after it, every v1 call met a JWT check first: the open description answered 401 and no `nnm_` token
+  // worked — the checks here mount v1 alone and could not see it; the eterix-lab run of 1.32.0 did.
+  const index = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  const v1 = index.indexOf("app.use('/api/v1', v1Router)");
+  const catchAll = [...index.matchAll(/app\.use\('\/api', (\w+)\)/g)].filter(m => m[1] !== 'auditMutations');
+  assert.ok(catchAll.length > 0, 'no router on /api found — the check would pass vacuously');
+  for (const m of catchAll) assert.ok(m.index > v1, `${m[1]} is mounted on /api before /api/v1`);
+});
+
 await check('a token appears in the audit log by name and id, never by its secret', () => {
   const src = readFileSync(new URL('../src/api/v1.js', import.meta.url), 'utf8');
   assert.match(src, /username: `token:\$\{t\.name\}#\$\{t\.tokenId\}`/);
