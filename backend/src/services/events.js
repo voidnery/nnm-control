@@ -18,6 +18,7 @@ export const EVENT_TYPES = [
   'playlist.deployed', 'playlist.stream_stopped', 'playlist.stream_started',
   'channel.unhealthy', 'channel.healthy',
   'agent.offline', 'agent.online',
+  'server.unreachable', 'server.reachable', 'stream.up', 'stream.down', 'certificate.expiring',
   'webhook.test',
 ];
 

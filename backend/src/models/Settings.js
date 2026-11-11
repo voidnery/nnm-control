@@ -66,6 +66,12 @@ const settingsSchema = new mongoose.Schema({
   // backup, which is the same installation. Not a hostname and not an address.
   instanceId: { type: String, default: '' },
   instanceName: { type: String, default: '' },
+  // What services/eventWatch.js polls for server.* and stream.* events, and how patiently.
+  eventWatch: {
+    enabled: { type: Boolean, default: true },
+    intervalSec: { type: Number, default: 30 },
+    downAfter: { type: Number, default: 2 },
+  },
 }, { timestamps: true });
 
 settingsSchema.statics.load = async function () {

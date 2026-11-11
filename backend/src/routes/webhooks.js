@@ -5,6 +5,9 @@ import { WebhookSubscription, WebhookDelivery } from '../models/Webhook.js';
 import { logEvent } from '../services/audit.js';
 import { EVENT_TYPES, emit, actorOf } from '../services/events.js';
 import { checkUrl } from '../services/webhooks.js';
+import { Settings } from '../models/Settings.js';
+import { watchSettings, startEventWatch } from '../services/eventWatch.js';
+import { WARN_DAYS } from '../services/certState.js';
 
 // Webhook subscriptions from the panel (evt/1; docs/api/PROPOSAL-nnm-api-1.md §3.1). The signing
 // secret is shown ONCE, in the answer to the creation; afterwards only that it exists.
@@ -25,6 +28,20 @@ const cleanTypes = (types) => {
 };
 
 webhooksRouter.get('/types', (_req, res) => res.json(EVENT_TYPES));
+
+// How servers and streams are watched for server.* and stream.* (services/eventWatch.js).
+webhooksRouter.get('/watch', async (_req, res) => res.json({ ...watchSettings(await Settings.load()), certWarnDays: WARN_DAYS }));
+webhooksRouter.put('/watch', async (req, res) => {
+  const s = await Settings.load();
+  const b = req.body || {};
+  const next = watchSettings({ eventWatch: { ...watchSettings(s), ...b } });
+  s.eventWatch = next;
+  s.markModified?.('eventWatch');
+  await s.save();
+  logEvent({ req, action: 'webhook:watch', target: `every ${next.intervalSec} s, down after ${next.downAfter}${next.enabled ? '' : ' (off)'}`, outcome: 'ok', status: 200 });
+  await startEventWatch().catch(() => {});
+  res.json({ ...next, certWarnDays: WARN_DAYS });
+});
 
 webhooksRouter.get('/', async (_req, res) => {
   res.json((await WebhookSubscription.find().sort({ createdAt: -1 })).map(pub));

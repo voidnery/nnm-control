@@ -148,7 +148,11 @@ NNM-Control.
 ### 3.4. События первой волны (`type`, конверт — `evt/1`)
 
 Сделано в этапе 2 (1.32.0): `stream_object.*`, `playlist.*`, `channel.*`, `agent.*`, `webhook.test`.
-Следующий шаг — `server.*`, `stream.*`, `certificate.*`: для них нужны новые опросы.
+Сделано в этапе 4: `server.*`, `stream.*`, `certificate.*` — `services/eventWatch.js`. Серверы и потоки читаются из
+собственного API Nimble (как статистика; бюджет WMSPanel не тратится), интервал и терпение — на странице
+«Webhooks» (по умолчанию каждые 30 с, «пропал» после 2 пропусков подряд). Событие — только перемена:
+первый взгляд после перезапуска панели — исходное состояние; сервер, ни разу не ответивший, не
+«недоступен», а не настроен.
 
 | type | Когда | Источник в коде |
 |---|---|---|
@@ -156,9 +160,9 @@ NNM-Control.
 | `playlist.deployed` / `.stream_stopped` / `.stream_started` | запись плейлиста; `data.renewed_ids`, `data.plays_once`, `data.unsupported` | `deployHandler` |
 | `channel.unhealthy` / `.healthy` | проверка доставки канала сменила состояние | `services/deliveryMonitor.js` |
 | `agent.offline` / `.online` | агент на сервере перестал/начал отвечать | `services/agentWatchdog.js` |
-| `server.unreachable` / `.reachable` | сервер не отвечает API / снова отвечает | опрос статуса (новое) |
-| `stream.up` / `.down` | живой поток появился/пропал на сервере | опрос `live streams` (новое, интервал настраивается) |
-| `certificate.expiring` | до конца сертификата edge ≤ 20 дней (раз в сутки) | `services/certState.js` (новое расписание) |
+| `server.unreachable` / `.reachable` | сервер перестал отвечать собственным API (N пропусков подряд) / снова отвечает | `services/eventWatch.js` |
+| `stream.up` / `.down` | живой поток появился (сразу) / пропал (N пропусков подряд); пока сервер недоступен, потоки не судятся | `services/eventWatch.js` |
+| `certificate.expiring` | до конца сертификата ≤ 20 дней (`WARN_DAYS`) по имени, которым зрители ходят по TLS; проверка раз в час, сообщение раз в сутки на имя (по журналу событий) | `services/eventWatch.js` |
 
 ## 4. Что меняется где
 

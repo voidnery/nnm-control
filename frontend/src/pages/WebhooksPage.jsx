@@ -115,6 +115,34 @@ function DeliveriesModal({ sub, onClose }) {
   );
 }
 
+// server.* and stream.* need the panel to look; how often, and how patiently (services/eventWatch.js).
+function WatchPanel() {
+  const { t } = useI18n();
+  const [w, setW] = useState(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { api('/webhooks/watch').then(setW).catch(e => setMsg(e.message)); }, []);
+  if (!w) return msg ? <div className="error-box">{msg}</div> : null;
+  const save = async () => {
+    try {
+      setW(await api('/webhooks/watch', { method: 'PUT', body: { enabled: w.enabled, intervalSec: Number(w.intervalSec), downAfter: Number(w.downAfter) } }));
+      setMsg(t('wh.watchSaved'));
+    } catch (e) { setMsg(e.message); }
+  };
+  return (
+    <div className="panel" style={{ marginTop: 18 }}>
+      <h3>{t('wh.watch')}</h3>
+      <div className="hint">{t('wh.watchHint', { days: w.certWarnDays ?? 20 })}</div>
+      <div className="row" style={{ gap: 14, alignItems: 'flex-end', marginTop: 10 }}>
+        <label><input type="checkbox" checked={w.enabled} onChange={e => setW({ ...w, enabled: e.target.checked })} /> {t('wh.watchOn')}</label>
+        <label>{t('wh.watchEvery')}<input type="number" min={10} max={600} value={w.intervalSec} onChange={e => setW({ ...w, intervalSec: e.target.value })} /></label>
+        <label>{t('wh.watchDownAfter')}<input type="number" min={1} max={10} value={w.downAfter} onChange={e => setW({ ...w, downAfter: e.target.value })} /></label>
+        <button className="primary" onClick={save}>{t('wh.watchSave')}</button>
+      </div>
+      {msg && <div className="hint">{msg}</div>}
+    </div>
+  );
+}
+
 export default function WebhooksPage() {
   const confirm = useConfirm();
   const { t } = useI18n();
@@ -180,6 +208,7 @@ export default function WebhooksPage() {
           </tbody>
         </table>
       </div>
+      <WatchPanel />
       {modal && <SubscriptionModal types={types} onClose={() => setModal(false)}
                                    onCreated={(r) => { setModal(false); setCreated(r); load(); }} />}
       {created && <SecretModal created={created} onClose={() => setCreated(null)} />}

@@ -56,6 +56,7 @@ import { Event, WebhookSubscription, WebhookDelivery } from './models/Webhook.js
 import { Settings } from './models/Settings.js';
 import { configureEvents, ensureInstance } from './services/events.js';
 import { startWebhookDispatcher } from './services/webhooks.js';
+import { startEventWatch } from './services/eventWatch.js';
 import { v1Router } from './api/v1.js';
 import { auditMutations } from './services/audit.js';
 import { startPeriodicSync } from './services/wmspanelSync.js';
@@ -138,6 +139,7 @@ const start = async () => {
   await ensureInstance(Settings).catch(e => console.error('[events] instance id:', e?.message || e));
   configureEvents({ Settings, Event, WebhookSubscription, WebhookDelivery });
   startWebhookDispatcher({ Event, WebhookSubscription, WebhookDelivery });
+  await startEventWatch().catch(e => console.error('[watch]', e?.message || e));
   startPeriodicSync();
   await startStatsCollector();
   // Delivery monitoring. Per-network and off by default, so installing the
