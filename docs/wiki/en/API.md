@@ -157,7 +157,7 @@ A deploy takes **exactly one** of three:
 { "content": "<the file as text>" }
 ```
 
-plus optional `file` (`server-playlist.json` by default), `force`, `note`. The checks are the panel's own
+plus optional `file` (`server_playlist.json` by default), `force`, `note`. The checks are the panel's own
 (see [Playlists](Playlists.md)): a broken file is never written; files missing on the server, sources that
 are not MP4/MP3, an empty playlist — `409` unless `"force": true` is sent.
 

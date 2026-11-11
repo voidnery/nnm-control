@@ -44,8 +44,10 @@ Look at the message on the **Agents** page — the table of meanings is on
 
 **Deployed, but nothing changed on air.**
 
-1. The right file? The Deploy dialog suggests `playlist.json`, the **On the server** panel uses
-   `server-playlist.json`. Nimble reads only its own.
+1. The right file? By default the panel writes `server_playlist.json`; if Nimble reads another, pick it in
+   the **On the server** panel. Versions before 1.32.0 suggested `playlist.json` and
+   `server-playlist.json` — after updating, check whether such files from earlier deploys are left on
+   the server.
 2. Did a changed block keep its old `Id`? The panel renews it on write; if the file was edited by hand,
    change the `Id` (the **New Id** button).
 

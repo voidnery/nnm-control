@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { Playlist } from '../models/Playlist.js';
-import { parsePlaylistFile, comparePlaylists } from '../services/playlistFile.js';
+import { parsePlaylistFile, comparePlaylists, DEFAULT_PLAYLIST_FILE } from '../services/playlistFile.js';
 import { PlaylistDeploy } from '../models/PlaylistDeploy.js';
 import { buildFromModel, isEditorModel, prepareForNimble } from '../services/playlistBuild.js';
 import { emit, actorOf } from '../services/events.js';
@@ -152,7 +152,7 @@ agentRouter.get('/:id/agent/config-list', requirePerm('playlist.view'), loadServ
 
 // GET /:id/agent/playlist-state — exported for /api/v1 (api/v1.js), which answers the same question.
 export async function playlistState(req) {
-  const name = String(req.query.name || 'server-playlist.json');
+  const name = String(req.query.name || DEFAULT_PLAYLIST_FILE);
 
   let file = null;
   let readError = null;
@@ -252,7 +252,7 @@ agentRouter.get('/:id/agent/playlist-state', requirePerm('playlist.view'), loadS
 // reimplement it. A second implementation would be one that drifts from the
 // first, and the drift would show up as a rollback that skipped a check.
 export async function deployHandler(req) {
-  const filename = String(req.body?.filename || 'server-playlist.json');
+  const filename = String(req.body?.filename || DEFAULT_PLAYLIST_FILE);
   const force = req.body?.force === true;
   // Said first: every read below swallows its failure, so an agent that is off reached the operator as
   // «the media list could not be read» — true, and no help.
@@ -380,7 +380,7 @@ agentRouter.post('/:id/agent/deploy-playlist', requirePerm('playlist.manage'), l
 // hurry.
 // POST /:id/agent/playlist-stop — exported for /api/v1.
 export async function playlistStop(req) {
-  const filename = String(req.body?.filename || 'server-playlist.json');
+  const filename = String(req.body?.filename || DEFAULT_PLAYLIST_FILE);
   const stream = String(req.body?.stream || '');
   if (!stream) throw Object.assign(new Error('which stream to stop?'), { status: 400 });
 
@@ -403,7 +403,7 @@ agentRouter.post('/:id/agent/playlist-stop', requirePerm('playlist.manage'), loa
 
 // POST /:id/agent/playlist-start — exported for /api/v1.
 export async function playlistStart(req) {
-  const filename = String(req.body?.filename || 'server-playlist.json');
+  const filename = String(req.body?.filename || DEFAULT_PLAYLIST_FILE);
   const stream = String(req.body?.stream || '');
   if (!stream) throw Object.assign(new Error('which stream to start?'), { status: 400 });
 
@@ -480,7 +480,7 @@ agentRouter.post('/:id/agent/playlist-start', requirePerm('playlist.manage'), lo
 // the stream. Read-only, and one request, because these questions are asked
 // together and each one alone costs an agent round trip.
 agentRouter.get('/:id/agent/playlist-advice', requirePerm('playlist.view'), loadServer, wrap(async (req) => {
-  const filename = String(req.query.filename || 'server-playlist.json');
+  const filename = String(req.query.filename || DEFAULT_PLAYLIST_FILE);
 
   let content = '';
   try {
@@ -546,6 +546,30 @@ agentRouter.post('/:id/agent/rollback-playlist', requirePerm('playlist.manage'),
 
 
 // --- media ---
+
+/**
+ * Every media path any playlist in the server's config directory names.
+ *
+ * Not one file by name: the check asked for `server-playlist.json` while the fleet's file is
+ * `server_playlist.json`, the agent answered «no such file», nothing parsed, and every delete went
+ * through unchecked. Which file Nimble reads is its own setting; a file that any playlist there names
+ * is a file worth keeping. Throws if a file could not be read — not knowing is not permission.
+ */
+export async function playlistSources(srv, by, run = runTask) {
+  let names = [DEFAULT_PLAYLIST_FILE];
+  try {
+    const listing = await run(srv, 'GET /config/list', { createdBy: by });
+    const found = (listing?.files || []).map(f => f.name).filter(n => /\.json$/i.test(n));
+    if (found.length) names = found;
+  } catch { /* an agent too old to list: the default name is all there is to check */ }
+  const sources = [];
+  for (const name of names) {
+    const file = await run(srv, 'GET /config', { query: { name }, createdBy: by });
+    const p = parsePlaylistFile(file?.content ?? '');
+    if (p.ok) sources.push(...p.sources);
+  }
+  return sources;
+}
 agentRouter.get('/:id/agent/media', requirePerm('playlist.view'), loadServer,
   wrap(req => runTask(req.srv, 'GET /media', { createdBy: req.user?.username })));
 
@@ -564,10 +588,8 @@ agentRouter.delete('/:id/agent/media', requirePerm('playlist.manage'), loadServe
   // override is an explicit act.
   if (req.query.force !== '1') {
     try {
-      const file = await runTask(req.srv, 'GET /config', {
-        query: { name: 'server-playlist.json' }, createdBy: req.user?.username,
-      });
-      const parsed = parsePlaylistFile(file?.content ?? '');
+      const sources = await playlistSources(req.srv, req.user?.username);
+      const parsed = { ok: sources.length > 0, sources };
       if (parsed.ok) {
         // The full path, not the file name.
         //

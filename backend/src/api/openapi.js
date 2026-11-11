@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { KINDS } from './streamKinds.js';
 import { EVENT_TYPES } from '../services/events.js';
+import { DEFAULT_PLAYLIST_FILE } from '../services/playlistFile.js';
 
 const productVersion = () => {
   try { return JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version; }
@@ -63,7 +64,7 @@ export function openapiDocument() {
   const server = P('serverId', 'id of the server in the panel (GET /servers)');
   const objId = P('objId', 'id of the object in WMSPanel');
   const playlistId = P('playlistId', 'id of the stored playlist');
-  const fileQ = Q('file', 'playlist file on the server; default `server-playlist.json`');
+  const fileQ = Q('file', 'playlist file on the server; default `' + DEFAULT_PLAYLIST_FILE + '`');
   const kindDoc = kinds.map(k => `\`${k}\` — ${KINDS[k].view} / ${KINDS[k].manage}`).join('; ');
 
   const paths = {
@@ -239,7 +240,7 @@ export function openapiDocument() {
       type: 'object', description: 'Exactly one of playlistId, document, content.',
       properties: {
         playlistId: { type: 'string', description: 'a stored playlist' }, document: ref('NimblePlaylist'), content: { type: 'string', description: 'the file as text' },
-        file: { type: 'string', description: 'default `server-playlist.json`' }, force: { type: 'boolean', description: 'deploy past the refusals that can be overridden' }, note: { type: 'string', maxLength: 200 },
+        file: { type: 'string', description: 'default `' + DEFAULT_PLAYLIST_FILE + '`' }, force: { type: 'boolean', description: 'deploy past the refusals that can be overridden' }, note: { type: 'string', maxLength: 200 },
       },
     },
     DeployResult: {

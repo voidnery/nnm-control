@@ -6,6 +6,10 @@
 
 let _uid = 0;
 export const newUid = () => `u${++_uid}`;
+
+// The file Nimble's server playlist goes by unless the operator picks another — the same name as
+// DEFAULT_PLAYLIST_FILE in backend/src/services/playlistFile.js.
+export const DEFAULT_PLAYLIST_FILE = 'server_playlist.json';
 export const newBlockId = () =>
   Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, '0');
 

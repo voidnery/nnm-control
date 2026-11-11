@@ -47,16 +47,16 @@ On the server, in the **On the server** panel — **Upload a file**. The panel t
 the agent fetches it in the background (up to 12 hours; while the panel still holds the file you can
 **Retry**). Disk space is checked beforehand.
 
-A file cannot be deleted while `server-playlist.json` on that server refers to it — that entry would
-play silence.
+A file cannot be deleted while any playlist in that server's config directory refers to it — that entry
+would play silence.
 
 ## Deploy to a server
 
 **Deploy** → server → file name in Nimble's config directory.
 
-> Check the file name. The Deploy dialog suggests `playlist.json`, while the **On the server** panel and
-> the API default to `server-playlist.json`. Nimble reads the file named in its own settings — writing
-> another file changes nothing on air.
+> The default is `server_playlist.json` (with an underscore): the file Nimble reads. If the file on the
+> server is named otherwise, the **On the server** panel lists the files that are there — pick the right
+> one. Writing a file Nimble does not read changes nothing on air.
 
 What the panel does when writing:
 

@@ -1,4 +1,4 @@
-// Reading Nimble's server-playlist.json, as it actually is.
+// Reading Nimble's server playlist file, as it actually is.
 //
 // Built against a file taken from a running server rather than from the shape
 // I expected. Two things that would otherwise have been guessed wrong:
@@ -19,6 +19,12 @@
  * Never throws on bad input: an unreadable playlist is a fact to report, not
  * an exception to swallow somewhere up the stack.
  */
+// The name Nimble's server playlist goes by unless an operator says otherwise. The operator's fleet
+// reads `server_playlist.json` (underscore); the panel defaulted to `server-playlist.json` and to
+// `playlist.json` in different places, so a deploy could land in a file Nimble never reads. One name,
+// here, for every default in the backend; frontend/src/lib/playlistEngine.js carries the same one.
+export const DEFAULT_PLAYLIST_FILE = 'server_playlist.json';
+
 export function parsePlaylistFile(text) {
   const raw = String(text ?? '');
   if (!raw.trim()) return { ok: false, reason: 'empty', bytes: 0 };

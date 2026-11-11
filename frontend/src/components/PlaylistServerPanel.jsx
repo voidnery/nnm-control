@@ -7,6 +7,7 @@ import { useConfirm } from '../confirm.jsx';
 import Select from './Select.jsx';
 import Modal from './Modal.jsx';
 import IconButton from './IconButton.jsx';
+import { DEFAULT_PLAYLIST_FILE } from '../lib/playlistEngine.js';
 
 // What is on a server, and what can be done about it.
 //
@@ -47,7 +48,7 @@ export default function PlaylistServerPanel({ servers }) {
   // Which file on the server is the playlist. Not assumed: the default was one
   // character away from the name this fleet uses, and the panel then reported
   // "no playlist" about a server that had one.
-  const [file, setFile] = useState('server-playlist.json');
+  const [file, setFile] = useState(DEFAULT_PLAYLIST_FILE);
   const fileInput = useRef(null);
 
   const load = useCallback(async () => {

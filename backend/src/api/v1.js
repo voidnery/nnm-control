@@ -21,6 +21,7 @@ import { Playlist } from '../models/Playlist.js';
 import { buildFromModel } from '../services/playlistBuild.js';
 import { deployHandler, playlistState, playlistStop, playlistStart } from '../routes/agentProxy.js';
 import { history } from '../services/playlistDeploy.js';
+import { DEFAULT_PLAYLIST_FILE } from '../services/playlistFile.js';
 import { openapiDocument } from './openapi.js';
 
 export const v1Router = Router();
@@ -309,7 +310,7 @@ const viaAgent = (fn) => async (req, res) => {
   try { res.json(await fn(req)); }
   catch (e) { const a = agentError(e); fail(res, a.status, a.code, a.error, a.details); }
 };
-const fileOf = (v) => String(v || 'server-playlist.json');
+const fileOf = (v) => String(v || DEFAULT_PLAYLIST_FILE);
 
 v1Router.get('/servers/:serverId/playlist', perm('playlist.view'), loadServer, viaAgent(async (req) => {
   req.query = { ...req.query, name: fileOf(req.query.file) };

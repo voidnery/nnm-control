@@ -200,10 +200,10 @@ await check('deploying a stored playlist writes the clean build and records a ve
   assert.equal((await call('POST', `/servers/${SID}/playlist`, { token: viewer, body: { playlistId: pid } })).status, 403);
   const r = await call('POST', `/servers/${SID}/playlist`, { token: editor, body: { playlistId: pid, note: 'from CI' } });
   assert.equal(r.status, 200, JSON.stringify(r.json));
-  const written = JSON.parse(files.get('server-playlist.json'));
+  const written = JSON.parse(files.get('server_playlist.json'));
   assert.equal(written.Tasks[0].Stream, 'live/out');
   assert.match(written.Tasks[0].Blocks[0].Id, /^[0-9a-f]{8}$/, 'a block gets an Id');
-  assert.ok(!files.get('server-playlist.json').includes('_kind'));
+  assert.ok(!files.get('server_playlist.json').includes('_kind'));
   assert.equal(versions[0].origin, 'panel');
   assert.equal(versions[0].note, 'from CI');
   assert.match(versions[0].by, /^token:ci#/);
@@ -250,7 +250,7 @@ await check('stop removes the task, start brings it back from the history; both 
   const stop = await call('POST', `/servers/${SID}/playlist/streams/live/out/actions/stop`, { token: editor });
   assert.equal(stop.status, 200, JSON.stringify(stop.json));
   assert.equal(stop.json.stopped, 'live/out');
-  assert.equal(JSON.parse(files.get('server-playlist.json')).Tasks.length, 0);
+  assert.equal(JSON.parse(files.get('server_playlist.json')).Tasks.length, 0);
   const again = await call('POST', `/servers/${SID}/playlist/streams/live/out/actions/stop`, { token: editor });
   assert.equal(again.status, 409);
   assert.equal(again.json.code, 'refused');
@@ -258,7 +258,7 @@ await check('stop removes the task, start brings it back from the history; both 
   assert.equal(start.status, 200, JSON.stringify(start.json));
   assert.equal(start.json.started, 'live/out');
   assert.equal(start.json.resumesFromStart, true);
-  assert.equal(JSON.parse(files.get('server-playlist.json')).Tasks[0].Stream, 'live/out');
+  assert.equal(JSON.parse(files.get('server_playlist.json')).Tasks[0].Stream, 'live/out');
   assert.equal(versions.length, before + 2, 'each wrote a version');
   assert.ok(events.some(e => e.type === 'playlist.stream_stopped') && events.some(e => e.type === 'playlist.stream_started'));
   const bad = await call('POST', `/servers/${SID}/playlist/streams/live/out/actions/pause`, { token: editor });
@@ -267,7 +267,7 @@ await check('stop removes the task, start brings it back from the history; both 
 });
 
 await check('the history lists versions without their content', async () => {
-  const r = await call('GET', `/servers/${SID}/playlist/history?file=server-playlist.json`, { token: viewer });
+  const r = await call('GET', `/servers/${SID}/playlist/history?file=server_playlist.json`, { token: viewer });
   assert.equal(r.status, 200);
   assert.ok(r.json.items.length >= 3);
   assert.ok(r.json.items.every(v => typeof v.id === 'string' && v._id === undefined));
@@ -286,6 +286,29 @@ await check('a stored playlist is deleted with If-Match', async () => {
   assert.equal((await call('DELETE', `/playlists/${pid}`, { token: editor, headers: { 'If-Match': '"old"' } })).status, 412);
   assert.equal((await call('DELETE', `/playlists/${pid}`, { token: editor, headers: { 'If-Match': etag } })).status, 204);
   assert.equal((await call('GET', `/playlists/${pid}`, { token: viewer })).status, 404);
+});
+
+await check('the default file is the one the fleet uses: server_playlist.json', async () => {
+  files.clear();
+  const r = await call('POST', `/servers/${SID}/playlist`, { token: editor, body: { document: { Tasks: [{ Stream: 'live/d', Blocks: [{ Id: 'b1', MaxIterations: 0, Streams: [{ Type: 'vod', Source: '/srv/media/a.mp4' }] }] }] } } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.deepEqual([...files.keys()], ['server_playlist.json']);
+});
+
+await check('deleting media is checked against every playlist in the directory, by its real name', async () => {
+  // The check read `server-playlist.json`; on the operator's fleet that file does not exist, the agent
+  // said so politely, nothing parsed — and every delete went through.
+  const { playlistSources } = await import('../src/routes/agentProxy.js');
+  files.clear();
+  files.set('server_playlist.json', JSON.stringify({ Tasks: [{ Stream: 'live/a', Blocks: [{ Id: 'b1', Streams: [{ Source: '/srv/media/a.mp4' }] }] }] }));
+  files.set('night.json', JSON.stringify({ Tasks: [{ Stream: 'live/n', Blocks: [{ Id: 'b2', Streams: [{ Source: '/srv/media/b.mp4' }] }] }] }));
+  files.set('notes.txt', 'x');
+  const run = async (_srv, route, opts = {}) => agent({ route, ...opts });
+  assert.deepEqual((await playlistSources(SERVERS[SID], 'ci', run)).sort(), ['/srv/media/a.mp4', '/srv/media/b.mp4']);
+  const old = async (srv, route, opts = {}) => { if (route === 'GET /config/list') throw new Error('no handler'); return run(srv, route, opts); };
+  assert.deepEqual(await playlistSources(SERVERS[SID], 'ci', old), ['/srv/media/a.mp4'], 'an old agent: the default name');
+  const broken = async (srv, route, opts = {}) => { if (route === 'GET /config') throw new Error('timeout'); return run(srv, route, opts); };
+  await assert.rejects(playlistSources(SERVERS[SID], 'ci', broken), /timeout/, 'not knowing is not permission');
 });
 
 console.log('\nOPENAPI:');

@@ -751,7 +751,22 @@ check('the server default is only a default', () => {
   for (const where of ['playlist-stop', 'playlist-start', 'async function deployHandler']) {
     const at = proxy5.indexOf(where);
     assert.ok(at > 0, where);
-    assert.ok(proxy5.slice(at, at + 400).includes("req.body?.filename || 'server-playlist.json'"), where);
+    assert.ok(proxy5.slice(at, at + 400).includes('req.body?.filename || DEFAULT_PLAYLIST_FILE'), where);
+  }
+});
+
+check('and the default is the name the fleet uses, everywhere', () => {
+  // `server_playlist.json` (the operator, 1.32.0). The backend said `server-playlist.json` and the
+  // Deploy dialog `playlist.json`, so a deploy could land in a file Nimble never reads.
+  const back = readFileSync(new URL('../src/services/playlistFile.js', import.meta.url), 'utf8');
+  const front = readFileSync(new URL('../../frontend/src/lib/playlistEngine.js', import.meta.url), 'utf8');
+  assert.ok(back.includes("export const DEFAULT_PLAYLIST_FILE = 'server_playlist.json';"));
+  assert.ok(front.includes("export const DEFAULT_PLAYLIST_FILE = 'server_playlist.json';"));
+  const deploy = readFileSync(new URL('../../frontend/src/components/AgentPanel.jsx', import.meta.url), 'utf8');
+  assert.ok(deploy.includes('useState(DEFAULT_PLAYLIST_FILE)'), 'the Deploy dialog');
+  assert.ok(panel4.includes('useState(DEFAULT_PLAYLIST_FILE)'), 'the On the server panel');
+  for (const src of [proxy5, readFileSync(new URL('../src/api/v1.js', import.meta.url), 'utf8')]) {
+    assert.ok(!/'(server-)?playlist.json'/.test(src), 'no file name of its own');
   }
 });
 

@@ -4,6 +4,7 @@ import { useI18n } from '../i18n.jsx';
 import { useToast } from '../toast.jsx';
 import Modal from './Modal.jsx';
 import Select from './Select.jsx';
+import { DEFAULT_PLAYLIST_FILE } from '../lib/playlistEngine.js';
 
 // Deploying a playlist to a server through its file agent.
 //
@@ -18,7 +19,7 @@ export function DeployPlaylistModal({ playlist, servers, onClose }) {
   const { t } = useI18n();
   const { push } = useToast();
   const [serverId, setServerId] = useState('');
-  const [filename, setFilename] = useState('playlist.json');
+  const [filename, setFilename] = useState(DEFAULT_PLAYLIST_FILE);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
