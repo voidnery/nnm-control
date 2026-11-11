@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { SRC, DEST, LANGS, ROOT, apiReference, expectedCopy, RU } from '../scripts/wiki-sync.mjs';
+import { wikiExport, wikiName, rewriteLinks, OWNED } from '../scripts/wiki-export.mjs';
 import { openapiDocument } from '../src/api/openapi.js';
 import { EVENT_TYPES } from '../src/services/events.js';
 import { PERMISSIONS } from '../src/permissions.js';
@@ -134,6 +135,38 @@ await check('and the panel shows it: route, menu entry, smoke test', () => {
   assert.ok(app.includes('<Route path="/help/:lang/:page" element={<HelpPage />} />'));
   assert.ok(app.includes("{ to: '/help', key: 'nav.help' }"), 'visible to everyone');
   assert.ok(readFileSync(join(ROOT, 'frontend/scripts/pages-smoke.mjs'), 'utf8').includes("['HelpPage','/help']"));
+});
+
+console.log('\nTHE GITHUB WIKI (wiki-export.mjs):');
+
+await check('every page of both languages under its own name, plus Home, sidebar and footer', () => {
+  const files = wikiExport();
+  const pages = LANGS.flatMap(lang => order.map(slug => `${wikiName(lang, slug)}.md`));
+  assert.deepEqual(Object.keys(files).sort(), [...pages, 'Home.md', '_Sidebar.md', '_Footer.md'].sort());
+  assert.ok(Object.keys(files).every(OWNED), 'the export removes only what it writes');
+  assert.ok(!OWNED('.git') && !OWNED('Notes.md'));
+});
+
+await check('every link leads to an exported page, and every anchor to a heading on it', () => {
+  const files = wikiExport();
+  const bad = [];
+  for (const [name, md] of Object.entries(files)) {
+    for (const href of linksOf(md)) {
+      if (/^https?:\/\//i.test(href)) continue;
+      if (/\.md(#|$)/.test(href)) { bad.push(`${name}: ${href} (still a file link)`); continue; }
+      const [to, anchor] = href.split('#');
+      const target = to ? files[`${to}.md`] : md;
+      if (!target) bad.push(`${name}: ${href}`);
+      else if (anchor && !anchorsOf(target).has(anchor)) bad.push(`${name}: ${href} (no heading)`);
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+
+await check('links are rewritten, code is not', () => {
+  assert.equal(rewriteLinks('[a](API.md#token) [b](../en/Home.md) [c](https://x.org/a.md)', 'ru'),
+    '[a](ru-API#token) [b](en-Home) [c](https://x.org/a.md)');
+  assert.equal(rewriteLinks('`[a](API.md)` and\n```\n[b](API.md)\n```', 'en'), '`[a](API.md)` and\n```\n[b](API.md)\n```');
 });
 
 console.log('\nTHE RENDERER:');

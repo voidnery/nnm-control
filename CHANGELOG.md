@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **The wiki on the GitHub Wiki tab.** `backend/scripts/wiki-export.mjs` exports `docs/wiki` to a clone of
+  the wiki repository: one flat folder, the language in each page name (`ru-…`, `en-…`), links and anchors
+  rewritten, a language choice on `Home`, both languages in `_Sidebar`. `tests/wiki.test.mjs` checks that every
+  exported link leads to an exported page and heading. How to publish: `docs/wiki/README.md`.
+
 ## 1.32.0 — external API, events and webhooks, wiki, Nimble playlists fixed (HQ T-0049)
 
 Released through the old path (GitHub Pages APT, `1:1.32.0`, images on ghcr.io): installed panels update
