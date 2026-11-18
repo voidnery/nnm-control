@@ -1,23 +1,23 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Wed, 11 Nov 2026 03:45:13 +0000
+Date: Wed, 18 Nov 2026 17:05:12 +0000
 Label: nnm-control
 Origin: nnm-control
 Suite: stable
 MD5Sum:
- 72d0841ef0c258b05a8e6018a715093d              146 Release
- f98c8fc18fc246e58216f801028a0609            75179 main/binary-amd64/Packages
- 4a1bd6d8140776c9ebcdc26023e547f7            10128 main/binary-amd64/Packages.gz
+ e75d559dd78254d2e3ca5dbadbb5bb7d              146 Release
+ 55bf73a5902c12ef9c766a10c31dda23            75965 main/binary-amd64/Packages
+ 3c83a70ab0676b0617595f8e98e72bb9            10228 main/binary-amd64/Packages.gz
 SHA1:
- fedeb95812e225854c1c6cf22e9c1d62fa0e2562              146 Release
- ee2194099a99507beac929ea5e198eae672eaa37            75179 main/binary-amd64/Packages
- bd81360e267575367f208e19ead7fc7a85ebd1df            10128 main/binary-amd64/Packages.gz
+ 83e72d0a1c40a357e6123ba5036f779dd85b75ee              146 Release
+ d1f972a48269cdfdffe4055c4ef685981c2b4930            75965 main/binary-amd64/Packages
+ 5c9f025267ef8b374c3ab49b4e7fe1da5be5329d            10228 main/binary-amd64/Packages.gz
 SHA256:
- 9a913fde6dcba0626dfdadfed401169811896aafcd055fdaec6abae56fae88b0              146 Release
- 3e1682a374bd772d033c3900e6ced72c3d3482bcaec63e23a8ee852e9938315d            75179 main/binary-amd64/Packages
- 8b0676e3d6060914bda85ed243c74904635541410c729f6a5e34d530b93049a2            10128 main/binary-amd64/Packages.gz
+ 0b6e384d73306c7b42f612d65821b89b1ae37b3b7dae6b55e1ce7a765c57c6f8              146 Release
+ 7ee9743a563c05179c119eb2abc5f7c6b4790ec13bbff9f3562816cd1f8d6ba3            75965 main/binary-amd64/Packages
+ 2a905b31c23513e57f87cfd76691f3b408756a9031f8b34222c557ae9feade04            10228 main/binary-amd64/Packages.gz
 SHA512:
- 6c15d1b652385ab209bb95da0a18ec864ce4666311889fbbd04ffbd314a45458978e5f464011ca0f245312044d250ab7c287a07b162976d2c8397a18f7ed1dee              146 Release
- 628773ffdea49589a3ec7204fb5f09f26aae0ea7cfbae113ea326bdf1ba8091a22cb21c250ff3a2aba55b9920832a90cf48cde8b3021cc221a1b42465a07130f            75179 main/binary-amd64/Packages
- 75cbab6947a39dbe0a5a9d0a69885cf3ecefa779ec7d23c33d0b0206ca63bef096cdc6d5709a6e92c6447469c474aa924852d834d9c190627a2ac6e8eb1d2d32            10128 main/binary-amd64/Packages.gz
+ cbf89a0b3f5dfd779e5fdd03fe80fb437ccd5599a12228b735b6a566c49eaf3b1b5ac7ff4c20792e7f4d3078c26d4620c404dd273ff7ba334eb2656e47b373a8              146 Release
+ 367d7443f84786176131c8e1ed2233cfcc57193deafd7edb13f51efbe343e632fa950329c2bbfab6e538adf8cbfa61b9ff17f2997f25088b349f0e2bad201cd0            75965 main/binary-amd64/Packages
+ 1569d24af6f74b1e021c71f7243c2c89a9a36ee4040cc0cfd70953ec69752bd2cb515449912096a2043d436f45b5acccf59ff3b543f6540fc19c4ab28a69c1a0            10228 main/binary-amd64/Packages.gz
