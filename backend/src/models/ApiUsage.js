@@ -19,6 +19,9 @@ const apiUsageSchema = new mongoose.Schema({
   // 'YYYY-MM-DD' in UTC.
   day: { type: String, required: true, unique: true },
   calls: { type: Number, default: 0 },
+  // Of those, the calls an external API request (/api/v1) caused — held to their own daily allowance
+  // (services/apiBudget.js), so an API token can never spend the panel's budget.
+  apiCalls: { type: Number, default: 0 },
   // Broken down so a spike can be attributed rather than merely noticed.
   byPath: { type: mongoose.Schema.Types.Mixed, default: {} },
   firstAt: { type: Date, default: Date.now },

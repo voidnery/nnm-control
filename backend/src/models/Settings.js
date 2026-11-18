@@ -66,6 +66,12 @@ const settingsSchema = new mongoose.Schema({
   // backup, which is the same installation. Not a hostname and not an address.
   instanceId: { type: String, default: '' },
   instanceName: { type: String, default: '' },
+  // How much of the WMSPanel budget the external API (/api/v1) may cause (services/apiBudget.js).
+  apiLimits: {
+    dailyCalls: { type: Number, default: 1000 },
+    refreshSec: { type: Number, default: 900 },
+    reservePct: { type: Number, default: 20 },
+  },
   // What services/eventWatch.js polls for server.* and stream.* events, and how patiently.
   eventWatch: {
     enabled: { type: Boolean, default: true },

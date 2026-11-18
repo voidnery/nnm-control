@@ -26,7 +26,7 @@ export const RU = {
   listEvents: 'Журнал событий — те же конверты, что уходят в webhooks (evt/1)',
   listServers: 'Серверы панели',
   getServer: 'Один сервер',
-  listLiveStreams: 'Живые потоки на сервере сейчас (кодеки, разрешение, битрейт, источник, время)',
+  listLiveStreams: 'Живые потоки на сервере сейчас — от самого Nimble',
   listStreamObjects: 'Настройки потоков одного вида',
   createStreamObject: 'Создать',
   getStreamObject: 'Один объект',

@@ -3,6 +3,8 @@ import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { ApiToken } from '../models/ApiToken.js';
 import { logEvent } from '../services/audit.js';
 import { generateToken, grantable, cidrList, publicToken } from '../services/apiTokens.js';
+import { Settings } from '../models/Settings.js';
+import { apiLimits, budgetReport } from '../services/apiBudget.js';
 
 // Issuing and revoking API tokens from the panel (nnm-api/1 §2.2). The token is returned ONCE, in the
 // answer to its creation; the panel never shows it again and keeps only its hash.
@@ -50,4 +52,17 @@ apiTokensRouter.post('/:id/revoke', async (req, res) => {
   if (!t.revokedAt) { t.revokedAt = new Date(); await t.save(); }
   logEvent({ req, action: 'apitoken:revoke', target: `${t.name}#${t.tokenId}`, outcome: 'ok', status: 200 });
   res.json(publicToken(t));
+});
+
+// How much of the WMSPanel budget the external API may cause, and how much it has today
+// (services/apiBudget.js).
+apiTokensRouter.get('/budget', async (_req, res) => res.json(await budgetReport(apiLimits(await Settings.load()))));
+apiTokensRouter.put('/budget', async (req, res) => {
+  const s = await Settings.load();
+  const next = apiLimits({ apiLimits: { ...apiLimits(s), ...(req.body || {}) } });
+  s.apiLimits = next;
+  s.markModified?.('apiLimits');
+  await s.save();
+  logEvent({ req, action: 'apitoken:budget', target: `${next.dailyCalls} calls/day, refresh ${next.refreshSec} s, reserve ${next.reservePct} %`, outcome: 'ok', status: 200 });
+  res.json(await budgetReport(next));
 });

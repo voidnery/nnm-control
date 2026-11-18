@@ -31,7 +31,7 @@ const ifMatch = { name: 'If-Match', in: 'header', required: false, description: 
 const common = {
   401: err('no token, or the token is invalid, expired, revoked or used from an address it is not allowed from'),
   403: err('the token or user lacks the permission named in `x-permission`'),
-  429: { ...err('too many requests for this token (600 a minute unless set otherwise)'), headers: { 'Retry-After': { schema: { type: 'integer' } } } },
+  429: { ...err('`rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter)'), headers: { 'Retry-After': { schema: { type: 'integer' } } } },
 };
 const op = (o) => ({ ...o, responses: { ...o.responses, ...common } });
 
@@ -87,13 +87,13 @@ export function openapiDocument() {
     },
     '/servers/{serverId}/streams': {
       get: op({
-        operationId: 'listLiveStreams', tags: ['streams'], summary: 'Live streams on the server now (codecs, resolution, bandwidth, publisher, uptime)', 'x-permission': 'streams.view',
-        parameters: [server], responses: { 200: ok('as WMSPanel reports them', page({ type: 'object', additionalProperties: true })), 404: err('`not_found`'), ...upstreamErrors },
+        operationId: 'listLiveStreams', tags: ['streams'], summary: 'Live streams on the server now, from Nimble itself', description: 'Asked of Nimble\'s native API on the server, not of WMSPanel: costs nothing from the WMSPanel budget. One item per stream: `app`, `stream` and the fields Nimble reports (bandwidth, resolution, codecs and so on).', 'x-permission': 'streams.view',
+        parameters: [server], responses: { 200: ok('one item per stream', page({ type: 'object', required: ['app', 'stream'], additionalProperties: true })), 404: err('`not_found`'), 502: err('`nimble_failed` — Nimble on the server did not answer') },
       }),
     },
     '/servers/{serverId}/stream-objects/{kind}': {
       get: op({
-        operationId: 'listStreamObjects', tags: ['stream settings'], summary: 'Stream settings of one kind', description: `Permissions by kind (view / change): ${kindDoc}.`, 'x-permission': 'by kind',
+        operationId: 'listStreamObjects', tags: ['stream settings'], summary: 'Stream settings of one kind', description: `From the panel's own copy of WMSPanel's list, not from WMSPanel on every request: the copy is refreshed at most once per \`refreshSec\` (15 minutes unless set otherwise) and only within the API's WMSPanel allowance. \`fetchedAt\` and the \`X-Data-Fetched-At\` header say how old it is; \`stale: true\` and \`X-Data-Stale\` — it could not be refreshed (\`wmspanel_budget\` or \`upstream_failed\`). A change is one WMSPanel call. Permissions by kind (view / change): ${kindDoc}.`, 'x-permission': 'by kind',
         parameters: [server, kindParam], responses: { 200: ok('each item carries its `etag`', page(ref('StreamObject'))), 404: err('`not_found`, `unknown_kind` (details.kinds)'), ...upstreamErrors },
       }),
       post: op({

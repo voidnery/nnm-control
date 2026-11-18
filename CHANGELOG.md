@@ -1,6 +1,27 @@
 # Changelog
 
-## Unreleased
+## 1.32.1 — the API no longer spends the panel's WMSPanel budget (HQ T-0049)
+
+Released through the old path (GitHub Pages APT, `1:1.32.1`): `sudo apt update && sudo apt upgrade`.
+
+- **An API token can no longer leave the panel without WMSPanel.** The whole panel runs on one WMSPanel
+  account with 15 000 calls a day, and `/api/v1` went to WMSPanel on every request for stream settings
+  (a PATCH three times) — a script polling with a token could spend the day's budget and blind the panel.
+  Now the API works on the panel's own data, and the panel decides when WMSPanel is asked
+  (`services/apiBudget.js`):
+  - reads come from the panel's copy of each list (`StreamObjectCache`), which the panel's own screens keep
+    filling; for the API a copy is refreshed at most once per 15 minutes however many requests arrive.
+    `fetchedAt` / `X-Data-Fetched-At` give its age, `stale` / `X-Data-Stale` say when it could not be
+    refreshed;
+  - a change is exactly one WMSPanel call, and the copy is updated in place instead of being read back;
+  - the API may cause at most 1 000 WMSPanel calls a day, and none once the panel as a whole has used 80 %
+    of the account limit. Over either, reads answer from the copy and changes get `429 wmspanel_budget`
+    with `Retry-After` until 00:00 UTC.
+  The three numbers and today's usage: **API tokens → WMSPanel budget for the API**.
+- **Live streams through the API come from Nimble itself** (`GET /servers/{id}/streams`), not from
+  WMSPanel: free and current. One item per stream, `{app, stream, …}` as Nimble reports it; a server Nimble
+  does not answer for is `502 nimble_failed`.
+- Wiki and API reference updated (API → The WMSPanel budget).
 
 - **The wiki on the GitHub Wiki tab.** `backend/scripts/wiki-export.mjs` exports `docs/wiki` to a clone of
   the wiki repository: one flat folder, the language in each page name (`ru-…`, `en-…`), links and anchors

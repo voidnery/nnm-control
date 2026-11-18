@@ -9,7 +9,7 @@
 #
 # Сценарии (LAB_SCENARIO):
 #   fresh       — чистая установка 1:X.Y.Z;
-#   upgrade     — 1:1.31.1 из публичного APT, данные, затем обновление на 1:X.Y.Z: данные на месте;
+#   upgrade     — 1:1.32.0 из публичного APT, данные, затем обновление на 1:X.Y.Z: данные на месте;
 #   pull-fails  — диверсия: в реестре нет образа web; обновление обязано НЕ перезапустить службу (старая
 #                 версия работает), а после появления образа `dpkg --configure -a` довести его до конца.
 # Во всех, где стоит новая версия: /healthz, API v1 и OpenAPI, токен и права, webhook с проверкой подписи,
@@ -20,7 +20,7 @@ cd "$(dirname "$0")/.."
 
 SCEN=${LAB_SCENARIO:-fresh}
 VER=$(tr -d '\r\n' < VERSION)
-OLD=1.31.1
+OLD=1.32.0
 OWNER=voidnery
 P=nnm-control
 PORT=8090
@@ -143,6 +143,11 @@ TOK=$(api POST /api/api-tokens '{"name":"lab","permissions":["servers.view","pla
 api GET /api/v1/servers '' "$TOK" >/dev/null; [ "$(code)" = 200 ] || fail "/api/v1/servers с токеном: $(code)"
 api GET /api/v1/playlists '' "$TOK" >/dev/null; [ "$(code)" = 200 ] || fail "/api/v1/playlists: $(code)"
 api POST /api/v1/playlists '{"name":"x"}' "$TOK" >/dev/null; [ "$(code)" = 403 ] || fail "токен без playlist.manage создал плейлист: $(code)"
+# 1.32.1: лимит WMSPanel для API виден и меняется в панели.
+B=$(api GET /api/api-tokens/budget '' "$T" | json dailyCalls)
+[ "$B" = 1000 ] || fail "лимит WMSPanel для API: HTTP $(code), $(head -c 300 "$W/body")"
+B=$(api PUT /api/api-tokens/budget '{"dailyCalls":500}' "$T" | json dailyCalls)
+[ "$B" = 500 ] || fail "лимит WMSPanel для API не сохранился: HTTP $(code), $(head -c 300 "$W/body")"
 log "API v1: токен и права — как задумано"
 
 # Webhook: приёмник на адресе машины (частная сеть — разрешена), подпись проверяется, как у получателя.

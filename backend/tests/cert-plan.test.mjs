@@ -12,6 +12,7 @@
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { X509Certificate } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -137,15 +138,19 @@ check('a self-signed certificate is a problem, not a note', () => {
 });
 
 check('a leaf with no intermediate is noted, because it fails on some clients only', () => {
+  // Read on a day inside the fixtures' validity: with the real clock this passed until the fixture
+  // leaf expired (2026-11-15) and failed from then on.
+  const now = new Date(new X509Certificate(leaf).validFrom);
+  now.setUTCDate(now.getUTCDate() + 1);
   const r = inspectUploaded({ certificatePem: leaf, privateKeyPem: leafKey,
-                              domain: 'edge.example.ru' });
+                              domain: 'edge.example.ru', now });
   assert.ok(r.notes.includes('no-intermediate-bundled'),
     'a bare leaf passed silently — the failure it causes is intermittent by client');
   // Still usable: it is a note rather than a problem, and the bundle version
   // must not carry the same note.
   assert.ok(r.ok);
   assert.ok(!inspectUploaded({ certificatePem: bundle, privateKeyPem: leafKey,
-                               domain: 'edge.example.ru' }).notes.includes('no-intermediate-bundled'));
+                               domain: 'edge.example.ru', now }).notes.includes('no-intermediate-bundled'));
 });
 
 check('expiry is read against a clock that can be moved, and both ends are checked', () => {

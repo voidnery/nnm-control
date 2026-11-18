@@ -81,6 +81,38 @@ function IssuedModal({ issued, onClose }) {
   );
 }
 
+// What the API may cost WMSPanel: the panel's whole account has a daily limit, and a token must not be
+// able to spend it (backend services/apiBudget.js).
+function BudgetPanel() {
+  const { t } = useI18n();
+  const [b, setB] = useState(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { api('/api-tokens/budget').then(setB).catch(e => setMsg(e.message)); }, []);
+  if (!b) return msg ? <div className="error-box">{msg}</div> : null;
+  const save = async () => {
+    try {
+      setB(await api('/api-tokens/budget', { method: 'PUT', body: { dailyCalls: Number(b.dailyCalls), refreshSec: Number(b.refreshMin) * 60 || b.refreshSec, reservePct: Number(b.reservePct) } }));
+      setMsg(t('tok.budgetSaved'));
+    } catch (e) { setMsg(e.message); }
+  };
+  const refreshMin = b.refreshMin ?? Math.round(b.refreshSec / 60);
+  return (
+    <div className="panel" style={{ marginTop: 18 }}>
+      <h3>{t('tok.budget')}</h3>
+      <div className="hint">{t('tok.budgetHint', { limit: b.accountLimit })}</div>
+      <div className="hint">{t('tok.budgetToday', { used: b.used, limit: b.dailyCalls, panel: b.panelCalls, panelLimit: b.panelLimit })}
+        {b.blocked && <b> {t(b.blocked === 'api_allowance' ? 'tok.budgetBlockedApi' : 'tok.budgetBlockedPanel')}</b>}</div>
+      <div className="row" style={{ gap: 14, alignItems: 'flex-end', marginTop: 10 }}>
+        <label>{t('tok.budgetDaily')}<input type="number" min={0} max={b.accountLimit} value={b.dailyCalls} onChange={e => setB({ ...b, dailyCalls: e.target.value })} /></label>
+        <label>{t('tok.budgetRefresh')}<input type="number" min={1} max={1440} value={refreshMin} onChange={e => setB({ ...b, refreshMin: e.target.value })} /></label>
+        <label>{t('tok.budgetReserve')}<input type="number" min={0} max={90} value={b.reservePct} onChange={e => setB({ ...b, reservePct: e.target.value })} /></label>
+        <button className="primary" onClick={save}>{t('tok.budgetSave')}</button>
+      </div>
+      {msg && <div className="hint">{msg}</div>}
+    </div>
+  );
+}
+
 export default function ApiTokensPage() {
   const confirm = useConfirm();
   const { t } = useI18n();
@@ -137,6 +169,7 @@ export default function ApiTokensPage() {
           </tbody>
         </table>
       </div>
+      <BudgetPanel />
       {modal && <TokenModal catalog={catalog} onClose={() => setModal(false)}
                             onIssued={(r) => { setModal(false); setIssued(r); load(); }} />}
       {issued && <IssuedModal issued={issued} onClose={() => setIssued(null)} />}

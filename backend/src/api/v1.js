@@ -13,6 +13,8 @@ import { NimbleServer } from '../models/NimbleServer.js';
 import { Settings } from '../models/Settings.js';
 import { requireAuth, hasPerm } from '../middleware/auth.js';
 import { wmspanel } from '../services/wmspanelClient.js';
+import { nimble } from '../services/nimbleClient.js';
+import { apiLimits, listFor, spend, updateCopy, expireCopy } from '../services/apiBudget.js';
 import { authenticate, rateLimiter } from '../services/apiTokens.js';
 import { KINDS, itemsOf, etagOf, ifMatchOk } from './streamKinds.js';
 import { Event } from '../models/Webhook.js';
@@ -25,6 +27,11 @@ import { DEFAULT_PLAYLIST_FILE } from '../services/playlistFile.js';
 import { openapiDocument } from './openapi.js';
 
 export const v1Router = Router();
+
+// Nimble's native live view; replaced in tests.
+const nativeLive = (srv) => nimble.liveStreams(srv);
+let live = nativeLive;
+export const setLiveSource = (fn) => { live = fn || nativeLive; };
 
 // {error, code, details} — the error shape of nnm-api/1 §2.1.
 const fail = (res, status, code, error, details) =>
@@ -92,32 +99,47 @@ function loadKind(req, res, next) {
 // Kind-specific permission, after loadKind.
 const kindPerm = (which) => (req, res, next) => perm(req.kind[which])(req, res, next);
 
-// WMSPanel is where stream settings live; a server not mapped to it has none to offer.
+// WMSPanel is where stream settings live; a server not mapped to it has none to offer. The API reads the
+// panel's copy of them, and what it may cost WMSPanel is held by services/apiBudget.js — an API token
+// must never be able to spend the budget the panel itself runs on.
 async function upstream(req, res) {
   if (!req.srv.wmspanelServerId) {
     fail(res, 409, 'not_mapped', 'this server is not mapped to a WMSPanel server — set it in the panel');
     return null;
   }
   const s = await Settings.load();
-  return { cfg: s.wmspanel, sid: req.srv.wmspanelServerId };
+  return { cfg: s.wmspanel, sid: String(req.srv.wmspanelServerId), limits: apiLimits(s) };
 }
 
-// An upstream refusal is a 502 that says whose refusal it was.
+// Out of allowance is a 429 until the WMSPanel day turns; an upstream refusal is a 502 that says whose.
 const viaUpstream = (fn) => async (req, res) => {
   try { await fn(req, res); }
   catch (e) {
+    if (e?.code === 'wmspanel_budget') {
+      res.set('Retry-After', String(e.details.retryAfter));
+      return fail(res, 429, 'wmspanel_budget', e.message, e.details);
+    }
     if (e?.code === 'NO_CREDS') return fail(res, 409, 'no_credentials', e.message);
     return fail(res, 502, 'upstream_failed', `WMSPanel: ${e?.message || e}`, { upstream: e?.data ?? null });
   }
 };
 
+// One kind's list as the panel holds it: {items, fetchedAt, stale, reason?}.
+const listOf = (req, up) => listFor({
+  sid: up.sid, list: req.kind.list, limits: up.limits, fetch: () => wmspanel[req.kind.list](up.cfg, up.sid),
+});
+const dataAge = (res, l) => {
+  res.set('X-Data-Fetched-At', l.fetchedAt.toISOString());
+  if (l.stale) res.set('X-Data-Stale', l.reason || 'stale');
+};
+
 async function findObject(req, res) {
   const up = await upstream(req, res);
   if (!up) return null;
-  const items = itemsOf(await wmspanel[req.kind.list](up.cfg, up.sid));
-  const obj = items.find(o => String(o?.id) === String(req.params.objId));
+  const l = await listOf(req, up);
+  const obj = l.items.find(o => String(o?.id) === String(req.params.objId));
   if (!obj) { fail(res, 404, 'not_found', `${req.params.kind} ${req.params.objId} not found on this server`); return null; }
-  return { up, obj, etag: etagOf(obj) };
+  return { up, obj, etag: etagOf(obj), l };
 }
 
 // evt/1: every change of stream settings through the API is an event (secrets masked in emit()).
@@ -162,20 +184,25 @@ const base = '/servers/:serverId/stream-objects/:kind';
 v1Router.get(base, loadKind, kindPerm('view'), loadServer, viaUpstream(async (req, res) => {
   const up = await upstream(req, res);
   if (!up) return;
-  const items = itemsOf(await wmspanel[req.kind.list](up.cfg, up.sid));
-  res.json({ items: items.map(o => ({ ...o, etag: etagOf(o) })), next: null });
+  const l = await listOf(req, up);
+  dataAge(res, l);
+  res.json({ items: l.items.map(o => ({ ...o, etag: etagOf(o) })), next: null, fetchedAt: l.fetchedAt, stale: l.stale });
 }));
 
 v1Router.get(`${base}/:objId`, loadKind, kindPerm('view'), loadServer, viaUpstream(async (req, res) => {
   const f = await findObject(req, res);
   if (!f) return;
+  dataAge(res, f.l);
   res.set('ETag', f.etag).json(f.obj);
 }));
 
+// A write is one WMSPanel call. The copy is changed in place, not read back; a creation (whose answer
+// does not reliably carry the new object) leaves the copy to be refreshed on the next read.
 v1Router.post(base, loadKind, kindPerm('manage'), loadServer, viaUpstream(async (req, res) => {
   const up = await upstream(req, res);
   if (!up) return;
-  const out = await wmspanel[req.kind.create](up.cfg, up.sid, req.body || {});
+  const out = await spend(up.limits, () => wmspanel[req.kind.create](up.cfg, up.sid, req.body || {}));
+  await expireCopy(up.sid, req.kind.list);
   objectEvent(req, 'stream_object.created', out?.id ?? out?.setting?.id ?? '', { after: req.body || {} });
   res.status(201).json(out);
 }));
@@ -189,12 +216,12 @@ for (const method of ['patch', 'put']) {
     if (!ifMatchOk(req.headers['if-match'], f.etag)) {
       return fail(res, 412, 'precondition_failed', 'the object changed since it was read', { etag: f.etag, current: f.obj });
     }
-    await wmspanel[req.kind.update](f.up.cfg, f.up.sid, req.params.objId, req.body || {});
-    const after = await findObject(req, res);
-    if (!after) return;
+    await spend(f.up.limits, () => wmspanel[req.kind.update](f.up.cfg, f.up.sid, req.params.objId, req.body || {}));
+    const after = { ...f.obj, ...(req.body || {}), id: f.obj.id };
+    await updateCopy(f.up.sid, req.kind.list, items => items.map(o => (String(o?.id) === String(f.obj.id) ? after : o)));
     objectEvent(req, 'stream_object.changed', req.params.objId,
-      { before: f.obj, after: after.obj, changed: changedFields(f.obj, after.obj), via: 'api' });
-    res.set('ETag', after.etag).json(after.obj);
+      { before: f.obj, after, changed: changedFields(f.obj, after), via: 'api' });
+    res.set('ETag', etagOf(after)).json(after);
   }));
 }
 
@@ -204,7 +231,8 @@ v1Router.delete(`${base}/:objId`, loadKind, kindPerm('manage'), loadServer, viaU
   if (!ifMatchOk(req.headers['if-match'], f.etag)) {
     return fail(res, 412, 'precondition_failed', 'the object changed since it was read', { etag: f.etag, current: f.obj });
   }
-  await wmspanel[req.kind.remove](f.up.cfg, f.up.sid, req.params.objId);
+  await spend(f.up.limits, () => wmspanel[req.kind.remove](f.up.cfg, f.up.sid, req.params.objId));
+  await updateCopy(f.up.sid, req.kind.list, items => items.filter(o => String(o?.id) !== String(f.obj.id)));
   objectEvent(req, 'stream_object.deleted', req.params.objId, { before: f.obj, via: 'api' });
   res.status(204).end();
 }));
@@ -217,18 +245,28 @@ v1Router.post(`${base}/:objId/actions/:action`, loadKind, kindPerm('manage'), lo
   }
   const up = await upstream(req, res);
   if (!up) return;
-  const out = await act(wmspanel, up.cfg, up.sid, req.params.objId);
+  const out = await spend(up.limits, () => act(wmspanel, up.cfg, up.sid, req.params.objId));
   objectEvent(req, 'stream_object.action', req.params.objId, { action: req.params.action, via: 'api' });
   res.json(out ?? { ok: true });
 }));
 
-// ---- live streams (what is on the air now; WMSPanel's live view) ----
-v1Router.get('/servers/:serverId/streams', perm('streams.view'), loadServer, viaUpstream(async (req, res) => {
-  const up = await upstream(req, res);
-  if (!up) return;
-  const d = await wmspanel.liveStreams(up.cfg, up.sid);
-  res.json({ items: itemsOf(d), next: null });
-}));
+// ---- live streams (what is on the air now) ----
+// From Nimble's own API on the server — free, unlike WMSPanel's live view, and as current as it gets.
+// Nimble answers [{app, streams: [{strm, ...}]}]; each stream becomes one item {app, stream, ...}.
+export function liveItems(d) {
+  const list = Array.isArray(d) ? d : (Array.isArray(d?.streams) ? d.streams : []);
+  return list.flatMap(x => (Array.isArray(x?.streams)
+    ? x.streams.map(s => ({ ...s, app: x.app ?? x.application, stream: s?.strm ?? s?.stream ?? s?.name }))
+    : [{ ...x, app: x?.app ?? x?.application, stream: x?.stream ?? x?.strm ?? x?.name }]))
+    .filter(s => s.app && s.stream);
+}
+
+v1Router.get('/servers/:serverId/streams', perm('streams.view'), loadServer, async (req, res) => {
+  let d;
+  try { d = await live(req.srv); }
+  catch (e) { return fail(res, 502, 'nimble_failed', `Nimble on ${req.srv.name}: ${e?.message || e}`); }
+  res.json({ items: liveItems(d), next: null });
+});
 
 // ---- playlists kept in the panel (the editor's model) ----
 const playlistEtag = (p) => etagOf({ name: p.name, description: p.description, model: p.model });

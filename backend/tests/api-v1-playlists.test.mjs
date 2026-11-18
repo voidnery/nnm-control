@@ -43,7 +43,8 @@ const SERVERS = {
 };
 NimbleServer.findById = async (id) => SERVERS[id] || null;
 Settings.load = async () => ({ wmspanel: { clientId: 'c', apiKey: 'k' }, instanceId: '01TESTINSTANCE', instanceName: 'ci', save: async () => {} });
-wmspanel.liveStreams = async (_c, sid) => ({ streams: [{ id: 's1', application: 'live', stream: 'a', server: sid, bandwidth: 1 }] });
+// Live streams come from Nimble on the server (never WMSPanel): the native answer's shape.
+wmspanel.liveStreams = async () => { throw new Error('not WMSPanel'); };
 AuditLog.create = async () => ({});
 
 // Stored playlists.
@@ -98,7 +99,8 @@ configureEvents({
   WebhookSubscription: { find: async () => [] }, WebhookDelivery: { insertMany: async () => [] },
 });
 
-const { v1Router } = await import('../src/api/v1.js');
+const { v1Router, setLiveSource } = await import('../src/api/v1.js');
+setLiveSource(async () => [{ app: 'live', streams: [{ strm: 'a', bandwidth: 1 }] }]);
 const { openapiDocument } = await import('../src/api/openapi.js');
 const app = express();
 app.use(express.json());

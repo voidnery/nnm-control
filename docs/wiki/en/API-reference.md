@@ -29,7 +29,7 @@ The event log — the same envelopes webhooks deliver (evt/1).
 | 400 | `bad_since` |
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ## servers
 
@@ -44,7 +44,7 @@ Servers of the panel.
 | 200 | all servers |
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ### GET /servers/{serverId}
 
@@ -59,26 +59,27 @@ One server.
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ## streams
 
 ### GET /servers/{serverId}/streams
 
-Live streams on the server now (codecs, resolution, bandwidth, publisher, uptime).
+Live streams on the server now, from Nimble itself.
+
+Asked of Nimble's native API on the server, not of WMSPanel: costs nothing from the WMSPanel budget. One item per stream: `app`, `stream` and the fields Nimble reports (bandwidth, resolution, codecs and so on).
 
 - Permission: `streams.view`
 - Parameters: `serverId` (path)
 
 | Answers | |
 |---|---|
-| 200 | as WMSPanel reports them |
+| 200 | one item per stream |
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
-| 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
-| 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
+| 502 | `nimble_failed` — Nimble on the server did not answer |
 
 ## stream settings
 
@@ -86,7 +87,7 @@ Live streams on the server now (codecs, resolution, bandwidth, publisher, uptime
 
 Stream settings of one kind.
 
-Permissions by kind (view / change): `udp` — wmsobjects.view / wmsobjects.manage; `mpegts-in` — wmsobjects.view / wmsobjects.manage; `mpegts-out` — wmsobjects.view / wmsobjects.manage; `republish` — republish.view / republish.manage; `livepull` — wmsobjects.view / wmsobjects.manage; `hotswap` — wmsobjects.view / wmsobjects.manage; `apps` — wmsobjects.view / wmsobjects.manage; `interfaces` — wmsobjects.view / wmsobjects.manage.
+From the panel's own copy of WMSPanel's list, not from WMSPanel on every request: the copy is refreshed at most once per `refreshSec` (15 minutes unless set otherwise) and only within the API's WMSPanel allowance. `fetchedAt` and the `X-Data-Fetched-At` header say how old it is; `stale: true` and `X-Data-Stale` — it could not be refreshed (`wmspanel_budget` or `upstream_failed`). A change is one WMSPanel call. Permissions by kind (view / change): `udp` — wmsobjects.view / wmsobjects.manage; `mpegts-in` — wmsobjects.view / wmsobjects.manage; `mpegts-out` — wmsobjects.view / wmsobjects.manage; `republish` — republish.view / republish.manage; `livepull` — wmsobjects.view / wmsobjects.manage; `hotswap` — wmsobjects.view / wmsobjects.manage; `apps` — wmsobjects.view / wmsobjects.manage; `interfaces` — wmsobjects.view / wmsobjects.manage.
 
 - Permission: by kind of settings (see [API](API.md#permissions-by-kind))
 - Parameters: `serverId` (path), `kind` (path)
@@ -98,7 +99,7 @@ Permissions by kind (view / change): `udp` — wmsobjects.view / wmsobjects.mana
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found`, `unknown_kind` (details.kinds) |
 | 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
 
 ### POST /servers/{serverId}/stream-objects/{kind}
@@ -117,7 +118,7 @@ Create.
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found`, `unknown_kind` |
 | 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
 
 ### GET /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -134,7 +135,7 @@ One object.
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found`, `unknown_kind` |
 | 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
 
 ### PATCH /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -156,7 +157,7 @@ Example — replace the source of a UDP stream: read it, then send `{"source_str
 | 404 | `not_found`, `unknown_kind` |
 | 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
 | 412 | `precondition_failed` — details.etag, details.current |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
 
 ### PUT /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -176,7 +177,7 @@ Replace the whole object.
 | 404 | `not_found`, `unknown_kind` |
 | 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
 | 412 | `precondition_failed` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
 
 ### DELETE /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -195,7 +196,7 @@ Delete.
 | 404 | `not_found`, `unknown_kind` |
 | 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
 | 412 | `precondition_failed` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
 
 ### POST /servers/{serverId}/stream-objects/{kind}/{objId}/actions/{action}
@@ -215,7 +216,7 @@ Actions by kind: `mpegts-out` — pause, resume, restart; `republish` — restar
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found`, `unknown_kind`, `unknown_action` (details.actions) |
 | 409 | `not_mapped` — the server is not mapped to a WMSPanel server; `no_credentials` — WMSPanel API credentials are not set |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `upstream_failed` — WMSPanel refused or did not answer; `details.upstream` holds its answer |
 
 ## playlists
@@ -231,7 +232,7 @@ Playlists kept in the panel (without the model).
 | 200 | newest change first |
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ### POST /playlists
 
@@ -246,7 +247,7 @@ Create.
 | 400 | `name_required` |
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ### GET /playlists/{playlistId}
 
@@ -261,7 +262,7 @@ One playlist with its model.
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ### PATCH /playlists/{playlistId}
 
@@ -278,7 +279,7 @@ Change only the fields sent.
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
 | 412 | `precondition_failed` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ### PUT /playlists/{playlistId}
 
@@ -296,7 +297,7 @@ Replace name, description and model.
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
 | 412 | `precondition_failed` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ### DELETE /playlists/{playlistId}
 
@@ -312,7 +313,7 @@ Delete.
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
 | 412 | `precondition_failed` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ### GET /playlists/{playlistId}/nimble
 
@@ -329,7 +330,7 @@ The clean build of the model. A deploy additionally renews the Id of every block
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ## server playlist
 
@@ -349,7 +350,7 @@ The playlist on the server now.
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
 | 409 | refused before anything was written: `media_missing` (details.missing), `unsupported_source` (not MP4/MP3, details.unsupported), `refused` (empty playlist, unreadable media list, stream already there or not there), `agent_disabled` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `agent_failed` — the agent on the server answered with an error |
 | 504 | `agent_timeout` — the agent did not pick the task up or did not answer |
 
@@ -372,7 +373,7 @@ The same checks as the panel: a malformed file is always refused; missing media,
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` — server or stored playlist |
 | 409 | refused before anything was written: `media_missing` (details.missing), `unsupported_source` (not MP4/MP3, details.unsupported), `refused` (empty playlist, unreadable media list, stream already there or not there), `agent_disabled` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `agent_failed` — the agent on the server answered with an error |
 | 504 | `agent_timeout` — the agent did not pick the task up or did not answer |
 
@@ -394,7 +395,7 @@ Stop removes the task from the file; start puts it back from the version history
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` — server, or no version holds this stream; `unknown_action` |
 | 409 | refused before anything was written: `media_missing` (details.missing), `unsupported_source` (not MP4/MP3, details.unsupported), `refused` (empty playlist, unreadable media list, stream already there or not there), `agent_disabled` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 | 502 | `agent_failed` — the agent on the server answered with an error |
 | 504 | `agent_timeout` — the agent did not pick the task up or did not answer |
 
@@ -411,7 +412,7 @@ Versions written to the server, newest first (without content).
 | 401 | no token, or the token is invalid, expired, revoked or used from an address it is not allowed from |
 | 403 | the token or user lacks the permission named in `x-permission` |
 | 404 | `not_found` |
-| 429 | too many requests for this token (600 a minute unless set otherwise) |
+| 429 | `rate_limited` — too many requests for this token (600 a minute unless set otherwise); `wmspanel_budget` — stream settings only: the API has used its WMSPanel allowance for today, or the panel has reached the part of the WMSPanel limit it keeps for itself (details.reason `api_allowance` / `panel_reserve`, details.retryAfter) |
 
 ## Events (webhooks)
 

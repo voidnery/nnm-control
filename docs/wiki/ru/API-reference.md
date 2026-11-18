@@ -29,7 +29,7 @@
 | 400 | неверный запрос: `bad_since` |
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ## серверы
 
@@ -44,7 +44,7 @@
 | 200 | успех |
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ### GET /servers/{serverId}
 
@@ -59,13 +59,13 @@
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ## живые потоки
 
 ### GET /servers/{serverId}/streams
 
-Живые потоки на сервере сейчас (кодеки, разрешение, битрейт, источник, время).
+Живые потоки на сервере сейчас — от самого Nimble.
 
 - Право: `streams.view`
 - Параметры: `serverId` (path)
@@ -76,9 +76,8 @@
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
-| 409 | отказ до записи: `not_mapped`, `no_credentials` |
-| 429 | слишком часто, см. Retry-After |
-| 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
+| 502 | WMSPanel или агент ответили ошибкой: `nimble_failed` |
 
 ## настройки потоков
 
@@ -96,7 +95,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found`, `unknown_kind` |
 | 409 | отказ до записи: `not_mapped`, `no_credentials` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
 
 ### POST /servers/{serverId}/stream-objects/{kind}
@@ -115,7 +114,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found`, `unknown_kind` |
 | 409 | отказ до записи: `not_mapped`, `no_credentials` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
 
 ### GET /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -132,7 +131,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found`, `unknown_kind` |
 | 409 | отказ до записи: `not_mapped`, `no_credentials` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
 
 ### PATCH /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -152,7 +151,7 @@
 | 404 | не найдено: `not_found`, `unknown_kind` |
 | 409 | отказ до записи: `not_mapped`, `no_credentials` |
 | 412 | объект изменился с момента чтения: `precondition_failed` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
 
 ### PUT /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -172,7 +171,7 @@
 | 404 | не найдено: `not_found`, `unknown_kind` |
 | 409 | отказ до записи: `not_mapped`, `no_credentials` |
 | 412 | объект изменился с момента чтения: `precondition_failed` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
 
 ### DELETE /servers/{serverId}/stream-objects/{kind}/{objId}
@@ -191,7 +190,7 @@
 | 404 | не найдено: `not_found`, `unknown_kind` |
 | 409 | отказ до записи: `not_mapped`, `no_credentials` |
 | 412 | объект изменился с момента чтения: `precondition_failed` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
 
 ### POST /servers/{serverId}/stream-objects/{kind}/{objId}/actions/{action}
@@ -209,7 +208,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found`, `unknown_kind`, `unknown_action` |
 | 409 | отказ до записи: `not_mapped`, `no_credentials` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `upstream_failed` |
 
 ## плейлисты
@@ -225,7 +224,7 @@
 | 200 | успех |
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ### POST /playlists
 
@@ -240,7 +239,7 @@
 | 400 | неверный запрос: `name_required` |
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ### GET /playlists/{playlistId}
 
@@ -255,7 +254,7 @@
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ### PATCH /playlists/{playlistId}
 
@@ -272,7 +271,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
 | 412 | объект изменился с момента чтения: `precondition_failed` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ### PUT /playlists/{playlistId}
 
@@ -290,7 +289,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
 | 412 | объект изменился с момента чтения: `precondition_failed` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ### DELETE /playlists/{playlistId}
 
@@ -306,7 +305,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
 | 412 | объект изменился с момента чтения: `precondition_failed` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ### GET /playlists/{playlistId}/nimble
 
@@ -321,7 +320,7 @@
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ## плейлист на сервере
 
@@ -339,7 +338,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
 | 409 | отказ до записи: `media_missing`, `unsupported_source`, `refused`, `agent_disabled` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `agent_failed` |
 | 504 | агент не ответил: `agent_timeout` |
 
@@ -360,7 +359,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
 | 409 | отказ до записи: `media_missing`, `unsupported_source`, `refused`, `agent_disabled` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `agent_failed` |
 | 504 | агент не ответил: `agent_timeout` |
 
@@ -380,7 +379,7 @@
 | 403 | не хватает права |
 | 404 | не найдено: `not_found`, `unknown_action` |
 | 409 | отказ до записи: `media_missing`, `unsupported_source`, `refused`, `agent_disabled` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 | 502 | WMSPanel или агент ответили ошибкой: `agent_failed` |
 | 504 | агент не ответил: `agent_timeout` |
 
@@ -397,7 +396,7 @@
 | 401 | нет или неверный токен |
 | 403 | не хватает права |
 | 404 | не найдено: `not_found` |
-| 429 | слишком часто, см. Retry-After |
+| 429 | слишком часто, см. Retry-After: `rate_limited`, `wmspanel_budget`, `api_allowance`, `panel_reserve` |
 
 ## События (webhooks)
 

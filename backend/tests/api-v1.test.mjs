@@ -12,6 +12,8 @@ import {
   generateToken, parseToken, grantable, cidrList, authenticate, rateLimiter, NEVER_FOR_TOKENS, publicToken, hashSecret,
 } from '../src/services/apiTokens.js';
 import { etagOf, ifMatchOk, itemsOf, KINDS } from '../src/api/streamKinds.js';
+import { setStore, apiLimits, secondsToReset, remember, LIMIT_DEFAULTS } from '../src/services/apiBudget.js';
+import { DAILY_LIMIT } from '../src/models/ApiUsage.js';
 
 let failures = 0;
 const check = async (name, fn) => {
@@ -37,10 +39,22 @@ const SERVERS = {
 };
 NimbleServer.findById = async (id) => SERVERS[id] || null;
 NimbleServer.find = () => ({ sort: async () => Object.values(SERVERS) });
-Settings.load = async () => ({ wmspanel: { clientId: 'c', apiKey: 'k' } });
-let udp = [{ id: 'u1', name: 'out-1', ip: '239.0.0.1', port: 1234, source_streams: [{ app: 'live', stream: 'a' }], status: 'ok', bandwidth: 100 }];
+let limits = {};
+Settings.load = async () => ({ wmspanel: { clientId: 'c', apiKey: 'k' }, apiLimits: limits });
+const UDP0 = { id: 'u1', name: 'out-1', ip: '239.0.0.1', port: 1234, source_streams: [{ app: 'live', stream: 'a' }], status: 'ok', bandwidth: 100 };
+let udp = [UDP0];
 const calls = [];
-wmspanel.udpList = async () => ({ settings: udp });
+let listCalls = 0;
+wmspanel.udpList = async () => { listCalls++; return { settings: udp }; };
+// The panel's copies and its WMSPanel counts (services/apiBudget.js), in memory.
+const mem = { copies: new Map(), calls: 0, apiCalls: 0 };
+setStore({
+  get: async (sid, list) => mem.copies.get(`${sid}/${list}`) || null,
+  put: async (sid, list, items, fetchedAt = new Date()) => { mem.copies.set(`${sid}/${list}`, { items, fetchedAt }); },
+  usage: async () => ({ calls: mem.calls, apiCalls: mem.apiCalls }),
+  charge: async () => { mem.apiCalls++; },
+});
+wmspanel.liveStreams = async () => { throw new Error('the API must not ask WMSPanel for live streams'); };
 wmspanel.udpUpdate = async (_c, sid, id, patch) => {
   calls.push(['udpUpdate', sid, id, patch]);
   udp = udp.map(o => (o.id === id ? { ...o, ...patch } : o));
@@ -50,7 +64,7 @@ wmspanel.udpDelete = async (_c, sid, id) => { calls.push(['udpDelete', sid, id])
 wmspanel.outgoingAction = async (_c, sid, id, a) => { calls.push(['outgoingAction', sid, id, a]); return { status: 'Ok' }; };
 wmspanel.hotswapList = async () => { throw Object.assign(new Error('Error: server not found'), { data: { status: 'Error' } }); };
 
-const { v1Router } = await import('../src/api/v1.js');
+const { v1Router, setLiveSource, liveItems } = await import('../src/api/v1.js');
 const app = express();
 app.use(express.json());
 app.use('/api/v1', v1Router);
@@ -243,6 +257,122 @@ await check('an unknown path is a JSON 404, not the panel', async () => {
   const r = await call('GET', '/nothing', { token: tok });
   assert.equal(r.status, 404);
   assert.equal(r.json.code, 'not_found');
+});
+
+console.log('\nTHE WMSPANEL BUDGET (an API token must not be able to spend the panel\'s):');
+const fresh = () => { udp = [{ ...UDP0 }]; mem.copies.clear(); mem.calls = 0; mem.apiCalls = 0; listCalls = 0; limits = {}; };
+const expire = () => { for (const c of mem.copies.values()) c.fetchedAt = new Date(0); };
+
+await check('reads come from the panel\'s copy: a hundred reads cost WMSPanel one call', async () => {
+  fresh();
+  for (let i = 0; i < 100; i++) assert.equal((await call('GET', U, { token: tok })).status, 200);
+  await Promise.all([1, 2, 3].map(() => call('GET', `${U}/u1`, { token: tok })));
+  assert.equal(listCalls, 1);
+  assert.equal(mem.apiCalls, 1);
+});
+
+await check('a list the panel already read for its own screens costs the API nothing', async () => {
+  fresh();
+  await remember('wms1', 'udpList', { settings: udp });
+  const r = await call('GET', U, { token: tok });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.items[0].id, 'u1');
+  assert.equal(r.json.stale, false);
+  assert.ok(r.headers.get('x-data-fetched-at'));
+  assert.equal(listCalls, 0);
+});
+
+await check('a PATCH is exactly one WMSPanel call, and the copy shows the change', async () => {
+  fresh();
+  const etag = (await call('GET', `${U}/u1`, { token: tok })).headers.get('etag');
+  const before = listCalls;
+  const r = await call('PATCH', `${U}/u1`, { token: tok, headers: { 'If-Match': etag }, body: { port: 5000 } });
+  assert.equal(r.status, 200);
+  assert.equal(listCalls, before, 'not read back');
+  assert.equal(mem.apiCalls, 2, 'one read, one write');
+  assert.equal((await call('GET', `${U}/u1`, { token: tok })).json.port, 5000);
+  assert.equal(listCalls, before);
+});
+
+await check('the copy is refreshed once it is older than refreshSec', async () => {
+  fresh();
+  await call('GET', U, { token: tok });
+  expire();
+  await call('GET', U, { token: tok });
+  assert.equal(listCalls, 2);
+});
+
+await check('out of the API\'s allowance: reads answer from the copy, saying so; writes are 429 until the day turns', async () => {
+  fresh();
+  await call('GET', U, { token: tok });
+  mem.apiCalls = LIMIT_DEFAULTS.dailyCalls;
+  expire();
+  const r = await call('GET', U, { token: tok });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.stale, true);
+  assert.equal(r.headers.get('x-data-stale'), 'wmspanel_budget');
+  assert.equal(listCalls, 1, 'WMSPanel not asked');
+  const n = calls.length;
+  const w = await call('PATCH', `${U}/u1`, { token: tok, body: { port: 1 } });
+  assert.equal(w.status, 429);
+  assert.equal(w.json.code, 'wmspanel_budget');
+  assert.equal(w.json.details.reason, 'api_allowance');
+  assert.ok(Number(w.headers.get('retry-after')) > 0);
+  assert.equal(calls.length, n, 'nothing written');
+});
+
+await check('the panel\'s reserve holds even when the API has allowance left', async () => {
+  fresh();
+  mem.calls = Math.floor(DAILY_LIMIT * 0.8);
+  const r = await call('GET', U, { token: tok });
+  assert.equal(r.status, 429, 'no copy and no budget');
+  assert.equal(r.json.details.reason, 'panel_reserve');
+  assert.equal(listCalls, 0);
+  const a = await call('POST', '/servers/aaaaaaaaaaaaaaaaaaaaaaaa/stream-objects/mpegts-out/x1/actions/restart', { token: tok });
+  assert.equal(a.status, 429);
+});
+
+await check('WMSPanel failing with a copy at hand: the copy, marked stale', async () => {
+  fresh();
+  await call('GET', U, { token: tok });
+  expire();
+  const keep = wmspanel.udpList;
+  wmspanel.udpList = async () => { throw new Error('down'); };
+  const r = await call('GET', U, { token: tok });
+  wmspanel.udpList = keep;
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('x-data-stale'), 'upstream_failed');
+});
+
+await check('the limits are held to a sane range; the day turns at UTC midnight', () => {
+  assert.deepEqual(apiLimits({}), LIMIT_DEFAULTS);
+  assert.deepEqual(apiLimits({ apiLimits: { dailyCalls: 10 ** 9, refreshSec: 1, reservePct: 100 } }),
+    { dailyCalls: DAILY_LIMIT, refreshSec: 60, reservePct: 90 });
+  assert.equal(secondsToReset(new Date('2026-11-18T23:59:00Z')), 60);
+});
+
+await check('the panel\'s own screens keep the copy for every kind', () => {
+  const src = readFileSync(new URL('../src/routes/wmspanelProxy.js', import.meta.url), 'utf8');
+  for (const [k, v] of Object.entries(KINDS)) assert.ok(src.includes(`listed('${v.list}', rq)`), k);
+});
+
+console.log('\nLIVE STREAMS (Nimble\'s own API, never WMSPanel):');
+
+await check('each stream of each application is one item', async () => {
+  setLiveSource(async () => [{ app: 'live', streams: [{ strm: 'a', bandwidth: 10 }, { strm: 'b' }] }, { app: 'vod', streams: [] }]);
+  const r = await call('GET', '/servers/aaaaaaaaaaaaaaaaaaaaaaaa/streams', { token: issue({ permissions: ['streams.view'] }) });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.items.map(s => `${s.app}/${s.stream}`), ['live/a', 'live/b']);
+  assert.equal(r.json.items[0].bandwidth, 10);
+  assert.deepEqual(liveItems({ streams: [{ application: 'x', stream: 'y' }] }).map(s => `${s.app}/${s.stream}`), ['x/y']);
+});
+
+await check('a server Nimble does not answer for is a 502 saying so', async () => {
+  setLiveSource(async () => { throw new Error('ECONNREFUSED'); });
+  const r = await call('GET', '/servers/bbbbbbbbbbbbbbbbbbbbbbbb/streams', { token: issue({ permissions: ['streams.view'] }) });
+  assert.equal(r.status, 502);
+  assert.equal(r.json.code, 'nimble_failed');
+  setLiveSource(null);
 });
 
 console.log('\nWIRING:');

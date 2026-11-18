@@ -277,7 +277,7 @@ await check('a change from the panel\'s screens is the same kind of event', () =
 });
 
 await check('every source emits: API, panel, playlists, watchdog, delivery monitor', () => {
-  assert.match(src('api/v1.js'), /'stream_object\.changed', req\.params\.objId,\s*\{ before: f\.obj, after: after\.obj/);
+  assert.match(src('api/v1.js'), /'stream_object\.changed', req\.params\.objId,\s*\{ before: f\.obj, after, changed: changedFields\(f\.obj, after\)/);
   assert.match(src('routes/wmspanelProxy.js'), /if \(res\.statusCode < 400\) emit\(/);
   for (const t of ['playlist.deployed', 'playlist.stream_stopped', 'playlist.stream_started']) assert.ok(src('routes/agentProxy.js').includes(`'${t}'`), t);
   assert.match(src('services/agentWatchdog.js'), /healthy \? 'agent\.online' : 'agent\.offline'/);

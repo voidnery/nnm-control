@@ -58,7 +58,9 @@ Decide in your program by `code`: it does not change within v1, while the `error
 | 409 | `media_missing`, `unsupported_source`, `refused`, `agent_disabled` | the playlist was not written — see [Playlists](Playlists.md) |
 | 412 | `precondition_failed` | the object changed since you read it |
 | 429 | `rate_limited` | too often |
+| 429 | `wmspanel_budget` | the API has used its share of WMSPanel calls for today — see [The WMSPanel budget](#the-wmspanel-budget) |
 | 502 | `upstream_failed`, `agent_failed` | WMSPanel or the agent on the server answered with an error; their answer is in `details` |
+| 502 | `nimble_failed` | Nimble on the server did not answer (live streams) |
 | 504 | `agent_timeout` | the agent did not pick up the task or did not answer |
 
 ## Not overwriting someone else's change
@@ -89,6 +91,25 @@ POST   /api/v1/servers/{serverId}/stream-objects/{kind}/{objId}/actions/{restart
 
 Object fields are WMSPanel API names as they are: the panel does not rename them, so Softvelum's
 documentation applies.
+
+### The WMSPanel budget
+
+The whole panel works through one WMSPanel account, and it has 15 000 calls a day. So the API does not
+go to WMSPanel on every request — it works with the panel's data, and the panel decides when WMSPanel is
+asked:
+
+- **Reads** come from the copy of the lists the panel keeps, which its own screens refill whenever they
+  read the same lists. For the API the copy is refreshed at most once in 15 minutes, however many
+  requests arrive. Its age is in the `fetchedAt` field and the `X-Data-Fetched-At` header. If it could
+  not be refreshed, the answer still comes from the copy, with `stale: true` and an `X-Data-Stale`
+  header (`wmspanel_budget` or `upstream_failed`).
+- **A change** is exactly one WMSPanel call; the copy is changed in place, not read back.
+- **The API's share** is at most 1 000 WMSPanel calls a day caused by API requests. Besides, once the
+  panel as a whole has used 80 % of the daily limit, the API stops going to WMSPanel: the rest is the
+  panel's own. Changes then get `429 wmspanel_budget` with `Retry-After` until the end of the UTC day.
+
+All three numbers are set in the panel: **Access → API tokens → WMSPanel budget for the API**, which also
+shows how much is used today.
 
 ### Permissions by kind
 
@@ -124,9 +145,9 @@ The answer is the object as it is now and a new `ETag`. Webhook subscribers get 
 
 ## Live streams
 
-`GET /api/v1/servers/{serverId}/streams` — what is on air on the server now: codecs, resolution, bitrate,
-publisher, uptime (`streams.view`). The data comes from WMSPanel and spends its daily call limit; do not
-poll this address more than needed. To learn about streams appearing and disappearing, subscribe to
+`GET /api/v1/servers/{serverId}/streams` — what is on air on the server now, one item per stream: `app`,
+`stream` and what Nimble reports (bitrate, resolution, codecs and so on); `streams.view`. The data comes
+from Nimble on the server itself, not from WMSPanel, and does not spend the WMSPanel budget. To learn about streams appearing and disappearing, subscribe to
 `stream.up` / `stream.down` instead.
 
 ## Playlists

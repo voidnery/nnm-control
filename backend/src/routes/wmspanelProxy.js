@@ -3,6 +3,7 @@ import { Settings } from '../models/Settings.js';
 import { NimbleServer } from '../models/NimbleServer.js';
 import { requireAuth, requirePerm } from '../middleware/auth.js';
 import { wmspanel } from '../services/wmspanelClient.js';
+import { remember } from '../services/apiBudget.js';
 import { syncServersFromWmspanel } from '../services/wmspanelSync.js';
 import { emit, actorOf } from '../services/events.js';
 
@@ -51,6 +52,11 @@ function proxy(fn) {
   };
 }
 
+// The panel's own reads of stream settings also keep the copy the external API reads, so /api/v1
+// mostly answers without asking WMSPanel at all (services/apiBudget.js).
+const listed = async (list, rq) =>
+  remember(rq.mapped.wmspanelServerId, list, await wmspanel[list](await cfg(), rq.mapped.wmspanelServerId));
+
 // Manual fleet sync (also runs automatically every 10 min in wmspanel mode).
 wmspanelRouter.post('/sync', requirePerm('servers.manage'), proxy(async () => {
   return await syncServersFromWmspanel({ force: true });
@@ -88,7 +94,7 @@ r.put('/server/:id/wmsinfo', requirePerm('servers.manage'), loadMapped,
     return wmspanel.serverUpdate(await cfg(), rq.mapped.wmspanelServerId, patch);
   }));
 r.get('/server/:id/republish', requirePerm('republish.view'), loadMapped,
-  proxy(async rq => wmspanel.republishList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('republishList', rq)));
 r.post('/server/:id/republish', requirePerm('republish.manage'), loadMapped,
   proxy(async rq => wmspanel.republishCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
 r.put('/server/:id/republish/:ruleId', requirePerm('republish.manage'), loadMapped,
@@ -104,13 +110,13 @@ r.post('/server/:id/republish/:ruleId/restart', requirePerm('republish.manage'),
 
 // UDP/SRT outputs: view + edit (source_streams incl. PIDs, paused)
 r.get('/server/:id/udp', requirePerm('wmsobjects.view'), loadMapped,
-  proxy(async rq => wmspanel.udpList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('udpList', rq)));
 r.put('/server/:id/udp/:objId', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.udpUpdate(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId, rq.body || {})));
 
 // MPEGTS outgoing: view + edit + pause/resume/restart
 r.get('/server/:id/outgoing', requirePerm('wmsobjects.view'), loadMapped,
-  proxy(async rq => wmspanel.outgoingList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('outgoingList', rq)));
 r.put('/server/:id/outgoing/:objId', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.outgoingUpdate(await cfg(), rq.mapped.wmspanelServerId, rq.params.objId, rq.body || {})));
 r.post('/server/:id/outgoing/:objId/:action(pause|resume|restart)', requirePerm('wmsobjects.manage'), loadMapped,
@@ -118,7 +124,7 @@ r.post('/server/:id/outgoing/:objId/:action(pause|resume|restart)', requirePerm(
 
 // Hot swap: full CRUD
 r.get('/server/:id/hotswap', requirePerm('wmsobjects.view'), loadMapped,
-  proxy(async rq => wmspanel.hotswapList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('hotswapList', rq)));
 r.post('/server/:id/hotswap', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.hotswapCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
 r.put('/server/:id/hotswap/:objId', requirePerm('wmsobjects.manage'), loadMapped,
@@ -142,7 +148,7 @@ r.delete('/server/:id/streams/:objId', requirePerm('wmsobjects.manage'), loadMap
 // port, receive_mode, parameters, description, tags; status/bandwidth are
 // read-only telemetry)
 r.get('/server/:id/incoming', requirePerm('wmsobjects.view'), loadMapped,
-  proxy(async rq => wmspanel.incomingList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('incomingList', rq)));
 r.post('/server/:id/incoming', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.incomingCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
 r.put('/server/:id/incoming/:objId', requirePerm('wmsobjects.manage'), loadMapped,
@@ -159,7 +165,7 @@ r.delete('/server/:id/outgoing/:objId', requirePerm('wmsobjects.manage'), loadMa
 // --- m8: distribution operations layer ---
 // RTMP live pull: full CRUD + restart (fallback_urls = built-in feed reserve)
 r.get('/server/:id/livepull', requirePerm('wmsobjects.view'), loadMapped,
-  proxy(async rq => wmspanel.livePullList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('livePullList', rq)));
 r.post('/server/:id/livepull', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.livePullCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
 r.put('/server/:id/livepull/:objId', requirePerm('wmsobjects.manage'), loadMapped,
@@ -171,7 +177,7 @@ r.post('/server/:id/livepull/:objId/restart', requirePerm('wmsobjects.manage'), 
 
 // Live applications: CRUD (contains push credentials — audit masks them)
 r.get('/server/:id/apps', requirePerm('wmsobjects.view'), loadMapped,
-  proxy(async rq => wmspanel.liveAppList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('liveAppList', rq)));
 r.post('/server/:id/apps', requirePerm('wmsobjects.manage'), loadMapped,
   proxy(async rq => wmspanel.liveAppCreate(await cfg(), rq.mapped.wmspanelServerId, rq.body || {})));
 r.put('/server/:id/apps/:objId', requirePerm('wmsobjects.manage'), loadMapped,
@@ -181,7 +187,7 @@ r.delete('/server/:id/apps/:objId', requirePerm('wmsobjects.manage'), loadMapped
 
 // RTMP interfaces: view
 r.get('/server/:id/interfaces', requirePerm('wmsobjects.view'), loadMapped,
-  proxy(async rq => wmspanel.rtmpInterfaceList(await cfg(), rq.mapped.wmspanelServerId)));
+  proxy(async rq => listed('rtmpInterfaceList', rq)));
 
 // --- m9: transcoders (account-level) ---
 r.get('/transcoders', requirePerm('wmsobjects.view'),
